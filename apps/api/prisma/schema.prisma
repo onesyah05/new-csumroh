@@ -39,24 +39,29 @@ enum WaStatus {
 }
 
 enum CapiStatus {
+  pending
   success
   failed
 }
 
 model Brand {
-  id                Int               @id @default(autoincrement())
-  name              String            @db.VarChar(100)
-  code              String            @unique @db.VarChar(30)
-  ppiuNumber        String?           @map("ppiu_number") @db.VarChar(100)
-  bankName          String?           @map("bank_name") @db.VarChar(50)
-  bankAccountNumber String?           @map("bank_account_number") @db.VarChar(50)
-  bankAccountHolder String?           @map("bank_account_holder") @db.VarChar(100)
-  address           String?           @db.Text
-  phone             String?           @db.VarChar(30)
-  metaPixelId       String?           @map("meta_pixel_id") @db.VarChar(50)
-  metaAccessToken   String?           @map("meta_access_token") @db.Text
-  facebookPageId    String?           @map("facebook_page_id") @db.VarChar(50)
-  createdAt         DateTime          @default(now()) @map("created_at")
+  id                Int              @id @default(autoincrement())
+  name              String           @db.VarChar(100)
+  code              String           @unique @db.VarChar(30)
+  ppiuNumber        String?          @map("ppiu_number") @db.VarChar(100)
+  bankName          String?          @map("bank_name") @db.VarChar(50)
+  bankAccountNumber String?          @map("bank_account_number") @db.VarChar(50)
+  bankAccountHolder String?          @map("bank_account_holder") @db.VarChar(100)
+  address           String?          @db.Text
+  phone             String?          @db.VarChar(30)
+  metaPixelId       String?          @map("meta_pixel_id") @db.VarChar(50)
+  metaAccessToken   String?          @map("meta_access_token") @db.Text
+  facebookPageId    String?          @map("facebook_page_id") @db.VarChar(50)
+  metaWabaId        String?          @map("meta_waba_id") @db.VarChar(50)
+  metaTestEventCode String?          @map("meta_test_event_code") @db.VarChar(100)
+  metaVerifiedAt    DateTime?        @map("meta_verified_at")
+  metaLastError     String?          @map("meta_last_error") @db.Text
+  createdAt         DateTime         @default(now()) @map("created_at")
   users             User[]
   packages          Package[]
   prospects         Prospect[]
@@ -121,46 +126,49 @@ model Package {
 }
 
 model Prospect {
-  id                 Int             @id @default(autoincrement())
-  brandId            Int             @map("brand_id")
-  userId             Int?            @map("user_id")
-  packageId          Int?            @map("package_id")
-  name               String          @db.VarChar(100)
-  phone              String?         @db.VarChar(30)
-  city               String?         @db.VarChar(100)
-  leadSource         String          @default("whatsapp") @map("lead_source") @db.VarChar(50)
-  currentStage       String          @default("greeting") @map("current_stage") @db.VarChar(50)
-  status             ProspectStatus  @default(new)
-  targetMonth        String?         @map("target_month") @db.VarChar(50)
-  budgetRange        String?         @map("budget_range") @db.VarChar(50)
-  roomPreference     String?         @map("room_preference") @db.VarChar(50)
-  paxQuad            Int             @default(0) @map("pax_quad")
-  paxTriple          Int             @default(0) @map("pax_triple")
-  paxDouble          Int             @default(0) @map("pax_double")
-  paxInfant          Int             @default(0) @map("pax_infant")
-  specialNeeds       String?         @map("special_needs") @db.Text
-  decisionMaker      String?         @map("decision_maker") @db.VarChar(50)
-  passportStatus     String?         @map("passport_status") @db.VarChar(50)
-  vaccineStatus      String?         @map("vaccine_status") @db.VarChar(50)
-  dealValue          Decimal         @default(0) @map("deal_value") @db.Decimal(15, 2)
-  dpAmount           Decimal         @default(0) @map("dp_amount") @db.Decimal(15, 2)
-  dpPaidAt           DateTime?       @map("dp_paid_at")
-  paymentStatus      PaymentStatus   @default(unpaid) @map("payment_status")
-  lostReason         String?         @map("lost_reason") @db.VarChar(100)
-  lostReasonDetail   String?         @map("lost_reason_detail") @db.Text
-  remoteJid          String?         @map("remote_jid") @db.VarChar(100)
-  metaReferralMarker String?         @map("meta_referral_marker") @db.Text
-  adId               String?         @map("ad_id") @db.VarChar(100)
-  campaignId         String?         @map("campaign_id") @db.VarChar(100)
-  photoUrl           String?         @map("photo_url") @db.Text
-  notes              String?         @db.Text
-  nextFollowupDate   DateTime?       @map("next_followup_date") @db.Date
-  lastFollowupAt     DateTime?       @map("last_followup_at")
-  createdAt          DateTime        @default(now()) @map("created_at")
-  updatedAt          DateTime        @updatedAt @map("updated_at")
-  brand              Brand           @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  user               User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  package            Package?        @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  id                 Int            @id @default(autoincrement())
+  brandId            Int            @map("brand_id")
+  userId             Int?           @map("user_id")
+  packageId          Int?           @map("package_id")
+  name               String         @db.VarChar(100)
+  phone              String?        @db.VarChar(30)
+  city               String?        @db.VarChar(100)
+  leadSource         String         @default("whatsapp") @map("lead_source") @db.VarChar(50)
+  currentStage       String         @default("greeting") @map("current_stage") @db.VarChar(50)
+  status             ProspectStatus @default(new)
+  targetMonth        String?        @map("target_month") @db.VarChar(50)
+  budgetRange        String?        @map("budget_range") @db.VarChar(50)
+  roomPreference     String?        @map("room_preference") @db.VarChar(50)
+  paxQuad            Int            @default(0) @map("pax_quad")
+  paxTriple          Int            @default(0) @map("pax_triple")
+  paxDouble          Int            @default(0) @map("pax_double")
+  paxInfant          Int            @default(0) @map("pax_infant")
+  specialNeeds       String?        @map("special_needs") @db.Text
+  decisionMaker      String?        @map("decision_maker") @db.VarChar(50)
+  passportStatus     String?        @map("passport_status") @db.VarChar(50)
+  vaccineStatus      String?        @map("vaccine_status") @db.VarChar(50)
+  dealValue          Decimal        @default(0) @map("deal_value") @db.Decimal(15, 2)
+  dpAmount           Decimal        @default(0) @map("dp_amount") @db.Decimal(15, 2)
+  dpPaidAt           DateTime?      @map("dp_paid_at")
+  paymentStatus      PaymentStatus  @default(unpaid) @map("payment_status")
+  lostReason         String?        @map("lost_reason") @db.VarChar(100)
+  lostReasonDetail   String?        @map("lost_reason_detail") @db.Text
+  remoteJid          String?        @map("remote_jid") @db.VarChar(100)
+  metaReferralMarker String?        @map("meta_referral_marker") @db.Text
+  adId               String?        @map("ad_id") @db.VarChar(100)
+  campaignId         String?        @map("campaign_id") @db.VarChar(100)
+  adHeadline         String?        @map("ad_headline") @db.VarChar(255)
+  adSourceUrl        String?        @map("ad_source_url") @db.Text
+  closedWonCount     Int            @default(0) @map("closed_won_count")
+  photoUrl           String?        @map("photo_url") @db.Text
+  notes              String?        @db.Text
+  nextFollowupDate   DateTime?      @map("next_followup_date") @db.Date
+  lastFollowupAt     DateTime?      @map("last_followup_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  brand              Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user               User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  package            Package?       @relation(fields: [packageId], references: [id], onDelete: SetNull)
   logs               ProspectLog[]
   messages           ChatMessage[]
   capiLogs           MetaCapiLog[]
@@ -186,15 +194,15 @@ model ProspectLog {
 }
 
 model WhatsappSession {
-  id              Int      @id @default(autoincrement())
-  brandId         Int      @unique @map("brand_id")
-  phoneNumber     String?  @map("phone_number") @db.VarChar(30)
-  sessionName     String   @map("session_name") @db.VarChar(100)
-  status          WaStatus @default(disconnected)
-  qrCode          String?  @map("qr_code") @db.Text
+  id              Int       @id @default(autoincrement())
+  brandId         Int       @unique @map("brand_id")
+  phoneNumber     String?   @map("phone_number") @db.VarChar(30)
+  sessionName     String    @map("session_name") @db.VarChar(100)
+  status          WaStatus  @default(disconnected)
+  qrCode          String?   @map("qr_code") @db.Text
   lastConnectedAt DateTime? @map("last_connected_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  brand           Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  brand           Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_sessions")
 }
@@ -244,20 +252,21 @@ model MetaCapiLog {
   brand          Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
   prospect       Prospect   @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
+  @@unique([brandId, eventId])
   @@index([brandId, createdAt])
   @@map("meta_capi_logs")
 }
 
 model RefreshToken {
-  id         Int       @id @default(autoincrement())
-  userId     Int       @map("user_id")
-  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
-  userAgent  String?   @map("user_agent") @db.VarChar(255)
-  ipAddress  String?   @map("ip_address") @db.VarChar(45)
-  expiresAt  DateTime  @map("expires_at")
-  revokedAt  DateTime? @map("revoked_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  userAgent String?   @map("user_agent") @db.VarChar(255)
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@map("refresh_tokens")

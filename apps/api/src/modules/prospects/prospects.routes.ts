@@ -5,7 +5,7 @@ import { prisma } from '../../db/prisma.js';
 import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
-import { dispatchCapiForStatus } from '../capi/capi.service.js';
+import { queueCapiForStatus } from '../capi/capi.service.js';
 
 export const prospectsRouter = Router();
 prospectsRouter.use(authGuard);
@@ -27,7 +27,7 @@ prospectsRouter.get('/', asyncHandler(async (req, res) => {
 prospectsRouter.get('/:id', asyncHandler(async (req, res) => {
   const requestedBrand = req.user?.role === 'superadmin' && req.query.brandId ? Number(req.query.brandId) : undefined;
   const brandId = scopedBrandId(req, requestedBrand);
-  const prospect = await prisma.prospect.findFirst({ where: { id: Number(req.params.id), brandId }, include: { ...include, brand: true, logs: { include: { user: { select: { name: true } } }, orderBy: { createdAt: 'desc' } }, messages: { orderBy: { timestamp: 'asc' } } } });
+  const prospect = await prisma.prospect.findFirst({ where: { id: Number(req.params.id), brandId }, include: { ...include, brand: { select: { id: true, name: true, code: true, ppiuNumber: true, bankName: true, bankAccountNumber: true, bankAccountHolder: true, address: true, phone: true } }, logs: { include: { user: { select: { name: true } } }, orderBy: { createdAt: 'desc' } }, messages: { orderBy: { timestamp: 'asc' } } } });
   if (!prospect) throw new HttpError(404, 'Prospek tidak ditemukan.');
   res.json({ success: true, data: prospect });
 }));
@@ -48,12 +48,12 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
   if (!existing) throw new HttpError(404, 'Prospek tidak ditemukan.');
   if (!canTransitionStatus(existing.status as ProspectStatus, status)) throw new HttpError(422, `Transisi ${existing.status} → ${status} tidak diizinkan.`);
   const prospect = await prisma.$transaction(async (tx) => {
-    const updated = await tx.prospect.update({ where: { id: existing.id }, data: { status: status as DbProspectStatus }, include });
+    const updated = await tx.prospect.update({ where: { id: existing.id }, data: { status: status as DbProspectStatus, ...(status === 'closed_won' && existing.status !== 'closed_won' ? { closedWonCount: { increment: 1 } } : {}) }, include });
     await tx.prospectLog.create({ data: { prospectId: existing.id, userId: req.user!.id, actionType: 'status_changed', title: `Status menjadi ${status}`, description: `Dari ${existing.status}` } });
     return updated;
   });
   emitToBrand(brandId, 'prospect:updated', prospect);
-  void dispatchCapiForStatus(prospect.id, status).catch((error) => console.error('CAPI dispatch failed', error));
+  if (existing.status !== status) queueCapiForStatus(prospect.id, status);
   res.json({ success: true, data: prospect });
 }));
 

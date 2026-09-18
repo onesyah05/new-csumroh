@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { buildCapiPayload, normalizePhone, sha256 } from './capi.payload.js';
+import { describe, expect, it, vi } from 'vitest';
+import { buildCapiEventId, buildCapiPayload, normalizePhone, sha256, validateEventValue, validateMetaConfig } from './capi.payload.js';
+import { queueCapiForStatus } from './capi.service.js';
 
 describe('Meta CAPI payload builder',()=>{
   it('normalizes Indonesian phone numbers',()=>{expect(normalizePhone('0812-3456-7890')).toBe('6281234567890');expect(normalizePhone('+62 812 3456 7890')).toBe('6281234567890');});
-  it('never exposes raw phone in payload',()=>{const payload=buildCapiPayload({eventName:'Purchase',eventId:'event-1',phone:'081234567890',value:50_000_000});const serialized=JSON.stringify(payload);expect(serialized).not.toContain('081234567890');expect(serialized).toContain(sha256('6281234567890'));expect(payload.data[0]!.custom_data).toEqual({currency:'IDR',value:50_000_000});});
+  it('hashes phone but keeps the CTWA click id raw',()=>{const payload=buildCapiPayload({eventName:'Purchase',eventId:'event-1',phone:'081234567890',ctwaClid:'AR-click-id',pageId:'123456',whatsappBusinessAccountId:'987654',value:50_000_000});const serialized=JSON.stringify(payload);expect(serialized).not.toContain('081234567890');expect(serialized).toContain(sha256('6281234567890'));expect(payload.data[0]!.user_data.ctwa_clid).toBe('AR-click-id');expect(payload.data[0]!.user_data.page_id).toBe('123456');expect(payload.data[0]!.messaging_channel).toBe('whatsapp');expect(payload.data[0]!.custom_data).toEqual({currency:'IDR',value:50_000_000});});
+  it('builds deterministic event ids',()=>{expect(buildCapiEventId(42,'Purchase',2)).toBe('csumroh_prospect_42_won_2');expect(buildCapiEventId(42,'Purchase',2)).toBe(buildCapiEventId(42,'Purchase',2));expect(buildCapiEventId(42,'AddToCart')).toBe('csumroh_prospect_42_offered');});
+  it('requires page and WABA ids plus real transaction values',()=>{expect(validateMetaConfig({pixelId:'1',accessToken:'token',pageId:'2',wabaId:null}).valid).toBe(false);expect(validateEventValue('Purchase',0,5_000_000).valid).toBe(false);expect(validateEventValue('InitiateCheckout',50_000_000,0).valid).toBe(false);expect(validateEventValue('Purchase',50_000_000,0)).toEqual({valid:true,value:50_000_000});});
+  it('queues dispatch without blocking the status update response',async()=>{const dispatch=vi.fn().mockRejectedValue(new Error('Meta unavailable'));const consoleSpy=vi.spyOn(console,'error').mockImplementation(()=>undefined);expect(queueCapiForStatus(7,'closed_won',dispatch)).toBeUndefined();expect(dispatch).toHaveBeenCalledWith(7,'closed_won');await Promise.resolve();await Promise.resolve();expect(consoleSpy).toHaveBeenCalled();consoleSpy.mockRestore();});
 });

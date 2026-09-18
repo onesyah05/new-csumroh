@@ -6,13 +6,15 @@ import { env } from '../../config/env.js';
 import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
+import { dispatchCapiEvent } from '../capi/capi.service.js';
+import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
 
 export const chatRouter = Router();
 chatRouter.use(authGuard);
 
 chatRouter.get('/conversations', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
-  const data = await prisma.prospect.findMany({ where: { brandId }, select: { id: true, name: true, phone: true, photoUrl: true, status: true, remoteJid: true, packageId: true, updatedAt: true, user: { select: { id: true, name: true } }, package: { select: { id: true, name: true } }, messages: { where: { isDeleted: false }, orderBy: { timestamp: 'desc' }, take: 1 } }, orderBy: { updatedAt: 'desc' } });
+  const data = await prisma.prospect.findMany({ where: { brandId }, select: { id: true, name: true, phone: true, photoUrl: true, status: true, remoteJid: true, packageId: true, leadSource: true, adId: true, campaignId: true, adHeadline: true, adSourceUrl: true, updatedAt: true, user: { select: { id: true, name: true } }, package: { select: { id: true, name: true } }, messages: { where: { isDeleted: false }, orderBy: { timestamp: 'desc' }, take: 1 } }, orderBy: { updatedAt: 'desc' } });
   res.json({ success: true, data });
 }));
 
@@ -62,14 +64,20 @@ internalRouter.use((req, _res, next) => req.get('x-internal-secret') === env.WA_
 internalRouter.post('/messages/incoming', asyncHandler(async (req, res) => {
   const { brandId, messageId, remoteJid, phone, senderName, text, timestamp, messageType, mediaUrl, referral } = req.body as Record<string, any>;
   if (!brandId || !messageId || !remoteJid || !phone) throw new HttpError(400, 'Payload pesan tidak lengkap.');
+  const referralMarker = normalizeReferralMarker(referral);
   let prospect = await prisma.prospect.findFirst({ where: { brandId: Number(brandId), OR: [{ remoteJid }, { phone }] } });
+  let referralCaptured = false;
   if (!prospect) {
     const users = await prisma.user.findMany({ where: { brandId: Number(brandId), role: 'cs', isActive: true }, select: { id: true, _count: { select: { prospects: { where: { status: { notIn: ['closed_won', 'closed_lost'] } } } } } } });
     const assigned = users.sort((a, b) => a._count.prospects - b._count.prospects)[0];
-    prospect = await prisma.prospect.create({ data: { brandId: Number(brandId), userId: assigned?.id ?? null, name: senderName || phone, phone, remoteJid, leadSource: referral ? 'meta_ads' : 'whatsapp', metaReferralMarker: referral ? JSON.stringify(referral) : null, adId: referral?.adId, campaignId: referral?.campaignId } });
+    prospect = await prisma.prospect.create({ data: { brandId: Number(brandId), userId: assigned?.id ?? null, name: senderName || phone, phone, remoteJid, leadSource: referralMarker ? 'meta_ads' : 'whatsapp', metaReferralMarker: referralMarker?.ctwaClid, adId: referralMarker?.adId, campaignId: referralMarker?.campaignId, adHeadline: referralMarker?.headline, adSourceUrl: referralMarker?.sourceUrl } });
+    referralCaptured = Boolean(referralMarker);
+  } else {
+    referralCaptured = await attachReferralMarker(prospect.id, referralMarker);
   }
-  const message = await prisma.chatMessage.upsert({ where: { brandId_messageId: { brandId: Number(brandId), messageId } }, update: { status: 'delivered' }, create: { brandId: Number(brandId), prospectId: prospect.id, messageId, remoteJid, phone, senderName, isFromMe: false, messageText: text, messageType: messageType ?? 'conversation', mediaUrl, timestamp: Number(timestamp) || Math.floor(Date.now() / 1000), metaReferralData: referral } });
+  const message = await prisma.chatMessage.upsert({ where: { brandId_messageId: { brandId: Number(brandId), messageId } }, update: { status: 'delivered' }, create: { brandId: Number(brandId), prospectId: prospect.id, messageId, remoteJid, phone, senderName, isFromMe: false, messageText: text, messageType: messageType ?? 'conversation', mediaUrl, timestamp: Number(timestamp) || Math.floor(Date.now() / 1000), metaReferralData: referralMarker ?? undefined } });
   emitToBrand(Number(brandId), 'message:new', message);
+  if (referralCaptured) void dispatchCapiEvent(prospect.id, 'Contact').catch((error) => console.error('CAPI Contact dispatch failed', error));
   res.status(201).json({ success: true, data: message });
 }));
 
