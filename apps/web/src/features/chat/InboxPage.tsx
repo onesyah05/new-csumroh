@@ -8,6 +8,7 @@ import {
   CircleUserRound,
   Clipboard,
   MessageSquareText,
+  Megaphone,
   MoreHorizontal,
   Paperclip,
   Search,
@@ -189,7 +190,7 @@ export function InboxPage() {
               <header className="flex h-[73px] items-center gap-3 border-b px-4 sm:px-5">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-100 text-xs font-bold">{String(selected.name ?? '?').slice(0, 2).toUpperCase()}</span>
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-bold">{selected.name}</h3>
+                  <div className="flex min-w-0 items-center gap-2"><h3 className="truncate text-sm font-bold">{selected.name}</h3>{selected.leadSource==='meta_ads'&&<span title={[selected.adHeadline,selected.adId&&`Ad ${selected.adId}`].filter(Boolean).join(' · ')} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-950 px-2 py-0.5 text-[9px] font-bold text-white"><Megaphone size={10}/>Meta Ads</span>}</div>
                   <p className="flex items-center gap-1 text-[10px] text-zinc-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600" /> WhatsApp · {selected.phone}</p>
                 </div>
                 <Button variant="secondary" size="sm" className="inbox-copilot-trigger" onClick={() => setCopilotOpen(true)}><Bot size={15} />Copilot</Button>

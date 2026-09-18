@@ -36,6 +36,17 @@ Web berjalan di `http://localhost:5173`, API di `http://localhost:4000`, dan gat
 
 Access token hanya disimpan di memory browser. Refresh token dirotasi melalui cookie `httpOnly`, `SameSite=Strict`. Semua query non-superadmin discoping oleh `brandId` dari JWT, bukan input client.
 
+## Meta Pixel & CAPI CTWA per brand
+
+Admin brand atau superadmin dapat membuka **Administrasi → Meta Pixel & CAPI** untuk mengatur Pixel/Dataset ID, Facebook Page ID, WhatsApp Business Account ID, System User Access Token, dan Test Event Code khusus brand tersebut.
+
+- Access token disimpan terenkripsi dan tidak pernah dikirim kembali ke browser.
+- Gunakan tombol **Tes koneksi** setelah menyimpan konfigurasi.
+- `ctwa_clid` diambil dari referral pesan WhatsApp pertama dan tidak ditimpa referral berikutnya.
+- Event otomatis: `Contact`, `AddToCart`, `InitiateCheckout`, dan `Purchase`.
+- Hapus Test Event Code setelah verifikasi di Meta Events Manager agar event berikutnya masuk laporan produksi.
+- Isi `META_TOKEN_ENCRYPTION_KEY` minimal 32 karakter pada environment produksi. Jika tidak diisi, aplikasi memakai `JWT_REFRESH_SECRET` sebagai material kunci fallback agar instalasi lama tetap berjalan.
+
 ## Perintah verifikasi
 
 ```bash

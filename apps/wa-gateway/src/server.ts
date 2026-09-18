@@ -8,6 +8,7 @@ import pino from 'pino';
 import QRCode from 'qrcode';
 import makeWASocket, { Browsers, DisconnectReason, fetchLatestBaileysVersion, getContentType, useMultiFileAuthState, type WASocket, type WAMessage } from '@whiskeysockets/baileys';
 import { z } from 'zod';
+import { extractMetaReferral } from './referral.js';
 
 dotenv.config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
 
@@ -49,7 +50,7 @@ async function startSession(brandId: number) {
     for (const message of messages) {
       if (!message.key.remoteJid || !message.key.id) continue;
       const type = getContentType(message.message ?? undefined) ?? 'conversation';
-      await notify('/messages/incoming', { brandId, messageId:message.key.id, remoteJid:message.key.remoteJid, phone:message.key.remoteJid.split('@')[0], senderName:message.pushName, text:messageText(message), timestamp:Number(message.messageTimestamp), messageType:type });
+      await notify('/messages/incoming', { brandId, messageId:message.key.id, remoteJid:message.key.remoteJid, phone:message.key.remoteJid.split('@')[0], senderName:message.pushName, text:messageText(message), timestamp:Number(message.messageTimestamp), messageType:type, referral:extractMetaReferral(message) });
     }
   });
   return socket;

@@ -4,7 +4,7 @@
   "packageManager": "pnpm@11.1.2",
   "scripts": {
     "dev": "pnpm --parallel --filter @csumroh/api --filter @csumroh/web dev",
-    "dev:all": "pnpm --parallel --filter './apps/*' dev",
+    "dev:all": "pnpm --parallel --filter @csumroh/api --filter @csumroh/web --filter @csumroh/wa-gateway dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",

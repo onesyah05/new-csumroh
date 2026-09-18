@@ -19,6 +19,8 @@ describe('critical business rules', () => {
   });
 
   it('maps conversion events', () => {
+    expect(capiEventForStatus('new')).toBe('Contact');
+    expect(capiEventForStatus('identifying')).toBeNull();
     expect(capiEventForStatus('closing')).toBe('InitiateCheckout');
     expect(capiEventForStatus('followup')).toBeNull();
   });

@@ -26,6 +26,6 @@ export function nextTgjpStep(current: TgjpStep): TgjpStep | null {
 }
 
 export const capiEventForStatus = (status: ProspectStatus) =>
-  ({ identifying: 'Contact', offered: 'AddToCart', closing: 'InitiateCheckout', closed_won: 'Purchase' })[
-    status as 'identifying' | 'offered' | 'closing' | 'closed_won'
+  ({ new: 'Contact', offered: 'AddToCart', closing: 'InitiateCheckout', closed_won: 'Purchase' })[
+    status as 'new' | 'offered' | 'closing' | 'closed_won'
   ] ?? null;

@@ -9,9 +9,10 @@ export const catalogRouter = Router();
 catalogRouter.use(authGuard);
 
 catalogRouter.get('/brands', asyncHandler(async (req, res) => {
-  const data = req.user!.role === 'superadmin'
+  const rows = req.user!.role === 'superadmin'
     ? await prisma.brand.findMany({ orderBy: { name: 'asc' }, include: { _count: { select: { users: true, prospects: true, packages: true } }, whatsappSession: true } })
     : await prisma.brand.findMany({ where: { id: req.user!.brandId ?? -1 }, include: { _count: { select: { users: true, prospects: true, packages: true } }, whatsappSession: true } });
+  const data = rows.map(({ metaAccessToken: _secret, metaLastError: _privateError, ...brand }) => brand);
   res.json({ success: true, data });
 }));
 

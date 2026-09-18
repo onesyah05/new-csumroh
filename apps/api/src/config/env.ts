@@ -13,6 +13,7 @@ const schema = z.object({
   WA_GATEWAY_SECRET: z.string().min(16),
   WA_GATEWAY_URL: z.string().url().default('http://localhost:4001'),
   META_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v20.0'),
+  META_TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
 });
 
 export const env = schema.parse(process.env);
