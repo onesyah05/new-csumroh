@@ -1,0 +1,21 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@whiskeysockets/baileys': true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - '@whiskeysockets/baileys'
+  - bcrypt
+  - esbuild
+  - prisma
+  - protobufjs
+  - sharp

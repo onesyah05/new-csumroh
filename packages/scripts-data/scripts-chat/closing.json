@@ -1,0 +1,698 @@
+{
+    "id": "closing_script_bank",
+    "nama": "Bank Script Closing",
+    "deskripsi": "Kumpulan script chat untuk membantu Agen mengarahkan prospek dari ketertarikan menuju keputusan dan komitmen nyata.",
+    "tujuan": "Membantu Agen meminta keputusan dengan jelas, mengamankan seat melalui DP resmi travel, serta menggunakan urgency dan scarcity secara transparan dan amanah.",
+    "guidelines": [
+        "Closing dilakukan setelah prospek cukup memahami paket.",
+        "Jangan menunggu prospek selalu meminta cara daftar terlebih dahulu.",
+        "Gunakan satu ajakan tindakan yang jelas.",
+        "Jika prospek sudah menunjukkan buying signal, kurangi penjelasan dan arahkan ke tindakan.",
+        "Urgency harus berdasarkan batas waktu nyata.",
+        "Scarcity harus berdasarkan ketersediaan nyata.",
+        "Jangan membuat seat atau deadline palsu.",
+        "Jika muncul keberatan, pindahkan ke Handling Objection.",
+        "Jika prospek diam, pindahkan ke Follow-up."
+    ],
+    "placeholders": [
+        "{{nama}}",
+        "{{paket}}",
+        "{{harga}}",
+        "{{tanggal}}",
+        "{{bulan}}",
+        "{{dp}}",
+        "{{seat}}",
+        "{{jumlah_jamaah}}",
+        "{{deadline}}",
+        "{{rekening}}",
+        "{{nama_rekening}}",
+        "{{fasilitas_utama}}"
+    ],
+    "categories": [
+        {
+            "id": "confirmation",
+            "nama": "Konfirmasi Kecocokan"
+        },
+        {
+            "id": "dp",
+            "nama": "Closing DP"
+        },
+        {
+            "id": "seat",
+            "nama": "Pengamanan Seat"
+        },
+        {
+            "id": "schedule",
+            "nama": "Closing Berdasarkan Jadwal"
+        },
+        {
+            "id": "family",
+            "nama": "Closing Keluarga"
+        },
+        {
+            "id": "decision_maker",
+            "nama": "Closing dengan Pengambil Keputusan"
+        },
+        {
+            "id": "urgency",
+            "nama": "Closing dengan Urgency"
+        },
+        {
+            "id": "scarcity",
+            "nama": "Closing dengan Scarcity"
+        },
+        {
+            "id": "soft_closing",
+            "nama": "Soft Closing"
+        },
+        {
+            "id": "after_objection",
+            "nama": "Closing Ulang"
+        },
+        {
+            "id": "high_intent",
+            "nama": "Buying Intent Tinggi"
+        },
+        {
+            "id": "payment",
+            "nama": "Arahkan Pembayaran"
+        }
+    ],
+    "scripts": [
+        {
+            "id": "closing_confirmation_01",
+            "category": "confirmation",
+            "title": "Cek Kecocokan Paket",
+            "use_when": "Offer sudah dijelaskan dan Agen ingin mengetahui kesiapan prospek.",
+            "script": "Dari penjelasan paket yang tadi saya sampaikan 😊\n\nSejauh ini apakah sudah sesuai dengan yang Kakak dan keluarga cari?",
+            "next_stage_if_yes": "closing",
+            "next_stage_if_no": "identification",
+            "tags": [
+                "fit",
+                "confirmation"
+            ]
+        },
+        {
+            "id": "closing_confirmation_02",
+            "category": "confirmation",
+            "title": "Konfirmasi Paket dan Jadwal",
+            "use_when": "Prospek terlihat cocok tetapi belum mengambil keputusan.",
+            "script": "Dari sisi rincian paket dan tanggal keberangkatannya 😊\n\nApakah sudah cocok dengan rencana Kakak sekeluarga?",
+            "next_stage_if_yes": "closing",
+            "next_stage_if_no": "offer",
+            "tags": [
+                "package",
+                "schedule"
+            ]
+        },
+        {
+            "id": "closing_confirmation_03",
+            "category": "confirmation",
+            "title": "Cari Hambatan Terakhir",
+            "use_when": "Prospek terlihat tertarik tetapi belum bergerak.",
+            "script": "Jika paketnya sudah dirasa cocok di hati Kakak 😊\n\nApakah masih ada bagian lain yang ingin dipertimbangkan sebelum kita lanjutkan pendaftarannya?",
+            "next_stage_if_objection": "objection",
+            "next_stage_if_clear": "closing",
+            "tags": [
+                "objection_discovery"
+            ]
+        },
+        {
+            "id": "closing_dp_01",
+            "category": "dp",
+            "title": "Closing DP Langsung",
+            "use_when": "Prospek sudah cocok dengan paket dan jadwal.",
+            "script": "Alhamdulillah jika seluruh rincian paketnya sudah cocok di hati Kakak 😊\n\nUntuk mengunci seat dan harga promo ini agar tidak berubah, cukup dengan DP awal **{{dp}}**.\n\nBoleh saya bantu buatkan form reservasi resminya sekarang, Kak?",
+            "next_stage": "payment",
+            "tags": [
+                "dp",
+                "seat"
+            ]
+        },
+        {
+            "id": "closing_dp_02",
+            "category": "dp",
+            "title": "DP sebagai Langkah Berikutnya",
+            "use_when": "Prospek membutuhkan arahan tentang langkah setelah memilih paket.",
+            "script": "Langkah mudah berikutnya, kita tinggal amankan kuota manifes maskapai Kakak dengan DP awal **{{dp}}** 😊\n\nApakah Kakak ingin saya kirimkan nomor rekening resmi travel kami sekarang?",
+            "next_stage": "payment",
+            "tags": [
+                "dp",
+                "next_step"
+            ]
+        },
+        {
+            "id": "closing_dp_03",
+            "category": "dp",
+            "title": "Closing Ringan",
+            "use_when": "CS ingin meminta komitmen tanpa terdengar terlalu mendesak.",
+            "script": "Jika Kakak sudah mantap dengan pilihan paket ini 😊\n\nSaya bantu proses pengamanan seat-nya ya Kak. Komitmen awal cukup dengan DP **{{dp}}**.",
+            "next_stage": "payment",
+            "tags": [
+                "dp",
+                "soft"
+            ]
+        },
+        {
+            "id": "closing_seat_01",
+            "category": "seat",
+            "title": "Amankan Seat",
+            "use_when": "Prospek sudah memilih jadwal dan seat masih tersedia.",
+            "script": "Untuk keberangkatan tanggal **{{tanggal}}** kuotanya saat ini masih tersedia, Kak 😊\n\nJika memang sudah cocok, kita bisa amankan {{jumlah_jamaah}} seat terlebih dahulu dengan DP awal **{{dp}}**.\n\nBoleh saya bantu siapkan administrasinya sekarang?",
+            "requires_verified_data": true,
+            "next_stage": "payment",
+            "tags": [
+                "seat",
+                "availability"
+            ]
+        },
+        {
+            "id": "closing_seat_02",
+            "category": "seat",
+            "title": "Konfirmasi Jumlah Seat",
+            "use_when": "Prospek membawa pasangan atau keluarga.",
+            "script": "Berarti kuota yang perlu kita amankan adalah **{{jumlah_jamaah}} seat** ya Kak 😊\n\nJika sudah fix, saya bantu lanjutkan ke proses booking resminya sekarang.",
+            "next_stage": "payment",
+            "tags": [
+                "seat",
+                "pax"
+            ]
+        },
+        {
+            "id": "closing_seat_03",
+            "category": "seat",
+            "title": "Cek Seat Sebelum Booking",
+            "use_when": "CS perlu memastikan ketersediaan alokasi seat sebelum meminta pembayaran.",
+            "script": "Jika Kakak sudah cocok dengan paket ini, saya cek alokasi seat terbarunya ke tim pusat ya Kak 😊\n\nJika kuotanya masih aman, langsung kita lanjutkan proses bookingnya.",
+            "next_stage": "closing",
+            "tags": [
+                "seat",
+                "verification"
+            ]
+        },
+        {
+            "id": "closing_schedule_01",
+            "category": "schedule",
+            "title": "Jadwal Sudah Cocok",
+            "use_when": "Tanggal keberangkatan menjadi alasan utama prospek memilih paket.",
+            "script": "Mengingat tanggal **{{tanggal}}** adalah jadwal yang paling pas dengan waktu luang Kakak sekeluarga 😊\n\nMau saya bantu tahan kuotanya untuk {{jumlah_jamaah}} orang hari ini, Kak?",
+            "next_stage": "payment",
+            "tags": [
+                "schedule",
+                "commitment"
+            ]
+        },
+        {
+            "id": "closing_schedule_02",
+            "category": "schedule",
+            "title": "Prospek Punya Waktu Terbatas",
+            "use_when": "Prospek hanya memiliki satu periode yang memungkinkan.",
+            "script": "Karena periode **{{bulan}}** ini adalah waktu yang paling memungkinkan bagi Kakak sekeluarga 😊\n\nSaya sarankan kita fokus mengamankan jadwal di tanggal **{{tanggal}}** ini terlebih dahulu.",
+            "next_stage": "closing",
+            "tags": [
+                "schedule",
+                "fixed_date"
+            ]
+        },
+        {
+            "id": "closing_family_01",
+            "category": "family",
+            "title": "Closing untuk Keluarga",
+            "use_when": "Prospek berangkat bersama keluarga.",
+            "script": "Alhamdulillah jika seluruh keluarga sudah sepakat dan cocok dengan paket ini 😊\n\nKita bisa amankan **{{jumlah_jamaah}} seat** sekaligus agar rombongan keluarga tetap berada dalam satu keberangkatan yang sama.",
+            "next_stage": "payment",
+            "tags": [
+                "family",
+                "pax"
+            ]
+        },
+        {
+            "id": "closing_family_02",
+            "category": "family",
+            "title": "Pastikan Anggota Keluarga",
+            "use_when": "Jumlah keluarga belum benar-benar final.",
+            "script": "Sebelum kita lanjutkan ke proses booking resmi 😊\n\nSaya pastikan kembali ya Kak, total anggota keluarga yang fix berangkat adalah **{{jumlah_jamaah}} orang**?",
+            "next_stage": "closing",
+            "tags": [
+                "family",
+                "confirmation"
+            ]
+        },
+        {
+            "id": "closing_decision_01",
+            "category": "decision_maker",
+            "title": "Perlu Diskusi Pasangan",
+            "use_when": "Prospek mengatakan harus berdiskusi dengan pasangan.",
+            "script": "Tentu sangat boleh Kak, silakan didiskusikan terlebih dahulu dengan pasangan/keluarga tercinta 😊\n\nKira-kira kapan waktu yang paling nyaman bagi saya untuk menyapa kembali guna mendengar kabar baiknya, Kak?",
+            "next_stage": "followup",
+            "tags": [
+                "pasangan",
+                "followup"
+            ]
+        },
+        {
+            "id": "closing_decision_02",
+            "category": "decision_maker",
+            "title": "Tawarkan Konsultasi Bersama",
+            "use_when": "Pasangan atau anggota keluarga membutuhkan penjelasan langsung.",
+            "script": "Agar informasinya sama-sama jelas bagi Kakak dan pasangan 😊\n\nSaya juga siap membantu menjelaskan langsung atau membuatkan grup diskusi singkat. Apakah Kakak ingin saya bantu jelaskan bersama pasangan Kakak?",
+            "next_stage": "followup",
+            "tags": [
+                "decision_maker",
+                "family"
+            ]
+        },
+        {
+            "id": "closing_decision_03",
+            "category": "decision_maker",
+            "title": "Cari Hal yang Perlu Didiskusikan",
+            "use_when": "Prospek ingin diskusi tetapi alasannya belum jelas.",
+            "script": "Boleh sekali Kak, rembuk keluarga memang sangat penting untuk ibadah ini 😊\n\nBiasanya bagian yang paling banyak dibicarakan lebih ke penyesuaian jadwal, rincian biaya, atau fasilitas hotelnya, Kak?",
+            "next_stage": "objection",
+            "tags": [
+                "decision_maker",
+                "gali"
+            ]
+        },
+        {
+            "id": "closing_urgency_01",
+            "category": "urgency",
+            "title": "Batas Promo Nyata",
+            "use_when": "Promo memang memiliki batas waktu yang sudah ditentukan.",
+            "script": "Sebagai informasi penting, penawaran harga promo ini berlaku hingga **{{deadline}}**, Kak 😊\n\nJika paketnya sudah cocok, sebelum kuota promo ditutup ada baiknya seat-nya diamankan terlebih dahulu.",
+            "requires_verified_data": true,
+            "next_stage": "payment",
+            "tags": [
+                "urgency",
+                "promo"
+            ]
+        },
+        {
+            "id": "closing_urgency_02",
+            "category": "urgency",
+            "title": "Deadline Administrasi",
+            "use_when": "Keberangkatan sudah dekat dan ada batas administrasi nyata.",
+            "script": "Mengingat jadwal keberangkatan sudah semakin dekat, proses administrasi visa dan tiket perlu dimulai paling lambat **{{deadline}}** 😊\n\nJika Kakak fix mengambil jadwal ini, sebaiknya kita mulai proses administrasinya dari sekarang.",
+            "requires_verified_data": true,
+            "next_stage": "payment",
+            "tags": [
+                "urgency",
+                "deadline"
+            ]
+        },
+        {
+            "id": "closing_urgency_03",
+            "category": "urgency",
+            "title": "Momentum Prospek",
+            "use_when": "Prospek sendiri memiliki batas waktu seperti cuti atau agenda keluarga.",
+            "script": "Karena Kakak hanya memiliki waktu luang di periode ini 😊\n\nJika jadwal keberangkatan **{{tanggal}}** sudah cocok, mari kita mulai amankan kuotanya dari sekarang agar tidak diambil jamaah lain.",
+            "next_stage": "payment",
+            "tags": [
+                "urgency",
+                "personal_timing"
+            ]
+        },
+        {
+            "id": "closing_scarcity_01",
+            "category": "scarcity",
+            "title": "Seat Tersisa",
+            "use_when": "Jumlah seat aktual sudah diverifikasi.",
+            "script": "Untuk keberangkatan tanggal **{{tanggal}}**, saat ini alokasi kuotanya tersisa **{{seat}}** saja Kak 😊\n\nJika memang sudah cocok, kita bisa amankan hari ini sebelum kuotanya habis.",
+            "requires_verified_data": true,
+            "next_stage": "payment",
+            "tags": [
+                "scarcity",
+                "seat"
+            ]
+        },
+        {
+            "id": "closing_scarcity_02",
+            "category": "scarcity",
+            "title": "Seat untuk Keluarga",
+            "use_when": "Prospek butuh beberapa seat sekaligus dan jumlah tersedia terbatas.",
+            "script": "Karena Kakak membutuhkan **{{jumlah_jamaah}} seat** sekaligus 😊\n\nSaya sangat menyarankan kita amankan bersama sekarang agar seluruh rombongan keluarga dipastikan berada di pesawat dan jadwal yang sama.",
+            "requires_verified_data": true,
+            "next_stage": "payment",
+            "tags": [
+                "scarcity",
+                "family"
+            ]
+        },
+        {
+            "id": "closing_scarcity_03",
+            "category": "scarcity",
+            "title": "Tipe Kamar Terbatas",
+            "use_when": "Tipe kamar tertentu memang memiliki ketersediaan terbatas.",
+            "script": "Untuk tipe kamar pilihan Kakak ketersediaannya sangat terbatas 😊\n\nJika memang ini yang paling pas, saya bantu cek dan amankan stok terbarunya ke pihak hotel sekarang ya Kak?",
+            "requires_verified_data": true,
+            "next_stage": "closing",
+            "tags": [
+                "scarcity",
+                "room"
+            ]
+        },
+        {
+            "id": "closing_soft_01",
+            "category": "soft_closing",
+            "title": "Pilih Paket",
+            "use_when": "Prospek tertarik tetapi belum siap diminta DP.",
+            "script": "Dari pilihan paket yang telah kita diskusikan tadi 😊\n\nKira-kira Kakak dan keluarga lebih mantap memilih paket yang mana?",
+            "next_stage": "closing",
+            "tags": [
+                "soft_closing",
+                "choice"
+            ]
+        },
+        {
+            "id": "closing_soft_02",
+            "category": "soft_closing",
+            "title": "Pilih Jadwal",
+            "use_when": "Prospek masih memilih antara beberapa tanggal.",
+            "script": "Dari pilihan jadwal keberangkatannya 😊\n\nKakak lebih cocok terbang di tanggal **{{tanggal}}** atau opsi tanggal alternatif lainnya?",
+            "next_stage": "closing",
+            "tags": [
+                "soft_closing",
+                "schedule"
+            ]
+        },
+        {
+            "id": "closing_soft_03",
+            "category": "soft_closing",
+            "title": "Minta Data Jamaah",
+            "use_when": "Prospek sudah sangat tertarik tetapi proses pembayaran belum dilakukan.",
+            "script": "Jika pilihan paketnya sudah mantap, saya siap bantu proses administrasinya 😊\n\nBolehkah saya dibantu data nama jamaah yang akan berangkat terlebih dahulu, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "soft_closing",
+                "data"
+            ]
+        },
+        {
+            "id": "closing_soft_04",
+            "category": "soft_closing",
+            "title": "Cek Kesiapan",
+            "use_when": "Agen ingin mengukur kesiapan prospek.",
+            "script": "Jika dari segi paket, jadwal, dan harganya sudah cocok di hati Kakak 😊\n\nApakah Kakak sudah siap melanjutkan ke proses pendaftaran, atau masih ada yang ingin ditanyakan terlebih dahulu?",
+            "next_stage_if_ready": "closing",
+            "next_stage_if_objection": "objection",
+            "tags": [
+                "soft_closing",
+                "readiness"
+            ]
+        },
+        {
+            "id": "closing_after_objection_01",
+            "category": "after_objection",
+            "title": "Closing Ulang Setelah Keberatan Selesai",
+            "use_when": "Keberatan prospek sudah dijawab.",
+            "script": "Alhamdulillah jika penjelasan tadi sudah cukup melegakan hati Kakak 😊\n\nBerarti untuk pilihan paket dan tanggal keberangkatannya sendiri sudah cocok ya, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "TGJP",
+                "reclose"
+            ]
+        },
+        {
+            "id": "closing_after_objection_02",
+            "category": "after_objection",
+            "title": "Pastikan Tidak Ada Keberatan Lain",
+            "use_when": "Satu keberatan sudah selesai tetapi Agen ingin memastikan hambatan lain.",
+            "script": "Selain hal yang tadi kita bahas bersama 😊\n\nApakah masih ada hal lain yang membuat Kakak ragu untuk melanjutkan pendaftaran?",
+            "next_stage_if_clear": "closing",
+            "next_stage_if_objection": "objection",
+            "tags": [
+                "TGJP",
+                "check"
+            ]
+        },
+        {
+            "id": "closing_after_objection_03",
+            "category": "after_objection",
+            "title": "Kembali ke DP",
+            "use_when": "Keberatan sudah diselesaikan dan prospek siap lanjut.",
+            "script": "Jika bagian tersebut sudah aman dan jelas solusinya 😊\n\nMari kita lanjutkan mengamankan seat-nya dengan DP awal sebesar **{{dp}}** ya Kak.",
+            "next_stage": "payment",
+            "tags": [
+                "TGJP",
+                "dp"
+            ]
+        },
+        {
+            "id": "closing_high_intent_01",
+            "category": "high_intent",
+            "title": "Prospek Tanya Cara Daftar",
+            "use_when": "Prospek bertanya cara mendaftar.",
+            "prospect_example": "Cara daftarnya gimana?",
+            "script": "Siap dengan senang hati Kak 😊\n\nUntuk memulai pendaftaran, langkah awalnya kita amankan seat terlebih dahulu dengan DP **{{dp}}**, lalu saya bantu pandu kelengkapan data dan dokumennya.",
+            "next_stage": "payment",
+            "tags": [
+                "high_intent",
+                "registration"
+            ]
+        },
+        {
+            "id": "closing_high_intent_02",
+            "category": "high_intent",
+            "title": "Prospek Tanya DP",
+            "use_when": "Prospek bertanya nominal DP.",
+            "prospect_example": "DP berapa?",
+            "script": "Untuk mengamankan kuota seat di paket **{{paket}}**, komitmen awal cukup dengan DP sebesar **{{dp}}** Kak 😊\n\nJika Kakak sudah siap, saya bantu proses reservasi resminya sekarang ya.",
+            "next_stage": "payment",
+            "tags": [
+                "high_intent",
+                "dp"
+            ]
+        },
+        {
+            "id": "closing_high_intent_03",
+            "category": "high_intent",
+            "title": "Prospek Tanya Seat",
+            "use_when": "Prospek bertanya apakah seat masih tersedia.",
+            "prospect_example": "Masih ada seat?",
+            "script": "Saya bantu cek ketersediaan kuota seat terbarunya ke tim operasional ya Kak 😊\n\nJika kuotanya masih tersedia dan Kakak sudah cocok, langsung bisa kita amankan hari ini.",
+            "next_stage": "closing",
+            "tags": [
+                "high_intent",
+                "seat"
+            ]
+        },
+        {
+            "id": "closing_high_intent_04",
+            "category": "high_intent",
+            "title": "Prospek Bilang Mau Ambil",
+            "use_when": "Prospek sudah menyatakan ingin mengambil paket.",
+            "prospect_example": "Saya ambil yang ini aja.",
+            "script": "MasyaAllah, siap Kak! Kita proseskan untuk paket **{{paket}}** ya 😊\n\nSaya bantu langkah mudah pengamanan seat dan administrasinya sekarang.",
+            "next_stage": "payment",
+            "tags": [
+                "high_intent",
+                "commitment"
+            ]
+        },
+        {
+            "id": "closing_payment_01",
+            "category": "payment",
+            "title": "Kirim Instruksi Pembayaran Resmi",
+            "use_when": "Prospek sudah siap melakukan DP.",
+            "script": "Siap Kak 😊 Untuk booking dan pengamanan seat, DP awal sebesar **{{dp}}** dapat ditransfer langsung ke rekening resmi travel kami:\n\n🏦 **{{rekening}}**\nAtas Nama: **{{nama_rekening}}**\n\nSetelah transfer berhasil, mohon kirimkan bukti transfernya ke saya ya Kak, agar langsung saya teruskan ke tim pusat {{travel}} untuk konfirmasi manifes seat dan penerbitan tanda terima resmi 🙏",
+            "next_stage": "payment_confirmation",
+            "tags": [
+                "payment",
+                "transfer"
+            ]
+        },
+        {
+            "id": "closing_payment_02",
+            "category": "payment",
+            "title": "Konfirmasi Sebelum Transfer",
+            "use_when": "Agen perlu memastikan data sebelum pembayaran.",
+            "script": "Sebelum melakukan transfer, izinkan saya konfirmasikan kembali rinciannya ya Kak:\n\n📌 Paket: **{{paket}}**\n📅 Keberangkatan: **{{tanggal}}**\n👥 Jumlah: **{{jumlah_jamaah}} jamaah**\n\nApakah seluruh datanya sudah benar, Kak?",
+            "next_stage": "payment",
+            "tags": [
+                "payment",
+                "confirmation"
+            ]
+        },
+        {
+            "id": "closing_payment_03",
+            "category": "payment",
+            "title": "Setelah Bukti Transfer Dikirim",
+            "use_when": "Prospek sudah mengirim bukti pembayaran.",
+            "script": "Alhamdulillah bukti transfer sudah saya terima dengan baik, Kak 😊 Terima kasih banyak atas kepercayaan Kakak sekeluarga 🙏\n\nLangsung saya proseskan konfirmasi seat ke tim operasional pusat {{travel}} dan segera saya terbitkan tanda terima resminya ya Kak.",
+            "next_stage": "closed_won",
+            "tags": [
+                "payment",
+                "closed_won"
+            ]
+        },
+        {
+            "id": "closing_pause_01",
+            "category": "transition",
+            "title": "Prospek Mendadak Diam",
+            "use_when": "Prospek tidak merespons setelah closing diajukan.",
+            "script": "Assalamu'alaikum Kak {{nama}} 😊\n\nSemoga hari ini penuh berkah. Melanjutkan pembicaraan kita mengenai rencana keberangkatan paket **{{paket}}**, apakah masih ada hal yang ingin Kakak pastikan kembali sebelum kuota promonya ditutup?",
+            "next_stage": "followup",
+            "script_ref": "scripts/followup.json",
+            "tags": [
+                "no_response"
+            ]
+        },
+        {
+            "id": "closing_objection_01",
+            "category": "transition",
+            "title": "Prospek Menyampaikan Keberatan",
+            "use_when": "Prospek menolak atau menunjukkan hambatan setelah closing.",
+            "script": "Sangat kami pahami Kak 😊 Setiap keberangkatan ibadah tentu memerlukan pertimbangan matang bersama keluarga.\n\nBolehkah saya tahu, apa yang saat ini paling menjadi fokus pertimbangan Kakak: jadwal, skema pembiayaan, atau fasilitas akomodasinya?",
+            "next_stage": "objection",
+            "script_ref": "scripts/objection.json",
+            "tags": [
+                "objection"
+            ]
+        }
+    ],
+    "buying_signals": [
+        {
+            "signal": "Tanya nominal DP",
+            "recommended_category": "high_intent"
+        },
+        {
+            "signal": "Tanya cara daftar",
+            "recommended_category": "high_intent"
+        },
+        {
+            "signal": "Tanya rekening",
+            "recommended_category": "payment"
+        },
+        {
+            "signal": "Tanya seat tersisa",
+            "recommended_category": "high_intent"
+        },
+        {
+            "signal": "Tanya dokumen pendaftaran",
+            "recommended_category": "high_intent"
+        },
+        {
+            "signal": "Mengatakan paket cocok",
+            "recommended_category": "dp"
+        },
+        {
+            "signal": "Mengatakan ingin mengambil paket",
+            "recommended_category": "payment"
+        },
+        {
+            "signal": "Memastikan harga untuk beberapa orang",
+            "recommended_category": "family"
+        }
+    ],
+    "routing_rules": [
+        {
+            "condition": "Prospek belum menyatakan apakah paket cocok.",
+            "recommended_categories": [
+                "confirmation"
+            ]
+        },
+        {
+            "condition": "Prospek sudah cocok dan siap diarahkan ke komitmen.",
+            "recommended_categories": [
+                "dp",
+                "seat"
+            ]
+        },
+        {
+            "condition": "Tanggal keberangkatan menjadi faktor utama.",
+            "recommended_categories": [
+                "schedule"
+            ]
+        },
+        {
+            "condition": "Prospek membawa beberapa anggota keluarga.",
+            "recommended_categories": [
+                "family"
+            ]
+        },
+        {
+            "condition": "Keputusan melibatkan pasangan atau keluarga.",
+            "recommended_categories": [
+                "decision_maker"
+            ]
+        },
+        {
+            "condition": "Ada deadline nyata.",
+            "recommended_categories": [
+                "urgency"
+            ]
+        },
+        {
+            "condition": "Ada ketersediaan terbatas yang sudah diverifikasi.",
+            "recommended_categories": [
+                "scarcity"
+            ]
+        },
+        {
+            "condition": "Prospek tertarik tetapi belum siap DP.",
+            "recommended_categories": [
+                "soft_closing"
+            ]
+        },
+        {
+            "condition": "Keberatan baru selesai ditangani.",
+            "recommended_categories": [
+                "after_objection"
+            ]
+        },
+        {
+            "condition": "Prospek sudah menunjukkan buying intent tinggi.",
+            "recommended_categories": [
+                "high_intent",
+                "payment"
+            ]
+        }
+    ],
+    "urgency_rules": [
+        "Pastikan tanggal deadline benar sebelum mengirim script.",
+        "Jangan menulis 'hari terakhir' jika promo sebenarnya masih dapat diperpanjang.",
+        "Gunakan urgency untuk memberi informasi, bukan menakut-nakuti prospek."
+    ],
+    "scarcity_rules": [
+        "Pastikan jumlah seat terbaru sebelum menyebut angka.",
+        "Jangan mengatakan 'tinggal sedikit' tanpa data.",
+        "Jika seat belum diverifikasi, gunakan script cek ketersediaan terlebih dahulu."
+    ],
+    "do": [
+        "Minta keputusan secara jelas.",
+        "Gunakan satu CTA dalam satu pesan.",
+        "Kenali buying signal dan segera arahkan ke tindakan.",
+        "Pastikan data paket sebelum menerima pembayaran.",
+        "Konfirmasi nominal DP dan ketentuan dengan jelas.",
+        "Kembali ke closing setelah objection selesai."
+    ],
+    "dont": [
+        "Memaksa prospek membayar.",
+        "Menciptakan urgency palsu.",
+        "Menciptakan scarcity palsu.",
+        "Mengirim terlalu banyak penjelasan setelah prospek siap membeli.",
+        "Memberi nomor rekening sebelum memastikan paket dan data dasar jika itu berisiko menimbulkan kesalahan.",
+        "Membiarkan prospek yang sudah bilang mau transfer tanpa follow-up jika pembayaran belum masuk."
+    ],
+    "success_conditions": [
+        {
+            "id": "closed_won",
+            "condition": "Komitmen booking sesuai aturan travel sudah diterima."
+        },
+        {
+            "id": "objection",
+            "condition": "Prospek menyampaikan hambatan yang perlu ditangani."
+        },
+        {
+            "id": "followup",
+            "condition": "Prospek belum mengambil keputusan dan percakapan berhenti."
+        },
+        {
+            "id": "nurture",
+            "condition": "Prospek belum siap sekarang tetapi masih punya rencana."
+        }
+    ],
+    "framework_ref": "closing.json",
+    "objection_ref": "scripts/objection.json",
+    "followup_ref": "scripts/followup.json"
+}

@@ -1,0 +1,516 @@
+{
+    "id": "greeting_script_bank",
+    "nama": "Bank Script Greeting",
+    "deskripsi": "Kumpulan script pembuka percakapan resmi Customer Service (CS) Umroh saat menyambut calon jamaah baru dari berbagai kanal inbound resmi travel.",
+    "tujuan": "Menyambut calon jamaah dengan hangat dan profesional, memperkenalkan otoritas travel resmi, membangun rasa aman instan, lalu memandu percakapan menuju tahap Identifikasi Kebutuhan (NPGD).",
+    "guidelines": [
+        "Balas sesuai konteks pesan pertama calon jamaah.",
+        "Sebut nama calon jamaah jika sudah diketahui.",
+        "Perkenalkan diri sebagai konsultan umroh / mitra resmi travel seperlunya.",
+        "Jangan membuat greeting terlalu panjang.",
+        "Jangan langsung membombardir calon jamaah dengan brosur.",
+        "Jika calon jamaah sudah menyebut kebutuhannya, jangan menanyakan ulang hal yang sama.",
+        "Akhiri greeting dengan pertanyaan ringan yang membawa ke tahap Identification."
+    ],
+    "placeholders": [
+        "{{nama}}",
+        "{{cs_name}}",
+        "{{agent_name}}",
+        "{{travel}}",
+        "{{sumber}}",
+        "{{bulan}}",
+        "{{kota}}",
+        "{{paket}}"
+    ],
+    "scripts": [
+        {
+            "id": "greeting_agent_outbound_lead_01",
+            "category": "general",
+            "title": "Sapa Jamaah Baru dari Web / Link Iklan",
+            "use_when": "CS menyapa calon jamaah yang baru mengisi form minat di web atau iklan resmi travel.",
+            "prospect_example": "(Data masuk di pipeline CS)",
+            "script": "Assalamu'alaikum Kak {{nama}} 😊 Terima kasih telah menghubungi layanan resmi {{travel}}.\n\nSaya {{cs_name}} dari tim layanan jamaah. Menindaklanjuti data formulir yang Kakak isi di website kami, apakah Kakak sedang mencari paket keberangkatan dalam waktu dekat ini atau untuk musim liburan nanti, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "outbound",
+                "referral",
+                "web_lead"
+            ]
+        },
+        {
+            "id": "greeting_agent_personal_network_01",
+            "category": "general",
+            "title": "Menyapa Kenalan / Kerabat (Personal Network)",
+            "use_when": "CS menyapa kontak relasi untuk menawarkan informasi umroh resmi.",
+            "prospect_example": "(Inisiatif CS ke kontak pribadi)",
+            "script": "Assalamu'alaikum Kak {{nama}} 😊 Semoga berkah dan sehat selalu sekeluarga. Senang bisa menyapa Kakak kembali.\n\nSekadar mengabarkan, saat ini saya bertugas di layanan konsultasi resmi {{travel}}. Semisal Kakak atau keluarga ada rencana ibadah umroh di tahun ini, boleh saya bantu kirimkan jadwal keberangkatan terbarunya, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "personal_network",
+                "warm_lead",
+                "konsultasi"
+            ]
+        },
+        {
+            "id": "greeting_general_01",
+            "category": "general",
+            "title": "Greeting Umum",
+            "use_when": "Prospek baru menyapa tanpa menyampaikan kebutuhan.",
+            "prospect_example": "Assalamu'alaikum",
+            "script": "Wa'alaikumussalam Kak {{nama}} 😊 Selamat datang di layanan resmi {{travel}}.\n\nSaya {{cs_name}} yang siap membantu rencana ibadah Kakak. Boleh tahu, Kakak sedang mencari informasi paket untuk keberangkatan di bulan apa?",
+            "next_stage": "identification",
+            "tags": [
+                "general",
+                "new_prospect"
+            ]
+        },
+        {
+            "id": "greeting_general_02",
+            "category": "general",
+            "title": "Prospek Hanya Bilang Halo",
+            "use_when": "Prospek hanya mengirim sapaan singkat.",
+            "prospect_example": "Halo kak",
+            "script": "Halo Kak {{nama}} 😊 Terima kasih sudah menghubungi {{travel}}.\n\nSaya {{cs_name}}, siap mendampingi rencana ibadah Kakak. Boleh tahu, Kakak tertarik dengan paket umroh promo hemat atau paket yang fasilitasnya lebih nyaman/premium, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "general",
+                "short"
+            ]
+        },
+        {
+            "id": "greeting_info_01",
+            "category": "minta_info",
+            "title": "Prospek Minta Info Umroh",
+            "use_when": "Prospek mengatakan ingin meminta informasi umroh tetapi belum spesifik.",
+            "prospect_example": "Mau tanya info umroh kak",
+            "script": "Siap dengan senang hati Kak {{nama}} 😊\n\nSaya {{cs_name}} dari Customer Service resmi {{travel}}. Agar saya bisa pilihkan paket yang paling pas, rencananya Kakak ingin berangkat di kisaran bulan apa?",
+            "next_stage": "identification",
+            "tags": [
+                "info",
+                "new_prospect"
+            ]
+        },
+        {
+            "id": "greeting_price_01",
+            "category": "tanya_harga",
+            "title": "Langsung Tanya Harga",
+            "use_when": "Pesan pertama prospek langsung menanyakan harga umroh.",
+            "prospect_example": "Umroh berapa kak?",
+            "script": "Siap Kak {{nama}}, ada beberapa pilihan paket umroh yang tersedia 😊\n\nSupaya saya tidak salah kasih rekomendasi, rencananya Kakak ingin berangkat di kisaran bulan apa?",
+            "next_stage": "identification",
+            "tags": [
+                "harga",
+                "need",
+                "schedule"
+            ]
+        },
+        {
+            "id": "greeting_price_02",
+            "category": "tanya_harga",
+            "title": "Tanya Paket Termurah",
+            "use_when": "Prospek langsung mencari harga paling murah.",
+            "prospect_example": "Yang paling murah berapa?",
+            "script": "Ada beberapa pilihan paket promo menarik Kak 😊\n\nBiar saya carikan yang pas, boleh tahu rencananya berangkat dari {{kota}} atau kota lain?",
+            "next_stage": "identification",
+            "tags": [
+                "harga",
+                "budget",
+                "departure_city"
+            ]
+        },
+        {
+            "id": "greeting_schedule_01",
+            "category": "tanya_jadwal",
+            "title": "Langsung Tanya Jadwal",
+            "use_when": "Prospek langsung menanyakan jadwal keberangkatan.",
+            "prospect_example": "Ada keberangkatan Desember?",
+            "script": "Ada Kak, saya bantu cek pilihan jadwal keberangkatannya ya 😊\n\nRencananya untuk keberangkatan berapa orang, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "schedule",
+                "pax"
+            ]
+        },
+        {
+            "id": "greeting_specific_month_01",
+            "category": "tanya_jadwal",
+            "title": "Sudah Menyebut Bulan",
+            "use_when": "Prospek sudah menyebut target bulan keberangkatan.",
+            "prospect_example": "Saya cari umroh bulan Februari.",
+            "script": "Siap Kak, untuk keberangkatan Februari saya bantu carikan pilihan terbaiknya 😊\n\nRencananya berangkat sendiri atau bersama keluarga?",
+            "next_stage": "identification",
+            "tags": [
+                "schedule",
+                "family"
+            ]
+        },
+        {
+            "id": "greeting_package_01",
+            "category": "tanya_paket",
+            "title": "Prospek Minta Paket",
+            "use_when": "Prospek langsung meminta pilihan paket.",
+            "prospect_example": "Boleh kirim paket umrohnya?",
+            "script": "Boleh Kak 😊\n\nBiar informasi yang saya kirim tepat sasaran dan tidak terlalu banyak, Kakak sudah ada target keberangkatan di bulan apa?",
+            "next_stage": "identification",
+            "tags": [
+                "package",
+                "schedule"
+            ]
+        },
+        {
+            "id": "greeting_brochure_01",
+            "category": "minta_brosur",
+            "title": "Prospek Minta Brosur",
+            "use_when": "Prospek langsung meminta brosur.",
+            "prospect_example": "Kirim brosurnya dong kak",
+            "script": "Siap Kak, dengan senang hati 😊\n\nKarena pilihan paket kami cukup beragam, agar saya kirimkan brosur yang paling pas, rencananya Kakak ingin keberangkatan di bulan apa?",
+            "next_stage": "identification",
+            "tags": [
+                "brochure",
+                "schedule",
+                "pax"
+            ]
+        },
+        {
+            "id": "greeting_family_01",
+            "category": "keluarga",
+            "title": "Prospek Ingin Berangkat dengan Keluarga",
+            "use_when": "Pesan pertama sudah menyebut ingin berangkat bersama keluarga.",
+            "prospect_example": "Saya mau umroh sama keluarga.",
+            "script": "MasyaAllah, siap Kak 😊 InsyaAllah saya bantu carikan paket yang paling cocok dan nyaman untuk keluarga.\n\nRencananya berapa orang yang akan ikut berangkat bersama?",
+            "next_stage": "identification",
+            "tags": [
+                "family",
+                "pax"
+            ]
+        },
+        {
+            "id": "greeting_parent_01",
+            "category": "orang_tua",
+            "title": "Prospek Ingin Membawa Orang Tua",
+            "use_when": "Prospek menyebut ingin berangkat bersama ayah atau ibu.",
+            "prospect_example": "Saya mau ajak ibu umroh.",
+            "script": "MasyaAllah, niat mulia sekali Kak 😊 InsyaAllah saya bantu carikan paket yang fasilitas dan jarak hotelnya paling nyaman untuk Ibu.\n\nKalau boleh tahu, usia beliau sekarang berapa, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "orang_tua",
+                "lansia",
+                "comfort"
+            ]
+        },
+        {
+            "id": "greeting_couple_01",
+            "category": "pasangan",
+            "title": "Prospek Ingin Umroh dengan Pasangan",
+            "use_when": "Prospek menyebut akan berangkat dengan suami atau istri.",
+            "prospect_example": "Mau umroh berdua sama suami.",
+            "script": "MasyaAllah, siap Bu 😊 Saya bantu carikan pilihan paket terbaik untuk berdua.\n\nSudah ada target bulan keberangkatannya?",
+            "next_stage": "identification",
+            "tags": [
+                "pasangan",
+                "schedule"
+            ]
+        },
+        {
+            "id": "greeting_first_timer_01",
+            "category": "first_timer",
+            "title": "Pertama Kali Umroh",
+            "use_when": "Prospek mengatakan belum pernah umroh sebelumnya.",
+            "prospect_example": "Saya belum pernah umroh, mau tanya-tanya dulu.",
+            "script": "Alhamdulillah, berkah niat baiknya Kak {{nama}} 😊 Saya {{cs_name}} dari tim bimbingan jamaah {{travel}}.\n\nTenang saja Kak, kami siap dampingi dan jelaskan seluruh prosesnya dari nol sampai selesai di Tanah Suci. Untuk rencana awal, Kakak berniat berangkat sendiri atau bersama keluarga tercinta?",
+            "next_stage": "identification",
+            "tags": [
+                "first_timer",
+                "trust",
+                "schedule"
+            ]
+        },
+        {
+            "id": "greeting_budget_01",
+            "category": "budget",
+            "title": "Prospek Langsung Menyebut Budget",
+            "use_when": "Prospek menyebut kisaran budget pada pesan pertama.",
+            "prospect_example": "Ada paket sekitar 30 juta?",
+            "script": "Ada beberapa pilihan paket yang bisa kita sesuaikan dengan budget Kakak 😊\n\nSupaya saya carikan yang paling tepat dan hemat, rencananya mau berangkat bulan apa?",
+            "next_stage": "identification",
+            "tags": [
+                "budget",
+                "schedule"
+            ]
+        },
+        {
+            "id": "greeting_city_01",
+            "category": "departure_city",
+            "title": "Prospek Menanyakan Keberangkatan dari Kota Tertentu",
+            "use_when": "Prospek langsung menanyakan keberangkatan dari kota tertentu.",
+            "prospect_example": "Ada keberangkatan dari Medan?",
+            "script": "Ada Kak, saya bantu cek jadwal keberangkatan dari Medan ya 😊\n\nSudah ada target bulan keberangkatannya?",
+            "next_stage": "identification",
+            "tags": [
+                "departure_city",
+                "schedule"
+            ]
+        },
+        {
+            "id": "greeting_referral_01",
+            "category": "referral",
+            "title": "Prospek dari Referral Jamaah",
+            "use_when": "Prospek mengatakan mendapat kontak CS dari jamaah atau kenalan.",
+            "prospect_example": "Saya dapat nomor Kakak dari Bu Rina.",
+            "script": "MasyaAllah, salam hangat untuk keluarga ya Kak 😊 Terima kasih sudah menghubungi {{travel}}.\n\nSaya {{cs_name}}, betul sekali alhamdulillah Bu Rina adalah jamaah kami yang telah mempercayakan perjalanan ibadahnya bersama {{travel}}. Untuk rencana ibadah Kakak sendiri, apakah ada rencana berangkat di periode yang sama dengan beliau?",
+            "next_stage": "identification",
+            "tags": [
+                "referral",
+                "trust"
+            ]
+        },
+        {
+            "id": "greeting_referral_02",
+            "category": "referral",
+            "title": "Referral Tanpa Menyebut Nama",
+            "use_when": "Prospek mengatakan mendapat nomor dari teman tetapi tidak menyebut siapa.",
+            "prospect_example": "Nomornya dapat dari teman.",
+            "script": "Alhamdulillah, terima kasih banyak ya Kak sudah menghubungi layanan resmi {{travel}} 😊\n\nSaya {{cs_name}} yang siap melayani Kakak. Biar saya bisa siapkan informasi yang paling sesuai, Kakak ingin rekomendasi jadwal keberangkatan terdekat atau paket promo khusus, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "referral",
+                "general"
+            ]
+        },
+        {
+            "id": "greeting_social_media_01",
+            "category": "social_media",
+            "title": "Prospek dari Media Sosial",
+            "use_when": "Prospek masuk setelah melihat postingan atau konten seputar umroh.",
+            "prospect_example": "Saya lihat dari Instagram.",
+            "script": "MasyaAllah, terima kasih sudah menyapa akun resmi {{travel}} ya Kak {{nama}} 😊 Saya {{cs_name}} dari tim layanan jamaah.\n\nApakah Kakak tertarik dengan paket yang tadi Kakak lihat di postingan media sosial kami, atau sedang mencari jadwal keberangkatan lain?",
+            "next_stage": "identification",
+            "tags": [
+                "instagram",
+                "tiktok",
+                "content"
+            ]
+        },
+        {
+            "id": "greeting_status_wa_01",
+            "category": "whatsapp_status",
+            "title": "Prospek dari Status WhatsApp",
+            "use_when": "Prospek membalas status WhatsApp terkait paket atau perjalanan umroh.",
+            "prospect_example": "Ini keberangkatan kapan kak?",
+            "script": "Betul sekali Kak, yang di status tadi untuk keberangkatan bulan {{bulan}} 😊\n\nApakah Kakak sedang mencari jadwal keberangkatan di bulan tersebut?",
+            "next_stage": "identification",
+            "tags": [
+                "whatsapp",
+                "status",
+                "schedule"
+            ]
+        },
+        {
+            "id": "greeting_ad_01",
+            "category": "iklan",
+            "title": "Prospek dari Iklan / Link Web",
+            "use_when": "Prospek masuk dari link/iklan dan pesan awal masih umum.",
+            "prospect_example": "Saya mau info lebih lanjut.",
+            "script": "Assalamu'alaikum Kak {{nama}} 😊 Terima kasih telah menghubungi WhatsApp resmi {{travel}}.\n\nSaya {{cs_name}}, siap memberikan rincian promo yang Kakak lihat di iklan kami. Untuk kuota promonya, rencananya Kakak ingin cek untuk keberangkatan berapa orang, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "ads",
+                "new_prospect"
+            ]
+        },
+        {
+            "id": "greeting_promo_01",
+            "category": "promo",
+            "title": "Prospek Bertanya Promo",
+            "use_when": "Prospek masuk karena melihat informasi promo.",
+            "prospect_example": "Promonya masih ada?",
+            "script": "Untuk promo yang Kakak lihat, saya bantu cek alokasi seat-nya dulu ya 😊\n\nRencananya keberangkatan untuk berapa orang?",
+            "next_stage": "identification",
+            "tags": [
+                "promo",
+                "pax"
+            ]
+        },
+        {
+            "id": "greeting_hotel_01",
+            "category": "hotel",
+            "title": "Prospek Langsung Tanya Hotel",
+            "use_when": "Prospek langsung menanyakan hotel atau jaraknya.",
+            "prospect_example": "Hotelnya dekat nggak?",
+            "script": "Untuk paket yang Kakak tanyakan, saya bantu cek detail hotel dan jarak jalannya ya 😊\n\nKalau boleh tahu, jarak hotel jadi prioritas utama karena berangkat bersama orang tua atau memang ingin yang lebih dekat ke masjid?",
+            "next_stage": "identification",
+            "tags": [
+                "hotel",
+                "pain",
+                "gain"
+            ]
+        },
+        {
+            "id": "greeting_trust_01",
+            "category": "trust",
+            "title": "Prospek Langsung Tanya Travel Aman atau Tidak",
+            "use_when": "Pesan pertama menunjukkan kekhawatiran tentang keamanan atau kepercayaan.",
+            "prospect_example": "Travelnya aman nggak?",
+            "script": "Sangat wajar dan tepat sekali Kakak menanyakan hal ini di awal. Ini perjalanan ibadah yang mulia.\n\nKami di {{travel}} adalah penyelenggara resmi berizin Kemenag RI dengan nomor PPIU: {{ppiu}}. Seluruh transaksi dilakukan melalui rekening giro resmi perusahaan atas nama PT, bukan perorangan.\n\nApakah Kakak ingin saya kirimkan tautan pengecekan izin resmi kami di website Kemenag RI sekarang, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "trust",
+                "pain"
+            ]
+        },
+        {
+            "id": "greeting_legalitas_01",
+            "category": "trust",
+            "title": "Prospek Langsung Tanya Legalitas",
+            "use_when": "Prospek langsung meminta informasi legalitas travel.",
+            "prospect_example": "Travel ini resmi?",
+            "script": "Siap Kak, pertanyaan itu memang sangat penting sebelum memutuskan mendaftar 😊\n\nSaya kirimkan nomor izin PPIU resmi Kemenag dan legalitas travel kami ya. Kakak saat ini sedang membandingkan beberapa travel juga?",
+            "next_stage": "identification",
+            "tags": [
+                "legalitas",
+                "trust",
+                "comparison"
+            ]
+        },
+        {
+            "id": "greeting_old_prospect_01",
+            "category": "returning_prospect",
+            "title": "Prospek Lama Chat Kembali",
+            "use_when": "Prospek yang pernah berdiskusi kembali menghubungi Agen.",
+            "prospect_example": "Kak, masih ada paket umroh?",
+            "script": "Alhamdulillah senang bisa silaturahmi kembali dengan Kakak 😊\n\nTerakhir kita sempat membahas rencana ibadah umroh ya Kak. Untuk rencana keberangkatan saat ini apakah masih sama target bulannya, atau sudah ada rencana tanggal baru?",
+            "next_stage": "identification",
+            "tags": [
+                "old_prospect",
+                "reactivation"
+            ]
+        },
+        {
+            "id": "greeting_specific_package_01",
+            "category": "specific_package",
+            "title": "Prospek Sudah Menyebut Paket",
+            "use_when": "Prospek menyebut nama atau paket tertentu pada pesan pertama.",
+            "prospect_example": "Saya tertarik paket {{paket}}.",
+            "script": "Siap Kak 😊 Untuk {{paket}} saya bantu jelaskan rincian lengkapnya ya.\n\nRencananya nanti berangkat untuk berapa orang?",
+            "next_stage": "identification",
+            "tags": [
+                "specific_package",
+                "pax"
+            ]
+        },
+        {
+            "id": "greeting_ready_01",
+            "category": "high_intent",
+            "title": "Prospek Langsung Ingin Daftar",
+            "use_when": "Prospek datang dengan buying intent tinggi dan mengatakan ingin mendaftar.",
+            "prospect_example": "Saya mau daftar umroh.",
+            "script": "MasyaAllah, alhamdulillah siap kami bantu proses pendaftarannya Kak 😊\n\nBoleh diinfokan nama paket atau tanggal keberangkatan yang sudah Kakak incar?",
+            "next_stage": "identification",
+            "tags": [
+                "high_intent",
+                "registration",
+                "pax"
+            ]
+        },
+        {
+            "id": "greeting_seat_01",
+            "category": "high_intent",
+            "title": "Prospek Langsung Tanya Seat",
+            "use_when": "Prospek langsung menanyakan ketersediaan seat tertentu.",
+            "prospect_example": "Untuk tanggal 12 Desember masih ada seat?",
+            "script": "Siap Kak, saya bantu cek ketersediaan kuota seat-nya ya 😊\n\nRencananya butuh untuk berapa seat?",
+            "next_stage": "identification",
+            "tags": [
+                "high_intent",
+                "seat",
+                "pax"
+            ]
+        }
+    ],
+    "routing_rules": [
+        {
+            "condition": "Prospek hanya menyapa.",
+            "recommended_categories": [
+                "general"
+            ]
+        },
+        {
+            "condition": "Prospek langsung menanyakan harga.",
+            "recommended_categories": [
+                "tanya_harga",
+                "budget"
+            ]
+        },
+        {
+            "condition": "Prospek langsung menanyakan tanggal.",
+            "recommended_categories": [
+                "tanya_jadwal"
+            ]
+        },
+        {
+            "condition": "Prospek meminta brosur atau paket.",
+            "recommended_categories": [
+                "minta_brosur",
+                "tanya_paket"
+            ]
+        },
+        {
+            "condition": "Prospek sudah menyebut orang tua atau keluarga.",
+            "recommended_categories": [
+                "orang_tua",
+                "keluarga",
+                "pasangan"
+            ]
+        },
+        {
+            "condition": "Prospek menunjukkan masalah kepercayaan.",
+            "recommended_categories": [
+                "trust"
+            ]
+        },
+        {
+            "condition": "Prospek berasal dari referral.",
+            "recommended_categories": [
+                "referral"
+            ]
+        },
+        {
+            "condition": "Prospek berasal dari konten atau iklan.",
+            "recommended_categories": [
+                "social_media",
+                "whatsapp_status",
+                "iklan"
+            ]
+        },
+        {
+            "condition": "Prospek pernah berkomunikasi sebelumnya.",
+            "recommended_categories": [
+                "returning_prospect"
+            ]
+        },
+        {
+            "condition": "Prospek langsung ingin daftar, DP, atau mengecek seat.",
+            "recommended_categories": [
+                "high_intent"
+            ]
+        }
+    ],
+    "do": [
+        "Gunakan nama prospek jika diketahui.",
+        "Sesuaikan sapaan Kak, Bu, atau Pak dengan konteks.",
+        "Jawab bagian penting dari pertanyaan prospek sebelum menggali.",
+        "Gunakan satu pertanyaan lanjutan yang paling relevan.",
+        "Bawa percakapan secara alami menuju Identification."
+    ],
+    "dont": [
+        "Mengirim paragraf perkenalan yang terlalu panjang.",
+        "Langsung mengirim lima atau lebih brosur tanpa memahami kebutuhan.",
+        "Menanyakan ulang informasi yang sudah ditulis prospek.",
+        "Menggunakan terlalu banyak emoji.",
+        "Langsung meminta DP pada prospek yang masih sekadar mencari informasi.",
+        "Menggunakan script secara kaku tanpa menyesuaikan konteks."
+    ],
+    "next_stage": "identification",
+    "framework_ref": "conversion_cycle.json",
+    "identification_ref": "identification.json"
+}

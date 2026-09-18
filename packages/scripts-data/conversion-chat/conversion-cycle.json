@@ -1,0 +1,223 @@
+{
+    "id": "umroh_conversion_cycle",
+    "nama": "Umroh Conversion Cycle",
+    "deskripsi": "Alur kerja Agen/Konsultan Umroh untuk mendampingi calon jamaah dari perkenalan awal hingga closing dengan status yang jelas.",
+    "tujuan_utama": "Mengarahkan setiap prospek dari percakapan awal hingga closing, nurture, atau batal tanpa membiarkan prospek menggantung.",
+    "stages": [
+        {
+            "id": "greeting",
+            "urutan": 1,
+            "nama": "Greeting + Sell Yourself",
+            "tujuan": "Menyambut calon jamaah, membangun kenyamanan, dan menunjukkan bahwa Agen adalah konsultan dan pendamping yang tepat untuk membantu kebutuhan umrohnya.",
+            "fokus": [
+                "Sambut dengan ramah",
+                "Perkenalkan diri",
+                "Bangun kepercayaan",
+                "Tunjukkan kesiapan membantu"
+            ],
+            "indikator_selesai": "Prospek nyaman melanjutkan percakapan dan bersedia memberikan informasi tentang kebutuhannya.",
+            "next_stage": "identification",
+            "detail_ref": "scripts/greeting.json"
+        },
+        {
+            "id": "identification",
+            "urutan": 2,
+            "nama": "Prospect Identification",
+            "tujuan": "Memahami kebutuhan, masalah, keinginan, impian, dan kondisi prospek sebelum memberikan penawaran.",
+            "framework": "NPGD",
+            "framework_items": [
+                {
+                    "kode": "N",
+                    "nama": "Need",
+                    "arti": "Apa yang dibutuhkan prospek."
+                },
+                {
+                    "kode": "P",
+                    "nama": "Pain",
+                    "arti": "Masalah, kekhawatiran, atau hambatan yang dirasakan prospek."
+                },
+                {
+                    "kode": "G",
+                    "nama": "Gain",
+                    "arti": "Manfaat atau hasil yang ingin didapatkan prospek."
+                },
+                {
+                    "kode": "D",
+                    "nama": "Dream",
+                    "arti": "Keinginan atau pengalaman besar yang ingin diwujudkan prospek."
+                }
+            ],
+            "qualification": [
+                "Waktu keberangkatan",
+                "Jumlah jamaah",
+                "Kota keberangkatan",
+                "Budget",
+                "Pendamping atau anggota keluarga",
+                "Kondisi khusus jamaah",
+                "Kesiapan dokumen",
+                "Cara pembayaran"
+            ],
+            "catatan": "Tidak semua unsur NPGD harus digali dalam setiap percakapan. Gunakan yang paling relevan dengan informasi yang dibawa prospek.",
+            "indikator_selesai": "Agen memiliki gambaran yang cukup untuk menentukan paket dan pendekatan penawaran yang relevan.",
+            "next_stage": "offer",
+            "detail_ref": "identification.json",
+            "script_ref": "scripts/identification.json"
+        },
+        {
+            "id": "offer",
+            "urutan": 3,
+            "nama": "Offer",
+            "tujuan": "Memberikan rekomendasi paket atau solusi yang paling sesuai dengan hasil identifikasi prospek.",
+            "fokus": [
+                "Hubungkan penawaran dengan kebutuhan prospek",
+                "Jelaskan alasan paket direkomendasikan",
+                "Tonjolkan benefit yang relevan",
+                "Sampaikan harga dan ketentuan dengan jelas",
+                "Arahkan percakapan menuju keputusan"
+            ],
+            "prinsip": "Jangan hanya mengirim brosur atau daftar paket. Jelaskan mengapa penawaran tersebut cocok untuk prospek.",
+            "indikator_selesai": "Prospek memahami penawaran dan menunjukkan respon terhadap paket yang direkomendasikan.",
+            "next_stage": "closing",
+            "loop_back": "identification",
+            "loop_condition": "Kebutuhan prospek belum jelas atau paket yang ditawarkan ternyata tidak sesuai.",
+            "detail_ref": "offers.json",
+            "script_ref": "scripts/offer.json"
+        },
+        {
+            "id": "closing",
+            "urutan": 4,
+            "nama": "Closing",
+            "tujuan": "Mendorong prospek mengambil komitmen nyata untuk mengamankan keberangkatan.",
+            "primary_action": "Mengamankan seat dengan minimal DP sesuai ketentuan.",
+            "fokus": [
+                "Konfirmasi kecocokan paket",
+                "Konfirmasi kecocokan jadwal",
+                "Minta keputusan",
+                "Arahkan ke pembayaran DP",
+                "Gunakan urgency jika relevan",
+                "Gunakan scarcity jika relevan"
+            ],
+            "prinsip": [
+                "Urgency harus berdasarkan kondisi nyata.",
+                "Scarcity harus berdasarkan ketersediaan nyata.",
+                "Closing harus menghasilkan tindakan atau status yang jelas."
+            ],
+            "success_status": "closed_won",
+            "objection_stage": "objection",
+            "no_response_stage": "followup",
+            "detail_ref": "closing.json",
+            "script_ref": "scripts/closing.json"
+        },
+        {
+            "id": "objection",
+            "urutan": 5,
+            "nama": "Handling Objection",
+            "tujuan": "Memahami dan menyelesaikan keberatan yang menghambat prospek mengambil keputusan.",
+            "framework": "TGJP",
+            "framework_items": [
+                {
+                    "kode": "T",
+                    "nama": "Terima",
+                    "arti": "Terima keberatan prospek tanpa membantah atau defensif."
+                },
+                {
+                    "kode": "G",
+                    "nama": "Gali",
+                    "arti": "Cari alasan sebenarnya di balik keberatan yang disampaikan."
+                },
+                {
+                    "kode": "J",
+                    "nama": "Jawab",
+                    "arti": "Berikan jawaban atau solusi sesuai akar keberatan."
+                },
+                {
+                    "kode": "P",
+                    "nama": "Pastikan",
+                    "arti": "Pastikan apakah keberatan sudah terjawab dan arahkan kembali menuju keputusan."
+                }
+            ],
+            "prinsip": "Jangan langsung menjawab keberatan sebelum memahami alasan sebenarnya.",
+            "next_stage": "closing",
+            "no_response_stage": "followup",
+            "detail_ref": "objections.json",
+            "script_ref": "scripts/objection.json"
+        },
+        {
+            "id": "followup",
+            "urutan": 6,
+            "nama": "Follow-up",
+            "tujuan": "Memastikan setiap prospek yang berhenti di tengah proses mendapatkan kepastian status.",
+            "fokus": [
+                "Cari tahu posisi terakhir prospek",
+                "Lanjutkan percakapan dari konteks terakhir",
+                "Cari penyebab prospek berhenti",
+                "Dorong ke langkah berikutnya",
+                "Tetapkan status prospek"
+            ],
+            "prinsip": "Tidak boleh ada prospek yang menggantung tanpa status atau rencana tindak lanjut.",
+            "possible_results": [
+                {
+                    "status": "closed_won",
+                    "nama": "Closing",
+                    "arti": "Prospek sudah memberikan komitmen sesuai ketentuan, seperti pembayaran DP."
+                },
+                {
+                    "status": "nurture",
+                    "nama": "Belum Sekarang",
+                    "arti": "Prospek masih memiliki potensi tetapi belum siap mengambil keputusan. Harus memiliki waktu follow-up berikutnya."
+                },
+                {
+                    "status": "closed_lost",
+                    "nama": "Batal",
+                    "arti": "Prospek tidak melanjutkan dan alasan batal sudah diketahui."
+                }
+            ],
+            "return_to_stage": [
+                "identification",
+                "offer",
+                "closing",
+                "objection"
+            ],
+            "detail_ref": "followups.json",
+            "script_ref": "scripts/followup.json"
+        }
+    ],
+    "prospect_statuses": [
+        {
+            "id": "new",
+            "nama": "Prospek Baru"
+        },
+        {
+            "id": "identifying",
+            "nama": "Sedang Diidentifikasi"
+        },
+        {
+            "id": "offered",
+            "nama": "Sudah Diberikan Penawaran"
+        },
+        {
+            "id": "closing",
+            "nama": "Dalam Proses Closing"
+        },
+        {
+            "id": "objection",
+            "nama": "Ada Keberatan"
+        },
+        {
+            "id": "followup",
+            "nama": "Perlu Follow-up"
+        },
+        {
+            "id": "nurture",
+            "nama": "Belum Sekarang"
+        },
+        {
+            "id": "closed_won",
+            "nama": "Closing"
+        },
+        {
+            "id": "closed_lost",
+            "nama": "Batal"
+        }
+    ]
+}

@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { @apply border-zinc-200; }
+  html { @apply bg-zinc-50 antialiased; }
+  body { @apply m-0 min-w-[320px] bg-zinc-50 font-sans text-zinc-900; }
+  ::selection { @apply bg-zinc-900 text-white; }
+  input, textarea { @apply outline-none; }
+  input:focus, textarea:focus { @apply border-zinc-500 ring-2 ring-zinc-900/10; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  button:focus-visible, a:focus-visible, [role='button']:focus-visible { @apply outline-none ring-2 ring-zinc-950 ring-offset-2; }
+}
+
+@layer components {
+  .surface { @apply rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,.03)]; }
+  .field { @apply h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm text-zinc-900 placeholder:text-zinc-400 transition; }
+  .label { @apply mb-1.5 block text-xs font-bold uppercase tracking-[.08em] text-zinc-500; }
+  .page-title { @apply font-display text-2xl font-extrabold tracking-[-.035em] text-zinc-950 sm:text-3xl; }
+  .app-page { @apply mx-auto w-full max-w-[1440px] space-y-6 animate-fade-up; }
+  .page-header { @apply flex flex-col justify-between gap-4 lg:flex-row lg:items-end; }
+  .page-kicker { @apply mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[.14em] text-zinc-400; }
+  .page-subtitle { @apply mt-2 max-w-2xl text-sm leading-6 text-zinc-500; }
+}
+
+.thin-scrollbar { scrollbar-color: #d4d4d8 transparent; scrollbar-width: thin; }
+.noise { background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E"); }
+
+/* Inbox uses an explicit application grid. Keeping this outside generated utility
+   breakpoints prevents browser zoom and lazy-route CSS ordering from collapsing it. */
+.inbox-workspace {
+  display: grid;
+  grid-template-columns: 280px minmax(400px, 1fr) 360px;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.inbox-conversation-list,
+.inbox-chat,
+.inbox-copilot {
+  min-width: 0;
+  min-height: 0;
+}
+
+.inbox-copilot {
+  display: flex;
+}
+
+.inbox-copilot-trigger,
+.inbox-copilot-close,
+.inbox-copilot-backdrop {
+  display: none;
+}
+
+@media (max-width: 1439px) {
+  .inbox-workspace {
+    grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  }
+
+  .inbox-copilot {
+    position: absolute;
+    z-index: 40;
+    inset: 0 0 0 auto;
+    display: none;
+    width: min(390px, 92vw);
+    box-shadow: -12px 0 30px rgb(0 0 0 / 8%);
+  }
+
+  .inbox-copilot.is-open {
+    display: flex;
+  }
+
+  .inbox-copilot-trigger,
+  .inbox-copilot-close {
+    display: inline-flex;
+  }
+
+  .inbox-copilot-backdrop {
+    position: absolute;
+    z-index: 30;
+    inset: 0;
+    display: block;
+    background: rgb(0 0 0 / 25%);
+    backdrop-filter: blur(1px);
+  }
+}
+
+@media (min-width: 1536px) {
+  .inbox-workspace {
+    grid-template-columns: 300px minmax(460px, 1fr) 380px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

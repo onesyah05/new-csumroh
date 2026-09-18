@@ -1,0 +1,637 @@
+{
+    "id": "followup_framework",
+    "nama": "Follow-up",
+    "deskripsi": "Panduan untuk menindaklanjuti prospek yang berhenti di tengah proses sampai mendapatkan status yang jelas.",
+    "tujuan": "Memastikan setiap prospek memiliki langkah berikutnya atau status akhir yang jelas: lanjut, nurture, closing, atau batal.",
+    "prinsip": [
+        "Follow-up harus melanjutkan konteks percakapan terakhir.",
+        "Jangan mengirim pesan follow-up yang sama ke semua prospek.",
+        "Tujuan follow-up bukan sekadar mendapatkan balasan, tetapi mendapatkan kepastian.",
+        "Jangan memulai percakapan dari nol jika sebelumnya sudah ada informasi.",
+        "Jika prospek pernah menjanjikan waktu tertentu, follow-up mengikuti waktu tersebut.",
+        "Jika muncul keberatan baru, arahkan ke Handling Objection.",
+        "Jika prospek kembali tertarik, lanjutkan ke tahap Conversion Cycle yang relevan.",
+        "Jika prospek belum siap sekarang tetapi masih punya rencana, tetapkan sebagai Nurture.",
+        "Jika prospek tidak melanjutkan, cari tahu alasannya dan tetapkan sebagai Closed Lost.",
+        "Jangan mengejar prospek secara berlebihan."
+    ],
+    "followup_formula": {
+        "nama": "Context - Check - Next Step",
+        "steps": [
+            {
+                "id": "context",
+                "nama": "Context",
+                "tujuan": "Ingatkan secara singkat pembicaraan atau kesepakatan terakhir.",
+                "contoh": "Kaitkan pesan dengan paket, jadwal, pertanyaan, atau keputusan terakhir prospek."
+            },
+            {
+                "id": "check",
+                "nama": "Check",
+                "tujuan": "Cari tahu perkembangan atau hal yang masih menghambat.",
+                "contoh": "Tanyakan apakah paket sudah dilihat atau apakah diskusi dengan keluarga sudah dilakukan."
+            },
+            {
+                "id": "next_step",
+                "nama": "Next Step",
+                "tujuan": "Arahkan percakapan ke satu langkah berikutnya.",
+                "contoh": "Lanjut konsultasi, pilih paket, selesaikan objection, DP, follow-up berikutnya, atau tutup prospek."
+            }
+        ]
+    },
+    "followup_categories": [
+        {
+            "id": "after_greeting_no_response",
+            "nama": "Tidak Membalas Setelah Greeting",
+            "stage": "greeting",
+            "use_when": "Prospek menghubungi tetapi tidak melanjutkan percakapan setelah dibalas Agen.",
+            "tujuan": "Membuka kembali percakapan dan mengetahui kebutuhan awal prospek.",
+            "fokus": [
+                "Ingatkan bahwa Agen siap membantu",
+                "Berikan pertanyaan yang mudah dijawab",
+                "Jangan langsung mengirim banyak informasi"
+            ],
+            "next_stages": [
+                "identification",
+                "followup",
+                "closed_lost"
+            ],
+            "script_category": "after_greeting"
+        },
+        {
+            "id": "after_initial_question",
+            "nama": "Berhenti Setelah Pertanyaan Awal",
+            "stage": "identification",
+            "use_when": "Agen sudah menanyakan kebutuhan dasar tetapi prospek belum menjawab.",
+            "tujuan": "Mendapatkan informasi minimal agar Agen bisa membantu.",
+            "fokus": [
+                "Gunakan satu pertanyaan sederhana",
+                "Jangan mengulang banyak pertanyaan sekaligus",
+                "Permudah prospek untuk menjawab"
+            ],
+            "next_stages": [
+                "identification",
+                "followup",
+                "closed_lost"
+            ],
+            "script_category": "after_initial_question"
+        },
+        {
+            "id": "after_ask_price",
+            "nama": "Berhenti Setelah Tanya Harga",
+            "stage": "identification",
+            "use_when": "Prospek sempat menanyakan harga tetapi percakapan berhenti.",
+            "tujuan": "Mengetahui apakah harga masih menjadi pertimbangan dan menggali kebutuhan yang belum diketahui.",
+            "fokus": [
+                "Kisaran budget",
+                "Target keberangkatan",
+                "Paket yang dicari",
+                "Apakah sedang membandingkan pilihan"
+            ],
+            "next_stages": [
+                "identification",
+                "offer",
+                "objection",
+                "nurture"
+            ],
+            "script_category": "after_ask_price"
+        },
+        {
+            "id": "after_identification",
+            "nama": "Berhenti Setelah Identifikasi",
+            "stage": "identification",
+            "use_when": "Sebagian kebutuhan prospek sudah diketahui tetapi percakapan berhenti sebelum offer.",
+            "tujuan": "Melanjutkan dari informasi yang sudah diperoleh dan membawa prospek menuju rekomendasi.",
+            "fokus": [
+                "Gunakan informasi NPGD yang sudah diketahui",
+                "Jangan bertanya ulang",
+                "Lengkapi informasi yang benar-benar dibutuhkan"
+            ],
+            "next_stages": [
+                "identification",
+                "offer"
+            ],
+            "script_category": "after_identification"
+        },
+        {
+            "id": "after_offer_no_response",
+            "nama": "Diam Setelah Dikirim Penawaran",
+            "stage": "offer",
+            "use_when": "Prospek sudah menerima rekomendasi paket tetapi belum memberikan respons.",
+            "tujuan": "Mengetahui tanggapan prospek terhadap penawaran.",
+            "fokus": [
+                "Apakah paket sudah dilihat",
+                "Bagian yang cocok",
+                "Bagian yang belum cocok",
+                "Pertanyaan atau keberatan yang belum disampaikan"
+            ],
+            "next_stages": [
+                "closing",
+                "objection",
+                "offer",
+                "followup"
+            ],
+            "script_category": "after_offer"
+        },
+        {
+            "id": "after_brochure",
+            "nama": "Diam Setelah Dikirim Brosur",
+            "stage": "offer",
+            "use_when": "Prospek menerima brosur atau informasi paket tetapi tidak merespons.",
+            "tujuan": "Mengubah percakapan dari sekadar melihat brosur menjadi diskusi kebutuhan.",
+            "fokus": [
+                "Paket mana yang menarik perhatian",
+                "Tanggal yang memungkinkan",
+                "Fasilitas yang menjadi pertimbangan"
+            ],
+            "next_stages": [
+                "identification",
+                "offer",
+                "closing"
+            ],
+            "script_category": "after_brochure"
+        },
+        {
+            "id": "after_package_comparison",
+            "nama": "Setelah Membandingkan Paket",
+            "stage": "offer",
+            "use_when": "Prospek sudah melihat beberapa pilihan tetapi belum menentukan salah satu.",
+            "tujuan": "Membantu prospek mempersempit pilihan.",
+            "fokus": [
+                "Pilihan yang paling disukai",
+                "Perbedaan yang masih membingungkan",
+                "Prioritas utama prospek"
+            ],
+            "next_stages": [
+                "offer",
+                "closing",
+                "objection"
+            ],
+            "script_category": "after_comparison"
+        },
+        {
+            "id": "after_closing_no_response",
+            "nama": "Diam Setelah Diajak Closing",
+            "stage": "closing",
+            "use_when": "Agen sudah mengajak prospek mengambil keputusan tetapi belum ada jawaban.",
+            "tujuan": "Mengetahui apakah ada keberatan yang belum disampaikan.",
+            "fokus": [
+                "Apakah paket masih cocok",
+                "Apakah ada hambatan",
+                "Apakah keputusan membutuhkan pihak lain"
+            ],
+            "next_stages": [
+                "closing",
+                "objection",
+                "followup",
+                "nurture"
+            ],
+            "script_category": "after_closing"
+        },
+        {
+            "id": "promised_dp",
+            "nama": "Sudah Janji DP",
+            "stage": "closing",
+            "use_when": "Prospek sudah menyatakan akan melakukan DP tetapi pembayaran belum diterima.",
+            "tujuan": "Mendapatkan kepastian tentang komitmen pembayaran.",
+            "fokus": [
+                "Konfirmasi rencana pembayaran",
+                "Cari tahu jika ada kendala",
+                "Cek ketersediaan seat aktual jika relevan"
+            ],
+            "next_stages": [
+                "closed_won",
+                "objection",
+                "followup",
+                "nurture"
+            ],
+            "script_category": "promised_dp"
+        },
+        {
+            "id": "waiting_salary",
+            "nama": "Menunggu Gajian atau Dana",
+            "stage": "closing",
+            "use_when": "Prospek sudah tertarik tetapi meminta waktu karena menunggu dana.",
+            "tujuan": "Menindaklanjuti sesuai waktu kesiapan dana yang disampaikan prospek.",
+            "fokus": [
+                "Waktu dana tersedia",
+                "Apakah paket masih menjadi pilihan",
+                "Ketersediaan paket saat follow-up"
+            ],
+            "next_stages": [
+                "closing",
+                "nurture",
+                "objection"
+            ],
+            "script_category": "waiting_funds"
+        },
+        {
+            "id": "discussion_spouse",
+            "nama": "Menunggu Diskusi dengan Pasangan",
+            "stage": "objection",
+            "use_when": "Prospek mengatakan perlu berdiskusi dengan suami atau istri.",
+            "tujuan": "Mendapatkan hasil diskusi dan mengetahui keberatan pihak pasangan jika ada.",
+            "fokus": [
+                "Apakah diskusi sudah dilakukan",
+                "Bagaimana tanggapan pasangan",
+                "Apa yang masih perlu dijelaskan"
+            ],
+            "next_stages": [
+                "closing",
+                "objection",
+                "offer",
+                "nurture"
+            ],
+            "script_category": "discussion_spouse"
+        },
+        {
+            "id": "discussion_family",
+            "nama": "Menunggu Keputusan Keluarga",
+            "stage": "objection",
+            "use_when": "Keputusan keberangkatan melibatkan anggota keluarga lain.",
+            "tujuan": "Mendapatkan kepastian hasil diskusi keluarga.",
+            "fokus": [
+                "Siapa pengambil keputusan",
+                "Apa yang belum disepakati",
+                "Apakah perlu penjelasan tambahan"
+            ],
+            "next_stages": [
+                "closing",
+                "objection",
+                "offer",
+                "nurture"
+            ],
+            "script_category": "discussion_family"
+        },
+        {
+            "id": "after_objection",
+            "nama": "Setelah Objection Ditangani",
+            "stage": "objection",
+            "use_when": "Agen sudah menjawab keberatan tetapi prospek belum memberikan keputusan.",
+            "tujuan": "Memastikan apakah keberatan benar-benar sudah selesai.",
+            "fokus": [
+                "Apakah jawaban sudah jelas",
+                "Apakah masih ada keberatan lain",
+                "Apakah siap melanjutkan"
+            ],
+            "next_stages": [
+                "closing",
+                "objection",
+                "followup"
+            ],
+            "script_category": "after_objection"
+        },
+        {
+            "id": "thinking",
+            "nama": "Prospek Mau Pikir-Pikir",
+            "stage": "objection",
+            "use_when": "Prospek meminta waktu untuk mempertimbangkan.",
+            "tujuan": "Mengetahui apa yang sebenarnya sedang dipertimbangkan dan mendapatkan waktu follow-up yang jelas.",
+            "fokus": [
+                "Apa yang masih dipertimbangkan",
+                "Apakah ada informasi yang kurang",
+                "Kapan boleh dihubungi kembali"
+            ],
+            "next_stages": [
+                "closing",
+                "objection",
+                "nurture",
+                "closed_lost"
+            ],
+            "script_category": "thinking"
+        },
+        {
+            "id": "waiting_leave_approval",
+            "nama": "Menunggu Kepastian Cuti",
+            "stage": "offer",
+            "use_when": "Prospek tertarik tetapi belum bisa memastikan tanggal karena menunggu izin atau jadwal cuti.",
+            "tujuan": "Menindaklanjuti setelah prospek mendapatkan kepastian waktu.",
+            "fokus": [
+                "Status cuti",
+                "Alternatif jadwal",
+                "Fleksibilitas keberangkatan"
+            ],
+            "next_stages": [
+                "offer",
+                "closing",
+                "nurture"
+            ],
+            "script_category": "waiting_leave"
+        },
+        {
+            "id": "waiting_passport",
+            "nama": "Menunggu Paspor atau Dokumen",
+            "stage": "closing",
+            "use_when": "Keputusan tertunda karena dokumen jamaah belum siap.",
+            "tujuan": "Mengetahui perkembangan dokumen dan memastikan rencana keberangkatan tetap berjalan.",
+            "fokus": [
+                "Status dokumen",
+                "Target selesai",
+                "Apakah ada bantuan yang dibutuhkan"
+            ],
+            "next_stages": [
+                "closing",
+                "offer",
+                "nurture"
+            ],
+            "script_category": "waiting_document"
+        },
+        {
+            "id": "waiting_promo",
+            "nama": "Menunggu Promo",
+            "stage": "objection",
+            "use_when": "Prospek tertarik tetapi memilih menunggu promo atau harga tertentu.",
+            "tujuan": "Menjaga prospek tetap aktif sampai ada penawaran yang relevan.",
+            "fokus": [
+                "Target budget",
+                "Jadwal yang fleksibel",
+                "Jenis paket yang diminati"
+            ],
+            "next_stages": [
+                "offer",
+                "closing",
+                "nurture"
+            ],
+            "script_category": "waiting_promo"
+        },
+        {
+            "id": "nurture_short_term",
+            "nama": "Nurture Jangka Pendek",
+            "stage": "nurture",
+            "use_when": "Prospek masih tertarik tetapi belum siap dalam waktu dekat.",
+            "tujuan": "Menjaga hubungan sampai kondisi prospek lebih siap.",
+            "fokus": [
+                "Alasan belum siap",
+                "Target waktu",
+                "Informasi yang masih relevan"
+            ],
+            "next_stages": [
+                "identification",
+                "offer",
+                "closing",
+                "nurture"
+            ],
+            "script_category": "nurture_short"
+        },
+        {
+            "id": "nurture_long_term",
+            "nama": "Nurture Jangka Panjang",
+            "stage": "nurture",
+            "use_when": "Prospek memiliki keinginan umroh tetapi target keberangkatannya masih cukup jauh.",
+            "tujuan": "Menjaga prospek tetap terhubung tanpa melakukan follow-up terlalu sering.",
+            "fokus": [
+                "Target bulan atau tahun",
+                "Perubahan kebutuhan",
+                "Update relevan"
+            ],
+            "next_stages": [
+                "identification",
+                "offer",
+                "nurture"
+            ],
+            "script_category": "nurture_long"
+        },
+        {
+            "id": "reactivate_old_prospect",
+            "nama": "Aktifkan Kembali Prospek Lama",
+            "stage": "followup",
+            "use_when": "Prospek sudah lama tidak berkomunikasi tetapi sebelumnya pernah menunjukkan minat.",
+            "tujuan": "Mengetahui apakah rencana umroh masih ada.",
+            "fokus": [
+                "Apakah kebutuhan masih sama",
+                "Apakah target keberangkatan berubah",
+                "Apakah kondisi prospek berubah"
+            ],
+            "next_stages": [
+                "identification",
+                "offer",
+                "closing",
+                "nurture",
+                "closed_lost"
+            ],
+            "script_category": "reactivation"
+        },
+        {
+            "id": "new_departure_available",
+            "nama": "Ada Jadwal Baru yang Relevan",
+            "stage": "nurture",
+            "use_when": "Ada keberangkatan baru yang sesuai dengan kebutuhan prospek lama.",
+            "tujuan": "Mengaktifkan kembali prospek dengan informasi yang relevan.",
+            "fokus": [
+                "Kesesuaian jadwal baru",
+                "Kebutuhan lama prospek",
+                "Perubahan paket atau harga"
+            ],
+            "next_stages": [
+                "offer",
+                "closing",
+                "nurture"
+            ],
+            "script_category": "new_departure"
+        },
+        {
+            "id": "relevant_promo",
+            "nama": "Ada Promo yang Relevan",
+            "stage": "nurture",
+            "use_when": "Prospek sebelumnya terkendala harga dan sekarang ada promo yang benar-benar sesuai.",
+            "tujuan": "Mengaktifkan kembali prospek dengan alasan yang relevan.",
+            "fokus": [
+                "Promo aktual",
+                "Syarat promo",
+                "Kesesuaian dengan kebutuhan prospek"
+            ],
+            "next_stages": [
+                "offer",
+                "closing",
+                "nurture"
+            ],
+            "script_category": "relevant_promo"
+        },
+        {
+            "id": "final_status_check",
+            "nama": "Minta Kepastian Status",
+            "stage": "followup",
+            "use_when": "Prospek sudah beberapa kali ditindaklanjuti tetapi belum memberikan kepastian.",
+            "tujuan": "Menentukan apakah prospek masih ingin melanjutkan, belum sekarang, atau batal.",
+            "fokus": [
+                "Minta kepastian dengan sopan",
+                "Beri ruang untuk mengatakan belum atau batal",
+                "Jangan memaksa prospek tetap aktif"
+            ],
+            "possible_results": [
+                "closing",
+                "nurture",
+                "closed_lost"
+            ],
+            "script_category": "final_status"
+        }
+    ],
+    "timing_rules": [
+        {
+            "condition": "Prospek menyebut waktu tertentu untuk dihubungi kembali.",
+            "rule": "Ikuti waktu yang disepakati prospek."
+        },
+        {
+            "condition": "Prospek sedang diskusi dengan pasangan atau keluarga.",
+            "rule": "Sepakati terlebih dahulu kapan Agen boleh menanyakan hasil diskusi."
+        },
+        {
+            "condition": "Prospek menunggu gaji, dana, cuti, atau dokumen.",
+            "rule": "Follow-up berdasarkan milestone tersebut, bukan menghubungi setiap hari."
+        },
+        {
+            "condition": "Prospek berhenti tanpa memberikan waktu follow-up.",
+            "rule": "Gunakan follow-up yang wajar berdasarkan posisi terakhir percakapan."
+        },
+        {
+            "condition": "Prospek masuk nurture jangka panjang.",
+            "rule": "Hubungi kembali ketika ada alasan yang relevan atau mendekati target waktu prospek."
+        },
+        {
+            "condition": "Prospek meminta untuk tidak dihubungi lagi.",
+            "rule": "Hentikan follow-up."
+        }
+    ],
+    "followup_results": [
+        {
+            "id": "active",
+            "nama": "Aktif Kembali",
+            "arti": "Prospek kembali merespons dan masuk ke salah satu tahap Conversion Cycle."
+        },
+        {
+            "id": "closed_won",
+            "nama": "Closing",
+            "arti": "Prospek sudah memenuhi komitmen booking sesuai ketentuan travel."
+        },
+        {
+            "id": "nurture",
+            "nama": "Belum Sekarang",
+            "arti": "Prospek masih potensial tetapi belum siap. Harus memiliki alasan dan waktu follow-up berikutnya."
+        },
+        {
+            "id": "closed_lost",
+            "nama": "Batal",
+            "arti": "Prospek tidak melanjutkan dan alasan batal sudah diketahui."
+        }
+    ],
+    "lost_reasons": [
+        {
+            "id": "choose_competitor",
+            "nama": "Memilih Travel Lain"
+        },
+        {
+            "id": "no_budget",
+            "nama": "Tidak Memiliki Budget"
+        },
+        {
+            "id": "cancel_plan",
+            "nama": "Rencana Umroh Batal"
+        },
+        {
+            "id": "schedule_not_match",
+            "nama": "Tidak Menemukan Jadwal yang Cocok"
+        },
+        {
+            "id": "family_not_approve",
+            "nama": "Tidak Mendapat Persetujuan Keluarga"
+        },
+        {
+            "id": "not_interested",
+            "nama": "Tidak Berminat Melanjutkan"
+        },
+        {
+            "id": "unreachable",
+            "nama": "Tidak Bisa Dihubungi"
+        },
+        {
+            "id": "other",
+            "nama": "Alasan Lain"
+        }
+    ],
+    "nurture_reasons": [
+        {
+            "id": "future_plan",
+            "nama": "Rencana Keberangkatan Masih Jauh"
+        },
+        {
+            "id": "waiting_budget",
+            "nama": "Menunggu Kesiapan Dana"
+        },
+        {
+            "id": "waiting_leave",
+            "nama": "Menunggu Cuti"
+        },
+        {
+            "id": "waiting_family",
+            "nama": "Menunggu Kesiapan Keluarga"
+        },
+        {
+            "id": "waiting_document",
+            "nama": "Menunggu Dokumen"
+        },
+        {
+            "id": "waiting_promo",
+            "nama": "Menunggu Penawaran yang Sesuai"
+        },
+        {
+            "id": "not_ready",
+            "nama": "Belum Siap Sekarang"
+        }
+    ],
+    "stop_conditions": [
+        "Prospek sudah closing.",
+        "Prospek menyatakan batal.",
+        "Prospek meminta tidak dihubungi kembali.",
+        "Prospek sudah memilih travel lain.",
+        "Prospek dipindahkan ke nurture dengan waktu tindak lanjut yang jelas."
+    ],
+    "output_schema": {
+        "prospect_id": null,
+        "followup_category": null,
+        "last_stage": null,
+        "last_context": null,
+        "last_contact_at": null,
+        "followup_at": null,
+        "followup_reason": null,
+        "result": null,
+        "return_stage": null,
+        "nurture_reason": null,
+        "next_followup_at": null,
+        "lost_reason": null,
+        "notes": null
+    },
+    "example": {
+        "last_stage": "closing",
+        "last_context": "Prospek sudah cocok dengan paket dan mengatakan akan berdiskusi dengan suami malam ini.",
+        "followup_category": "discussion_spouse",
+        "followup_goal": "Mengetahui hasil diskusi dan keberatan pasangan jika ada.",
+        "possible_results": [
+            {
+                "result": "active",
+                "return_stage": "closing"
+            },
+            {
+                "result": "active",
+                "return_stage": "objection"
+            },
+            {
+                "result": "nurture",
+                "return_stage": "nurture"
+            },
+            {
+                "result": "closed_lost",
+                "return_stage": "closed_lost"
+            }
+        ]
+    },
+    "return_stages": [
+        "identification",
+        "offer",
+        "closing",
+        "objection"
+    ],
+    "script_ref": "scripts/followup.json",
+    "closing_ref": "closing.json",
+    "objection_ref": "objections.json",
+    "identification_ref": "identification.json",
+    "offer_ref": "offers.json"
+}

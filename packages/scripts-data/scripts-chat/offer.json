@@ -1,0 +1,658 @@
+{
+    "id": "offer_script_bank",
+    "nama": "Bank Script Offer",
+    "deskripsi": "Kumpulan script chat untuk membantu Agen menyampaikan rekomendasi paket berdasarkan hasil Prospect Identification.",
+    "tujuan": "Membuat penawaran terasa relevan dengan kebutuhan prospek, bukan sekadar mengirim brosur atau daftar harga.",
+    "guidelines": [
+        "Mulai dari kebutuhan prospek, bukan dari fitur paket.",
+        "Jelaskan alasan kenapa paket tersebut direkomendasikan.",
+        "Sorot benefit yang paling relevan.",
+        "Tidak perlu menjelaskan semua fasilitas sekaligus.",
+        "Gunakan maksimal satu pilihan utama dan satu alternatif jika memang dibutuhkan.",
+        "Harga disampaikan dengan jelas dan tidak disembunyikan.",
+        "Jika prospek belum cocok, kembali ke Identification.",
+        "Jika prospek sudah menunjukkan ketertarikan, arahkan ke Closing."
+    ],
+    "placeholders": [
+        "{{nama}}",
+        "{{paket}}",
+        "{{harga}}",
+        "{{bulan}}",
+        "{{tanggal}}",
+        "{{hotel}}",
+        "{{jarak_hotel}}",
+        "{{maskapai}}",
+        "{{durasi}}",
+        "{{fasilitas_utama}}",
+        "{{dp}}",
+        "{{jumlah_jamaah}}"
+    ],
+    "scripts": [
+        {
+            "id": "offer_general_01",
+            "category": "general",
+            "title": "Rekomendasi Umum",
+            "use_when": "Kebutuhan dasar prospek sudah diketahui dan tidak ada kebutuhan khusus yang dominan.",
+            "script": "Melihat kebutuhan yang Kakak sampaikan tadi, saya sangat merekomendasikan **{{paket}}** 😊\n\nJadwal keberangkatannya pas, dan fasilitasnya juga sangat sesuai dengan yang Kakak cari.\n\nApakah rincian paket ini ingin saya kirimkan sekarang, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "general"
+            ]
+        },
+        {
+            "id": "offer_general_02",
+            "category": "general",
+            "title": "Offer dengan Alasan",
+            "use_when": "Agen ingin menjelaskan kenapa memilih satu paket tertentu.",
+            "script": "Dari beberapa pilihan paket yang tersedia, menurut saya **{{paket}}** yang paling mendekati kebutuhan Kakak 😊\n\nKeunggulan utamanya ada di {{fasilitas_utama}}.\n\nBoleh saya bantu jelaskan detail akomodasinya, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "general",
+                "reason"
+            ]
+        },
+        {
+            "id": "offer_general_03",
+            "category": "general",
+            "title": "Offer Singkat",
+            "use_when": "Prospek tidak suka penjelasan panjang.",
+            "script": "Saya sangat rekomendasikan **{{paket}}** untuk Kakak sekeluarga 😊\n\nUntuk kebutuhan yang tadi Kakak ceritakan, paket inilah yang paling pas dan efisien.\n\nApakah jadwal keberangkatan paket ini sudah cocok dengan waktu luang Kakak?",
+            "next_stage": "closing",
+            "tags": [
+                "general",
+                "short"
+            ]
+        },
+        {
+            "id": "offer_budget_01",
+            "category": "budget",
+            "title": "Sesuai Kisaran Budget",
+            "use_when": "Prospek sudah menyampaikan kisaran budget.",
+            "script": "Untuk kisaran budget yang Kakak siapkan, saya menyarankan **{{paket}}** di harga {{harga}} 😊\n\nFasilitas utamanya sudah lengkap termasuk {{fasilitas_utama}}.\n\nApakah nominal ini sudah sesuai dengan estimasi budget Kakak?",
+            "next_stage": "closing",
+            "tags": [
+                "budget",
+                "price"
+            ]
+        },
+        {
+            "id": "offer_budget_02",
+            "category": "budget",
+            "title": "Budget Terbatas",
+            "use_when": "Prospek ingin pilihan yang lebih ringan.",
+            "script": "Jika ingin tetap hemat di budget yang lebih ringan, pilihan yang paling tepat saat ini adalah **{{paket}}** 😊\n\nHarganya {{harga}}, dengan fasilitas utama {{fasilitas_utama}}.\n\nApakah paket hemat ini yang Kakak cari?",
+            "next_stage": "closing",
+            "tags": [
+                "budget",
+                "hemat"
+            ]
+        },
+        {
+            "id": "offer_budget_03",
+            "category": "budget",
+            "title": "Jangan Hanya Lihat Harga",
+            "use_when": "Prospek terlalu fokus pada angka dan perlu memahami perbedaan paket.",
+            "script": "Jika dibanding harga memang ada opsi yang lebih rendah, Kak 😊\n\nNamun untuk kebutuhan Kakak sekeluarga, saya lebih menyarankan **{{paket}}** karena fasilitas {{fasilitas_utama}} jauh lebih menjamin kenyamanan ibadah.\n\nBagaimana menurut Kakak, lebih memprioritaskan harga terendah atau kenyamanan ibadah keluarga?",
+            "next_stage": "closing",
+            "tags": [
+                "budget",
+                "value"
+            ]
+        },
+        {
+            "id": "offer_lansia_01",
+            "category": "lansia",
+            "title": "Berangkat dengan Orang Tua",
+            "use_when": "Prospek membawa orang tua atau jamaah lansia.",
+            "script": "Karena Kakak berangkat bersama orang tua tercinta, saya sangat menyarankan **{{paket}}** 😊\n\nSalah satu pertimbangan utamanya adalah {{fasilitas_utama}}, sehingga stamina beliau tetap terjaga dan ibadah menjadi tenang.\n\nBoleh saya kirimkan foto fasilitas kamar dan rute hotelnya untuk Kakak pelajari?",
+            "next_stage": "closing",
+            "tags": [
+                "lansia",
+                "orang_tua",
+                "comfort"
+            ]
+        },
+        {
+            "id": "offer_lansia_02",
+            "category": "lansia",
+            "title": "Fokus Hotel Dekat",
+            "use_when": "Jarak hotel menjadi perhatian utama untuk jamaah lansia.",
+            "script": "Untuk kenyamanan Ayah/Ibu, pilihan terbaik adalah paket ini Kak 😊\n\nHotelnya di {{hotel}} dengan jarak sekitar {{jarak_hotel}}, sehingga perjalanan ibadah harian tidak melelahkan fisik beliau.\n\nApakah jarak hotel seperti ini yang Kakak harapkan untuk orang tua?",
+            "next_stage": "closing",
+            "tags": [
+                "lansia",
+                "hotel_dekat"
+            ]
+        },
+        {
+            "id": "offer_lansia_03",
+            "category": "lansia",
+            "title": "Fokus Pendampingan",
+            "use_when": "Prospek lebih membutuhkan bantuan dan pendampingan.",
+            "script": "Jika yang paling Kakak utamakan adalah bimbingan dan pendampingannya, saya merekomendasikan **{{paket}}** 😊\n\nFasilitas {{fasilitas_utama}} kami rancang khusus agar jamaah lansia mendapatkan perhatian optimal selama di Tanah Suci.\n\nBoleh saya buatkan simulasinya untuk Kakak dan orang tua?",
+            "next_stage": "closing",
+            "tags": [
+                "lansia",
+                "pendampingan"
+            ]
+        },
+        {
+            "id": "offer_family_01",
+            "category": "family",
+            "title": "Umroh Keluarga",
+            "use_when": "Prospek berangkat bersama keluarga.",
+            "script": "Untuk rombongan {{jumlah_jamaah}} orang sekeluarga, pilihan paling pas adalah **{{paket}}** 😊\n\nJadwal penerbangan dan alokasi tipe kamarnya sangat fleksibel dan nyaman untuk keluarga besar.\n\nApakah Kakak ingin saya hitungkan estimasi totalnya untuk {{jumlah_jamaah}} orang?",
+            "next_stage": "closing",
+            "tags": [
+                "family",
+                "pax"
+            ]
+        },
+        {
+            "id": "offer_family_02",
+            "category": "family",
+            "title": "Keluarga dengan Anak atau Orang Tua",
+            "use_when": "Dalam rombongan keluarga ada kebutuhan yang berbeda.",
+            "script": "Karena rombongan keluarga terdiri dari beragam usia, saya pilihkan paket yang seimbang ya Kak 😊\n\n**{{paket}}** adalah opsi paling tepat dari sisi kenyamanan hotel dan kemudahan jadwal ibadah.\n\nBoleh saya bantu cek sisa kuota seat untuk jadwal ini, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "family",
+                "comfort"
+            ]
+        },
+        {
+            "id": "offer_couple_01",
+            "category": "couple",
+            "title": "Umroh Bersama Pasangan",
+            "use_when": "Prospek ingin berangkat bersama suami atau istri.",
+            "script": "Untuk ibadah berdua bersama pasangan, **{{paket}}** sangat ideal Kak 😊\n\nJadwalnya pas dan fasilitas kamarnya sangat mendukung ketenangan ibadah berdua.\n\nApakah Kakak ingin jadwal keberangkatan di awal bulan atau akhir bulan?",
+            "next_stage": "closing",
+            "tags": [
+                "pasangan"
+            ]
+        },
+        {
+            "id": "offer_first_timer_01",
+            "category": "first_timer",
+            "title": "Pertama Kali Umroh",
+            "use_when": "Prospek baru pertama kali akan umroh.",
+            "script": "Karena ini adalah pengalaman umroh pertama bagi Kakak, saya sangat merekomendasikan **{{paket}}** 😊\n\nPendampingan muthawif dan pembekalan manasiknya sangat intensif, siap memandu sejak di tanah air hingga tuntas.\n\nApakah Kakak ingin saya kirimkan rincian tahapan bimbingannya?",
+            "next_stage": "closing",
+            "tags": [
+                "first_timer",
+                "pendampingan"
+            ]
+        },
+        {
+            "id": "offer_first_timer_02",
+            "category": "first_timer",
+            "title": "Fokus Kemudahan",
+            "use_when": "Prospek khawatir proses umroh pertama terasa rumit.",
+            "script": "Jika Kakak menginginkan persiapan yang tenang dan mudah diikuti, saya sarankan **{{paket}}** 😊\n\nInsyaAllah seluruh tahapan dokumen, manasik, hingga bimbingan ibadah akan kami dampingi penuh.\n\nBoleh saya bantu pandu dari langkah awalnya sekarang, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "first_timer",
+                "pelayanan"
+            ]
+        },
+        {
+            "id": "offer_hotel_near_01",
+            "category": "hotel_near",
+            "title": "Prioritas Hotel Dekat",
+            "use_when": "Prospek memprioritaskan jarak hotel.",
+            "script": "Jika hotel dekat adalah prioritas utama Kakak, paket yang paling tepat adalah **{{paket}}** 😊\n\nAkomodasi hotel di {{hotel}} dengan jarak {{jarak_hotel}} ke pelataran masjid.\n\nApakah hotel sedekat ini yang Kakak harapkan?",
+            "next_stage": "closing",
+            "tags": [
+                "hotel",
+                "hotel_dekat"
+            ]
+        },
+        {
+            "id": "offer_hotel_near_02",
+            "category": "hotel_near",
+            "title": "Jelaskan Benefit Hotel",
+            "use_when": "Agen perlu menghubungkan jarak hotel dengan manfaat.",
+            "script": "Saya pilihkan **{{paket}}** karena lokasi hotelnya sangat strategis, Kak 😊\n\nSetelah selesai shalat atau thowaf, Kakak bisa kembali istirahat ke kamar dengan cepat tanpa perlu berjalan jauh.\n\nApakah kemudahan akses seperti ini yang Kakak prioritaskan?",
+            "next_stage": "closing",
+            "tags": [
+                "hotel",
+                "comfort"
+            ]
+        },
+        {
+            "id": "offer_trust_01",
+            "category": "trust",
+            "title": "Prospek Butuh Rasa Aman",
+            "use_when": "Prospek punya kekhawatiran soal kredibilitas travel.",
+            "script": "Karena rasa aman dan kepastian adalah hal yang paling utama bagi Kakak, sebelum melangkah lebih jauh kami tunjukkan legalitas resmi kami 😊\n\n{{travel}} memegang izin resmi Kemenag No. PPIU: {{ppiu}} dan seluruh pembayaran menggunakan rekening giro perusahaan.\n\nBoleh saya kirimkan sertifikat izin resmi dan dokumentasi jamaah kami, Kak?",
+            "next_stage": "offer",
+            "tags": [
+                "trust",
+                "legalitas"
+            ]
+        },
+        {
+            "id": "offer_trust_02",
+            "category": "trust",
+            "title": "Setelah Trust Terbangun",
+            "use_when": "Prospek sudah melihat bukti dan siap kembali membahas paket.",
+            "script": "Setelah legalitas resmi travel kami terverifikasi dengan baik 😊\n\nUntuk kebutuhan Kakak tadi saya menyarankan **{{paket}}** karena fasilitas unggulannya di {{fasilitas_utama}}.\n\nApakah paket ini sudah sesuai dengan rencana Kakak?",
+            "next_stage": "closing",
+            "tags": [
+                "trust",
+                "transition"
+            ]
+        },
+        {
+            "id": "offer_comfort_01",
+            "category": "comfort",
+            "title": "Prioritas Kenyamanan",
+            "use_when": "Prospek mengatakan kenyamanan lebih penting daripada harga termurah.",
+            "script": "Karena kenyamanan adalah prioritas utama Kakak sekeluarga, rekomendasi terbaik saya adalah **{{paket}}** 😊\n\nNilai tambah terbesarnya ada pada fasilitas {{fasilitas_utama}}.\n\nApakah Kakak ingin saya buatkan rincian fasilitas VIP-nya?",
+            "next_stage": "closing",
+            "tags": [
+                "comfort",
+                "value"
+            ]
+        },
+        {
+            "id": "offer_comfort_02",
+            "category": "comfort",
+            "title": "Kenyamanan Lebih Penting",
+            "use_when": "Prospek bersedia membayar sedikit lebih tinggi untuk kenyamanan.",
+            "script": "Jika kenyamanan ibadah lebih diutamakan daripada selisih biaya hemat, saya menyarankan **{{paket}}** 😊\n\nPerbedaan kualitasnya sangat nyata pada fasilitas {{fasilitas_utama}} dan kemudahan mobilitas ibadah.\n\nBoleh saya kirimkan brosur detailnya untuk dipelajari bersama keluarga?",
+            "next_stage": "closing",
+            "tags": [
+                "comfort",
+                "premium"
+            ]
+        },
+        {
+            "id": "offer_premium_01",
+            "category": "premium",
+            "title": "Offer Premium",
+            "use_when": "Prospek mencari fasilitas dan kenyamanan lebih tinggi.",
+            "script": "Untuk kenyamanan ibadah kelas eksekutif, pilihan terbaik adalah **{{paket}}** di harga {{harga}} 😊\n\nBenefit eksklusifnya mencakup {{fasilitas_utama}} untuk ketenangan ibadah maksimal.\n\nApakah paket premium ini yang Kakak harapkan?",
+            "next_stage": "closing",
+            "tags": [
+                "premium",
+                "value"
+            ]
+        },
+        {
+            "id": "offer_fixed_schedule_01",
+            "category": "fixed_schedule",
+            "title": "Tanggal Sudah Pasti",
+            "use_when": "Prospek hanya bisa berangkat pada tanggal tertentu.",
+            "script": "Karena Kakak memiliki waktu luang di tanggal {{tanggal}}, pilihan yang paling sempurna adalah **{{paket}}** 😊\n\nJadwal terbangnya tepat dan kuotanya saat ini masih tersedia.\n\nBoleh saya bantu tahan kuota seat-nya untuk Kakak hari ini?",
+            "next_stage": "closing",
+            "tags": [
+                "schedule",
+                "fixed_date"
+            ]
+        },
+        {
+            "id": "offer_fixed_schedule_02",
+            "category": "fixed_schedule",
+            "title": "Alternatif Tanggal Terdekat",
+            "use_when": "Tanggal utama tidak tersedia.",
+            "script": "Untuk tanggal persis yang Kakak minta kebetulan kuotanya sudah penuh, namun jadwal terdekat yang tersedia ada di tanggal **{{tanggal}}** 😊\n\nJika tanggal ini masih memungkinkan untuk Kakak, boleh saya bantu jelaskan paketnya?",
+            "next_stage": "offer",
+            "tags": [
+                "schedule",
+                "alternative"
+            ]
+        },
+        {
+            "id": "offer_flexible_schedule_01",
+            "category": "flexible_schedule",
+            "title": "Jadwal Fleksibel",
+            "use_when": "Prospek tidak terikat pada tanggal tertentu.",
+            "script": "Karena waktu Kakak cukup fleksibel, saya sangat menyarankan **{{paket}}** di tanggal {{tanggal}} 😊\n\nDari seluruh jadwal yang ada, tanggal ini menawarkan perpaduan harga terbaik dan fasilitas terlengkap.\n\nApakah Kakak tertarik dengan jadwal hemat ini?",
+            "next_stage": "closing",
+            "tags": [
+                "schedule",
+                "flexible"
+            ]
+        },
+        {
+            "id": "offer_payment_01",
+            "category": "payment",
+            "title": "Butuh Pembayaran Bertahap",
+            "use_when": "Prospek tertarik tetapi pembayaran menjadi pertimbangan.",
+            "script": "Jika skema pembayaran menjadi pertimbangan utama Kakak, di paket **{{paket}}** kami menyediakan kemudahan pembayaran bertahap 😊\n\nPelunasan dapat dicicil hingga 1 bulan sebelum jadwal keberangkatan.\n\nApakah skema bertahap ini lebih meringankan untuk Kakak?",
+            "next_stage": "closing",
+            "tags": [
+                "payment",
+                "budget"
+            ]
+        },
+        {
+            "id": "offer_payment_02",
+            "category": "payment",
+            "title": "Fokus DP",
+            "use_when": "Prospek sudah cocok paket tetapi sensitif pada pembayaran awal.",
+            "script": "Untuk mengunci harga promo dan kuota seat di paket ini, komitmen awalnya cukup dengan DP sebesar **{{dp}}** 😊\n\nSisa biaya pelunasan dapat disesuaikan kemudian.\n\nApakah Kakak ingin saya kirimkan instruksi pengamanan seat-nya?",
+            "next_stage": "closing",
+            "tags": [
+                "payment",
+                "dp"
+            ]
+        },
+        {
+            "id": "offer_document_support_01",
+            "category": "document_support",
+            "title": "Belum Punya Paspor",
+            "use_when": "Prospek tertarik tetapi dokumen belum siap.",
+            "script": "Jika paspor belum ada, tenang saja Kak, itu bukan kendala sama sekali 😊\n\nYang terpenting kita amankan jadwal dan kuota seat-nya terlebih dahulu. Untuk surat rekomendasi paspor dari {{travel}} dan panduan pengurusannya siap saya dampingi penuh.\n\nBoleh kita mulai dari penguncian seat-nya sekarang Kak?",
+            "next_stage": "offer",
+            "tags": [
+                "document",
+                "passport"
+            ]
+        },
+        {
+            "id": "offer_dream_parent_01",
+            "category": "dream_parent",
+            "title": "Ingin Membawa Orang Tua",
+            "use_when": "Motivasi utama prospek adalah berangkat bersama atau memberangkatkan orang tua.",
+            "script": "Karena niat suci Kakak adalah memuliakan orang tua di Tanah Suci, fokus saya adalah memastikan beliau nyaman dan tidak lelah 😊\n\nPaket **{{paket}}** adalah opsi paling tepat untuk kondisi beliau.\n\nBoleh saya buatkan penawaran resminya untuk Kakak tunjukkan ke beliau?",
+            "next_stage": "closing",
+            "tags": [
+                "orang_tua",
+                "dream"
+            ]
+        },
+        {
+            "id": "offer_dream_parent_02",
+            "category": "dream_parent",
+            "title": "Hadiah Umroh Orang Tua",
+            "use_when": "Prospek ingin memberangkatkan orang tua sebagai hadiah.",
+            "script": "Jika perjalanan ini diniatkan sebagai hadiah terindah untuk Ayah/Ibu, mari kita pilihkan paket yang fasilitasnya benar-benar menjamin ketenangan beliau 😊\n\nPaket **{{paket}}** memberikan standar layanan terbaik untuk beliau.\n\nApakah paket ini yang Kakak harapkan sebagai hadiah umroh beliau?",
+            "next_stage": "closing",
+            "tags": [
+                "orang_tua",
+                "hadiah_umroh"
+            ]
+        },
+        {
+            "id": "offer_group_01",
+            "category": "group",
+            "title": "Rombongan",
+            "use_when": "Prospek membawa rombongan atau keluarga besar.",
+            "script": "Untuk rombongan sejumlah {{jumlah_jamaah}} orang, kita prioritaskan paket yang kuota seat-nya masih mencukupi dalam satu jadwal terbang bersama 😊\n\nSaat ini **{{paket}}** adalah pilihan paling pas untuk rombongan Kakak.\n\nBoleh saya cek kuota persisnya untuk {{jumlah_jamaah}} orang sekarang?",
+            "next_stage": "closing",
+            "tags": [
+                "group",
+                "pax"
+            ]
+        },
+        {
+            "id": "offer_two_options_01",
+            "category": "comparison",
+            "title": "Berikan Dua Pilihan",
+            "use_when": "Prospek memang membutuhkan perbandingan dua paket.",
+            "script": "Agar lebih mudah dipertimbangkan bersama keluarga, saya berikan dua opsi terbaik ya Kak 😊\n\n1. Opsi Nyaman: **{{paket}}** yang mengutamakan fasilitas {{fasilitas_utama}}.\n2. Opsi Hemat: Paket Promo Reguler dengan budget yang lebih terjangkau.\n\nDari dua opsi ini, Kakak lebih condong ke paket yang mana?",
+            "next_stage": "offer",
+            "tags": [
+                "comparison"
+            ]
+        },
+        {
+            "id": "offer_two_options_02",
+            "category": "comparison",
+            "title": "Tanyakan Pilihan Prospek",
+            "use_when": "Agen sudah menjelaskan dua pilihan.",
+            "script": "Dari dua opsi paket yang telah saya paparkan sebelumnya 😊\n\nKira-kira Kakak dan keluarga lebih mantap memilih opsi yang mengutamakan kenyamanan fasilitas atau efisiensi budget, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "comparison",
+                "decision"
+            ]
+        },
+        {
+            "id": "offer_value_01",
+            "category": "value",
+            "title": "Hubungkan Fitur dengan Benefit",
+            "use_when": "Agen perlu menjelaskan kenapa sebuah fasilitas penting.",
+            "script": "Bagian yang paling bernilai bagi rencana Kakak adalah fasilitas {{fasilitas_utama}} 😊\n\nFitur ini langsung menjawab kenyamanan yang tadi Kakak ceritakan kepada kami.\n\nApakah fasilitas seperti ini yang memang Kakak cari?",
+            "next_stage": "closing",
+            "tags": [
+                "value",
+                "benefit"
+            ]
+        },
+        {
+            "id": "offer_price_01",
+            "category": "price",
+            "title": "Sampaikan Harga",
+            "use_when": "Agen sudah menjelaskan alasan dan benefit paket.",
+            "script": "Untuk paket **{{paket}}**, biayanya adalah **{{harga}}** per jamaah 😊\n\nBiaya ini sudah all-in termasuk {{fasilitas_utama}} tanpa ada biaya tersembunyi lagi.\n\nApakah Kakak ingin saya buatkan rincian kalkulasinya?",
+            "next_stage": "closing",
+            "tags": [
+                "price"
+            ]
+        },
+        {
+            "id": "offer_price_02",
+            "category": "price",
+            "title": "Harga untuk Beberapa Jamaah",
+            "use_when": "Prospek membawa lebih dari satu jamaah.",
+            "script": "Untuk rombongan {{jumlah_jamaah}} jamaah, estimasi per orangnya adalah **{{harga}}** 😊\n\nUntuk rincian tipe kamar (Quad/Triple/Double) dan total investasinya siap saya buatkan simulasinya.\n\nBoleh saya bantu hitungkan sekarang, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "price",
+                "pax"
+            ]
+        },
+        {
+            "id": "offer_brochure_after_match_01",
+            "category": "brochure",
+            "title": "Kirim Brosur Setelah Identifikasi",
+            "use_when": "Agen sudah menentukan paket yang cocok dan ingin mengirim detail visual.",
+            "script": "Saya kirimkan brosur resmi **{{paket}}** ini ya Kak 😊\n\nDari kebutuhan yang tadi Kakak ceritakan, paket inilah yang paling saya rekomendasikan untuk keluarga.\n\nBoleh Kakak pelajari dulu rincian jadwal dan fasilitasnya ya.",
+            "next_stage": "closing",
+            "tags": [
+                "brochure",
+                "matched_offer"
+            ]
+        },
+        {
+            "id": "offer_check_fit_01",
+            "category": "transition",
+            "title": "Cek Kecocokan Offer",
+            "use_when": "Setelah menjelaskan paket, Agen ingin melihat respons prospek.",
+            "script": "Melihat rincian paket yang telah saya paparkan tadi 😊\n\nSejauh ini apakah jadwal dan fasilitasnya sudah cukup sesuai dengan yang Kakak cari?",
+            "next_stage": "closing",
+            "tags": [
+                "transition",
+                "fit"
+            ]
+        },
+        {
+            "id": "offer_check_fit_02",
+            "category": "transition",
+            "title": "Cari Bagian yang Belum Cocok",
+            "use_when": "Prospek terlihat belum yakin setelah menerima offer.",
+            "script": "Jika paket ini dirasa belum sepenuhnya pas di hati Kakak 😊\n\nBagian mana yang sekiranya masih perlu disesuaikan: jadwal, budget, atau jarak hotelnya, Kak?",
+            "next_stage": "identification",
+            "tags": [
+                "transition",
+                "reidentify"
+            ]
+        },
+        {
+            "id": "offer_to_closing_01",
+            "category": "transition",
+            "title": "Transisi ke Closing",
+            "use_when": "Prospek menunjukkan paket sudah sesuai.",
+            "script": "Alhamdulillah jika paket dan jadwalnya sudah cocok dengan rencana Kakak sekeluarga 😊\n\nMari kita lanjut cek ketersediaan kuota seat-nya agar jadwal ini bisa kita amankan ya Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "transition",
+                "closing"
+            ]
+        },
+        {
+            "id": "offer_to_closing_02",
+            "category": "transition",
+            "title": "Transisi ke Pengamanan Seat",
+            "use_when": "Prospek menunjukkan buying signal.",
+            "script": "Jika pilihan paket ini sudah sesuai di hati Kakak 😊\n\nSaya bantu langkah mudah untuk mengamankan kuota seat-nya sekarang ya, Kak?",
+            "next_stage": "closing",
+            "tags": [
+                "transition",
+                "seat"
+            ]
+        }
+    ],
+    "routing_rules": [
+        {
+            "condition": "Prospek tidak punya kebutuhan khusus yang dominan.",
+            "recommended_categories": [
+                "general"
+            ]
+        },
+        {
+            "condition": "Harga atau budget menjadi pertimbangan utama.",
+            "recommended_categories": [
+                "budget",
+                "price"
+            ]
+        },
+        {
+            "condition": "Prospek membawa orang tua atau lansia.",
+            "recommended_categories": [
+                "lansia",
+                "dream_parent"
+            ]
+        },
+        {
+            "condition": "Prospek berangkat bersama keluarga.",
+            "recommended_categories": [
+                "family"
+            ]
+        },
+        {
+            "condition": "Prospek berangkat bersama pasangan.",
+            "recommended_categories": [
+                "couple"
+            ]
+        },
+        {
+            "condition": "Prospek baru pertama kali umroh.",
+            "recommended_categories": [
+                "first_timer"
+            ]
+        },
+        {
+            "condition": "Hotel dekat menjadi prioritas.",
+            "recommended_categories": [
+                "hotel_near"
+            ]
+        },
+        {
+            "condition": "Prospek memiliki kekhawatiran soal travel.",
+            "recommended_categories": [
+                "trust"
+            ]
+        },
+        {
+            "condition": "Prospek lebih mengutamakan kenyamanan.",
+            "recommended_categories": [
+                "comfort",
+                "premium"
+            ]
+        },
+        {
+            "condition": "Tanggal keberangkatan prospek terbatas.",
+            "recommended_categories": [
+                "fixed_schedule"
+            ]
+        },
+        {
+            "condition": "Tanggal prospek fleksibel.",
+            "recommended_categories": [
+                "flexible_schedule"
+            ]
+        },
+        {
+            "condition": "Pembayaran menjadi pertimbangan utama.",
+            "recommended_categories": [
+                "payment"
+            ]
+        },
+        {
+            "condition": "Prospek belum memiliki dokumen.",
+            "recommended_categories": [
+                "document_support"
+            ]
+        },
+        {
+            "condition": "Prospek membawa rombongan.",
+            "recommended_categories": [
+                "group"
+            ]
+        },
+        {
+            "condition": "Prospek membutuhkan perbandingan.",
+            "recommended_categories": [
+                "comparison"
+            ]
+        },
+        {
+            "condition": "Prospek sudah cocok dengan paket.",
+            "recommended_categories": [
+                "transition"
+            ]
+        }
+    ],
+    "offer_sequence_example": [
+        {
+            "scenario": "Prospek ingin membawa ibu yang sudah lansia.",
+            "steps": [
+                {
+                    "type": "reason",
+                    "text": "Karena Kakak berangkat bersama ibu yang sudah lansia..."
+                },
+                {
+                    "type": "recommendation",
+                    "text": "saya lebih menyarankan {{paket}}."
+                },
+                {
+                    "type": "benefit",
+                    "text": "Hotel lebih dekat sehingga mobilitas beliau bisa lebih ringan."
+                },
+                {
+                    "type": "value",
+                    "text": "Harganya {{harga}} per jamaah."
+                },
+                {
+                    "type": "action",
+                    "text": "Kalau paketnya sudah cocok, saya bantu cek seat-nya ya."
+                }
+            ]
+        }
+    ],
+    "do": [
+        "Sebut alasan rekomendasi.",
+        "Hubungkan fitur dengan kebutuhan prospek.",
+        "Gunakan bahasa yang mudah dipahami.",
+        "Batasi jumlah pilihan.",
+        "Arahkan prospek ke keputusan setelah paket terasa cocok."
+    ],
+    "dont": [
+        "Mengirim semua paket yang tersedia.",
+        "Menjelaskan fitur yang tidak relevan.",
+        "Mengatakan paket terbaik tanpa alasan.",
+        "Menyembunyikan harga.",
+        "Menggunakan scarcity di tahap Offer jika belum ada data aktual.",
+        "Mendorong paket mahal hanya karena prospek terlihat mampu.",
+        "Terus menawarkan saat prospek sebenarnya masih membutuhkan Identification."
+    ],
+    "next_stage": "closing",
+    "fallback_stage": "identification",
+    "framework_ref": "offers.json",
+    "closing_ref": "closing.json",
+    "package_ref": "packages.json"
+}

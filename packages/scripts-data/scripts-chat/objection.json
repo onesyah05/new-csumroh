@@ -1,0 +1,1077 @@
+{
+    "id": "objection_script_bank",
+    "nama": "Bank Script Handling Objection",
+    "deskripsi": "Kumpulan script chat untuk membantu Agen menangani keberatan prospek menggunakan framework TGJP.",
+    "tujuan": "Membantu Agen menerima keberatan dengan empati, menemukan alasan sebenarnya, memberikan jawaban yang objektif dan solutif, lalu mengarahkan prospek kembali menuju keputusan ibadah.",
+    "framework": "TGJP",
+    "guidelines": [
+        "Jangan langsung menjawab sebelum memahami alasan sebenarnya.",
+        "Gunakan Terima agar prospek merasa didengar.",
+        "Gunakan Gali untuk menemukan akar keberatan.",
+        "Pilih Jawab berdasarkan alasan yang ditemukan.",
+        "Gunakan Pastikan untuk mengecek apakah keberatan sudah selesai.",
+        "Jika keberatan selesai, kembali ke Closing.",
+        "Jika muncul keberatan baru, ulangi TGJP.",
+        "Jika prospek butuh waktu, masuk ke Follow-up.",
+        "Jangan berdebat atau menjelekkan travel lain.",
+        "Jangan menjanjikan fasilitas, harga, legalitas, atau kebijakan yang tidak benar."
+    ],
+    "placeholders": [
+        "{{nama}}",
+        "{{paket}}",
+        "{{harga}}",
+        "{{dp}}",
+        "{{tanggal}}",
+        "{{bulan}}",
+        "{{hotel}}",
+        "{{jarak_hotel}}",
+        "{{maskapai}}",
+        "{{travel}}",
+        "{{deadline}}",
+        "{{seat}}",
+        "{{fasilitas_utama}}"
+    ],
+    "scripts": [
+        {
+            "id": "obj_harga_mahal_01",
+            "category": "harga_mahal",
+            "title": "Prospek Bilang Mahal",
+            "prospect_examples": [
+                "Mahal juga ya.",
+                "Kok lebih mahal dari yang lain?",
+                "Budget saya nggak sampai segitu."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, saya paham. Soal biaya memang perlu dipertimbangkan matang.",
+                    "Iya Kak, wajar kalau harga jadi salah satu pertimbangan."
+                ],
+                "gali": [
+                    "Kalau boleh tahu, yang terasa berat lebih ke total paketnya atau pembayaran awalnya?",
+                    "Kakak sedang membandingkan dengan paket lain juga?",
+                    "Ada kisaran budget yang ingin Kakak jaga?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "budget_tidak_cukup",
+                        "script": "Sangat kami pahami Kak, jangan sampai rencana ibadah ini membebani keuangan keluarga.\n\nKami ada opsi paket yang lebih efisien namun tetap nyaman.\n\nMau saya pilihkan opsi paket hemat yang selisihnya Rp 3-5 juta lebih terjangkau, Kak?"
+                    },
+                    {
+                        "reason": "belum_melihat_value",
+                        "script": "Betul Kak, selisih biayanya berbanding lurus dengan kualitas fasilitas dan ketenangan ibadah Kakak sekeluarga.\n\nDi paket ini, hotel {{hotel}} dan fasilitas {{fasilitas_utama}} kami pilihkan khusus agar jamaah tidak kelelahan fisik dan bisa fokus ibadah dengan nyaman.\n\nJika melihat kemudahan dan fasilitas yang didapatkan, apakah fasilitas seperti ini memang yang Kakak prioritaskan?"
+                    },
+                    {
+                        "reason": "bandingkan_harga",
+                        "script": "Tentu sangat boleh Kak, umroh memang harus dipilih dengan teliti.\n\nAgar perbandingannya berimbang, pastikan travel pembanding sudah include asuransi, visa resmi, dan tiket pesawat direct tanpa transit lama ya Kak.\n\nBoleh tahu, paket pembanding yang Kakak lihat di harga kisaran berapa agar kita bisa bedah bersama?"
+                    },
+                    {
+                        "reason": "dp_terlalu_besar",
+                        "script": "Untuk pembayaran awal, di travel kami ada skema komitmen booking yang sangat fleksibel agar seat tidak hangus.\n\nBoleh tahu, nominal yang paling nyaman untuk Kakak siapkan hari ini di angka berapa?"
+                    },
+                    {
+                        "reason": "paket_tidak_sesuai",
+                        "script": "Berarti paket ini fiturnya melebihi dari yang Kakak butuhkan saat ini.\n\nBagaimana kalau saya buatkan rekomendasi paket standar kami yang fasilitas pokoknya tetap lengkap tapi harganya jauh lebih ekonomis, Kak?"
+                    }
+                ],
+                "pastikan": [
+                    "Kalau soal biayanya sudah lebih masuk, untuk jadwal dan paketnya sendiri sudah cocok?",
+                    "Selain soal harga tadi, masih ada bagian lain yang Kakak pertimbangkan?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "fallback_stage": "offer",
+            "tags": [
+                "harga",
+                "budget",
+                "value"
+            ]
+        },
+        {
+            "id": "obj_dp_berat_01",
+            "category": "dp_berat",
+            "title": "DP Terasa Berat",
+            "prospect_examples": [
+                "DP-nya besar ya.",
+                "Belum bisa DP segitu.",
+                "Ada DP lebih kecil?"
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, saya paham.",
+                    "Iya Kak, pembayaran awal memang perlu disesuaikan dengan kondisi."
+                ],
+                "gali": [
+                    "Yang jadi kendala nominal DP-nya atau waktunya belum pas?",
+                    "Kalau paket dan jadwalnya sendiri sebenarnya sudah cocok?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "cashflow",
+                        "script": "Untuk membantu kelancaran cashflow Kakak, pelunasan sisa biaya sebenarnya bisa dicicil bertahap hingga 1 bulan sebelum jadwal terbang.\n\nApakah skema cicilan bertahap seperti ini terasa lebih meringankan buat Kakak?"
+                    },
+                    {
+                        "reason": "belum_yakin",
+                        "script": "Betul Kak, jangan transfer DP sebelum hati Kakak benar-benar mantap 100%.\n\nDari penjelasan paket {{paket}} tadi, bagian mana yang sebenarnya masih membuat Kakak menimbang-nimbang?"
+                    },
+                    {
+                        "reason": "menunggu_dana",
+                        "script": "Baik Kak, semoga Allah lancarkan rezeki Kakak sekeluarga.\n\nAgar jadwal keberangkatan ini tidak terlewat dan kuotanya tidak habis diambil jamaah lain, boleh saya catat tanggal {{tanggal}} sebagai jadwal pengingat untuk Kakak?"
+                    }
+                ],
+                "pastikan": [
+                    "Kalau bagian DP sudah ada solusinya, Kakak siap lanjut amankan seat?",
+                    "Berarti selain pembayaran awal, tidak ada kendala lain ya?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "fallback_stage": "followup",
+            "tags": [
+                "dp",
+                "payment"
+            ]
+        },
+        {
+            "id": "obj_belum_ada_dana_01",
+            "category": "belum_ada_dana",
+            "title": "Belum Ada Dana",
+            "prospect_examples": [
+                "Belum ada uangnya.",
+                "Belum siap dana.",
+                "Nanti kalau sudah ada rezeki."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, nggak apa-apa. Jangan sampai rencana umroh justru terasa membebani.",
+                    "Saya paham Kak, soal kesiapan dana memang masing-masing berbeda."
+                ],
+                "gali": [
+                    "Kalau rencana umrohnya sendiri masih ada?",
+                    "Kira-kira target yang lebih realistis tahun ini atau tahun depan?",
+                    "Kalau ada pilihan yang lebih sesuai budget, Kakak masih ingin lihat?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "belum_prioritas",
+                        "script": "Sangat kami pahami Kak, ibadah umroh adalah panggilan hati dan kesiapan.\n\nJika boleh saya simpan nomor Kakak, apakah Kakak berkenan saya kirimkan update info promo berkala sewaktu-waktu ada program tabungan umroh dari travel kami?"
+                    },
+                    {
+                        "reason": "dana_belum_tersedia",
+                        "script": "InsyaAllah niat baiknya sudah dicatat pahala oleh Allah ya Kak.\n\nUntuk target rencana ibadah Kakak, kira-kira proyeksi yang lebih memungkinkan di akhir tahun ini atau awal musim tahun depan, Kak?"
+                    },
+                    {
+                        "reason": "harga_di_luar_kemampuan",
+                        "script": "Di {{travel}} kami memiliki program umroh hemat serba lengkap. Kalau ada paket di kisaran Rp 25 - 28 jutaan yang resmi dan amanah, apakah Kakak ingin saya buatkan simulasinya?"
+                    }
+                ],
+                "pastikan": [
+                    "Berarti saya catat dulu targetnya untuk {{bulan}} ya, Kak?",
+                    "Kalau nanti ada pilihan yang lebih sesuai, boleh saya kabari?"
+                ]
+            },
+            "next_stage_if_resolved": "nurture",
+            "fallback_stage": "followup",
+            "tags": [
+                "budget",
+                "nurture"
+            ]
+        },
+        {
+            "id": "obj_diskusi_pasangan_01",
+            "category": "diskusi_pasangan",
+            "title": "Mau Diskusi dengan Pasangan",
+            "prospect_examples": [
+                "Saya tanya suami dulu.",
+                "Saya diskusi sama istri dulu."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Boleh banget Kak, memang bagus kalau diputuskan bersama.",
+                    "Siap Kak, silakan dibicarakan dulu dengan pasangan."
+                ],
+                "gali": [
+                    "Kira-kira yang perlu dibicarakan lebih ke jadwal, biaya, atau paketnya?",
+                    "Ada informasi yang perlu saya bantu siapkan supaya lebih mudah dibahas?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "keputusan_bersama",
+                        "script": "Tepat sekali Kak, keputusan ibadah bersama pasangan insyaAllah membawa berkah. Saya buatkan ringkasan 1 lembar format PDF/teks yang memuat hotel, maskapai, dan rincian biaya yang mudah dibaca beliau ya.\n\nMau saya kirimkan sekarang Kak?"
+                    },
+                    {
+                        "reason": "pasangan_belum_tahu",
+                        "script": "Semisal pasangan Kakak ingin mendengar penjelasan langsung mengenai fasilitas hotel dan garansi kepastian visa dari kami, kami siap bantu lewat voice note atau telepon singkat.\n\nKira-kira waktu santai beliau biasanya di malam hari atau akhir pekan, Kak?"
+                    },
+                    {
+                        "reason": "soft_rejection",
+                        "script": "Tidak apa-apa Kak. Sebelum itu, ada bagian dari penawarannya yang sebenarnya masih membuat Kakak kurang yakin?"
+                    }
+                ],
+                "pastikan": [
+                    "Kira-kira kapan saya boleh follow-up lagi untuk tahu hasil diskusinya?",
+                    "Berarti saya hubungi lagi {{tanggal}} ya, Kak?"
+                ]
+            },
+            "next_stage_if_resolved": "followup",
+            "tags": [
+                "pasangan",
+                "decision_maker"
+            ]
+        },
+        {
+            "id": "obj_diskusi_keluarga_01",
+            "category": "diskusi_keluarga",
+            "title": "Mau Diskusi dengan Keluarga",
+            "prospect_examples": [
+                "Saya rembukkan dulu dengan keluarga.",
+                "Harus tanya anak-anak dulu."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, silakan dibicarakan dulu dengan keluarga.",
+                    "Wajar Kak, apalagi kalau keberangkatannya melibatkan beberapa orang."
+                ],
+                "gali": [
+                    "Tentu Kak, agar saat rembuk keluarga nanti Kakak punya bahan yang lengkap, hal apa yang biasanya paling banyak ditanyakan oleh keluarga: pilihan tanggal liburnya atau total biayanya, Kak?",
+                    "Siapa saja yang perlu ikut menentukan?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "keputusan_keluarga",
+                        "script": "Tentu Kak, ibadah sekeluarga memang perlu dimusyawarahkan. Saya bantu rincikan biaya per orang dan fasilitas kamar (Double/Triple/Quad) agar mudah dibagikan ke grup keluarga ya. Berapa orang kira-kira yang kemungkinan besar ikut, Kak?"
+                    },
+                    {
+                        "reason": "biaya_keluarga",
+                        "script": "Untuk biayanya nanti saya bantu rincikan per jamaah dan totalnya supaya jelas."
+                    },
+                    {
+                        "reason": "jadwal_keluarga",
+                        "script": "Menyesuaikan jadwal cuti kerja dan libur sekolah anak-anak memang butuh pencocokan Kak. Di travel kami ada 2 opsi favorit: keberangkatan awal liburan atau akhir liburan. Keluarga Kakak kira-kira lebih leluasa di opsi yang mana?"
+                    }
+                ],
+                "pastikan": [
+                    "Kapan kira-kira keluarga sudah sempat membahasnya, Kak?",
+                    "Saya follow-up lagi setelah itu ya?"
+                ]
+            },
+            "next_stage_if_resolved": "followup",
+            "tags": [
+                "family",
+                "decision_maker"
+            ]
+        },
+        {
+            "id": "obj_bandingkan_travel_01",
+            "category": "bandingkan_travel",
+            "title": "Mau Bandingkan Travel Lain",
+            "prospect_examples": [
+                "Saya lihat travel lain dulu.",
+                "Ada penawaran lain juga.",
+                "Saya bandingkan dulu ya."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Boleh Kak, justru bagus dibandingkan dulu supaya pilihannya mantap.",
+                    "Silakan Kak, umroh memang sebaiknya dipilih dengan hati-hati."
+                ],
+                "gali": [
+                    "Tentu Kak, membandingkan itu hak jamaah agar yakin. Dari penawaran travel lain yang Kakak lihat, bagian apa yang paling menarik perhatian Kakak: harganya yang lebih murah atau ada fasilitas tertentu?",
+                    "Dari penawaran lain, bagian apa yang paling menarik buat Kakak?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "harga",
+                        "script": "Kalau mau dibandingkan harga, sebaiknya kita lihat paket yang setara ya Kak, terutama hotel, maskapai, durasi, dan fasilitasnya."
+                    },
+                    {
+                        "reason": "fasilitas",
+                        "script": "Boleh Kak. Fokuskan dulu ke fasilitas yang paling penting buat Kakak supaya perbandingannya tidak terlalu banyak."
+                    },
+                    {
+                        "reason": "trust",
+                        "script": "Kalau yang dibandingkan kredibilitasnya, saya bantu berikan informasi {{travel}} yang bisa Kakak cek sendiri."
+                    },
+                    {
+                        "reason": "belum_yakin",
+                        "script": "Kalau masih bingung, kita kembali saja ke kebutuhan utama Kakak. Yang paling penting dari perjalanan ini apa?"
+                    }
+                ],
+                "pastikan": [
+                    "Kalau dari sisi yang Kakak prioritaskan tadi sudah cocok, masih ada hal lain yang ingin dibandingkan?",
+                    "Kalau sudah cukup jelas, apakah paket ini masih masuk pilihan utama Kakak?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "fallback_stage": "followup",
+            "tags": [
+                "comparison",
+                "competitor"
+            ]
+        },
+        {
+            "id": "obj_takut_ditipu_01",
+            "category": "takut_ditipu",
+            "title": "Takut Travel Bermasalah",
+            "prospect_examples": [
+                "Travelnya aman nggak?",
+                "Takut gagal berangkat.",
+                "Saya takut tertipu."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Wajar sekali Kak kalau hati-hati. Ini perjalanan ibadah dan nilainya juga tidak kecil.",
+                    "Saya paham Kak. Justru sebelum daftar memang sebaiknya dicek dulu."
+                ],
+                "gali": [
+                    "Yang paling Kakak khawatirkan bagian apa?",
+                    "Kakak pernah punya pengalaman buruk atau lebih karena sering melihat kasus travel bermasalah?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "pengalaman_buruk",
+                        "script": "Saya paham kenapa Kakak jadi lebih hati-hati. Saya bantu berikan informasi dan bukti yang memang bisa diverifikasi, jadi Kakak tidak perlu hanya percaya dari ucapan saya."
+                    },
+                    {
+                        "reason": "berita_negatif",
+                        "script": "Betul Kak, karena itu lebih baik cek legalitas, identitas travel, aktivitas keberangkatan, dan ketentuan paketnya sebelum memutuskan."
+                    },
+                    {
+                        "reason": "belum_kenal_travel",
+                        "script": "Saya bantu kenalkan dulu {{travel}} dari informasi resmi, legalitas, alamat, dan dokumentasi yang memang bisa Kakak periksa."
+                    }
+                ],
+                "pastikan": [
+                    "Setelah informasi tadi dicek, apakah dari sisi travel sudah cukup membuat Kakak nyaman?",
+                    "Selain soal keamanan travel, masih ada hal lain yang membuat Kakak ragu?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "tags": [
+                "trust",
+                "legalitas"
+            ]
+        },
+        {
+            "id": "obj_legalitas_01",
+            "category": "minta_bukti_legalitas",
+            "title": "Minta Legalitas Travel",
+            "prospect_examples": [
+                "Travelnya resmi?",
+                "Ada izinnya?",
+                "Boleh lihat legalitasnya?"
+            ],
+            "tgjp": {
+                "terima": [
+                    "Tentu Kak, itu memang penting untuk dicek sebelum mendaftar."
+                ],
+                "gali": [
+                    "Kakak ingin cek legalitas travel atau ada informasi lain yang ingin diverifikasi juga?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "verifikasi",
+                        "script": "Siap Kak, saya kirim informasi legalitas yang tersedia supaya Kakak bisa cek sendiri."
+                    },
+                    {
+                        "reason": "trust_issue",
+                        "script": "Selain legalitas, kalau Kakak butuh dokumentasi keberangkatan atau informasi lainnya saya bantu juga."
+                    }
+                ],
+                "pastikan": [
+                    "Informasinya sudah cukup jelas, Kak?",
+                    "Kalau dari sisi legalitas sudah aman, kita lanjut bahas paketnya ya?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "tags": [
+                "legalitas",
+                "trust"
+            ]
+        },
+        {
+            "id": "obj_hotel_jauh_01",
+            "category": "hotel_jauh",
+            "title": "Khawatir Hotel Jauh",
+            "prospect_examples": [
+                "Hotelnya jauh nggak?",
+                "Takut capek kalau jauh.",
+                "Ada yang lebih dekat?"
+            ],
+            "tgjp": {
+                "terima": [
+                    "Iya Kak, jarak hotel memang cukup berpengaruh ke kenyamanan selama di sana."
+                ],
+                "gali": [
+                    "Hotel dekat jadi prioritas karena ada orang tua yang ikut atau memang Kakak ingin mobilitas lebih ringan?",
+                    "Kalau hotel lebih dekat tapi harganya sedikit berbeda, apakah masih bisa dipertimbangkan?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "kenyamanan",
+                        "script": "Kalau kenyamanan jadi prioritas, saya lebih baik carikan pilihan hotel yang lokasinya lebih mendukung."
+                    },
+                    {
+                        "reason": "lansia",
+                        "script": "Kalau ada orang tua, saya setuju jarak hotel perlu jadi pertimbangan utama. Saya cek pilihan yang lebih sesuai ya."
+                    },
+                    {
+                        "reason": "mobilitas",
+                        "script": "Kalau mobilitas menjadi kendala, kita jangan memaksakan paket ini. Saya cari pilihan yang lebih cocok."
+                    }
+                ],
+                "pastikan": [
+                    "Kalau hotelnya sudah lebih sesuai, bagian lain dari paketnya sudah cocok?",
+                    "Berarti fokus kita cari yang lebih dekat ya, Kak?"
+                ]
+            },
+            "next_stage_if_resolved": "offer",
+            "tags": [
+                "hotel",
+                "comfort",
+                "lansia"
+            ]
+        },
+        {
+            "id": "obj_maskapai_01",
+            "category": "maskapai",
+            "title": "Keberatan soal Maskapai",
+            "prospect_examples": [
+                "Saya maunya maskapai lain.",
+                "Ada yang direct?",
+                "Saya kurang cocok maskapainya."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, maskapai memang bisa jadi pertimbangan penting."
+                ],
+                "gali": [
+                    "Ada alasan khusus memilih maskapai tertentu?",
+                    "Yang ingin Kakak hindari lebih ke transit, durasi penerbangan, atau maskapainya sendiri?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "preferensi",
+                        "script": "Saya cek dulu apakah ada jadwal yang menggunakan maskapai pilihan Kakak."
+                    },
+                    {
+                        "reason": "kenyamanan",
+                        "script": "Kalau kenyamanan penerbangan jadi prioritas, kita bisa bandingkan opsi yang tersedia."
+                    },
+                    {
+                        "reason": "rute",
+                        "script": "Kalau masalahnya transit atau rute, saya bantu cari jadwal yang paling mendekati kebutuhan Kakak."
+                    }
+                ],
+                "pastikan": [
+                    "Kalau penerbangannya sudah cocok, paket lainnya sudah sesuai?",
+                    "Berarti maskapai ini yang menjadi pertimbangan utama ya?"
+                ]
+            },
+            "next_stage_if_resolved": "offer",
+            "tags": [
+                "airline",
+                "comfort"
+            ]
+        },
+        {
+            "id": "obj_jadwal_01",
+            "category": "jadwal_tidak_cocok",
+            "title": "Jadwal Tidak Cocok",
+            "prospect_examples": [
+                "Tanggalnya nggak bisa.",
+                "Belum dapat cuti.",
+                "Ada bulan lain?"
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, berarti kita jangan paksa di tanggal ini."
+                ],
+                "gali": [
+                    "Kira-kira periode yang paling memungkinkan kapan?",
+                    "Ada tanggal yang harus dihindari?",
+                    "Kalau geser beberapa hari masih memungkinkan?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "cuti",
+                        "script": "Kita tunggu kepastian cutinya atau saya carikan periode lain yang lebih memungkinkan."
+                    },
+                    {
+                        "reason": "agenda_keluarga",
+                        "script": "Saya cari alternatif di luar tanggal yang bentrok ya."
+                    },
+                    {
+                        "reason": "tanggal_spesifik",
+                        "script": "Kalau harus di periode itu, saya fokuskan pencarian hanya pada jadwal yang mendekati kebutuhan Kakak."
+                    }
+                ],
+                "pastikan": [
+                    "Kalau ada keberangkatan di periode itu, Kakak masih tertarik lanjut?",
+                    "Berarti kendala utamanya tinggal tanggal ya?"
+                ]
+            },
+            "next_stage_if_resolved": "offer",
+            "tags": [
+                "schedule"
+            ]
+        },
+        {
+            "id": "obj_paspor_01",
+            "category": "belum_punya_paspor",
+            "title": "Belum Punya Paspor",
+            "prospect_examples": [
+                "Saya belum punya paspor.",
+                "Paspor sudah mati.",
+                "Belum urus dokumen."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Nggak apa-apa Kak, kita cek dulu kondisinya."
+                ],
+                "gali": [
+                    "Paspor belum pernah dibuat atau sudah pernah tapi masa berlakunya habis?",
+                    "Target keberangkatannya kira-kira kapan?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "tidak_tahu_proses",
+                        "script": "Saya bantu jelaskan alur dokumen yang perlu disiapkan sesuai proses yang berlaku."
+                    },
+                    {
+                        "reason": "belum_sempat",
+                        "script": "Kalau begitu kita sesuaikan juga target keberangkatannya supaya waktu persiapannya realistis."
+                    },
+                    {
+                        "reason": "menganggap_harus_siap_dulu",
+                        "script": "Kita bisa tetap lihat pilihan paket dulu, Kak. Untuk kapan dokumen wajib siap nanti mengikuti proses keberangkatan yang berlaku."
+                    }
+                ],
+                "pastikan": [
+                    "Kalau soal dokumen sudah jelas, rencana berangkatnya tetap lanjut ya?",
+                    "Selain paspor, masih ada bagian lain yang belum siap?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "tags": [
+                "document",
+                "passport"
+            ]
+        },
+        {
+            "id": "obj_kesehatan_01",
+            "category": "khawatir_kesehatan",
+            "title": "Khawatir Kondisi Fisik",
+            "prospect_examples": [
+                "Takut nggak kuat.",
+                "Ibu sudah sepuh.",
+                "Saya gampang capek."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Wajar Kak kalau bagian itu jadi perhatian, apalagi perjalanan umroh memang cukup banyak aktivitas fisiknya."
+                ],
+                "gali": [
+                    "Bagian yang paling dikhawatirkan lebih ke jalan kaki, jadwal kegiatan, atau mobilitas selama di sana?",
+                    "Nanti ada keluarga yang mendampingi juga?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "lansia",
+                        "script": "Kalau untuk jamaah lansia, kita lebih baik fokus ke paket dan layanan yang memang mendukung kenyamanan beliau."
+                    },
+                    {
+                        "reason": "mobilitas",
+                        "script": "Saya akan prioritaskan pilihan yang lebih sesuai dari sisi hotel dan mobilitas."
+                    },
+                    {
+                        "reason": "kondisi_kesehatan",
+                        "script": "Untuk kesiapan medisnya sebaiknya tetap dikonsultasikan dengan tenaga kesehatan, Kak. Dari sisi perjalanan, saya bantu jelaskan fasilitas yang tersedia supaya bisa dipertimbangkan dengan lebih jelas."
+                    }
+                ],
+                "pastikan": [
+                    "Kalau dari sisi perjalanan sudah dibuat lebih nyaman, apakah Kakak masih ingin lanjut melihat pilihannya?",
+                    "Berarti faktor kenyamanan fisik ini yang paling utama ya?"
+                ]
+            },
+            "next_stage_if_resolved": "offer",
+            "tags": [
+                "health",
+                "lansia",
+                "comfort"
+            ]
+        },
+        {
+            "id": "obj_pikir_pikir_01",
+            "category": "mau_pikir_pikir",
+            "title": "Mau Pikir-Pikir Dulu",
+            "prospect_examples": [
+                "Saya pikir-pikir dulu.",
+                "Nanti saya kabari.",
+                "Saya pertimbangkan dulu."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Boleh Kak, silakan dipertimbangkan dulu.",
+                    "Siap Kak, nggak masalah."
+                ],
+                "gali": [
+                    "Biar saya nggak salah follow-up, yang masih ingin dipertimbangkan lebih ke harga, jadwal, atau paketnya?",
+                    "Masih ada informasi yang Kakak butuhkan sebelum memutuskan?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "masih_ada_keberatan",
+                        "script": "Kalau ada bagian yang masih mengganjal, boleh disampaikan saja Kak. Saya coba bantu jelaskan."
+                    },
+                    {
+                        "reason": "belum_urgent",
+                        "script": "Baik Kak.\n\nKalau memang belum perlu diputuskan sekarang, kita tidak perlu buru-buru."
+                    },
+                    {
+                        "reason": "butuh_waktu",
+                        "script": "Silakan dipertimbangkan dulu. Supaya tidak mengganggu, kapan kira-kira saya boleh menghubungi lagi?"
+                    },
+                    {
+                        "reason": "soft_rejection",
+                        "script": "Tidak apa-apa Kak. Kalau ternyata belum cocok juga boleh disampaikan, supaya saya tahu status rencananya."
+                    }
+                ],
+                "pastikan": [
+                    "Saya follow-up lagi {{tanggal}} ya, Kak?",
+                    "Kalau nanti ternyata belum jadi juga nggak apa-apa, kabari saya saja ya."
+                ]
+            },
+            "next_stage_if_resolved": "followup",
+            "tags": [
+                "delay",
+                "followup"
+            ]
+        },
+        {
+            "id": "obj_belum_yakin_01",
+            "category": "belum_yakin",
+            "title": "Prospek Belum Yakin",
+            "prospect_examples": [
+                "Saya masih ragu.",
+                "Belum yakin mau ambil.",
+                "Masih kurang yakin."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, nggak apa-apa. Lebih baik kita cari tahu dulu bagian yang masih membuat ragu."
+                ],
+                "gali": [
+                    "Yang belum membuat yakin itu lebih ke travel, paket, harga, atau waktunya?",
+                    "Kalau ada satu hal yang perlu jelas dulu sebelum Kakak mantap, apa itu?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "trust",
+                        "script": "Kalau soal travel, saya bantu berikan informasi yang bisa Kakak verifikasi sendiri."
+                    },
+                    {
+                        "reason": "value",
+                        "script": "Kalau yang belum terasa adalah manfaat paketnya, kita lihat lagi bagian yang paling berhubungan dengan kebutuhan Kakak."
+                    },
+                    {
+                        "reason": "paket",
+                        "script": "Berarti kita jangan lanjut closing dulu. Saya coba cari pilihan yang lebih cocok."
+                    },
+                    {
+                        "reason": "timing",
+                        "script": "Kalau masalahnya waktu, kita cari periode yang lebih realistis."
+                    }
+                ],
+                "pastikan": [
+                    "Kalau bagian tadi sudah jelas, apakah Kakak sudah lebih nyaman dengan pilihannya?",
+                    "Masih ada keraguan lain?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "fallback_stage": "identification",
+            "tags": [
+                "uncertain"
+            ]
+        },
+        {
+            "id": "obj_menunggu_promo_01",
+            "category": "menunggu_promo",
+            "title": "Menunggu Promo",
+            "prospect_examples": [
+                "Tunggu promo aja.",
+                "Kalau ada diskon kabari.",
+                "Ada kemungkinan turun?"
+            ],
+            "tgjp": {
+                "terima": [
+                    "Boleh Kak, saya paham kalau ingin cari harga yang lebih pas."
+                ],
+                "gali": [
+                    "Kalau boleh tahu, target budget Kakak sekitar berapa?",
+                    "Jadwalnya cukup fleksibel kalau harus menunggu promo?",
+                    "Kalau tidak ada promo, rencana umrohnya masih tetap ada?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "price_sensitive",
+                        "script": "Daripada menunggu sesuatu yang belum pasti, saya bisa cek dulu pilihan yang sekarang paling mendekati budget Kakak."
+                    },
+                    {
+                        "reason": "tidak_urgent",
+                        "script": "Baik Kak, saya simpan dulu kebutuhannya.\n\nKalau nanti ada penawaran yang memang relevan, saya kabari."
+                    },
+                    {
+                        "reason": "mencari_deal",
+                        "script": "Saya belum bisa menjanjikan promo yang belum ada, tapi saya bisa bantu bandingkan pilihan terbaik yang tersedia sekarang."
+                    }
+                ],
+                "pastikan": [
+                    "Kalau ada paket di kisaran budget Kakak, masih mau saya kabari?",
+                    "Berarti jadwalnya masih fleksibel ya?"
+                ]
+            },
+            "next_stage_if_resolved": "followup",
+            "tags": [
+                "promo",
+                "budget",
+                "nurture"
+            ]
+        },
+        {
+            "id": "obj_sudah_punya_travel_01",
+            "category": "sudah_punya_travel",
+            "title": "Sudah Punya Travel Pilihan",
+            "prospect_examples": [
+                "Saya biasanya pakai travel lain.",
+                "Sudah ada travel langganan.",
+                "Saya sudah punya pilihan."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, nggak masalah. Kalau sudah nyaman dengan travel langganan tentu itu juga penting."
+                ],
+                "gali": [
+                    "Sudah sampai booking atau masih tahap membandingkan?",
+                    "Apa yang paling Kakak suka dari travel tersebut?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "loyalty",
+                        "script": "Kalau sudah cocok dan percaya, tidak perlu dipaksakan pindah Kak. Saya tetap siap bantu kalau suatu waktu butuh informasi."
+                    },
+                    {
+                        "reason": "sudah_booking",
+                        "script": "Baik Kak, semoga perjalanan umrohnya lancar dan mabrur."
+                    },
+                    {
+                        "reason": "masih_membandingkan",
+                        "script": "Kalau masih membuka pilihan, saya bisa bantu jelaskan yang berbeda dari paket kami tanpa harus menjelekkan pilihan lain."
+                    }
+                ],
+                "pastikan": [
+                    "Berarti sekarang Kakak sudah fix dengan travel tersebut?",
+                    "Atau masih ingin melihat alternatif sebelum memutuskan?"
+                ]
+            },
+            "next_stage_if_resolved": "closed_lost",
+            "alternative_stage": "offer",
+            "tags": [
+                "competitor"
+            ]
+        },
+        {
+            "id": "obj_belum_siap_01",
+            "category": "belum_siap_berangkat",
+            "title": "Belum Siap Berangkat",
+            "prospect_examples": [
+                "Belum tahun ini.",
+                "Saya belum siap.",
+                "Mungkin tahun depan."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Baik Kak, nggak perlu dipaksakan kalau memang belum waktunya."
+                ],
+                "gali": [
+                    "Yang membuat belum siap lebih ke dana, waktu, atau keluarga?",
+                    "Kalau rencananya tetap ada, kira-kira target paling realistis kapan?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "budget",
+                        "script": "Baik Kak, kita simpan dulu targetnya sampai kondisi dana lebih siap."
+                    },
+                    {
+                        "reason": "waktu",
+                        "script": "Saya catat periode yang kira-kira lebih memungkinkan."
+                    },
+                    {
+                        "reason": "mental",
+                        "script": "Tidak apa-apa Kak. Kalau nanti butuh informasi untuk persiapan, saya tetap siap membantu."
+                    },
+                    {
+                        "reason": "keluarga",
+                        "script": "Kalau memang perlu menunggu kesiapan keluarga, nanti kita lanjut lagi setelah kondisinya lebih pas."
+                    }
+                ],
+                "pastikan": [
+                    "Boleh saya catat targetnya sekitar {{bulan}}?",
+                    "Nanti mendekati waktunya saya kabari lagi ya?"
+                ]
+            },
+            "next_stage_if_resolved": "nurture",
+            "tags": [
+                "nurture"
+            ]
+        },
+        {
+            "id": "obj_takut_gagal_berangkat_01",
+            "category": "takut_gagal_berangkat",
+            "title": "Takut Sudah Bayar Tapi Tidak Berangkat",
+            "prospect_examples": [
+                "Takut sudah bayar tapi gagal.",
+                "Kalau jadwal berubah gimana?",
+                "Takut nggak jadi berangkat."
+            ],
+            "tgjp": {
+                "terima": [
+                    "Wajar Kak kalau hal itu ingin dipastikan sebelum melakukan pembayaran."
+                ],
+                "gali": [
+                    "Yang paling Kakak khawatirkan perubahan jadwal, pembatalan, atau keamanan pembayaran?",
+                    "Ada ketentuan tertentu yang ingin Kakak pahami dulu?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "trust",
+                        "script": "Saya bantu jelaskan informasi travel dan proses pembayarannya berdasarkan ketentuan resmi yang tersedia."
+                    },
+                    {
+                        "reason": "ketentuan_tidak_jelas",
+                        "script": "Saya jelaskan ketentuan perubahan atau pembatalannya sesuai aturan paket ini supaya Kakak bisa baca dan pertimbangkan dulu."
+                    },
+                    {
+                        "reason": "pengalaman_lain",
+                        "script": "Saya paham kenapa Kakak khawatir. Lebih baik kita fokus ke informasi yang bisa diperiksa dan ketentuan yang tertulis."
+                    }
+                ],
+                "pastikan": [
+                    "Setelah ketentuannya dijelaskan, apakah bagian itu sudah cukup jelas?",
+                    "Masih ada hal lain yang ingin dipastikan sebelum lanjut?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "tags": [
+                "trust",
+                "policy"
+            ]
+        },
+        {
+            "id": "obj_testimoni_01",
+            "category": "minta_testimoni",
+            "title": "Minta Testimoni Jamaah",
+            "prospect_examples": [
+                "Ada testimoninya?",
+                "Sudah pernah berangkatkan jamaah?",
+                "Ada bukti keberangkatan?"
+            ],
+            "tgjp": {
+                "terima": [
+                    "Ada Kak, wajar juga kalau ingin lihat pengalaman jamaah sebelumnya."
+                ],
+                "gali": [
+                    "Kakak ingin lihat testimoni pelayanan, dokumentasi keberangkatan, atau keduanya?"
+                ],
+                "jawab": [
+                    {
+                        "reason": "trust",
+                        "script": "Saya kirim beberapa testimoni dan dokumentasi yang memang boleh dibagikan ya, Kak."
+                    },
+                    {
+                        "reason": "verification",
+                        "script": "Selain testimoni, kalau perlu saya juga bantu arahkan ke informasi travel yang bisa diverifikasi."
+                    }
+                ],
+                "pastikan": [
+                    "Setelah lihat dokumentasinya, apakah dari sisi kepercayaan sudah cukup jelas?",
+                    "Kalau sudah, kita lanjut ke paket yang tadi ya?"
+                ]
+            },
+            "next_stage_if_resolved": "closing",
+            "tags": [
+                "trust",
+                "social_proof"
+            ]
+        }
+    ],
+    "universal_scripts": {
+        "terima": [
+            "Baik Kak, saya paham.",
+            "Iya Kak, wajar kalau bagian itu jadi pertimbangan.",
+            "Nggak apa-apa Kak, kita bahas pelan-pelan."
+        ],
+        "gali": [
+            "Kalau boleh tahu, bagian mana yang paling membuat Kakak ragu?",
+            "Yang menjadi pertimbangan utamanya apa, Kak?",
+            "Kalau satu hal itu bisa kita selesaikan, masih ada kendala lain?"
+        ],
+        "pastikan": [
+            "Kalau bagian tadi sudah jelas, masih ada hal lain yang membuat Kakak ragu?",
+            "Kalau itu sudah aman, kita lanjut ke langkah berikutnya ya?",
+            "Berarti kendala utamanya tadi sudah selesai ya, Kak?"
+        ]
+    },
+    "routing_rules": [
+        {
+            "condition": "Prospek mengatakan harga mahal.",
+            "recommended_category": "harga_mahal"
+        },
+        {
+            "condition": "Prospek keberatan dengan nominal DP.",
+            "recommended_category": "dp_berat"
+        },
+        {
+            "condition": "Prospek belum memiliki dana.",
+            "recommended_category": "belum_ada_dana"
+        },
+        {
+            "condition": "Prospek perlu bicara dengan pasangan.",
+            "recommended_category": "diskusi_pasangan"
+        },
+        {
+            "condition": "Prospek perlu keputusan keluarga.",
+            "recommended_category": "diskusi_keluarga"
+        },
+        {
+            "condition": "Prospek ingin membandingkan travel.",
+            "recommended_category": "bandingkan_travel"
+        },
+        {
+            "condition": "Prospek takut travel bermasalah.",
+            "recommended_category": "takut_ditipu"
+        },
+        {
+            "condition": "Prospek menanyakan legalitas.",
+            "recommended_category": "minta_bukti_legalitas"
+        },
+        {
+            "condition": "Prospek keberatan dengan lokasi hotel.",
+            "recommended_category": "hotel_jauh"
+        },
+        {
+            "condition": "Prospek keberatan dengan maskapai.",
+            "recommended_category": "maskapai"
+        },
+        {
+            "condition": "Prospek tidak cocok dengan tanggal.",
+            "recommended_category": "jadwal_tidak_cocok"
+        },
+        {
+            "condition": "Prospek belum memiliki paspor.",
+            "recommended_category": "belum_punya_paspor"
+        },
+        {
+            "condition": "Prospek khawatir dengan kondisi fisik.",
+            "recommended_category": "khawatir_kesehatan"
+        },
+        {
+            "condition": "Prospek mengatakan ingin pikir-pikir.",
+            "recommended_category": "mau_pikir_pikir"
+        },
+        {
+            "condition": "Prospek mengatakan belum yakin.",
+            "recommended_category": "belum_yakin"
+        },
+        {
+            "condition": "Prospek memilih menunggu promo.",
+            "recommended_category": "menunggu_promo"
+        },
+        {
+            "condition": "Prospek sudah memiliki travel pilihan.",
+            "recommended_category": "sudah_punya_travel"
+        },
+        {
+            "condition": "Prospek belum siap berangkat.",
+            "recommended_category": "belum_siap_berangkat"
+        },
+        {
+            "condition": "Prospek takut sudah bayar tetapi gagal berangkat.",
+            "recommended_category": "takut_gagal_berangkat"
+        },
+        {
+            "condition": "Prospek meminta testimoni.",
+            "recommended_category": "minta_testimoni"
+        }
+    ],
+    "tgjp_flow": [
+        {
+            "step": 1,
+            "action": "Terima",
+            "rule": "Jangan membantah."
+        },
+        {
+            "step": 2,
+            "action": "Gali",
+            "rule": "Cari akar keberatan."
+        },
+        {
+            "step": 3,
+            "action": "Jawab",
+            "rule": "Pilih jawaban berdasarkan alasan yang ditemukan."
+        },
+        {
+            "step": 4,
+            "action": "Pastikan",
+            "rule": "Pastikan keberatan selesai dan arahkan kembali ke keputusan."
+        }
+    ],
+    "do": [
+        "Dengarkan keberatan sampai jelas.",
+        "Cari alasan di balik kalimat pertama prospek.",
+        "Gunakan jawaban yang sesuai konteks.",
+        "Berikan bukti jika keberatan berkaitan dengan trust.",
+        "Berikan pilihan jika keberatan berkaitan dengan paket.",
+        "Tentukan follow-up jika prospek membutuhkan waktu.",
+        "Closing ulang jika keberatan sudah selesai."
+    ],
+    "dont": [
+        "Langsung mengatakan prospek salah.",
+        "Menganggap semua keberatan adalah soal harga.",
+        "Menjawab sebelum menggali.",
+        "Menggunakan tekanan emosional berlebihan.",
+        "Menjelekkan travel lain.",
+        "Membuat testimoni, legalitas, scarcity, atau promo palsu.",
+        "Memaksa prospek yang memang belum siap.",
+        "Berhenti setelah menjawab keberatan tanpa memastikan langkah berikutnya."
+    ],
+    "resolution_rules": [
+        {
+            "condition": "Keberatan selesai dan prospek siap mengambil keputusan.",
+            "next_stage": "closing"
+        },
+        {
+            "condition": "Keberatan menunjukkan paket tidak cocok.",
+            "next_stage": "offer"
+        },
+        {
+            "condition": "Informasi prospek ternyata belum cukup.",
+            "next_stage": "identification"
+        },
+        {
+            "condition": "Prospek meminta waktu.",
+            "next_stage": "followup"
+        },
+        {
+            "condition": "Prospek masih berminat tetapi belum siap.",
+            "next_stage": "nurture"
+        },
+        {
+            "condition": "Prospek memutuskan tidak lanjut.",
+            "next_stage": "closed_lost"
+        }
+    ],
+    "framework_ref": "objections.json",
+    "closing_ref": "scripts/closing.json",
+    "followup_ref": "scripts/followup.json",
+    "offer_ref": "scripts/offer.json",
+    "identification_ref": "scripts/identification.json"
+}

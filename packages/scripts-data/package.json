@@ -1,0 +1,10 @@
+{
+  "name": "@csumroh/scripts-data",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./scripts-chat/*": "./scripts-chat/*",
+    "./conversion-chat/*": "./conversion-chat/*"
+  }
+}

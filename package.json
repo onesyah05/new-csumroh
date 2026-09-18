@@ -1,0 +1,19 @@
+{
+  "name": "csumroh-react",
+  "private": true,
+  "packageManager": "pnpm@11.1.2",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @csumroh/api --filter @csumroh/web dev",
+    "dev:all": "pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @csumroh/api db:generate",
+    "db:push": "pnpm --filter @csumroh/api db:push",
+    "db:seed": "pnpm --filter @csumroh/api db:seed",
+    "db:clean-demo": "pnpm --filter @csumroh/api db:clean-demo"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

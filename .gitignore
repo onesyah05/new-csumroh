@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+.env
+.env.*
+!.env.example
+dist/
+coverage/
+*.tsbuildinfo
+apps/wa-gateway/sessions/
+apps/api/uploads/
+*.log
+.DS_Store

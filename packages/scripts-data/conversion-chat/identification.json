@@ -1,0 +1,397 @@
+{
+    "id": "prospect_identification",
+    "nama": "Prospect Identification",
+    "deskripsi": "Panduan untuk memahami kebutuhan, masalah, keinginan, impian, dan kondisi praktis prospek sebelum memberikan rekomendasi paket umroh.",
+    "tujuan": "Membantu Agen memperoleh gambaran yang cukup tentang prospek agar penawaran yang diberikan lebih relevan dan berpotensi diterima.",
+    "framework": "NPGD",
+    "prinsip": [
+        "Identifikasi dilakukan melalui percakapan, bukan seperti mengisi formulir.",
+        "Tidak semua pertanyaan harus ditanyakan kepada setiap prospek.",
+        "Gunakan informasi yang sudah diberikan prospek agar tidak menanyakan hal yang sama.",
+        "Satu jawaban prospek bisa mengandung lebih dari satu unsur NPGD.",
+        "Gali seperlunya sampai Agen memiliki informasi yang cukup untuk memberikan rekomendasi.",
+        "Jangan buru-buru menawarkan paket sebelum memahami kebutuhan utama prospek."
+    ],
+    "npgd": [
+        {
+            "id": "need",
+            "kode": "N",
+            "nama": "Need",
+            "arti": "Kebutuhan nyata yang sedang dicari prospek.",
+            "tujuan": "Mengetahui seperti apa perjalanan atau paket umroh yang dibutuhkan prospek.",
+            "indikasi": [
+                "Prospek menanyakan paket tertentu",
+                "Prospek menyebut waktu keberangkatan",
+                "Prospek ingin berangkat bersama keluarga",
+                "Prospek mencari hotel dekat",
+                "Prospek mencari paket dengan budget tertentu",
+                "Prospek membutuhkan fasilitas atau pelayanan tertentu"
+            ],
+            "contoh_pernyataan_prospek": [
+                "Ada paket Desember nggak?",
+                "Saya mau berangkat sama ibu.",
+                "Ada yang hotelnya dekat Masjidil Haram?",
+                "Saya cari paket sekitar 30 jutaan.",
+                "Ada keberangkatan dari Medan?"
+            ],
+            "yang_perlu_digali": [
+                "Kebutuhan utama prospek",
+                "Waktu keberangkatan",
+                "Siapa yang akan berangkat",
+                "Preferensi paket",
+                "Fasilitas yang dianggap penting"
+            ],
+            "contoh_pertanyaan": [
+                "Rencananya ingin berangkat kapan, Kak?",
+                "Nanti berangkat sendiri atau bersama keluarga?",
+                "Kalau untuk paketnya, ada fasilitas yang paling Kakak prioritaskan?",
+                "Lebih mengutamakan harga, kenyamanan, atau jarak hotel?"
+            ],
+            "output_tags": [
+                "jadwal",
+                "keluarga",
+                "hotel",
+                "budget",
+                "fasilitas",
+                "kenyamanan"
+            ]
+        },
+        {
+            "id": "pain",
+            "kode": "P",
+            "nama": "Pain",
+            "arti": "Masalah, kekhawatiran, ketakutan, atau hambatan yang dirasakan prospek.",
+            "tujuan": "Mengetahui hal yang dapat menghambat prospek mengambil keputusan.",
+            "indikasi": [
+                "Prospek terlihat ragu",
+                "Prospek pernah punya pengalaman buruk",
+                "Prospek takut tertipu",
+                "Prospek khawatir dengan kondisi fisik",
+                "Prospek merasa biaya terlalu berat",
+                "Prospek bingung memilih travel atau paket",
+                "Prospek khawatir membawa orang tua atau anak"
+            ],
+            "contoh_pernyataan_prospek": [
+                "Saya takut travelnya bermasalah.",
+                "Ibu saya sudah sepuh, takut kecapekan.",
+                "Takut hotelnya jauh.",
+                "Saya masih bingung pilih travel.",
+                "Budget saya agak terbatas.",
+                "Saya pernah kecewa sama travel sebelumnya."
+            ],
+            "yang_perlu_digali": [
+                "Kekhawatiran utama",
+                "Penyebab kekhawatiran",
+                "Pengalaman sebelumnya",
+                "Hambatan finansial",
+                "Hambatan waktu",
+                "Hambatan keluarga",
+                "Kondisi khusus jamaah"
+            ],
+            "contoh_pertanyaan": [
+                "Yang paling membuat Kakak khawatir soal perjalanan umroh apa?",
+                "Kalau boleh tahu, apa yang membuat Kakak masih ragu?",
+                "Pernah ada pengalaman kurang nyaman sebelumnya?",
+                "Kalau soal biaya, yang menjadi pertimbangan lebih ke total paket atau pembayaran awalnya?",
+                "Untuk orang tua nanti ada kondisi khusus yang perlu kami perhatikan?"
+            ],
+            "output_tags": [
+                "trust",
+                "lansia",
+                "kesehatan",
+                "budget",
+                "hotel",
+                "jadwal",
+                "keluarga",
+                "pengalaman_buruk"
+            ]
+        },
+        {
+            "id": "gain",
+            "kode": "G",
+            "nama": "Gain",
+            "arti": "Manfaat atau hasil yang ingin didapatkan prospek dari paket dan pelayanan yang dipilih.",
+            "tujuan": "Mengetahui hal yang membuat sebuah penawaran terasa lebih bernilai bagi prospek.",
+            "indikasi": [
+                "Prospek membandingkan fasilitas",
+                "Prospek mencari perjalanan yang nyaman",
+                "Prospek ingin lebih tenang selama ibadah",
+                "Prospek menginginkan pendampingan",
+                "Prospek ingin perjalanan yang praktis",
+                "Prospek ingin mendapatkan value tertentu dari paket"
+            ],
+            "contoh_pernyataan_prospek": [
+                "Yang penting nyaman.",
+                "Saya maunya hotel jangan terlalu jauh.",
+                "Kalau bisa ada yang benar-benar membimbing.",
+                "Saya pertama kali umroh, jadi ingin didampingi.",
+                "Nggak masalah sedikit lebih mahal asal nyaman."
+            ],
+            "yang_perlu_digali": [
+                "Benefit paling penting",
+                "Standar kenyamanan",
+                "Harapan terhadap pelayanan",
+                "Harapan terhadap pendampingan",
+                "Prioritas fasilitas"
+            ],
+            "contoh_pertanyaan": [
+                "Kalau perjalanan nanti, yang paling penting buat Kakak apa?",
+                "Kakak lebih mengutamakan harga atau kenyamanan?",
+                "Kalau ada satu hal yang ingin dipastikan dari travel, apa itu?",
+                "Untuk pendampingan selama di Tanah Suci, Kakak ada harapan khusus?"
+            ],
+            "output_tags": [
+                "kenyamanan",
+                "pendampingan",
+                "hotel_dekat",
+                "pelayanan",
+                "value",
+                "praktis"
+            ]
+        },
+        {
+            "id": "dream",
+            "kode": "D",
+            "nama": "Dream",
+            "arti": "Keinginan besar, alasan emosional, atau pengalaman yang ingin diwujudkan prospek melalui perjalanan umroh.",
+            "tujuan": "Memahami alasan yang lebih dalam mengapa prospek ingin berangkat.",
+            "indikasi": [
+                "Prospek ingin membahagiakan orang tua",
+                "Prospek ingin umroh bersama pasangan",
+                "Prospek ingin membawa seluruh keluarga",
+                "Prospek sudah lama menabung",
+                "Prospek memiliki target ibadah tertentu",
+                "Prospek menyebut impian melihat Ka'bah",
+                "Prospek ingin menghadiahkan umroh kepada seseorang"
+            ],
+            "contoh_pernyataan_prospek": [
+                "Saya ingin bawa ibu sebelum beliau makin tua.",
+                "Sudah lama banget ingin lihat Ka'bah.",
+                "Saya ingin umroh bareng suami.",
+                "Ini cita-cita saya dari dulu.",
+                "Saya mau kasih hadiah umroh buat orang tua."
+            ],
+            "yang_perlu_digali": [
+                "Alasan utama ingin umroh",
+                "Siapa yang ingin diajak",
+                "Momen yang ingin diwujudkan",
+                "Target waktu",
+                "Motivasi emosional"
+            ],
+            "contoh_pertanyaan": [
+                "Apa yang paling membuat Kakak ingin berangkat umroh?",
+                "Kalau nanti berangkat, ingin bersama siapa?",
+                "Sudah lama punya keinginan untuk umroh?",
+                "Ada alasan khusus ingin berangkat di periode ini?"
+            ],
+            "output_tags": [
+                "orang_tua",
+                "pasangan",
+                "keluarga",
+                "hadiah_umroh",
+                "impian",
+                "spiritual",
+                "momentum"
+            ]
+        }
+    ],
+    "qualification": [
+        {
+            "id": "departure_time",
+            "nama": "Waktu Keberangkatan",
+            "tujuan": "Mengetahui kapan prospek ingin atau memungkinkan untuk berangkat.",
+            "prioritas": "tinggi",
+            "contoh_pertanyaan": [
+                "Rencananya ingin berangkat kapan, Kak?",
+                "Sudah punya target bulan atau masih fleksibel?"
+            ],
+            "output": [
+                "tanggal_target",
+                "bulan_target",
+                "fleksibel"
+            ]
+        },
+        {
+            "id": "pax",
+            "nama": "Jumlah Jamaah",
+            "tujuan": "Mengetahui berapa orang yang direncanakan ikut dalam keberangkatan.",
+            "prioritas": "tinggi",
+            "contoh_pertanyaan": [
+                "Rencananya berangkat berapa orang?",
+                "Sendiri atau ada keluarga yang ikut juga?"
+            ],
+            "output": [
+                "jumlah_jamaah"
+            ]
+        },
+        {
+            "id": "departure_city",
+            "nama": "Kota Keberangkatan",
+            "tujuan": "Menentukan jadwal dan paket yang relevan dengan lokasi prospek.",
+            "prioritas": "tinggi",
+            "contoh_pertanyaan": [
+                "Kakak domisili di mana?",
+                "Lebih nyaman berangkat dari kota mana?"
+            ],
+            "output": [
+                "kota_domisili",
+                "kota_keberangkatan"
+            ]
+        },
+        {
+            "id": "budget",
+            "nama": "Budget",
+            "tujuan": "Mengetahui kisaran kemampuan atau anggaran prospek agar rekomendasi tidak terlalu jauh dari kondisi sebenarnya.",
+            "prioritas": "situasional",
+            "contoh_pertanyaan": [
+                "Kalau boleh tahu, ada kisaran budget yang ingin disiapkan per orang?",
+                "Supaya saya nggak salah rekomendasi, Kakak mencari paket di kisaran berapa?"
+            ],
+            "output": [
+                "budget_min",
+                "budget_max"
+            ]
+        },
+        {
+            "id": "travel_companion",
+            "nama": "Pendamping atau Anggota Keluarga",
+            "tujuan": "Mengetahui siapa yang ikut agar kebutuhan perjalanan dapat disesuaikan.",
+            "prioritas": "situasional",
+            "contoh_pertanyaan": [
+                "Nanti berangkat bersama siapa?",
+                "Ada orang tua atau anak yang ikut juga?"
+            ],
+            "output": [
+                "sendiri",
+                "pasangan",
+                "orang_tua",
+                "anak",
+                "keluarga",
+                "rombongan"
+            ]
+        },
+        {
+            "id": "special_condition",
+            "nama": "Kondisi Khusus Jamaah",
+            "tujuan": "Mengetahui kebutuhan khusus yang memengaruhi pemilihan paket atau pelayanan.",
+            "prioritas": "situasional",
+            "contoh_pertanyaan": [
+                "Ada orang tua atau jamaah yang perlu perhatian khusus selama perjalanan?",
+                "Ada kondisi tertentu yang perlu kami perhatikan supaya perjalanan lebih nyaman?"
+            ],
+            "output": [
+                "lansia",
+                "mobilitas_terbatas",
+                "anak",
+                "kebutuhan_khusus"
+            ]
+        },
+        {
+            "id": "documents",
+            "nama": "Kesiapan Dokumen",
+            "tujuan": "Mengetahui kesiapan administratif prospek.",
+            "prioritas": "situasional",
+            "contoh_pertanyaan": [
+                "Paspor sudah ada atau belum, Kak?",
+                "Untuk dokumen keberangkatan sudah pernah dipersiapkan sebelumnya?"
+            ],
+            "output": [
+                "paspor_siap",
+                "paspor_belum_ada",
+                "dokumen_perlu_dibantu"
+            ]
+        },
+        {
+            "id": "payment",
+            "nama": "Cara Pembayaran",
+            "tujuan": "Memahami preferensi dan kesiapan pembayaran prospek.",
+            "prioritas": "situasional",
+            "contoh_pertanyaan": [
+                "Untuk pembayarannya lebih nyaman langsung atau bertahap?",
+                "Kalau paketnya sudah cocok, pembayaran awalnya ingin disiapkan kapan?"
+            ],
+            "output": [
+                "tunai",
+                "bertahap",
+                "belum_siap",
+                "siap_dp"
+            ]
+        },
+        {
+            "id": "decision_maker",
+            "nama": "Pengambil Keputusan",
+            "tujuan": "Mengetahui apakah prospek dapat mengambil keputusan sendiri atau perlu berdiskusi dengan pihak lain.",
+            "prioritas": "situasional",
+            "contoh_pertanyaan": [
+                "Untuk keputusan keberangkatannya nanti Kakak yang menentukan atau perlu diskusi dulu dengan keluarga?",
+                "Selain Kakak, ada siapa lagi yang perlu ikut mempertimbangkan paketnya?"
+            ],
+            "output": [
+                "keputusan_sendiri",
+                "pasangan",
+                "orang_tua",
+                "keluarga",
+                "pihak_lain"
+            ]
+        }
+    ],
+    "identification_levels": [
+        {
+            "id": "minimal",
+            "nama": "Identifikasi Minimal",
+            "deskripsi": "Informasi dasar sudah cukup untuk mulai menyaring paket.",
+            "minimum_data": [
+                "kebutuhan_utama",
+                "waktu_keberangkatan",
+                "jumlah_jamaah",
+                "kota_keberangkatan"
+            ]
+        },
+        {
+            "id": "qualified",
+            "nama": "Prospek Teridentifikasi",
+            "deskripsi": "Agen sudah memahami kebutuhan dan faktor utama yang memengaruhi keputusan prospek.",
+            "minimum_data": [
+                "minimal_satu_npgd",
+                "waktu_keberangkatan",
+                "jumlah_jamaah",
+                "kota_keberangkatan"
+            ]
+        },
+        {
+            "id": "high_intent",
+            "nama": "Prospek Siap Ditawarkan",
+            "deskripsi": "Informasi sudah cukup untuk memberikan rekomendasi yang spesifik dan mengarahkan percakapan menuju closing.",
+            "indikator": [
+                "Kebutuhan utama diketahui",
+                "Waktu keberangkatan cukup jelas",
+                "Jumlah jamaah diketahui",
+                "Kota keberangkatan diketahui",
+                "Minimal satu motivasi atau kekhawatiran utama diketahui",
+                "Tidak ada informasi penting yang menghalangi pemberian rekomendasi"
+            ]
+        }
+    ],
+    "output_schema": {
+        "prospect_summary": {
+            "need": [],
+            "pain": [],
+            "gain": [],
+            "dream": [],
+            "qualification": {
+                "departure_time": null,
+                "pax": null,
+                "departure_city": null,
+                "budget": null,
+                "travel_companion": [],
+                "special_condition": [],
+                "documents": null,
+                "payment": null,
+                "decision_maker": null
+            },
+            "tags": []
+        }
+    },
+    "next_stage": "offer",
+    "script_ref": "scripts/identification.json"
+}

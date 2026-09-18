@@ -1,0 +1,538 @@
+{
+    "id": "offer_framework",
+    "nama": "Offer",
+    "deskripsi": "Panduan untuk memberikan rekomendasi paket umroh berdasarkan hasil Prospect Identification.",
+    "tujuan": "Membantu Agen memberikan penawaran yang terasa relevan dengan kebutuhan prospek, bukan sekadar mengirim daftar paket atau brosur.",
+    "prinsip": [
+        "Offer harus berdasarkan informasi yang sudah digali dari prospek.",
+        "Jelaskan alasan kenapa paket tersebut direkomendasikan.",
+        "Utamakan benefit yang paling relevan bagi prospek.",
+        "Jangan menjelaskan semua fitur jika tidak dibutuhkan.",
+        "Gunakan bahasa sederhana dan mudah dipahami.",
+        "Harga disampaikan dengan jelas setelah prospek memahami value yang relevan.",
+        "Jika paket tidak cocok, kembali ke tahap Identification.",
+        "Urgency dan scarcity digunakan pada tahap Closing dan harus berdasarkan kondisi nyata."
+    ],
+    "offer_formula": {
+        "nama": "Match - Reason - Benefit - Value - Action",
+        "steps": [
+            {
+                "id": "match",
+                "nama": "Match",
+                "tujuan": "Pilih paket atau pilihan yang paling sesuai dengan hasil identifikasi prospek.",
+                "contoh": "Pilih paket yang sesuai dengan jadwal, budget, jumlah jamaah, dan kebutuhan utama."
+            },
+            {
+                "id": "reason",
+                "nama": "Reason",
+                "tujuan": "Jelaskan kenapa pilihan tersebut direkomendasikan.",
+                "contoh": "Karena Ibu berangkat bersama orang tua, saya lebih menyarankan paket yang lebih nyaman untuk beliau."
+            },
+            {
+                "id": "benefit",
+                "nama": "Benefit",
+                "tujuan": "Sorot manfaat yang paling berhubungan dengan Need, Pain, Gain, atau Dream prospek.",
+                "contoh": "Hotel yang lebih dekat akan membantu mengurangi aktivitas jalan kaki yang terlalu jauh."
+            },
+            {
+                "id": "value",
+                "nama": "Value",
+                "tujuan": "Sampaikan harga dan apa yang didapat secara jelas.",
+                "contoh": "Paket ini di harga {{harga}} dengan fasilitas {{fasilitas_utama}}."
+            },
+            {
+                "id": "action",
+                "nama": "Action",
+                "tujuan": "Arahkan prospek menuju langkah berikutnya.",
+                "contoh": "Kalau pilihan ini cocok, kita bisa lanjut cek tanggal dan ketersediaan seat."
+            }
+        ]
+    },
+    "offer_profiles": [
+        {
+            "id": "offer_general",
+            "nama": "Penawaran Umum",
+            "use_when": "Kebutuhan dasar prospek sudah diketahui tetapi belum ada kebutuhan khusus yang dominan.",
+            "match": {
+                "required_data": [
+                    "departure_time",
+                    "pax",
+                    "departure_city"
+                ],
+                "any_tags": []
+            },
+            "fokus_offer": [
+                "Kesesuaian jadwal",
+                "Kesesuaian kota keberangkatan",
+                "Fasilitas utama",
+                "Harga",
+                "Kemudahan proses"
+            ],
+            "hindari": [
+                "Mengirim terlalu banyak pilihan sekaligus",
+                "Menjelaskan fitur yang tidak relevan"
+            ],
+            "script_category": "general"
+        },
+        {
+            "id": "offer_budget",
+            "nama": "Prospek Sensitif Budget",
+            "use_when": "Prospek memiliki batas anggaran atau menjadikan harga sebagai pertimbangan utama.",
+            "match": {
+                "any_tags": [
+                    "budget"
+                ],
+                "qualification": [
+                    "budget"
+                ]
+            },
+            "fokus_offer": [
+                "Pilihan yang masuk kisaran budget",
+                "Fasilitas yang tetap didapat",
+                "Value dibanding sekadar harga murah",
+                "Pilihan pembayaran jika tersedia"
+            ],
+            "hindari": [
+                "Memaksakan paket jauh di atas budget",
+                "Langsung menganggap prospek hanya mencari yang paling murah"
+            ],
+            "script_category": "budget"
+        },
+        {
+            "id": "offer_lansia",
+            "nama": "Berangkat Bersama Lansia",
+            "use_when": "Prospek akan berangkat bersama orang tua atau jamaah lanjut usia.",
+            "match": {
+                "any_tags": [
+                    "orang_tua",
+                    "lansia",
+                    "mobilitas_terbatas"
+                ]
+            },
+            "fokus_offer": [
+                "Jarak hotel",
+                "Kenyamanan perjalanan",
+                "Pendampingan",
+                "Ritme perjalanan",
+                "Kemudahan mobilitas"
+            ],
+            "hindari": [
+                "Hanya fokus pada harga",
+                "Menjanjikan kemampuan pelayanan yang sebenarnya tidak tersedia"
+            ],
+            "script_category": "lansia"
+        },
+        {
+            "id": "offer_family",
+            "nama": "Umroh Bersama Keluarga",
+            "use_when": "Prospek ingin berangkat bersama beberapa anggota keluarga.",
+            "match": {
+                "any_tags": [
+                    "keluarga",
+                    "anak",
+                    "orang_tua"
+                ],
+                "qualification": [
+                    "travel_companion",
+                    "pax"
+                ]
+            },
+            "fokus_offer": [
+                "Kenyamanan keluarga",
+                "Pilihan kamar",
+                "Kesesuaian kebutuhan anggota keluarga",
+                "Jadwal yang cocok untuk rombongan keluarga",
+                "Kemudahan koordinasi"
+            ],
+            "hindari": [
+                "Menganggap kebutuhan semua anggota keluarga sama",
+                "Tidak mengecek usia atau kondisi anggota keluarga"
+            ],
+            "script_category": "family"
+        },
+        {
+            "id": "offer_couple",
+            "nama": "Umroh Bersama Pasangan",
+            "use_when": "Prospek ingin berangkat bersama suami atau istri.",
+            "match": {
+                "any_tags": [
+                    "pasangan"
+                ]
+            },
+            "fokus_offer": [
+                "Kesesuaian jadwal berdua",
+                "Kenyamanan perjalanan",
+                "Pilihan kamar",
+                "Pengalaman ibadah bersama"
+            ],
+            "hindari": [
+                "Terlalu banyak membahas hal yang tidak menjadi prioritas pasangan"
+            ],
+            "script_category": "couple"
+        },
+        {
+            "id": "offer_first_timer",
+            "nama": "Pertama Kali Umroh",
+            "use_when": "Prospek belum pernah umroh dan membutuhkan lebih banyak arahan.",
+            "match": {
+                "any_tags": [
+                    "pendampingan",
+                    "trust",
+                    "pelayanan"
+                ]
+            },
+            "fokus_offer": [
+                "Pendampingan",
+                "Manasik",
+                "Alur persiapan",
+                "Bantuan administrasi",
+                "Kemudahan bertanya kepada tim"
+            ],
+            "hindari": [
+                "Menggunakan terlalu banyak istilah teknis",
+                "Membanjiri prospek dengan informasi sekaligus"
+            ],
+            "script_category": "first_timer"
+        },
+        {
+            "id": "offer_hotel_near",
+            "nama": "Prioritas Hotel Dekat",
+            "use_when": "Jarak hotel menjadi salah satu kebutuhan atau kekhawatiran utama prospek.",
+            "match": {
+                "any_tags": [
+                    "hotel",
+                    "hotel_dekat",
+                    "kenyamanan",
+                    "lansia"
+                ]
+            },
+            "fokus_offer": [
+                "Lokasi hotel",
+                "Perkiraan jarak",
+                "Kemudahan akses",
+                "Dampaknya terhadap kenyamanan jamaah"
+            ],
+            "hindari": [
+                "Menggunakan istilah dekat tanpa informasi yang jelas",
+                "Membandingkan hotel hanya berdasarkan bintang"
+            ],
+            "script_category": "hotel_near"
+        },
+        {
+            "id": "offer_trust",
+            "nama": "Prospek Butuh Rasa Aman",
+            "use_when": "Prospek takut tertipu, pernah mengalami masalah dengan travel, atau masih ragu terhadap kredibilitas.",
+            "match": {
+                "any_tags": [
+                    "trust",
+                    "pengalaman_buruk"
+                ]
+            },
+            "fokus_offer": [
+                "Legalitas dan identitas travel",
+                "Transparansi fasilitas",
+                "Jadwal dan proses yang jelas",
+                "Bukti keberangkatan",
+                "Testimoni atau pengalaman jamaah yang relevan",
+                "Kemudahan menghubungi tim"
+            ],
+            "hindari": [
+                "Menjelekkan travel lain",
+                "Mengklaim hal yang tidak bisa dibuktikan",
+                "Memaksa prospek segera membayar sebelum rasa percaya terbentuk"
+            ],
+            "script_category": "trust"
+        },
+        {
+            "id": "offer_comfort",
+            "nama": "Prioritas Kenyamanan",
+            "use_when": "Prospek lebih mengutamakan kenyamanan dibanding mencari harga termurah.",
+            "match": {
+                "any_tags": [
+                    "kenyamanan",
+                    "pelayanan",
+                    "praktis"
+                ]
+            },
+            "fokus_offer": [
+                "Hotel",
+                "Transportasi",
+                "Maskapai",
+                "Pendampingan",
+                "Ritme perjalanan",
+                "Fasilitas yang mempermudah jamaah"
+            ],
+            "hindari": [
+                "Mengarahkan ke paket termurah hanya karena lebih mudah dijual",
+                "Menyebut fasilitas tanpa menjelaskan manfaatnya"
+            ],
+            "script_category": "comfort"
+        },
+        {
+            "id": "offer_premium",
+            "nama": "Prospek Mengutamakan Value Premium",
+            "use_when": "Prospek bersedia mengeluarkan biaya lebih untuk kenyamanan atau fasilitas yang lebih baik.",
+            "match": {
+                "any_tags": [
+                    "kenyamanan",
+                    "hotel_dekat",
+                    "pelayanan",
+                    "value"
+                ]
+            },
+            "fokus_offer": [
+                "Perbedaan fasilitas",
+                "Kenyamanan",
+                "Lokasi hotel",
+                "Pelayanan",
+                "Benefit tambahan yang benar-benar didapat"
+            ],
+            "hindari": [
+                "Menawarkan mahal hanya karena prospek terlihat mampu",
+                "Menggunakan istilah premium tanpa menjelaskan perbedaannya"
+            ],
+            "script_category": "premium"
+        },
+        {
+            "id": "offer_fixed_schedule",
+            "nama": "Tanggal Keberangkatan Sudah Spesifik",
+            "use_when": "Prospek hanya dapat berangkat pada bulan atau tanggal tertentu.",
+            "match": {
+                "any_tags": [
+                    "jadwal"
+                ],
+                "qualification": [
+                    "departure_time"
+                ]
+            },
+            "fokus_offer": [
+                "Keberangkatan yang sesuai tanggal",
+                "Ketersediaan seat",
+                "Pilihan terdekat jika tanggal utama tidak tersedia"
+            ],
+            "hindari": [
+                "Menawarkan banyak keberangkatan di luar waktu yang diminta"
+            ],
+            "script_category": "fixed_schedule"
+        },
+        {
+            "id": "offer_flexible_schedule",
+            "nama": "Jadwal Fleksibel",
+            "use_when": "Prospek tidak terikat pada tanggal tertentu dan terbuka terhadap beberapa pilihan.",
+            "match": {
+                "qualification_values": {
+                    "departure_time": [
+                        "fleksibel"
+                    ]
+                }
+            },
+            "fokus_offer": [
+                "Pilihan jadwal terbaik",
+                "Perbandingan fasilitas",
+                "Perbandingan harga",
+                "Momentum keberangkatan yang cocok"
+            ],
+            "hindari": [
+                "Memberikan terlalu banyak pilihan hingga prospek bingung"
+            ],
+            "script_category": "flexible_schedule"
+        },
+        {
+            "id": "offer_payment",
+            "nama": "Butuh Fleksibilitas Pembayaran",
+            "use_when": "Prospek tertarik tetapi kesiapan pembayaran menjadi salah satu pertimbangan.",
+            "match": {
+                "qualification_values": {
+                    "payment": [
+                        "bertahap",
+                        "belum_siap"
+                    ]
+                },
+                "any_tags": [
+                    "budget"
+                ]
+            },
+            "fokus_offer": [
+                "Besaran pembayaran awal",
+                "Tahapan pembayaran yang tersedia",
+                "Batas waktu pembayaran",
+                "Total biaya yang tetap transparan"
+            ],
+            "hindari": [
+                "Menawarkan skema pembayaran yang tidak tersedia",
+                "Membuat kemampuan finansial prospek terasa dihakimi"
+            ],
+            "script_category": "payment"
+        },
+        {
+            "id": "offer_document_support",
+            "nama": "Prospek Belum Siap Dokumen",
+            "use_when": "Prospek tertarik berangkat tetapi paspor atau dokumen lain belum siap.",
+            "match": {
+                "qualification_values": {
+                    "documents": [
+                        "paspor_belum_ada",
+                        "dokumen_perlu_dibantu"
+                    ]
+                }
+            },
+            "fokus_offer": [
+                "Bantuan proses dokumen yang memang tersedia",
+                "Urutan persiapan",
+                "Estimasi tahapan",
+                "Apa yang perlu disiapkan prospek"
+            ],
+            "hindari": [
+                "Membuat proses administrasi terdengar lebih mudah dari kondisi sebenarnya",
+                "Menjanjikan layanan yang tidak disediakan travel"
+            ],
+            "script_category": "document_support"
+        },
+        {
+            "id": "offer_dream_parent",
+            "nama": "Ingin Membahagiakan Orang Tua",
+            "use_when": "Motivasi utama prospek adalah memberangkatkan atau berangkat bersama orang tua.",
+            "match": {
+                "all_tags": [
+                    "orang_tua"
+                ],
+                "any_tags": [
+                    "impian",
+                    "hadiah_umroh",
+                    "momentum"
+                ]
+            },
+            "fokus_offer": [
+                "Kenyamanan orang tua",
+                "Pendampingan",
+                "Kesesuaian jadwal",
+                "Kemudahan proses",
+                "Membantu mewujudkan rencana tanpa berlebihan memainkan emosi"
+            ],
+            "hindari": [
+                "Mengeksploitasi emosi prospek",
+                "Menakut-nakuti prospek agar segera membeli"
+            ],
+            "script_category": "dream_parent"
+        },
+        {
+            "id": "offer_group",
+            "nama": "Berangkat Rombongan",
+            "use_when": "Prospek membawa beberapa orang, keluarga besar, komunitas, atau rombongan.",
+            "match": {
+                "any_tags": [
+                    "rombongan",
+                    "keluarga"
+                ]
+            },
+            "fokus_offer": [
+                "Jumlah peserta",
+                "Ketersediaan seat",
+                "Pilihan kamar",
+                "Koordinasi keberangkatan",
+                "Benefit grup jika memang tersedia"
+            ],
+            "hindari": [
+                "Menjanjikan harga grup sebelum jumlah jamaah jelas",
+                "Tidak memastikan ketersediaan seat untuk seluruh rombongan"
+            ],
+            "script_category": "group"
+        }
+    ],
+    "selection_logic": {
+        "step_1": "Ambil hasil identification dan qualification prospek.",
+        "step_2": "Cari offer_profile yang paling sesuai dengan tag dan data prospek.",
+        "step_3": "Jika beberapa profile cocok, prioritaskan Pain dan Need terlebih dahulu, lalu Gain dan Dream.",
+        "step_4": "Pilih satu penawaran utama. Maksimal berikan alternatif jika memang membantu prospek membandingkan.",
+        "step_5": "Susun offer menggunakan formula Match - Reason - Benefit - Value - Action.",
+        "step_6": "Jika tidak ada paket yang benar-benar cocok, kembali ke Identification atau sampaikan dengan jujur bahwa pilihan yang sesuai belum tersedia."
+    },
+    "priority_rules": [
+        {
+            "priority": 1,
+            "source": "pain",
+            "reason": "Hambatan atau kekhawatiran yang tidak terjawab dapat menghentikan keputusan."
+        },
+        {
+            "priority": 2,
+            "source": "need",
+            "reason": "Paket harus memenuhi kebutuhan dasar prospek."
+        },
+        {
+            "priority": 3,
+            "source": "gain",
+            "reason": "Benefit membantu prospek melihat nilai dari pilihan yang ditawarkan."
+        },
+        {
+            "priority": 4,
+            "source": "dream",
+            "reason": "Dream dapat memperkuat relevansi emosional selama digunakan secara wajar."
+        }
+    ],
+    "offer_output_schema": {
+        "selected_offer_profile": null,
+        "matched_tags": [],
+        "recommended_package_ids": [],
+        "primary_reason": null,
+        "relevant_benefits": [],
+        "price": null,
+        "alternative_package_ids": [],
+        "next_action": "closing"
+    },
+    "example": {
+        "prospect_summary": {
+            "need": [
+                "Umroh bersama ibu"
+            ],
+            "pain": [
+                "Takut ibu kelelahan"
+            ],
+            "gain": [
+                "Perjalanan lebih nyaman"
+            ],
+            "dream": [
+                "Ingin membawa ibu melihat Ka'bah"
+            ],
+            "qualification": {
+                "departure_time": "Desember",
+                "pax": 2,
+                "departure_city": "Medan",
+                "budget": null,
+                "travel_companion": [
+                    "orang_tua"
+                ],
+                "special_condition": [
+                    "lansia"
+                ],
+                "documents": "paspor_siap",
+                "payment": null,
+                "decision_maker": "keputusan_sendiri"
+            },
+            "tags": [
+                "orang_tua",
+                "lansia",
+                "kenyamanan",
+                "hotel_dekat"
+            ]
+        },
+        "matched_offer_profiles": [
+            "offer_lansia",
+            "offer_hotel_near",
+            "offer_comfort",
+            "offer_dream_parent"
+        ],
+        "primary_offer_profile": "offer_lansia",
+        "offer_direction": {
+            "primary_reason": "Prospek berangkat bersama ibu yang sudah lanjut usia.",
+            "relevant_benefits": [
+                "Hotel lebih dekat",
+                "Mobilitas lebih ringan",
+                "Pendampingan jamaah"
+            ]
+        }
+    },
+    "next_stage": "closing",
+    "fallback_stage": "identification",
+    "script_ref": "scripts/offer.json",
+    "package_ref": "packages.json"
+}

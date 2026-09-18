@@ -1,0 +1,414 @@
+{
+    "id": "closing_framework",
+    "nama": "Closing",
+    "deskripsi": "Panduan untuk mengarahkan prospek yang sudah cocok dengan paket menuju komitmen nyata, terutama pengamanan seat melalui DP sesuai ketentuan travel.",
+    "tujuan": "Membantu Agen meminta keputusan secara jelas, menciptakan momentum yang tepat, dan memastikan setiap closing berakhir pada tindakan atau status prospek yang jelas.",
+    "entry_criteria": [
+        "Kebutuhan utama prospek sudah cukup dipahami.",
+        "Paket atau pilihan yang relevan sudah ditawarkan.",
+        "Prospek memahami harga dan fasilitas utama.",
+        "Tidak ada informasi penting yang masih belum jelas.",
+        "Prospek menunjukkan ketertarikan atau kecocokan terhadap penawaran."
+    ],
+    "prinsip": [
+        "Closing bukan memaksa prospek membeli, tetapi membantu prospek mengambil keputusan.",
+        "Arahkan closing pada satu tindakan yang jelas.",
+        "Komitmen utama yang diharapkan adalah pengamanan seat sesuai ketentuan travel.",
+        "Gunakan urgency hanya jika memang ada batas waktu yang nyata.",
+        "Gunakan scarcity hanya jika jumlah seat atau ketersediaan memang terbatas.",
+        "Jangan membuat urgency atau scarcity palsu.",
+        "Jika prospek keberatan, masuk ke tahap Handling Objection.",
+        "Jika prospek berhenti merespons, masuk ke tahap Follow-up.",
+        "Jika prospek belum siap sekarang tetapi masih potensial, ubah status menjadi Nurture."
+    ],
+    "primary_commitment": {
+        "id": "secure_seat",
+        "nama": "Amankan Seat",
+        "deskripsi": "Prospek memberikan komitmen untuk mengamankan keberangkatan melalui DP atau mekanisme booking sesuai aturan travel.",
+        "success_condition": "Pembayaran atau komitmen booking yang disyaratkan sudah dilakukan dan tercatat."
+    },
+    "closing_formula": {
+        "nama": "Confirm - Reason - Action",
+        "steps": [
+            {
+                "id": "confirm",
+                "nama": "Confirm",
+                "tujuan": "Pastikan prospek memang sudah cocok dengan bagian utama penawaran.",
+                "contoh": "Pastikan paket, jadwal, fasilitas, dan harga sudah dipahami."
+            },
+            {
+                "id": "reason",
+                "nama": "Reason",
+                "tujuan": "Berikan alasan yang relevan kenapa keputusan sebaiknya diambil sekarang.",
+                "contoh": "Gunakan ketersediaan seat, batas waktu, atau kebutuhan prospek yang memang nyata."
+            },
+            {
+                "id": "action",
+                "nama": "Action",
+                "tujuan": "Minta satu tindakan konkret.",
+                "contoh": "Arahkan prospek untuk mengamankan seat dengan DP."
+            }
+        ]
+    },
+    "closing_profiles": [
+        {
+            "id": "closing_confirmation",
+            "nama": "Konfirmasi Kecocokan",
+            "use_when": "Agen sudah memberikan offer dan ingin memastikan apakah prospek merasa paketnya sesuai.",
+            "tujuan": "Mengetahui apakah prospek siap masuk ke closing atau masih ada hal yang perlu dibahas.",
+            "fokus": [
+                "Kecocokan paket",
+                "Kecocokan jadwal",
+                "Kecocokan fasilitas",
+                "Kecocokan harga"
+            ],
+            "possible_results": [
+                "ready_to_close",
+                "objection",
+                "need_more_information"
+            ],
+            "script_category": "confirmation"
+        },
+        {
+            "id": "closing_dp",
+            "nama": "Closing dengan DP",
+            "use_when": "Prospek sudah cocok dengan paket dan siap mengambil langkah berikutnya.",
+            "tujuan": "Mendapatkan komitmen pembayaran DP.",
+            "fokus": [
+                "Nominal DP",
+                "Cara pembayaran",
+                "Batas waktu pembayaran jika ada",
+                "Konfirmasi setelah pembayaran"
+            ],
+            "required_data": [
+                "package",
+                "departure_date",
+                "dp_amount"
+            ],
+            "script_category": "dp"
+        },
+        {
+            "id": "closing_seat",
+            "nama": "Amankan Seat",
+            "use_when": "Ketersediaan seat menjadi faktor penting dalam keputusan.",
+            "tujuan": "Mendorong prospek mengamankan seat yang tersedia.",
+            "fokus": [
+                "Ketersediaan seat aktual",
+                "Jumlah jamaah",
+                "Nominal pengamanan seat",
+                "Langkah berikutnya"
+            ],
+            "required_data": [
+                "seat_available",
+                "pax",
+                "dp_amount"
+            ],
+            "rules": [
+                "Jumlah seat harus berdasarkan data aktual.",
+                "Jangan menyebut seat terbatas jika belum diverifikasi."
+            ],
+            "script_category": "seat"
+        },
+        {
+            "id": "closing_fixed_date",
+            "nama": "Closing Berdasarkan Tanggal",
+            "use_when": "Prospek membutuhkan tanggal keberangkatan tertentu.",
+            "tujuan": "Menghubungkan keputusan dengan jadwal yang sudah cocok.",
+            "fokus": [
+                "Tanggal keberangkatan",
+                "Ketersediaan pada tanggal tersebut",
+                "Kebutuhan prospek terhadap tanggal itu",
+                "Tindakan pengamanan"
+            ],
+            "script_category": "fixed_date"
+        },
+        {
+            "id": "closing_after_comparison",
+            "nama": "Closing Setelah Membandingkan Pilihan",
+            "use_when": "Prospek sudah membandingkan dua atau lebih paket dan mulai condong pada salah satu pilihan.",
+            "tujuan": "Membantu prospek menyelesaikan pilihan dan mengambil keputusan.",
+            "fokus": [
+                "Pilihan yang paling sesuai",
+                "Alasan prospek memilih",
+                "Perbedaan utama",
+                "Tindakan berikutnya"
+            ],
+            "hindari": [
+                "Menambah terlalu banyak pilihan baru",
+                "Membuat prospek kembali bingung"
+            ],
+            "script_category": "after_comparison"
+        },
+        {
+            "id": "closing_family",
+            "nama": "Closing Keluarga",
+            "use_when": "Prospek akan berangkat bersama pasangan, orang tua, anak, atau keluarga besar.",
+            "tujuan": "Mengamankan keputusan untuk seluruh anggota yang akan berangkat.",
+            "fokus": [
+                "Jumlah jamaah",
+                "Ketersediaan seat seluruh anggota",
+                "Pilihan kamar",
+                "Kesepakatan keluarga",
+                "DP total atau per jamaah"
+            ],
+            "script_category": "family"
+        },
+        {
+            "id": "closing_decision_maker",
+            "nama": "Closing dengan Pengambil Keputusan Lain",
+            "use_when": "Prospek perlu berdiskusi dengan pasangan, orang tua, atau anggota keluarga lain.",
+            "tujuan": "Menentukan langkah konkret agar keputusan tidak menggantung.",
+            "fokus": [
+                "Siapa pengambil keputusan",
+                "Informasi apa yang dibutuhkan pihak tersebut",
+                "Kapan diskusi akan dilakukan",
+                "Kapan Agen boleh follow-up kembali"
+            ],
+            "possible_results": [
+                "followup_scheduled",
+                "join_decision_maker",
+                "ready_to_close"
+            ],
+            "script_category": "decision_maker"
+        },
+        {
+            "id": "closing_after_objection",
+            "nama": "Closing Ulang Setelah Objection",
+            "use_when": "Keberatan prospek sudah ditangani menggunakan TGJP.",
+            "tujuan": "Memastikan apakah hambatan sudah selesai dan mengarahkan kembali ke keputusan.",
+            "fokus": [
+                "Pastikan keberatan sudah terjawab",
+                "Cari keberatan lain jika masih ada",
+                "Arahkan kembali ke komitmen"
+            ],
+            "source_stage": "objection",
+            "script_category": "after_objection"
+        },
+        {
+            "id": "closing_soft",
+            "nama": "Soft Closing",
+            "use_when": "Prospek tertarik tetapi belum cukup siap untuk diminta DP secara langsung.",
+            "tujuan": "Mendapatkan komitmen kecil yang membawa prospek lebih dekat ke keputusan.",
+            "contoh_actions": [
+                "Memilih tanggal keberangkatan",
+                "Memilih paket",
+                "Mengirim data jamaah",
+                "Mengajak pasangan ikut konsultasi",
+                "Menentukan waktu follow-up"
+            ],
+            "script_category": "soft_closing"
+        },
+        {
+            "id": "closing_reactivation",
+            "nama": "Closing Prospek Lama",
+            "use_when": "Prospek lama kembali aktif setelah sebelumnya berhenti atau menunda.",
+            "tujuan": "Mengkonfirmasi ulang kebutuhan dan mengarahkan kembali ke keputusan.",
+            "fokus": [
+                "Pastikan kebutuhan masih sama",
+                "Cek apakah jadwal berubah",
+                "Cek apakah budget berubah",
+                "Berikan penawaran terbaru jika perlu",
+                "Arahkan kembali ke tindakan"
+            ],
+            "script_category": "reactivation"
+        }
+    ],
+    "urgency": {
+        "nama": "Urgency",
+        "arti": "Alasan nyata mengapa prospek perlu mengambil keputusan dalam waktu tertentu.",
+        "valid_sources": [
+            {
+                "id": "payment_deadline",
+                "nama": "Batas Waktu Pembayaran",
+                "contoh": "Batas pembayaran atau pengamanan booking memang sudah ditentukan."
+            },
+            {
+                "id": "departure_deadline",
+                "nama": "Batas Persiapan Keberangkatan",
+                "contoh": "Waktu keberangkatan semakin dekat dan ada proses administrasi yang harus diselesaikan."
+            },
+            {
+                "id": "promo_deadline",
+                "nama": "Batas Promo",
+                "contoh": "Harga atau promo memang memiliki tanggal berakhir yang jelas."
+            },
+            {
+                "id": "personal_timing",
+                "nama": "Momentum Prospek",
+                "contoh": "Prospek sendiri memiliki batas waktu tertentu seperti cuti, liburan, atau rencana keluarga."
+            }
+        ],
+        "rules": [
+            "Urgency harus bisa dijelaskan sumbernya.",
+            "Jangan membuat deadline palsu.",
+            "Jangan menggunakan ketakutan yang berlebihan."
+        ]
+    },
+    "scarcity": {
+        "nama": "Scarcity",
+        "arti": "Keterbatasan nyata pada seat, kamar, jadwal, atau fasilitas tertentu.",
+        "valid_sources": [
+            {
+                "id": "seat",
+                "nama": "Seat Terbatas"
+            },
+            {
+                "id": "room",
+                "nama": "Tipe Kamar Terbatas"
+            },
+            {
+                "id": "departure",
+                "nama": "Pilihan Keberangkatan Terbatas"
+            },
+            {
+                "id": "allocation",
+                "nama": "Alokasi Grup Terbatas"
+            }
+        ],
+        "rules": [
+            "Scarcity hanya digunakan setelah data diverifikasi.",
+            "Sebutkan angka jika memang tersedia dan akurat.",
+            "Jangan menggunakan klaim seperti 'tinggal sedikit' jika tidak diketahui jumlah sebenarnya."
+        ]
+    },
+    "closing_signals": [
+        {
+            "id": "ask_dp",
+            "signal": "Prospek bertanya nominal DP.",
+            "meaning": "Prospek mulai memikirkan komitmen pembayaran."
+        },
+        {
+            "id": "ask_payment",
+            "signal": "Prospek bertanya cara pembayaran.",
+            "meaning": "Prospek menunjukkan buying intent."
+        },
+        {
+            "id": "ask_seat",
+            "signal": "Prospek bertanya apakah seat masih tersedia.",
+            "meaning": "Prospek mempertimbangkan pengamanan keberangkatan."
+        },
+        {
+            "id": "ask_documents",
+            "signal": "Prospek bertanya dokumen apa yang perlu dikirim.",
+            "meaning": "Prospek mulai memikirkan proses pendaftaran."
+        },
+        {
+            "id": "confirm_date",
+            "signal": "Prospek mengkonfirmasi tanggal tertentu.",
+            "meaning": "Prospek mulai mengunci pilihan keberangkatan."
+        },
+        {
+            "id": "ask_family",
+            "signal": "Prospek memastikan seat atau harga untuk pasangan atau keluarga.",
+            "meaning": "Prospek mulai menghitung keputusan nyata."
+        },
+        {
+            "id": "positive_response",
+            "signal": "Prospek mengatakan paket cocok, menarik, atau sesuai.",
+            "meaning": "Agen sebaiknya tidak terus menjelaskan dan mulai meminta keputusan."
+        }
+    ],
+    "do_not_over_sell": {
+        "prinsip": "Ketika buying signal sudah muncul, kurangi penjelasan dan arahkan ke tindakan.",
+        "contoh_kesalahan": [
+            "Prospek sudah bertanya cara DP tetapi Agen kembali menjelaskan seluruh fasilitas.",
+            "Prospek sudah memilih tanggal tetapi Agen memberi lima paket baru.",
+            "Prospek sudah siap daftar tetapi Agen terus memberikan informasi yang tidak diminta."
+        ]
+    },
+    "decision_logic": [
+        {
+            "condition": "Prospek cocok dan siap melakukan DP.",
+            "action": "Arahkan ke pembayaran dan konfirmasi booking.",
+            "result": "closed_won"
+        },
+        {
+            "condition": "Prospek menunjukkan keberatan.",
+            "action": "Masuk ke Handling Objection menggunakan TGJP.",
+            "result": "objection"
+        },
+        {
+            "condition": "Prospek membutuhkan informasi tambahan.",
+            "action": "Jawab informasi yang dibutuhkan lalu kembali ke Closing.",
+            "result": "closing"
+        },
+        {
+            "condition": "Prospek perlu diskusi dengan pengambil keputusan lain.",
+            "action": "Tentukan kapan keputusan akan dibahas dan jadwalkan follow-up.",
+            "result": "followup"
+        },
+        {
+            "condition": "Prospek berhenti merespons.",
+            "action": "Masuk ke Follow-up berdasarkan posisi terakhir percakapan.",
+            "result": "followup"
+        },
+        {
+            "condition": "Prospek belum siap sekarang tetapi masih memiliki rencana.",
+            "action": "Tetapkan sebagai Nurture dan tentukan waktu follow-up berikutnya.",
+            "result": "nurture"
+        },
+        {
+            "condition": "Prospek menyatakan tidak akan melanjutkan.",
+            "action": "Cari tahu alasan batal dan simpan status.",
+            "result": "closed_lost"
+        }
+    ],
+    "success_definition": {
+        "closed_won": {
+            "nama": "Closing",
+            "condition": "Prospek sudah memenuhi komitmen booking sesuai aturan travel."
+        },
+        "nurture": {
+            "nama": "Belum Sekarang",
+            "condition": "Prospek masih potensial tetapi belum siap dan sudah memiliki rencana follow-up berikutnya."
+        },
+        "closed_lost": {
+            "nama": "Batal",
+            "condition": "Prospek tidak melanjutkan dan alasan batal sudah diketahui."
+        }
+    },
+    "closing_output_schema": {
+        "prospect_id": null,
+        "package_id": null,
+        "departure_id": null,
+        "closing_profile": null,
+        "buying_signals": [],
+        "urgency_source": null,
+        "scarcity_source": null,
+        "seat_available": null,
+        "dp_amount": null,
+        "decision_maker": null,
+        "result": null,
+        "next_stage": null,
+        "followup_date": null,
+        "lost_reason": null
+    },
+    "example": {
+        "prospect_context": {
+            "need": "Berangkat bersama ibu",
+            "pain": "Takut ibu kelelahan",
+            "selected_package": "Paket Umroh Nyaman 12 Hari",
+            "departure_date": "2026-12-12",
+            "pax": 2,
+            "buying_signal": "Prospek mengatakan paket dan tanggal sudah cocok."
+        },
+        "closing_direction": {
+            "profile": "closing_dp",
+            "confirm": "Pastikan kembali bahwa paket dan tanggal sudah sesuai.",
+            "reason": "Gunakan ketersediaan seat jika memang terbatas dan sudah diverifikasi.",
+            "action": "Arahkan prospek mengamankan dua seat dengan DP sesuai ketentuan."
+        },
+        "possible_results": [
+            "closed_won",
+            "objection",
+            "followup"
+        ]
+    },
+    "next_stage_success": "closed_won",
+    "objection_stage": "objection",
+    "no_response_stage": "followup",
+    "nurture_stage": "nurture",
+    "script_ref": "scripts/closing.json",
+    "package_ref": "packages.json",
+    "departure_ref": "departures.json"
+}
