@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BarChart3, BookOpen, Bot, Building2, ChevronDown, Inbox, KanbanSquare, LogOut, Menu, Settings2, Sparkles, Users, X } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, Building2, ChevronDown, ContactRound, Inbox, KanbanSquare, LogOut, Menu, Settings2, X } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -13,11 +13,12 @@ import { AppErrorBoundary } from '../components/ui/AppErrorBoundary';
 const mainNav = [
   { to: '/', label: 'Ringkasan', icon: BarChart3 },
   { to: '/inbox', label: 'Kotak masuk', icon: Inbox },
+  { to: '/contacts', label: 'Daftar kontak', icon: ContactRound },
   { to: '/pipeline', label: 'Pipeline CRM', icon: KanbanSquare },
   { to: '/copilot', label: 'Copilot skrip', icon: Bot },
   { to: '/lms', label: 'Akademi CS', icon: BookOpen },
 ];
-const titles: Record<string, string> = { '/': 'Ringkasan', '/inbox': 'Kotak masuk', '/pipeline': 'Pipeline CRM', '/copilot': 'Copilot skrip', '/lms': 'Akademi CS', '/admin': 'Administrasi' };
+const titles: Record<string, string> = { '/': 'Ringkasan', '/inbox': 'Kotak masuk', '/contacts': 'Daftar kontak', '/pipeline': 'Pipeline CRM', '/copilot': 'Copilot skrip', '/lms': 'Akademi CS', '/admin': 'Administrasi' };
 
 export function AppShell() {
   const { user, logout } = useAuth();

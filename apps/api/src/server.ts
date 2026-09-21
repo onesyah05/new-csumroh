@@ -12,6 +12,8 @@ import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { scriptsRouter } from './modules/scripts/scripts.routes.js';
 import { chatRouter, internalRouter } from './modules/chat/chat.routes.js';
 import { capiRouter } from './modules/capi/capi.routes.js';
+import { whatsappRouter } from './modules/whatsapp/whatsapp.routes.js';
+import { contactsRouter } from './modules/contacts/contacts.routes.js';
 import { createSocketServer } from './realtime/socket.js';
 
 const app = express();
@@ -29,6 +31,8 @@ app.use('/api/v1/catalog', catalogRouter);
 app.use('/api/v1/scripts', scriptsRouter);
 app.use('/api/v1/chat', chatRouter);
 app.use('/api/v1/meta', capiRouter);
+app.use('/api/v1/whatsapp', whatsappRouter);
+app.use('/api/v1/contacts', contactsRouter);
 app.use('/internal', internalRouter);
 app.use((_req, res) => res.status(404).json({ success: false, error: 'Endpoint tidak ditemukan.' }));
 app.use(errorHandler);
