@@ -7,16 +7,20 @@ import {
   CheckCheck,
   CircleUserRound,
   Clipboard,
+  ExternalLink,
+  MapPin,
   MessageSquareText,
   Megaphone,
   MoreHorizontal,
   Paperclip,
+  Phone,
   Search,
   Sparkles,
+  UserRound,
   WandSparkles,
   X,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { useBrandScope } from '../../lib/scope';
@@ -35,6 +39,7 @@ const copilotTabs = [
 ] as const;
 
 type CopilotTab = (typeof copilotTabs)[number]['id'];
+type SidePanel = 'copilot' | 'profile';
 
 const statusToTab: Record<string, CopilotTab> = {
   new: 'greeting',
@@ -50,14 +55,18 @@ const statusToTab: Record<string, CopilotTab> = {
 
 export function InboxPage() {
   const { brandId, query } = useBrandScope();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('');
   const [copilotTab, setCopilotTab] = useState<CopilotTab>('greeting');
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(true);
+  const [sidePanel, setSidePanel] = useState<SidePanel>('copilot');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const appliedDraftKey = useRef<string | null>(null);
 
   const conversations = useQuery({
     queryKey: ['conversations', brandId],
@@ -66,8 +75,29 @@ export function InboxPage() {
   });
 
   useEffect(() => {
-    if (!selectedId && conversations.data?.[0]) setSelectedId(conversations.data[0].id);
-  }, [conversations.data, selectedId]);
+    const items = conversations.data;
+    if (!items?.length) return;
+    const requestedId = Number(searchParams.get('prospectId')) || null;
+    const requestedPhone = normalizePhone(searchParams.get('phone'));
+    const requestedJid = searchParams.get('jid');
+    const requested = items.find((item) => (
+      item.id === requestedId
+      || item.duplicateIds?.includes(requestedId)
+      || (requestedPhone && normalizePhone(item.phone) === requestedPhone)
+      || (requestedJid && item.remoteJid === requestedJid)
+    ));
+    const currentExists = items.some((item) => item.id === selectedId);
+    const nextId = requested?.id ?? (currentExists ? selectedId : items[0].id);
+    if (nextId !== selectedId) setSelectedId(nextId);
+  }, [conversations.data, searchParams, selectedId]);
+
+  useEffect(() => {
+    const draft = (location.state as { draft?: string } | null)?.draft;
+    if (!draft || appliedDraftKey.current === location.key) return;
+    appliedDraftKey.current = location.key;
+    setMessage(draft);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }, [location.key, location.state]);
 
   const selected = conversations.data?.find((item) => item.id === selectedId);
 
@@ -79,6 +109,14 @@ export function InboxPage() {
     queryKey: ['messages', selectedId, brandId],
     queryFn: () => api.get<any[]>(`/chat/prospects/${selectedId}/messages${query}`),
     enabled: !!selectedId && !!brandId,
+  });
+
+  useQuery({
+    queryKey: ['history-sync', selectedId, brandId],
+    queryFn: () => api.post(`/chat/prospects/${selectedId}/history-sync`, { ...(query ? { brandId } : {}) }),
+    enabled: !!selectedId && !!brandId,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   const separator = query ? '&' : '?';
@@ -135,13 +173,13 @@ export function InboxPage() {
     <div className="relative -m-4 h-[calc(100vh-4rem)] overflow-hidden bg-white sm:-m-6 lg:-m-8">
       {copilotOpen && (
         <button
-          aria-label="Tutup Copilot"
+          aria-label="Tutup panel kanan"
           className="inbox-copilot-backdrop"
           onClick={() => setCopilotOpen(false)}
         />
       )}
 
-      <div className="inbox-workspace">
+      <div className={cn('inbox-workspace', copilotOpen && 'has-side-panel')}>
         <aside className="inbox-conversation-list flex flex-col border-r bg-zinc-50/60">
           <div className="border-b p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -172,7 +210,7 @@ export function InboxPage() {
                       <b className="truncate text-sm">{item.name}</b>
                       <time className="shrink-0 text-[9px] text-zinc-400">{last ? new Date(last.timestamp * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Baru'}</time>
                     </span>
-                    <span className="mt-1 block truncate text-xs text-zinc-500">{last?.isFromMe ? 'Anda: ' : ''}{last?.messageText ?? 'Mulai percakapan baru'}</span>
+                    <span className="mt-1 block truncate text-xs text-zinc-500">{last?.isFromMe ? 'Anda: ' : ''}{last?.messageText ?? 'Kontak WhatsApp · belum ada pesan'}</span>
                     <span className="mt-2 flex items-center justify-between gap-2">
                       <Badge value={item.status} className="px-2 py-0.5 text-[8px]" />
                       <span className="truncate text-[9px] text-zinc-400">{item.user?.name ?? 'Belum ada PIC'}</span>
@@ -193,8 +231,8 @@ export function InboxPage() {
                   <div className="flex min-w-0 items-center gap-2"><h3 className="truncate text-sm font-bold">{selected.name}</h3>{selected.leadSource==='meta_ads'&&<span title={[selected.adHeadline,selected.adId&&`Ad ${selected.adId}`].filter(Boolean).join(' · ')} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-950 px-2 py-0.5 text-[9px] font-bold text-white"><Megaphone size={10}/>Meta Ads</span>}</div>
                   <p className="flex items-center gap-1 text-[10px] text-zinc-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600" /> WhatsApp · {selected.phone}</p>
                 </div>
-                <Button variant="secondary" size="sm" className="inbox-copilot-trigger" onClick={() => setCopilotOpen(true)}><Bot size={15} />Copilot</Button>
-                <Link to={`/prospects/${selected.id}`}><Button variant="secondary" size="sm" className="hidden sm:inline-flex"><CircleUserRound size={15} />Profil</Button></Link>
+                <Button variant="secondary" size="sm" onClick={() => { setSidePanel('copilot'); setCopilotOpen(true); }}><Bot size={15} />Copilot</Button>
+                <Button variant="secondary" size="sm" onClick={() => { setSidePanel('profile'); setCopilotOpen(true); }}><CircleUserRound size={15} />Profil</Button>
                 <Button variant="ghost" size="icon"><MoreHorizontal size={18} /></Button>
               </header>
 
@@ -203,6 +241,7 @@ export function InboxPage() {
                   <div className="mb-5 text-center"><span className="rounded-full border bg-white px-3 py-1 text-[10px] font-medium text-zinc-400 shadow-sm">Percakapan terenkripsi end-to-end oleh WhatsApp</span></div>
                   {messages.isLoading && <div className="space-y-3" role="status" aria-label="Memuat percakapan"><div className="h-16 w-2/3 animate-pulse rounded-2xl bg-zinc-100"/><div className="ml-auto h-20 w-3/4 animate-pulse rounded-2xl bg-zinc-200"/><div className="h-14 w-1/2 animate-pulse rounded-2xl bg-zinc-100"/></div>}
                   {messages.isError && <div className="mx-auto max-w-sm rounded-2xl border bg-white p-5 text-center"><p className="text-sm font-bold">Pesan gagal dimuat</p><button className="mt-2 text-xs font-semibold underline" onClick={() => void messages.refetch()}>Coba lagi</button></div>}
+                  {!messages.isLoading && !messages.isError && messages.data?.length === 0 && <div className="grid min-h-[260px] place-items-center text-center"><div><MessageSquareText className="mx-auto text-zinc-300" size={28} /><p className="mt-3 text-sm font-bold">Belum ada riwayat pesan</p><p className="mt-1 max-w-xs text-xs leading-5 text-zinc-400">Kontak sudah tersinkron. Pesan baru dan histori yang tersedia dari WhatsApp akan tampil di sini.</p></div></div>}
                   {messages.data?.map((item) => (
                     <div key={item.id} className={cn('flex', item.isFromMe ? 'justify-end' : 'justify-start')}>
                       <div className={cn('max-w-[84%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm', item.isFromMe ? 'rounded-br-md bg-zinc-950 text-white' : 'rounded-bl-md border bg-white text-zinc-800')}>
@@ -244,21 +283,29 @@ export function InboxPage() {
           )}
         </section>
 
-        <CopilotPanel
-          selected={selected}
-          activeTab={copilotTab}
-          onTabChange={setCopilotTab}
-          scripts={scripts}
-          loading={copilot.isLoading}
-          copiedId={copiedId}
-          open={copilotOpen}
-          onClose={() => setCopilotOpen(false)}
-          onUse={useScript}
-          onCopy={(id, script) => void copyScript(id, script)}
-        />
+        {sidePanel === 'copilot' ? <CopilotPanel
+            selected={selected}
+            activeTab={copilotTab}
+            onTabChange={setCopilotTab}
+            scripts={scripts}
+            loading={copilot.isLoading}
+            copiedId={copiedId}
+            open={copilotOpen}
+            onClose={() => setCopilotOpen(false)}
+            onUse={useScript}
+            onCopy={(id, script) => void copyScript(id, script)}
+          /> : <ProfilePanel selected={selected} query={query} open={copilotOpen} onClose={() => setCopilotOpen(false)} />}
       </div>
     </div>
   );
+}
+
+function normalizePhone(value?: string | null) {
+  const digits = value?.replace(/\D/g, '') ?? '';
+  if (digits.startsWith('62')) return digits;
+  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
+  if (digits.startsWith('8')) return `62${digits}`;
+  return digits;
 }
 
 function CopilotPanel({
@@ -372,4 +419,84 @@ function CopilotPanel({
       )}
     </aside>
   );
+}
+
+function ProfilePanel({
+  selected,
+  query,
+  open,
+  onClose,
+}: {
+  selected: any;
+  query: string;
+  open: boolean;
+  onClose(): void;
+}) {
+  const profile = useQuery({
+    queryKey: ['prospect', selected?.id, query],
+    queryFn: () => api.get<any>(`/prospects/${selected.id}${query}`),
+    enabled: Boolean(selected?.id),
+  });
+  const data = profile.data ?? selected;
+
+  return (
+    <aside className={cn('inbox-copilot flex-col border-l bg-zinc-50', open && 'is-open animate-slide-in')}>
+      <header className="flex h-[73px] shrink-0 items-center gap-3 border-b bg-white px-4">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-zinc-950 text-white"><CircleUserRound size={18} /></span>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-sm font-extrabold">Profil jamaah</h3>
+          <p className="truncate text-[10px] text-zinc-400">CRM 360° di samping percakapan</p>
+        </div>
+        <button className="inbox-copilot-close rounded-lg p-2 text-zinc-500 hover:bg-zinc-100" onClick={onClose} aria-label="Tutup profil"><X size={18} /></button>
+      </header>
+
+      {!selected ? (
+        <div className="grid flex-1 place-items-center p-8 text-center"><div><CircleUserRound className="mx-auto text-zinc-400" /><p className="mt-3 text-xs font-bold">Pilih percakapan</p><p className="mt-1 text-[10px] text-zinc-400">Profil jamaah akan tampil di sini.</p></div></div>
+      ) : profile.isLoading ? (
+        <div className="space-y-3 p-4" role="status" aria-label="Memuat profil jamaah"><div className="h-32 animate-pulse rounded-2xl bg-zinc-200" /><div className="h-48 animate-pulse rounded-2xl bg-zinc-100" /></div>
+      ) : profile.isError ? (
+        <div className="p-4"><div className="rounded-2xl border bg-white p-5 text-center"><p className="text-sm font-bold">Profil gagal dimuat</p><button className="mt-2 text-xs font-semibold underline" onClick={() => void profile.refetch()}>Coba lagi</button></div></div>
+      ) : (
+        <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+          <section className="rounded-2xl bg-zinc-950 p-4 text-white">
+            <div className="flex items-center gap-3">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white text-sm font-extrabold text-zinc-950">{String(data?.name ?? '?').slice(0, 2).toUpperCase()}</span>
+              <div className="min-w-0 flex-1"><h4 className="truncate font-display font-extrabold">{data?.name}</h4><p className="mt-1 truncate text-[10px] text-zinc-400">{data?.phone || 'Nomor belum tersedia'}</p></div>
+              <Badge value={data?.status} className="shrink-0 bg-white text-zinc-950" />
+            </div>
+          </section>
+
+          <section className="mt-3 overflow-hidden rounded-2xl border bg-white">
+            <ProfileRow icon={Phone} label="WhatsApp" value={data?.phone || 'Belum diisi'} />
+            <ProfileRow icon={MapPin} label="Kota" value={data?.city || 'Belum diisi'} />
+            <ProfileRow icon={UserRound} label="CS PIC" value={data?.user?.name || 'Belum ada PIC'} />
+            <ProfileRow icon={Sparkles} label="Sumber lead" value={String(data?.leadSource || 'whatsapp').replaceAll('_', ' ')} />
+          </section>
+
+          <section className="mt-3 rounded-2xl border bg-white p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[.12em] text-zinc-400">Kualifikasi & kebutuhan</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <ProfileFact label="Paket" value={data?.package?.name || 'Belum dipilih'} />
+              <ProfileFact label="Target berangkat" value={data?.targetMonth || 'Belum diisi'} />
+              <ProfileFact label="Budget" value={data?.budgetRange || 'Belum diisi'} />
+              <ProfileFact label="Pengambil keputusan" value={data?.decisionMaker || 'Belum diisi'} />
+            </div>
+            {data?.specialNeeds && <div className="mt-3 rounded-xl bg-zinc-50 p-3"><p className="text-[9px] font-bold uppercase tracking-wide text-zinc-400">Kebutuhan khusus</p><p className="mt-1 text-xs leading-5 text-zinc-700">{data.specialNeeds}</p></div>}
+          </section>
+
+          {data?.notes && <section className="mt-3 rounded-2xl border bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-zinc-400">Catatan internal</p><p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-zinc-600">{data.notes}</p></section>}
+        </div>
+      )}
+
+      {selected && <footer className="shrink-0 border-t bg-white p-3"><Link to={`/prospects/${selected.id}`} className="flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-4 text-xs font-bold text-white hover:bg-zinc-800"><ExternalLink size={14} />Buka editor profil lengkap</Link></footer>}
+    </aside>
+  );
+}
+
+function ProfileRow({ icon: Icon, label, value }: { icon: typeof Phone; label: string; value: string }) {
+  return <div className="flex items-center gap-3 border-b px-4 py-3 last:border-b-0"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-zinc-100 text-zinc-600"><Icon size={14} /></span><div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-zinc-400">{label}</p><p className="mt-0.5 truncate text-xs font-semibold capitalize text-zinc-800">{value}</p></div></div>;
+}
+
+function ProfileFact({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-zinc-50 p-3"><p className="text-[9px] font-bold uppercase tracking-wide text-zinc-400">{label}</p><p className="mt-1 text-[11px] font-semibold leading-4 text-zinc-700">{value}</p></div>;
 }

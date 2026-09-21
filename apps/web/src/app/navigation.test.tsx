@@ -70,10 +70,12 @@ describe('workspace navigation', () => {
       if (url.includes('/dashboard')) return response({ total: 1, won: 0, conversionRate: 0, unassigned: 1, pipeline: [], recent: [conversation], wa: null });
       if (url.includes('/chat/conversations')) return response([conversation]);
       if (url.includes('/chat/prospects/')) return response(conversation.messages);
+      if (url.includes('/contacts')) return response([{ ...prospect, remoteJid: '628123456789@s.whatsapp.net', leadSource: 'whatsapp', messageCount: 1, messages: conversation.messages }]);
       if (url.includes('/scripts/lms')) return response({ stages: [{ id: 'stage-1', nama: 'Sapaan amanah', tujuan: 'Melayani jamaah dengan baik.' }] });
       if (url.includes('/scripts')) return response({ categories: { greeting: { scripts: [] }, identification: { scripts: [] }, offer: { scripts: [] }, objection: { scripts: [] }, followups: { scripts: [] }, closing: { scripts: [] } } });
       if (url.includes('/catalog/brands')) return response([{ id: 1, name: user.brand.name, code: user.brand.code, _count: { users: 1, packages: 0, prospects: 1 } }]);
       if (url.includes('/catalog/packages') || url.includes('/catalog/users')) return response([]);
+      if (url.includes('/prospects/11')) return response(prospect);
       if (url.includes('/prospects')) return response([prospect]);
       return response(null);
     }));
@@ -100,6 +102,10 @@ describe('workspace navigation', () => {
     fireEvent.click(screen.getByRole('link', { name: /^kotak masuk$/i }));
     await screen.findByRole('heading', { name: 'Kotak masuk' });
     await screen.findAllByText('Assalamualaikum');
+    fireEvent.click(screen.getByRole('button', { name: /^profil$/i }));
+    await screen.findByRole('heading', { name: 'Profil jamaah' });
+    await screen.findByText('Bandung');
+    expect(screen.getByRole('link', { name: /buka editor profil lengkap/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('link', { name: /pipeline crm/i }));
     await screen.findByRole('heading', { name: 'Prospek jamaah' });
@@ -118,6 +124,11 @@ describe('workspace navigation', () => {
       expect.stringContaining('/prospects/11/status'),
       expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: 'closed_won' }) }),
     ));
+
+    fireEvent.click(screen.getByRole('link', { name: /daftar kontak/i }));
+    await screen.findByRole('heading', { name: 'Daftar kontak' });
+    await screen.findByText('1 pesan tersimpan');
+    expect(screen.getByRole('button', { name: /tambah kontak/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('link', { name: /copilot skrip/i }));
     await screen.findByRole('heading', { name: 'Copilot percakapan' });

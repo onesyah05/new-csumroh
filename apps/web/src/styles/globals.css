@@ -31,7 +31,7 @@
    breakpoints prevents browser zoom and lazy-route CSS ordering from collapsing it. */
 .inbox-workspace {
   display: grid;
-  grid-template-columns: 280px minmax(400px, 1fr) 360px;
+  grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
   height: 100%;
   min-width: 0;
   overflow: hidden;
@@ -45,50 +45,66 @@
 }
 
 .inbox-copilot {
+  position: absolute;
+  z-index: 40;
+  inset: 0 0 0 auto;
+  display: none;
+  width: min(390px, 92vw);
+  box-shadow: -12px 0 30px rgb(0 0 0 / 8%);
+}
+
+.inbox-copilot.is-open {
   display: flex;
 }
 
-.inbox-copilot-trigger,
-.inbox-copilot-close,
-.inbox-copilot-backdrop {
+.inbox-copilot-trigger {
   display: none;
 }
 
-@media (max-width: 1439px) {
+.inbox-copilot-close {
+  display: inline-flex;
+}
+
+.inbox-copilot-backdrop {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: block;
+  background: rgb(0 0 0 / 25%);
+  backdrop-filter: blur(1px);
+}
+
+@media (min-width: 1280px) {
   .inbox-workspace {
-    grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .inbox-workspace.has-side-panel {
+    grid-template-columns: 280px minmax(400px, 1fr) 360px;
   }
 
   .inbox-copilot {
-    position: absolute;
-    z-index: 40;
-    inset: 0 0 0 auto;
-    display: none;
-    width: min(390px, 92vw);
-    box-shadow: -12px 0 30px rgb(0 0 0 / 8%);
+    position: static;
+    z-index: auto;
+    width: auto;
+    box-shadow: none;
   }
 
-  .inbox-copilot.is-open {
+  .inbox-workspace.has-side-panel .inbox-copilot {
     display: flex;
   }
 
-  .inbox-copilot-trigger,
-  .inbox-copilot-close {
-    display: inline-flex;
-  }
-
   .inbox-copilot-backdrop {
-    position: absolute;
-    z-index: 30;
-    inset: 0;
-    display: block;
-    background: rgb(0 0 0 / 25%);
-    backdrop-filter: blur(1px);
+    display: none;
   }
 }
 
 @media (min-width: 1536px) {
   .inbox-workspace {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .inbox-workspace.has-side-panel {
     grid-template-columns: 300px minmax(460px, 1fr) 380px;
   }
 }
