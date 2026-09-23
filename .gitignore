@@ -10,3 +10,10 @@ apps/wa-gateway/sessions/
 apps/api/uploads/
 *.log
 .DS_Store
+
+# Media hanya disajikan API; jangan simpan upload di public/ frontend (ikut ter-bundle ke dist)
+apps/web/public/uploads/
+apps/api/storage/
+scratch/
+apps/api/scratch/
+.claude/
