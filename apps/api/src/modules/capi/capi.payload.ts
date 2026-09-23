@@ -55,7 +55,7 @@ export function buildCapiPayload(input: CapiPayloadInput) {
 
 export function validateEventValue(eventName: CapiEventName, dealValue: number, dpAmount: number) {
   if (eventName === 'Purchase' && dealValue <= 0) return { valid: false as const, reason: 'Nilai transaksi final belum diisi.' };
-  if (eventName === 'InitiateCheckout' && dpAmount <= 0) return { valid: false as const, reason: 'Nilai DP belum diisi.' };
+  if (eventName === 'InitiateCheckout' && dpAmount <= 0) return { valid: false as const, reason: 'Nominal tagihan invoice belum diterbitkan.' };
   return { valid: true as const, value: eventName === 'Purchase' ? dealValue : eventName === 'InitiateCheckout' ? dpAmount : dealValue > 0 ? dealValue : undefined };
 }
 

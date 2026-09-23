@@ -4,6 +4,18 @@ import { env } from '../../config/env.js';
 import { buildCapiEventId, buildCapiPayload, validateEventValue, validateMetaConfig, type CapiEventName } from './capi.payload.js';
 import { decryptMetaToken } from './meta-token.js';
 
+/** Waktu kejadian bisnis yang immutable, bukan updatedAt yang berubah setiap edit profil. */
+function businessEventTime(
+  prospect: { createdAt: Date; updatedAt: Date; offerSentAt: Date | null; invoiceSentAt: Date | null; dpPaidAt: Date | null },
+  eventName: CapiEventName,
+) {
+  const at = eventName === 'Purchase' ? prospect.dpPaidAt
+    : eventName === 'InitiateCheckout' ? prospect.invoiceSentAt
+    : eventName === 'AddToCart' ? prospect.offerSentAt
+    : null;
+  return at ?? (eventName === 'Contact' ? prospect.createdAt : prospect.updatedAt);
+}
+
 type DispatchResult = { status: 'sent' | 'failed' | 'skipped'; reason?: string; eventId?: string };
 
 async function saveFailure(input: { brandId: number; prospectId: number; eventName: CapiEventName; eventId: string; reason: string; payload?: string }) {
@@ -16,7 +28,10 @@ async function saveFailure(input: { brandId: number; prospectId: number; eventNa
 }
 
 export async function dispatchCapiEvent(prospectId: number, eventName: CapiEventName): Promise<DispatchResult> {
-  const prospect = await prisma.prospect.findUnique({ where: { id: prospectId }, include: { brand: true } });
+  const prospect = await prisma.prospect.findUnique({
+    where: { id: prospectId },
+    include: { brand: true, package: true },
+  });
   if (!prospect?.metaReferralMarker) return { status: 'skipped', reason: 'NO_CTWA_MARKER' };
 
   const eventId = buildCapiEventId(prospect.id, eventName, prospect.closedWonCount);
@@ -28,13 +43,18 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
   const configResult = validateMetaConfig({ pixelId: config.metaPixelId, accessToken: config.metaAccessToken, pageId: config.facebookPageId, wabaId: config.metaWabaId });
   if (!configResult.valid) return saveFailure({ brandId: prospect.brandId, prospectId, eventName, eventId, reason: configResult.reason });
 
-  const valueResult = validateEventValue(eventName, Number(prospect.dealValue), Number(prospect.dpAmount));
+  // Nilai hanya dari snapshot transaksi: dealValue = total booking (ditetapkan penawaran resmi /
+  // verifikasi Finance), invoiceAmount = tagihan yang benar-benar diterbitkan. Tanpa fallback katalog.
+  const effectiveDealValue = Number(prospect.dealValue) || 0;
+  const effectiveInvoiceAmount = Number(prospect.invoiceAmount) || 0;
+
+  const valueResult = validateEventValue(eventName, effectiveDealValue, effectiveInvoiceAmount);
   if (!valueResult.valid) return saveFailure({ brandId: prospect.brandId, prospectId, eventName, eventId, reason: valueResult.reason });
 
   const payload = buildCapiPayload({
     eventName,
     eventId,
-    eventTime: Math.floor(prospect.updatedAt.getTime() / 1000),
+    eventTime: Math.floor(businessEventTime(prospect, eventName).getTime() / 1000),
     phone: prospect.phone,
     ctwaClid: prospect.metaReferralMarker,
     pageId: config.facebookPageId!,

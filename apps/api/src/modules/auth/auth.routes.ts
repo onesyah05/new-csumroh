@@ -25,8 +25,24 @@ const refreshLimiter = rateLimit({
 });
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
-function sessionFromUser(user: { id: number; name: string; email: string; role: string; brandId: number | null; brand: { id: number; name: string; code: string } | null }): SessionUser {
-  return { id: user.id, name: user.name, email: user.email, role: roleSchema.parse(user.role), brandId: user.brandId, brand: user.brand };
+function sessionFromUser(user: {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  brandId: number | null;
+  brand: { id: number; name: string; code: string } | null;
+  userBrands?: { brand: { id: number; name: string; code: string } }[];
+}): SessionUser {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: roleSchema.parse(user.role),
+    brandId: user.brandId,
+    brand: user.brand,
+    userBrands: user.userBrands,
+  };
 }
 
 async function issueTokens(user: SessionUser, req: Parameters<typeof getClientMeta>[0]) {
@@ -47,7 +63,13 @@ function setRefreshCookie(res: import('express').Response, token: string) {
 
 authRouter.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const input = loginSchema.parse(req.body);
-  const user = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() }, include: { brand: { select: { id: true, name: true, code: true } } } });
+  const user = await prisma.user.findUnique({
+    where: { email: input.email.toLowerCase() },
+    include: {
+      brand: { select: { id: true, name: true, code: true } },
+      userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
+    },
+  });
   if (!user || !user.isActive || !(await bcrypt.compare(input.password, user.password))) throw new HttpError(401, 'Email atau kata sandi tidak sesuai.');
   const session = sessionFromUser(user);
   const tokens = await issueTokens(session, req);
@@ -55,16 +77,45 @@ authRouter.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   res.json({ success: true, data: { accessToken: tokens.accessToken, user: session } });
 }));
 
+/**
+ * Masa tenggang rotasi. Refresh token dirotasi setiap dipakai, tetapi respons yang membawa cookie baru
+ * bisa tidak pernah sampai ke browser (halaman di-reload/ditutup saat request berjalan, atau dua tab
+ * me-refresh bersamaan). Tanpa tenggang, browser tertinggal memegang token yang sudah dicabut dan
+ * pengguna ter-logout permanen. Token yang dicabut KARENA ROTASI tetap diterima sebentar; token yang
+ * dicabut karena logout ditandai kedaluwarsa sehingga tidak pernah diterima lagi.
+ */
+export const REFRESH_ROTATION_GRACE_MS = 30_000;
+
 authRouter.post('/refresh', refreshLimiter, asyncHandler(async (req, res) => {
   const oldToken = req.cookies.refresh_token as string | undefined;
   if (!oldToken) throw new HttpError(401, 'Refresh token tidak tersedia.');
   let payload: jwt.JwtPayload;
   try { payload = jwt.verify(oldToken, env.JWT_REFRESH_SECRET) as jwt.JwtPayload; } catch { throw new HttpError(401, 'Refresh token tidak valid.'); }
-  const stored = await prisma.refreshToken.findFirst({ where: { tokenHash: hashToken(oldToken), revokedAt: null, expiresAt: { gt: new Date() } } });
+  const now = new Date();
+  const stored = await prisma.refreshToken.findFirst({ where: { tokenHash: hashToken(oldToken), expiresAt: { gt: now } } });
   if (!stored || stored.userId !== Number(payload.sub)) throw new HttpError(401, 'Refresh token sudah tidak aktif.');
-  const user = await prisma.user.findUnique({ where: { id: stored.userId }, include: { brand: { select: { id: true, name: true, code: true } } } });
+
+  const withinGrace = (revokedAt: Date | null) => Boolean(revokedAt) && now.getTime() - revokedAt!.getTime() <= REFRESH_ROTATION_GRACE_MS;
+  if (stored.revokedAt) {
+    if (!withinGrace(stored.revokedAt)) throw new HttpError(401, 'Refresh token sudah tidak aktif.');
+  } else {
+    // Pencabutan atomik: dari dua request paralel dengan token yang sama, hanya satu yang mencabut;
+    // yang lain masuk jalur masa tenggang (tidak ditolak, tidak membuat logout).
+    const claimed = await prisma.refreshToken.updateMany({ where: { id: stored.id, revokedAt: null }, data: { revokedAt: now } });
+    if (claimed.count === 0) {
+      const current = await prisma.refreshToken.findUnique({ where: { id: stored.id }, select: { revokedAt: true, expiresAt: true } });
+      if (!current || current.expiresAt <= now || !withinGrace(current.revokedAt)) throw new HttpError(401, 'Refresh token sudah tidak aktif.');
+    }
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: stored.userId },
+    include: {
+      brand: { select: { id: true, name: true, code: true } },
+      userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
+    },
+  });
   if (!user?.isActive) throw new HttpError(401, 'Akun tidak aktif.');
-  await prisma.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
   const session = sessionFromUser(user);
   const tokens = await issueTokens(session, req);
   setRefreshCookie(res, tokens.refreshToken);
@@ -73,7 +124,12 @@ authRouter.post('/refresh', refreshLimiter, asyncHandler(async (req, res) => {
 
 authRouter.post('/logout', asyncHandler(async (req, res) => {
   const token = req.cookies.refresh_token as string | undefined;
-  if (token) await prisma.refreshToken.updateMany({ where: { tokenHash: hashToken(token), revokedAt: null }, data: { revokedAt: new Date() } });
+  if (token) {
+    const now = new Date();
+    // Kedaluwarsakan juga token yang baru dirotasi, agar masa tenggang tidak berlaku setelah logout.
+    await prisma.refreshToken.updateMany({ where: { tokenHash: hashToken(token) }, data: { expiresAt: now } });
+    await prisma.refreshToken.updateMany({ where: { tokenHash: hashToken(token), revokedAt: null }, data: { revokedAt: now } });
+  }
   res.clearCookie('refresh_token', { path: '/api/v1/auth' });
   res.json({ success: true, data: null });
 }));
