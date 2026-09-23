@@ -4,6 +4,7 @@ import { Award, BookOpen, Check, ChevronRight, Circle, Clock3, GraduationCap, Li
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/button';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
+import { PageHeader } from '../../components/ui/page-header';
 
 function loadProgress() {
   try {
@@ -14,15 +15,179 @@ function loadProgress() {
   }
 }
 
-export function LmsPage(){
-  const course=useQuery({queryKey:['lms'],queryFn:()=>api.get<any>('/scripts/lms')});const [active,setActive]=useState(0);const [done,setDone]=useState<string[]>(loadProgress);
-  useEffect(()=>{localStorage.setItem('csumroh_lms_progress',JSON.stringify(done));},[done]);const stages=(course.data?.stages??[]) as any[];const module=stages[active];const progress=stages.length?Math.round(done.length/stages.length*100):0;
-  const content=useMemo(()=>{if(!module)return[];return Object.entries(module).filter(([key,value])=>!['id','urutan','nama'].includes(key)&&value).slice(0,6)},[module]);
-  function complete(){if(module&&!done.includes(module.id))setDone([...done,module.id]);if(active<stages.length-1)setActive(active+1)}
-  if (course.isLoading) return <PageLoading label="Memuat akademi" />;
+export function LmsPage() {
+  const course = useQuery({ queryKey: ['lms'], queryFn: () => api.get<any>('/scripts/lms') });
+  const [active, setActive] = useState(0);
+  const [done, setDone] = useState<string[]>(loadProgress);
+
+  useEffect(() => {
+    localStorage.setItem('csumroh_lms_progress', JSON.stringify(done));
+  }, [done]);
+
+  const stages = (course.data?.stages ?? []) as any[];
+  const module = stages[active];
+  const progress = stages.length ? Math.round((done.length / stages.length) * 100) : 0;
+
+  const content = useMemo(() => {
+    if (!module) return [];
+    return Object.entries(module)
+      .filter(([key, value]) => !['id', 'urutan', 'nama'].includes(key) && value)
+      .slice(0, 6);
+  }, [module]);
+
+  function complete() {
+    if (module && !done.includes(module.id)) {
+      setDone([...done, module.id]);
+    }
+    if (active < stages.length - 1) {
+      setActive(active + 1);
+    }
+  }
+
+  if (course.isLoading) return <PageLoading label="Memuat materi akademi CS..." />;
   if (course.isError) return <PageError description={course.error.message} onRetry={() => void course.refetch()} />;
-  return <div className="app-page"><section className="overflow-hidden rounded-3xl bg-zinc-950 p-6 text-white sm:p-8"><div className="grid gap-8 lg:grid-cols-[1fr_320px] lg:items-end"><div><span className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"><GraduationCap size={14}/>CS Umroh Academy</span><h2 className="mt-5 font-display text-3xl font-extrabold tracking-[-.04em] sm:text-4xl">Belajar melayani,<br/><span className="text-zinc-500">bertumbuh bersama.</span></h2><p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400">Kurikulum praktis untuk menguasai alur konsultasi jamaah dari greeting sampai closing yang amanah.</p></div><div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"><div className="flex justify-between text-xs"><span className="text-zinc-400">Progres belajar</span><b>{progress}%</b></div><div className="mt-3 h-2 rounded-full bg-zinc-800" role="progressbar" aria-label="Progres belajar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-white transition-all" style={{width:`${progress}%`}}/></div><p className="mt-3 text-[10px] text-zinc-500">{done.length} dari {stages.length||9} modul selesai</p></div></div></section>
-    <div className="grid gap-5 xl:grid-cols-[300px_1fr]"><aside className="surface h-fit overflow-hidden"><div className="border-b p-4"><h3 className="font-display font-bold">Daftar modul</h3><p className="mt-1 text-xs text-zinc-400">9 bab conversion cycle</p></div><div className="max-h-[620px] overflow-y-auto p-2">{stages.map((item,index)=>{const complete=done.includes(item.id);return <button key={item.id} onClick={()=>setActive(index)} className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${active===index?'bg-zinc-950 text-white':'hover:bg-zinc-100'}`}><span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold ${active===index?'bg-white text-black':complete?'bg-zinc-800 text-white':'bg-zinc-100 text-zinc-500'}`}>{complete?<Check size={14}/>:index+1}</span><span className="min-w-0 flex-1"><b className="block truncate text-xs">{item.nama}</b><span className={`mt-0.5 block text-[9px] ${active===index?'text-zinc-500':'text-zinc-400'}`}>± 8 menit</span></span><ChevronRight size={13} className={active===index?'text-zinc-500':'text-zinc-300'}/></button>})}</div></aside>
-      <section className="surface min-w-0 p-5 sm:p-8">{module?<><div className="flex flex-col justify-between gap-4 border-b pb-6 sm:flex-row sm:items-start"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-zinc-400">Modul {active+1} · Conversion cycle</p><h3 className="mt-2 font-display text-2xl font-extrabold tracking-tight">{module.nama}</h3><p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-500">{module.tujuan||module.deskripsi}</p></div><span className="flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-2 text-xs text-zinc-500"><Clock3 size={14}/>8 menit</span></div><div className="mt-7 space-y-5">{content.map(([key,value],index)=><section key={key} className="rounded-2xl border bg-zinc-50 p-5"><div className="flex items-start gap-3"><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white shadow-sm">{index===0?<Target size={15}/>:index===1?<Lightbulb size={15}/>:<BookOpen size={15}/>}</span><div><h4 className="font-display text-sm font-bold capitalize">{key.replaceAll('_',' ')}</h4>{Array.isArray(value)?<ul className="mt-3 space-y-2">{value.slice(0,6).map((line:any,i:number)=><li key={i} className="flex gap-2 text-sm leading-6 text-zinc-600"><Circle size={6} className="mt-2.5 shrink-0 fill-zinc-500"/>{typeof line==='string'?line:JSON.stringify(line)}</li>)}</ul>:<p className="mt-2 text-sm leading-6 text-zinc-600">{typeof value==='string'?value:JSON.stringify(value)}</p>}</div></div></section>)}</div><div className="mt-7 flex flex-col items-start justify-between gap-3 border-t pt-5 sm:flex-row sm:items-center"><p className="text-xs text-zinc-400">Pelajari materi sebelum menandai selesai.</p><Button onClick={complete}>{done.includes(module.id)?<Check size={15}/>:<Award size={15}/>} {done.includes(module.id)?'Sudah selesai':'Tandai selesai'}</Button></div></>:<div className="grid min-h-96 place-items-center text-zinc-400">Materi belum tersedia.</div>}</section></div>
-  </div>;
+
+  return (
+    <div className="app-page space-y-6">
+      <PageHeader
+        title="Akademi CS"
+        subtitle="Kurikulum praktis alur konsultasi calon jamaah dari sapaan awal hingga closing yang amanah."
+        actions={
+          <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2 shadow-xs">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-4 text-xs">
+                <span className="text-zinc-500 font-medium">Progres Belajar</span>
+                <span className="font-mono font-bold text-zinc-950 text-xs">{progress}%</span>
+              </div>
+              <div
+                className="h-1.5 w-36 rounded-full bg-zinc-100 overflow-hidden"
+                role="progressbar"
+                aria-label="Progres belajar"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className="h-full rounded-full bg-zinc-950 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        }
+      />
+
+      {/* 2 Column Layout: Modules Sidebar + Lesson Content */}
+      <div className="grid gap-6 xl:grid-cols-[300px_1fr]">
+        <aside className="surface h-fit overflow-hidden">
+          <div className="border-b border-zinc-200/90 px-4 py-3.5">
+            <h3 className="font-sans text-sm font-semibold text-zinc-950">Daftar Modul</h3>
+            <p className="mt-0.5 text-xs text-zinc-400">9 bab conversion cycle</p>
+          </div>
+          <div className="max-h-[620px] overflow-y-auto p-2 space-y-1">
+            {stages.map((item, index) => {
+              const isCompleted = done.includes(item.id);
+              const isActive = active === index;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActive(index)}
+                  className={`flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition ${
+                    isActive ? 'bg-zinc-950 text-white shadow-xs' : 'hover:bg-zinc-100/80 text-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-semibold ${
+                      isActive
+                        ? 'bg-white text-black'
+                        : isCompleted
+                        ? 'bg-zinc-200 text-zinc-800'
+                        : 'bg-zinc-100 text-zinc-500'
+                    }`}
+                  >
+                    {isCompleted ? <Check size={13} strokeWidth={2.5} /> : index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <b className="block truncate text-xs font-medium">{item.nama}</b>
+                    <span className={`block text-[10px] ${isActive ? 'text-zinc-400' : 'text-zinc-400'}`}>
+                      ± 8 menit
+                    </span>
+                  </div>
+                  <ChevronRight size={13} className={isActive ? 'text-zinc-400' : 'text-zinc-300'} />
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <section className="surface min-w-0 p-6 sm:p-8">
+          {module ? (
+            <>
+              <div className="flex flex-col justify-between gap-4 border-b border-zinc-200/90 pb-6 sm:flex-row sm:items-start">
+                <div>
+                  <p className="text-xs font-medium text-zinc-400">
+                    Modul {active + 1} · Conversion Cycle
+                  </p>
+                  <h3 className="mt-1.5 font-sans text-2xl font-bold tracking-tight text-zinc-950">
+                    {module.nama}
+                  </h3>
+                  <p className="mt-2 max-w-3xl text-xs sm:text-sm leading-relaxed text-zinc-600">
+                    {module.tujuan || module.deskripsi}
+                  </p>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-2xs">
+                  <Clock3 size={13} />
+                  <span>8 menit</span>
+                </span>
+              </div>
+
+              <div className="mt-6 space-y-4">
+                {content.map(([key, value], index) => (
+                  <section key={key} className="rounded-xl border border-zinc-200/90 bg-zinc-50/50 p-5">
+                    <div className="flex items-start gap-3.5">
+                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white border border-zinc-200 text-zinc-700 shadow-2xs">
+                        {index === 0 ? <Target size={14} /> : index === 1 ? <Lightbulb size={14} /> : <BookOpen size={14} />}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-sans text-xs sm:text-sm font-semibold text-zinc-950 capitalize">
+                          {key.replaceAll('_', ' ')}
+                        </h4>
+                        {Array.isArray(value) ? (
+                          <ul className="mt-2.5 space-y-2">
+                            {value.slice(0, 6).map((line: any, i: number) => (
+                              <li key={i} className="flex gap-2 text-xs sm:text-sm leading-relaxed text-zinc-600">
+                                <Circle size={5} className="mt-2 shrink-0 fill-zinc-400 text-zinc-400" />
+                                <span>{typeof line === 'string' ? line : JSON.stringify(line)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-xs sm:text-sm leading-relaxed text-zinc-600">
+                            {typeof value === 'string' ? value : JSON.stringify(value)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                ))}
+              </div>
+
+              <div className="mt-7 flex flex-col items-start justify-between gap-3 border-t border-zinc-200/90 pt-5 sm:flex-row sm:items-center">
+                <p className="text-xs text-zinc-400">Pelajari materi sebelum menandai selesai.</p>
+                <Button onClick={complete}>
+                  {done.includes(module.id) ? <Check size={14} /> : <Award size={14} />}
+                  <span>{done.includes(module.id) ? 'Sudah Selesai' : 'Tandai Selesai'}</span>
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="grid min-h-96 place-items-center text-xs text-zinc-400">
+              Materi belum tersedia.
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
 }

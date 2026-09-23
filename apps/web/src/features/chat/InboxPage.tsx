@@ -1,72 +1,264 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
+  AlertCircle,
+  ArrowLeft,
   ArrowUp,
-  Bot,
+  Ban,
   Check,
   CheckCheck,
-  CircleUserRound,
-  Clipboard,
-  ExternalLink,
-  MapPin,
+  ChevronDown,
+  Clock,
+  Copy,
+  CornerUpLeft,
+  CreditCard,
+  Download,
+  Eye,
+  FileText,
+  HandCoins,
+  ImageIcon,
+  Lock,
+  Menu,
   MessageSquareText,
   Megaphone,
-  MoreHorizontal,
+  Mic,
   Paperclip,
-  Phone,
+  RefreshCw,
   Search,
+  Send,
+  ShieldCheck,
+  Smartphone,
   Sparkles,
-  UserRound,
-  WandSparkles,
+  Star,
+  Trash2,
+  User,
+  UserPlus2,
+  Users,
+  WifiOff,
+  Smile,
   X,
 } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, resolveMediaUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
-import { useBrandScope } from '../../lib/scope';
+import { ChatSidePanel, type ChatSidePanelTab } from './ChatSidePanel';
+import { canAccessBrand, useBrandScope } from '../../lib/scope';
+import { useAuth } from '../../app/auth';
+import { useUiStore } from '../../app/store';
 import { queryClient } from '../../app/query';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
+import { formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
+import { EmojiPicker } from './EmojiPicker';
+import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 
-const copilotTabs = [
-  { id: 'greeting', label: 'Sapaan' },
-  { id: 'identification', label: 'Identifikasi' },
-  { id: 'offer', label: 'Penawaran' },
-  { id: 'objection', label: 'Keberatan' },
-  { id: 'followups', label: 'Follow-up' },
-  { id: 'closing', label: 'Closing' },
-] as const;
+const MAX_UPLOAD_MB = 30;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
-type CopilotTab = (typeof copilotTabs)[number]['id'];
-type SidePanel = 'copilot' | 'profile';
+const QUICK_REACTIONS =['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
 
-const statusToTab: Record<string, CopilotTab> = {
-  new: 'greeting',
-  identifying: 'identification',
-  offered: 'offer',
-  objection: 'objection',
-  followup: 'followups',
-  nurture: 'followups',
-  closing: 'closing',
-  closed_won: 'closing',
-  closed_lost: 'followups',
-};
+type ChatFilter = 'all' | 'unread' | 'personal' | 'group';
+
+function formatDateSeparator(timestampSeconds: number): string {
+  const date = new Date(timestampSeconds * 1000);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  if (isToday) return 'Hari ini';
+  if (isYesterday) return 'Kemarin';
+
+  return date.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
+}
+
+function formatWaTimestamp(timestampSeconds?: number): string {
+  if (!timestampSeconds) return '';
+  const date = new Date(timestampSeconds * 1000);
+  const now = new Date();
+
+  const isToday = date.toDateString() === now.toDateString();
+  if (isToday) {
+    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+  }
+
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  if (isYesterday) return 'Kemarin';
+
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 7 && diffDays >= 0) {
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    return days[date.getDay()] ?? '';
+  }
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function formatBubbleTime(timestampSeconds?: number): string {
+  if (!timestampSeconds) return '';
+  const date = new Date(timestampSeconds * 1000);
+  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+}
+
+function normalizePhone(value?: string | null) {
+  const digits = value?.replace(/\D/g, '') ?? '';
+  if (digits.startsWith('62')) return digits;
+  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
+  if (digits.startsWith('8')) return `62${digits}`;
+  return digits;
+}
+
+function ContactAvatar({
+  photoUrl,
+  name,
+  isGroup,
+  isWhatsAppOfficial,
+  size = 'md',
+}: {
+  photoUrl?: string | null;
+  name?: string | null;
+  isGroup?: boolean;
+  isWhatsAppOfficial?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [photoUrl]);
+
+  const sizeClass = size === 'sm' ? 'h-8 w-8 text-[11px]' : size === 'lg' ? 'h-12 w-12 text-xs' : 'h-10 w-10 text-xs';
+  const iconSize = size === 'sm' ? 14 : size === 'lg' ? 22 : 18;
+
+  if (photoUrl && !hasError) {
+    return (
+      <div className={cn('relative shrink-0 rounded-full overflow-hidden bg-[#dfe5e7] shadow-2xs border border-black/5', sizeClass)}>
+        <img
+          src={photoUrl}
+          alt={name ?? 'Kontak'}
+          className="h-full w-full object-cover"
+          referrerPolicy="no-referrer"
+          onError={() => setHasError(true)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        'grid shrink-0 place-items-center rounded-full font-bold shadow-2xs select-none',
+        sizeClass,
+        isWhatsAppOfficial
+          ? 'bg-[#25d366] text-white'
+          : isGroup
+          ? 'bg-[#00a884] text-white'
+          : 'bg-[#dfe5e7] text-[#54656f]'
+      )}
+    >
+      {isWhatsAppOfficial ? (
+        <MessageSquareText size={iconSize} />
+      ) : isGroup ? (
+        <Users size={iconSize} />
+      ) : (
+        String(name ?? '?').slice(0, 2).toUpperCase()
+      )}
+    </span>
+  );
+}
 
 export function InboxPage() {
+  const { user } = useAuth();
   const { brandId, query } = useBrandScope();
+  const setActiveBrandId = useUiStore((state) => state.setActiveBrandId);
+  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // Sync ?brandId= parameter if provided in URL
+  const brandParam = searchParams.get('brandId');
+  useEffect(() => {
+    if (brandParam) {
+      const parsed = Number(brandParam);
+      if (parsed && parsed !== brandId && canAccessBrand(user, parsed)) {
+        setActiveBrandId(parsed);
+      }
+    }
+  }, [brandParam, brandId, setActiveBrandId, user]);
+
+  // Reset selected conversation when switching brand
+  useEffect(() => {
+    setSelectedId(null);
+  }, [brandId]);
   const [search, setSearch] = useState('');
+  const [chatFilter, setChatFilter] = useState<ChatFilter>('all');
   const [message, setMessage] = useState('');
-  const [copilotTab, setCopilotTab] = useState<CopilotTab>('greeting');
-  const [copilotOpen, setCopilotOpen] = useState(true);
-  const [sidePanel, setSidePanel] = useState<SidePanel>('copilot');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [actionToast, setActionToast] = useState<string | null>(null);
+  const [activeReactionMessageId, setActiveReactionMessageId] = useState<number | null>(null);
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+  const [previewFlyer, setPreviewFlyer] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ id: number; messageId: string; senderName: string; text: string } | null>(null);
+  const [showDeletedMessages, setShowDeletedMessages] = useState(false);
+  const [revealedDeletedIds, setRevealedDeletedIds] = useState<Set<number>>(new Set());
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showPackagePickerModal, setShowPackagePickerModal] = useState(false);
+  const [packageSearch, setPackageSearch] = useState('');
+  const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
+  const [sidePanelTab, setSidePanelTab] = useState<ChatSidePanelTab | null>('profile');
+  const [mediaPreview, setMediaPreview] = useState<{
+    file: File;
+    url: string;
+    type: string;
+    name: string;
+    originalSize: number;
+    compressedSize: number;
+    savingsPercent: number;
+    isCompressed: boolean;
+    isPackageFlyer?: boolean;
+    packageName?: string;
+    packageId?: number;
+  } | null>(null);
+  const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
   const endRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const flyerInputRef = useRef<HTMLInputElement>(null);
+  const pendingFlyerPackageRef = useRef<any>(null);
+  const emojiPickerContainerRef = useRef<HTMLDivElement>(null);
   const appliedDraftKey = useRef<string | null>(null);
+
+  const sessionQuery = useQuery({
+    queryKey: ['whatsapp-device', brandId],
+    queryFn: () => api.get<{ status: string; phoneNumber?: string | null }>(`/chat/wa/status${query}`),
+    enabled: !!brandId,
+    refetchInterval: (queryData) => {
+      const status = queryData?.state?.data?.status;
+      if (status === 'connecting' || status === 'qr_ready') return 2000;
+      return 5000;
+    },
+  });
+
+  const isConnected = sessionQuery.data?.status === 'connected';
+  const canManageDevice = user?.role === 'superadmin' || user?.role === 'admin';
 
   const conversations = useQuery({
     queryKey: ['conversations', brandId],
@@ -74,9 +266,25 @@ export function InboxPage() {
     enabled: !!brandId,
   });
 
+  const packages = useQuery({
+    queryKey: ['packages', brandId],
+    queryFn: () => api.get<any[]>(`/catalog/packages${query}`),
+    enabled: !!brandId,
+  });
+
+  const brandsQuery = useQuery({
+    queryKey: ['brands'],
+    queryFn: () => api.get<any[]>('/catalog/brands'),
+  });
+  const activeBrand = brandsQuery.data?.find((b) => b.id === brandId) ?? user?.brand;
+
+  // Riwayat tetap dapat dibaca saat WhatsApp terputus (A10); hanya pengiriman yang dikunci.
   useEffect(() => {
     const items = conversations.data;
-    if (!items?.length) return;
+    if (!items?.length) {
+      setSelectedId(null);
+      return;
+    }
     const requestedId = Number(searchParams.get('prospectId')) || null;
     const requestedPhone = normalizePhone(searchParams.get('phone'));
     const requestedJid = searchParams.get('jid');
@@ -88,7 +296,10 @@ export function InboxPage() {
     ));
     const currentExists = items.some((item) => item.id === selectedId);
     const nextId = requested?.id ?? (currentExists ? selectedId : items[0].id);
-    if (nextId !== selectedId) setSelectedId(nextId);
+    if (nextId !== selectedId) {
+      setSelectedId(nextId);
+      if (requestedId) setMobileView('chat');
+    }
   }, [conversations.data, searchParams, selectedId]);
 
   useEffect(() => {
@@ -96,14 +307,103 @@ export function InboxPage() {
     if (!draft || appliedDraftKey.current === location.key) return;
     appliedDraftKey.current = location.key;
     setMessage(draft);
-    requestAnimationFrame(() => composerRef.current?.focus());
+    requestAnimationFrame(() => {
+      if (composerRef.current) {
+        adjustTextareaHeight(composerRef.current);
+        composerRef.current.focus();
+      }
+    });
   }, [location.key, location.state]);
 
   const selected = conversations.data?.find((item) => item.id === selectedId);
+  const isPic = Boolean(selected?.userId && selected.userId === user?.id);
+  const isUnassigned = !selected?.userId;
+  const canReply = isAdmin || isPic || (isUnassigned && user?.role === 'cs');
+  // Hak membalas (role/PIC) dan kemampuan mengirim (perangkat terhubung) dibedakan.
+  const canSend = canReply && isConnected;
 
-  useEffect(() => {
-    if (selected?.status) setCopilotTab(statusToTab[selected.status] ?? 'greeting');
-  }, [selected?.id, selected?.status]);
+  const currentPackage = useMemo(() => {
+    return packages.data?.find((p) => p.id === (selected?.packageId || selected?.package?.id));
+  }, [packages.data, selected?.packageId, selected?.package?.id]);
+
+  const filteredPackages = useMemo(() => {
+    const list = (packages.data ?? []).filter((p) => p.isActive);
+    const q = packageSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((p) =>
+      `${p.name ?? ''} ${p.airline ?? ''} ${p.departureInfo ?? ''} ${p.hotelMakkah ?? ''} ${p.hotelMadinah ?? ''} ${p.price ?? ''} ${p.priceQuad ?? ''}`
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [packages.data, packageSearch]);
+
+  const quickReplyChips = [
+    { id: 'greeting', label: 'Sapaan Hangat', icon: Sparkles },
+    { id: 'package', label: 'Tawarkan Paket', icon: FileText },
+    { id: 'flyer', label: 'Kirim Flyer Brosur', icon: ImageIcon },
+    { id: 'bank', label: 'Rekening Resmi', icon: CreditCard },
+    { id: 'closing', label: 'Dorong Closing', icon: HandCoins },
+    { id: 'ppiu', label: 'Legalitas PPIU', icon: ShieldCheck },
+  ] as const;
+
+  function handleInsertTemplate(type: string) {
+    if (type === 'flyer') {
+      openSendFlyerModal();
+      return;
+    }
+    const customerName = selected?.name && !/^\d+$/.test(selected.name) ? selected.name : 'Bapak/Ibu';
+    const travelName = activeBrand?.name || 'Layanan Resmi Umroh';
+    const csName = user?.name || 'Customer Service';
+
+    let text = '';
+    if (type === 'greeting') {
+      text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${customerName} 🙏\n\nSaya ${csName} dari tim layanan resmi ${travelName}.\n\nSenang sekali bisa membantu rencana ibadah umroh ${customerName} sekeluarga.\n\nApakah ada perkiraan bulan atau musim keberangkatan yang sedang direncanakan?`;
+    } else if (type === 'package') {
+      if (currentPackage) {
+        text = formatWaPackageSummary(currentPackage, travelName);
+      } else {
+        text = `Bismillah ${customerName}, ${travelName} memiliki beberapa pilihan paket umroh.\n\nBoleh kami tahu rencana bulan keberangkatan, jumlah jamaah, dan preferensi kamar (quad/triple/double)? Kami kirimkan rincian paket yang paling sesuai. 🙏`;
+      }
+    } else if (type === 'bank') {
+      // Data rekening hanya dari data resmi brand; tanpa data lengkap tidak ada teks yang dibuat.
+      const bank = activeBrand?.bankName?.trim();
+      const accNumber = activeBrand?.bankAccountNumber?.trim();
+      const accHolder = activeBrand?.bankAccountHolder?.trim();
+      if (!bank || !accNumber || accNumber === '-' || !accHolder) {
+        showToast('Rekening resmi brand belum lengkap. Minta Admin melengkapi data bank di menu Brand.');
+        return;
+      }
+      text = `Bismillah, untuk keamanan transaksi di ${travelName}, pembayaran resmi hanya melalui rekening perusahaan berikut:\n\n🏛️ Bank: ${bank}\n💳 No. Rekening: ${accNumber}\n👤 Atas Nama: ${accHolder}\n\nSetelah transfer, mohon kirimkan foto bukti transfernya agar dapat diverifikasi tim Finance kami. Terima kasih! 🙏`;
+    } else if (type === 'closing') {
+      // Klaim kuota hanya dari data kuota paket yang nyata.
+      const quota = currentPackage?.quotaRemaining;
+      const quotaLine = currentPackage && typeof quota === 'number'
+        ? `Untuk paket ${currentPackage.name}, saat ini tersisa ${quota} seat.\n\n`
+        : '';
+      text = `Bismillah ${customerName}, ${quotaLine}Jika ${customerName} sudah mantap, seat dapat kami amankan dengan pembayaran DP sesuai invoice resmi.\n\nApakah ada hal lain yang masih perlu kami jelaskan sebelum pendaftaran? 🙏`;
+    } else if (type === 'ppiu') {
+      const ppiu = activeBrand?.ppiuNumber?.trim();
+      if (!ppiu) {
+        showToast('Nomor izin PPIU brand belum diisi. Minta Admin melengkapinya di menu Brand.');
+        return;
+      }
+      text = `Alhamdulillah ${travelName} adalah Penyelenggara Perjalanan Ibadah Umrah (PPIU) dengan nomor izin: ${ppiu}.\n\nNomor izin tersebut dapat dicek di sistem resmi Kementerian Agama RI.`;
+    }
+
+    if (text) {
+      handleInsertDirectText(text);
+    }
+  }
+
+  function handleInsertDirectText(text: string) {
+    setMessage(text);
+    requestAnimationFrame(() => {
+      if (composerRef.current) {
+        adjustTextareaHeight(composerRef.current);
+        composerRef.current.focus();
+      }
+    });
+  }
 
   const messages = useQuery({
     queryKey: ['messages', selectedId, brandId],
@@ -114,389 +414,2243 @@ export function InboxPage() {
   useQuery({
     queryKey: ['history-sync', selectedId, brandId],
     queryFn: () => api.post(`/chat/prospects/${selectedId}/history-sync`, { ...(query ? { brandId } : {}) }),
-    enabled: !!selectedId && !!brandId,
+    enabled: !!selectedId && !!brandId && isConnected,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
 
-  const separator = query ? '&' : '?';
-  const copilot = useQuery({
-    queryKey: ['inbox-copilot', brandId, selected?.id, selected?.packageId],
-    queryFn: () => api.get<any>(
-      `/scripts${query}${separator}nama=${encodeURIComponent(selected?.name ?? '')}${selected?.packageId ? `&packageId=${selected.packageId}` : ''}`,
-    ),
-    enabled: !!brandId && !!selected,
-  });
-
-  const scripts = (copilot.data?.categories?.[copilotTab]?.scripts ?? []) as any[];
+  const lastSelectedIdRef = useRef<number | null>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.data]);
+    if (!timelineRef.current) return;
+    const container = timelineRef.current;
+    const isNewConversation = lastSelectedIdRef.current !== selectedId;
+    lastSelectedIdRef.current = selectedId;
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 180;
+    if (isNewConversation || isNearBottom) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages.data, selectedId]);
+
+  function scrollToMessage(messageId?: string | null) {
+    if (!messageId) return;
+    const el = document.getElementById(`msg-${messageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('bg-emerald-100/60');
+      setTimeout(() => {
+        el.classList.remove('bg-emerald-100/60');
+      }, 2000);
+    }
+  }
 
   const send = useMutation({
-    mutationFn: (text: string) => api.post('/chat/messages', { prospectId: selectedId, text }),
+    mutationFn: (text: string) =>
+      api.post(`/chat/messages${query}`, {
+        brandId,
+        prospectId: selectedId,
+        text,
+        quotedMessageId: replyingTo?.messageId,
+        quotedText: replyingTo?.text,
+        quotedSender: replyingTo?.senderName,
+      }),
     onSuccess: () => {
       setMessage('');
+      setReplyingTo(null);
+      if (composerRef.current) composerRef.current.style.height = '44px';
       void queryClient.invalidateQueries({ queryKey: ['messages', selectedId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 
-  const filtered = useMemo(
-    () => conversations.data?.filter((item) => `${item.name} ${item.phone}`.toLowerCase().includes(search.toLowerCase())) ?? [],
-    [conversations.data, search],
-  );
+  const starMutation = useMutation({
+    mutationFn: (messageId: number) => api.post<{ isStarred?: boolean }>(`/chat/messages/${messageId}/star${query}`),
+    onSuccess: (data: any) => {
+      void queryClient.invalidateQueries({ queryKey: ['messages', selectedId, brandId] });
+      showToast(data?.isStarred ? 'Pesan diberi bintang ⭐' : 'Bintang pesan dihapus');
+    },
+    onError: () => {
+      showToast('Gagal mengubah status bintang pesan');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (messageId: number) => api.delete(`/chat/messages/${messageId}${query}`),
+    onSuccess: () => {
+      setDeleteConfirmId(null);
+      void queryClient.invalidateQueries({ queryKey: ['messages', selectedId, brandId] });
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      showToast('Pesan berhasil dihapus');
+    },
+    onError: (err: any) => {
+      showToast(err?.message || 'Gagal menghapus pesan');
+    },
+  });
+
+  const proofFromMessage = useMutation({
+    mutationFn: (messageId: number) =>
+      api.post(`/prospects/${selectedId}/payment-proof-from-message`, { messageId, brandId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['prospect', selectedId] });
+      void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
+      showToast('Bukti transfer dikirim ke antrean verifikasi Finance');
+    },
+    onError: (err: any) => showToast(err?.message || 'Gagal mengirim bukti ke Finance'),
+  });
+
+  const claimMutation = useMutation({
+    mutationFn: (prospectId: number) => api.post(`/prospects/${prospectId}/claim`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations', brandId] });
+      showToast('Anda berhasil menjadi PIC percakapan ini');
+    },
+    onError: (err: any) => {
+      showToast(err?.message || 'Gagal mengklaim PIC');
+    },
+  });
+
+  const reactMutation = useMutation({
+    mutationFn: ({ messageId, emoji }: { messageId: number; emoji: string }) =>
+      api.post(`/chat/messages/${messageId}/react${query}`, { emoji, brandId }),
+    onMutate: async ({ messageId, emoji }) => {
+      setActiveReactionMessageId(null);
+      const queryKey = ['messages', selectedId, brandId];
+      await queryClient.cancelQueries({ queryKey });
+      const prev = queryClient.getQueryData<any[]>(queryKey);
+      if (prev) {
+        queryClient.setQueryData<any[]>(queryKey, (old) => {
+          if (!old) return old;
+          return old.map((m) => {
+            if (m.id === messageId) {
+              const isSame = m.reaction === emoji && m.reactionUserId === user?.id;
+              const nextReaction = isSame ? null : emoji;
+              return { ...m, reaction: nextReaction, reactionUserId: nextReaction ? user?.id : null };
+            }
+            return m;
+          });
+        });
+      }
+      return { prev, queryKey };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev) {
+        queryClient.setQueryData(context.queryKey, context.prev);
+      }
+      showToast('Gagal mengirim reaksi WhatsApp');
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['messages', selectedId, brandId] });
+    },
+  });
+
+
+
+  const filterCounts = useMemo(() => {
+    const list = conversations.data ?? [];
+    return {
+      all: list.length,
+      unread: list.filter((i) => (i.unreadCount ?? 0) > 0).length,
+      personal: list.filter((i) => !i.isGroup).length,
+      group: list.filter((i) => Boolean(i.isGroup)).length,
+    };
+  }, [conversations.data]);
+
+  const filtered = useMemo(() => {
+    const list = conversations.data ?? [];
+    return list.filter((item) => {
+      const q = search.trim().toLowerCase();
+      if (q) {
+        const matchText = `${item.name ?? ''} ${item.phone ?? ''} ${item.messages?.[0]?.messageText ?? ''}`.toLowerCase();
+        if (!matchText.includes(q)) return false;
+      }
+
+      if (chatFilter === 'unread') {
+        return (item.unreadCount ?? 0) > 0;
+      }
+      if (chatFilter === 'personal') {
+        return !item.isGroup;
+      }
+      if (chatFilter === 'group') {
+        return Boolean(item.isGroup);
+      }
+      return true;
+    });
+  }, [conversations.data, search, chatFilter]);
+
+  function handleSelectConversation(id: number) {
+    setSelectedId(id);
+    setMobileView('chat');
+    void api.post(`/chat/prospects/${id}/read${query}`).catch(() => null);
+    queryClient.setQueryData<any[]>(['conversations', brandId], (old) => {
+      if (!old) return old;
+      return old.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c));
+    });
+  }
+
+  function adjustTextareaHeight(element: HTMLTextAreaElement | null) {
+    if (!element) return;
+    element.style.height = 'auto';
+    const nextHeight = Math.min(element.scrollHeight, 140);
+    element.style.height = `${Math.max(nextHeight, 44)}px`;
+  }
+
+  function handleComposerChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setMessage(e.target.value);
+    adjustTextareaHeight(e.target);
+  }
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        emojiPickerContainerRef.current &&
+        !emojiPickerContainerRef.current.contains(e.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
+
+  function handleInsertEmoji(emoji: string) {
+    const textarea = composerRef.current;
+    if (!textarea) {
+      setMessage((prev) => prev + emoji);
+      return;
+    }
+    const start = textarea.selectionStart ?? message.length;
+    const end = textarea.selectionEnd ?? message.length;
+    const nextMessage = message.slice(0, start) + emoji + message.slice(end);
+    setMessage(nextMessage);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const nextPos = start + emoji.length;
+      textarea.setSelectionRange(nextPos, nextPos);
+      adjustTextareaHeight(textarea);
+    });
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (message.trim() && !send.isPending) send.mutate(message.trim());
+    if (mediaPreview) {
+      void handleSendMedia();
+    } else if (message.trim() && !send.isPending) {
+      send.mutate(message.trim());
+    }
   }
 
-  function useScript(script: string) {
-    setMessage(script);
-    setCopilotOpen(false);
-    requestAnimationFrame(() => composerRef.current?.focus());
+  function showToast(msg: string) {
+    setActionToast(msg);
+    setTimeout(() => setActionToast(null), 2500);
   }
 
-  async function copyScript(id: string, script: string) {
-    await navigator.clipboard.writeText(script);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1600);
+  function openSendFlyerModal(targetPkg?: any) {
+    if (!selectedId) {
+      showToast('Pilih kontak obrolan terlebih dahulu');
+      return;
+    }
+    const pkgToUse = targetPkg || currentPackage;
+    if (!pkgToUse) {
+      setShowPackagePickerModal(true);
+      return;
+    }
+    void loadFlyerAsMediaPreview(pkgToUse);
+  }
+
+  async function loadFlyerAsMediaPreview(pkg: any) {
+    if (!pkg || !selectedId) return;
+    const travelName = activeBrand?.name || 'Layanan Resmi Umroh';
+    const captionText = formatWaFlyerCaption(pkg, travelName);
+
+    if (!pkg.flyerImage) {
+      pendingFlyerPackageRef.current = pkg;
+      setMessage(captionText);
+      requestAnimationFrame(() => {
+        if (composerRef.current) {
+          adjustTextareaHeight(composerRef.current);
+          composerRef.current.focus();
+        }
+      });
+      flyerInputRef.current?.click();
+      showToast(`Pilih berkas flyer dari komputer untuk ${pkg.name}`);
+      return;
+    }
+
+    setIsCompressing(true);
+    try {
+      const fullUrl = resolveMediaUrl(pkg.flyerImage);
+      const res = await fetch(fullUrl);
+      if (!res.ok) throw new Error('Gagal mengambil berkas flyer dari server');
+      const blob = await res.blob();
+      const ext = blob.type === 'image/png' ? 'png' : 'jpg';
+      const cleanName = (pkg.name || 'paket').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const file = new File([blob], `Flyer_${cleanName}.${ext}`, { type: blob.type || 'image/jpeg' });
+
+      const result = await autoCompressMedia(file);
+      const objectUrl = URL.createObjectURL(result.file);
+
+      if (mediaPreview?.url) {
+        URL.revokeObjectURL(mediaPreview.url);
+      }
+
+      setMediaPreview({
+        file: result.file,
+        url: objectUrl,
+        type: result.file.type,
+        name: `Flyer - ${pkg.name}`,
+        originalSize: result.originalSize,
+        compressedSize: result.compressedSize,
+        savingsPercent: result.savingsPercent,
+        isCompressed: result.isCompressed,
+        isPackageFlyer: true,
+        packageName: pkg.name,
+        packageId: pkg.id,
+      });
+
+      setMessage(captionText);
+      requestAnimationFrame(() => {
+        if (composerRef.current) {
+          adjustTextareaHeight(composerRef.current);
+          composerRef.current.focus();
+        }
+      });
+      showToast(`Flyer ${pkg.name} siap dikirim dengan format resmi`);
+    } catch (err: any) {
+      console.warn('Fallback loading flyer:', err);
+      pendingFlyerPackageRef.current = pkg;
+      setMessage(captionText);
+      requestAnimationFrame(() => {
+        if (composerRef.current) {
+          adjustTextareaHeight(composerRef.current);
+          composerRef.current.focus();
+        }
+      });
+      flyerInputRef.current?.click();
+      showToast('Pilih gambar flyer manual');
+    } finally {
+      setIsCompressing(false);
+    }
+  }
+
+  async function handleProcessFlyerFile(file: File) {
+    if (!file || !selectedId) return;
+    const pkg = pendingFlyerPackageRef.current || currentPackage;
+    const travelName = activeBrand?.name || 'Layanan Resmi Umroh';
+    const captionText = pkg ? formatWaFlyerCaption(pkg, travelName) : message;
+
+    setIsCompressing(true);
+    try {
+      const result = await autoCompressMedia(file);
+      const objectUrl = URL.createObjectURL(result.file);
+
+      if (mediaPreview?.url) {
+        URL.revokeObjectURL(mediaPreview.url);
+      }
+
+      setMediaPreview({
+        file: result.file,
+        url: objectUrl,
+        type: result.file.type,
+        name: `Flyer - ${pkg?.name || file.name}`,
+        originalSize: result.originalSize,
+        compressedSize: result.compressedSize,
+        savingsPercent: result.savingsPercent,
+        isCompressed: result.isCompressed,
+        isPackageFlyer: true,
+        packageName: pkg?.name || 'Paket Umroh',
+        packageId: pkg?.id,
+      });
+
+      if (captionText) {
+        setMessage(captionText);
+        requestAnimationFrame(() => {
+          if (composerRef.current) adjustTextareaHeight(composerRef.current);
+        });
+      }
+      showToast('Flyer berhasil disiapkan');
+    } finally {
+      setIsCompressing(false);
+      pendingFlyerPackageRef.current = null;
+    }
+  }
+
+  async function handleProcessFile(file: File) {
+    if (!file || !selectedId) return;
+
+    // Berkas dikirim sebagai base64 dalam JSON (+33%) dan body API dibatasi 50 MB,
+    // jadi batas efektif berkas asli ±37 MB. Tolak lebih awal daripada gagal 413 setelah upload panjang.
+    if (file.size > MAX_UPLOAD_BYTES) {
+      showToast(`Ukuran file maksimal ${MAX_UPLOAD_MB} MB`);
+      return;
+    }
+
+    // Auto-compress image to reduce server load
+    if (file.type.startsWith('image/') && file.type !== 'image/gif' && file.type !== 'image/svg+xml') {
+      setIsCompressing(true);
+      try {
+        const result = await autoCompressMedia(file);
+        const objectUrl = URL.createObjectURL(result.file);
+        setMediaPreview({
+          file: result.file,
+          url: objectUrl,
+          type: result.file.type,
+          name: result.file.name,
+          originalSize: result.originalSize,
+          compressedSize: result.compressedSize,
+          savingsPercent: result.savingsPercent,
+          isCompressed: result.isCompressed,
+        });
+        if (result.isCompressed && result.savingsPercent > 5) {
+          showToast(`Kompresi otomatis: hemat ${result.savingsPercent}%`);
+        }
+      } finally {
+        setIsCompressing(false);
+      }
+    } else {
+      const objectUrl = URL.createObjectURL(file);
+      setMediaPreview({
+        file,
+        url: objectUrl,
+        type: file.type,
+        name: file.name,
+        originalSize: file.size,
+        compressedSize: file.size,
+        savingsPercent: 0,
+        isCompressed: false,
+      });
+    }
+  }
+
+  async function handleSendMedia(fileToSend?: File, customCaption?: string) {
+    const targetFile = fileToSend || mediaPreview?.file;
+    if (!selectedId || uploadingMedia || !targetFile) return;
+    setUploadingMedia(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1] ?? '');
+        reader.onerror = reject;
+        reader.readAsDataURL(targetFile);
+      });
+
+      const mediaType = targetFile.type.startsWith('image/')
+        ? 'imageMessage'
+        : targetFile.type.startsWith('video/')
+        ? 'videoMessage'
+        : 'documentMessage';
+
+      const caption = customCaption ?? (message.trim() || '');
+
+      await api.post(`/chat/messages/media${query}`, {
+        brandId,
+        prospectId: selectedId,
+        fileName: targetFile.name,
+        mimeType: targetFile.type,
+        base64Data: base64,
+        packageId: mediaPreview?.packageId,
+        mediaType,
+        caption,
+        quotedMessageId: replyingTo?.messageId,
+        quotedText: replyingTo?.text,
+        quotedSender: replyingTo?.senderName,
+      });
+
+      // Auto link package to prospect if not yet assigned
+      if (mediaPreview?.packageId && !selected?.packageId) {
+        void api.patch(`/prospects/${selectedId}/profile`, { packageId: mediaPreview.packageId })
+          .then(() => {
+            void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+          })
+          .catch(() => null);
+      }
+
+      if (mediaPreview?.url) {
+        URL.revokeObjectURL(mediaPreview.url);
+      }
+      setMediaPreview(null);
+      setMessage('');
+      setReplyingTo(null);
+      if (composerRef.current) composerRef.current.style.height = '44px';
+      void queryClient.invalidateQueries({ queryKey: ['messages', selectedId] });
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      showToast('Media berhasil dikirim!');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal mengirim media');
+    } finally {
+      setUploadingMedia(false);
+    }
   }
 
   if (!brandId) return <PageError title="Belum ada brand aktif" description="Buat brand melalui menu Administrasi dan hubungkan WhatsApp untuk menerima percakapan sebenarnya." />;
-  if (conversations.isLoading) return <PageLoading label="Membuka kotak masuk" />;
+  if (sessionQuery.isLoading) return <PageLoading label="Memeriksa status perangkat WhatsApp…" />;
+  if (conversations.isLoading) return <PageLoading label="Membuka kotak masuk…" />;
   if (conversations.isError) return <PageError description={conversations.error.message} onRetry={() => void conversations.refetch()} />;
 
   return (
-    <div className="relative -m-4 h-[calc(100vh-4rem)] overflow-hidden bg-white sm:-m-6 lg:-m-8">
-      {copilotOpen && (
-        <button
-          aria-label="Tutup panel kanan"
-          className="inbox-copilot-backdrop"
-          onClick={() => setCopilotOpen(false)}
-        />
+    <div className="relative h-screen w-full overflow-hidden bg-white">
+      {/* Toast Feedback */}
+      {actionToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-zinc-950 px-4 py-2.5 text-xs font-semibold text-white shadow-lift animate-fade-up">
+          <Check size={14} className="text-emerald-400" />
+          <span>{actionToast}</span>
+        </div>
       )}
 
-      <div className={cn('inbox-workspace', copilotOpen && 'has-side-panel')}>
-        <aside className="inbox-conversation-list flex flex-col border-r bg-zinc-50/60">
-          <div className="border-b p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <h2 className="font-display text-lg font-extrabold tracking-tight">Kotak masuk</h2>
-                <p className="text-[11px] text-zinc-400">{filtered.length} percakapan aktif</p>
-              </div>
-              <Button size="icon" variant="secondary"><MessageSquareText size={16} /></Button>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 text-zinc-400" size={15} />
-              <input className="h-9 w-full rounded-xl border bg-white pl-9 pr-3 text-xs" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari jamaah…" />
-            </div>
-          </div>
-
-          <div className="thin-scrollbar flex-1 overflow-y-auto">
-            {filtered.map((item) => {
-              const last = item.messages?.[0];
-              const active = item.id === selectedId;
-              return (
-                <button key={item.id} onClick={() => setSelectedId(item.id)} className={cn('flex w-full gap-3 border-b px-4 py-4 text-left transition', active ? 'bg-white shadow-[inset_3px_0_0_#18181b]' : 'hover:bg-white')}>
-                  <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-zinc-200 text-xs font-bold text-zinc-700">
-                    {String(item.name ?? '?').slice(0, 2).toUpperCase()}
-                    <i className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-600" />
+      <div className={cn('inbox-workspace', selected && sidePanelTab && 'has-side-panel')}>
+        {/* Left Column: WhatsApp Web Conversation List */}
+        <aside className={cn(
+          'inbox-conversation-list flex flex-col border-r border-[#e9edef] bg-white',
+          mobileView === 'chat' && 'hidden md:flex'
+        )}>
+          {/* WhatsApp Header Bar */}
+          <div className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 shrink-0 border-b border-[#e9edef]">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="lg:hidden p-1.5 rounded-lg text-[#54656f] hover:bg-black/5 hover:text-[#111b21] transition shrink-0 cursor-pointer"
+                aria-label="Buka menu navigasi"
+              >
+                <Menu size={20} />
+              </button>
+              {brandsQuery.data && brandsQuery.data.length > 1 ? (
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      className="flex items-center gap-3 min-w-0 hover:bg-black/5 p-1 -ml-1 rounded-lg transition text-left cursor-pointer group outline-none"
+                      title="Klik untuk ganti sesi WhatsApp Brand"
+                    >
+                      <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#00a884] font-bold text-xs text-white shadow-2xs">
+                        {activeBrand?.name ? String(activeBrand.name).slice(0, 2).toUpperCase() : 'WA'}
+                        {isConnected && (
+                          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]" />
+                        )}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h2 className="font-semibold text-sm text-[#111b21] truncate leading-tight group-hover:text-emerald-700">
+                            {activeBrand?.name ?? 'WhatsApp Live Chat'}
+                          </h2>
+                          <ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-700 shrink-0" />
+                        </div>
+                        <p className="text-[11px] text-[#667781] truncate">
+                          {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : 'Terputus'} • <span className="text-emerald-600 font-semibold">Ganti Brand</span>
+                        </p>
+                      </div>
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      side="bottom"
+                      align="start"
+                      sideOffset={8}
+                      className="z-50 w-64 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl animate-fade-up"
+                    >
+                      <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 mb-1">
+                        Pilih Sesi WhatsApp Brand
+                      </div>
+                      {brandsQuery.data.map((b: any) => {
+                        const isActive = b.id === brandId;
+                        return (
+                          <DropdownMenu.Item
+                            key={b.id}
+                            onSelect={() => {
+                              setActiveBrandId(b.id);
+                              setSelectedId(null);
+                            }}
+                            className={cn(
+                              "flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-xs cursor-pointer outline-none transition",
+                              isActive ? "bg-emerald-50 text-emerald-800 font-bold" : "text-zinc-700 hover:bg-zinc-100"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-zinc-200 text-[10px] font-bold text-zinc-700">
+                                {b.name ? String(b.name).slice(0, 2).toUpperCase() : 'B'}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="truncate text-xs">{b.name}</p>
+                                {b.phone && <p className="text-[10px] text-zinc-400 truncate">+{b.phone}</p>}
+                              </div>
+                            </div>
+                            {isActive && <Check size={14} className="text-emerald-600 shrink-0" />}
+                          </DropdownMenu.Item>
+                        );
+                      })}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              ) : (
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#00a884] font-bold text-xs text-white shadow-2xs">
+                    {activeBrand?.name ? String(activeBrand.name).slice(0, 2).toUpperCase() : 'WA'}
+                    {isConnected && (
+                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]" />
+                    )}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center justify-between gap-2">
-                      <b className="truncate text-sm">{item.name}</b>
-                      <time className="shrink-0 text-[9px] text-zinc-400">{last ? new Date(last.timestamp * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Baru'}</time>
-                    </span>
-                    <span className="mt-1 block truncate text-xs text-zinc-500">{last?.isFromMe ? 'Anda: ' : ''}{last?.messageText ?? 'Kontak WhatsApp · belum ada pesan'}</span>
-                    <span className="mt-2 flex items-center justify-between gap-2">
-                      <Badge value={item.status} className="px-2 py-0.5 text-[8px]" />
-                      <span className="truncate text-[9px] text-zinc-400">{item.user?.name ?? 'Belum ada PIC'}</span>
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-
-        <section className="inbox-chat flex flex-col bg-white">
-          {selected ? (
-            <>
-              <header className="flex h-[73px] items-center gap-3 border-b px-4 sm:px-5">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-100 text-xs font-bold">{String(selected.name ?? '?').slice(0, 2).toUpperCase()}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2"><h3 className="truncate text-sm font-bold">{selected.name}</h3>{selected.leadSource==='meta_ads'&&<span title={[selected.adHeadline,selected.adId&&`Ad ${selected.adId}`].filter(Boolean).join(' · ')} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-950 px-2 py-0.5 text-[9px] font-bold text-white"><Megaphone size={10}/>Meta Ads</span>}</div>
-                  <p className="flex items-center gap-1 text-[10px] text-zinc-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600" /> WhatsApp · {selected.phone}</p>
+                  <div className="min-w-0">
+                    <h2 className="font-semibold text-sm text-[#111b21] truncate leading-tight">
+                      {activeBrand?.name ?? 'WhatsApp Live Chat'}
+                    </h2>
+                    <p className="text-[11px] text-[#667781] truncate">
+                      {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : 'Terputus'}
+                    </p>
+                  </div>
                 </div>
-                <Button variant="secondary" size="sm" onClick={() => { setSidePanel('copilot'); setCopilotOpen(true); }}><Bot size={15} />Copilot</Button>
-                <Button variant="secondary" size="sm" onClick={() => { setSidePanel('profile'); setCopilotOpen(true); }}><CircleUserRound size={15} />Profil</Button>
-                <Button variant="ghost" size="icon"><MoreHorizontal size={18} /></Button>
-              </header>
+              )}
+            </div>
+            {isConnected && (
+              <div className="flex items-center gap-1">
+                {canManageDevice && (
+                  <Link to={`/devices/${brandId}`} title="Kelola Perangkat WA">
+                    <Button size="icon" variant="ghost" className="text-[#54656f] hover:text-[#111b21]">
+                      <Smartphone size={18} />
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
 
-              <div className="thin-scrollbar flex-1 overflow-y-auto bg-[radial-gradient(#d4d4d8_.7px,transparent_.7px)] bg-[size:18px_18px] px-4 py-6 sm:px-6">
-                <div className="mx-auto max-w-3xl space-y-3">
-                  <div className="mb-5 text-center"><span className="rounded-full border bg-white px-3 py-1 text-[10px] font-medium text-zinc-400 shadow-sm">Percakapan terenkripsi end-to-end oleh WhatsApp</span></div>
-                  {messages.isLoading && <div className="space-y-3" role="status" aria-label="Memuat percakapan"><div className="h-16 w-2/3 animate-pulse rounded-2xl bg-zinc-100"/><div className="ml-auto h-20 w-3/4 animate-pulse rounded-2xl bg-zinc-200"/><div className="h-14 w-1/2 animate-pulse rounded-2xl bg-zinc-100"/></div>}
-                  {messages.isError && <div className="mx-auto max-w-sm rounded-2xl border bg-white p-5 text-center"><p className="text-sm font-bold">Pesan gagal dimuat</p><button className="mt-2 text-xs font-semibold underline" onClick={() => void messages.refetch()}>Coba lagi</button></div>}
-                  {!messages.isLoading && !messages.isError && messages.data?.length === 0 && <div className="grid min-h-[260px] place-items-center text-center"><div><MessageSquareText className="mx-auto text-zinc-300" size={28} /><p className="mt-3 text-sm font-bold">Belum ada riwayat pesan</p><p className="mt-1 max-w-xs text-xs leading-5 text-zinc-400">Kontak sudah tersinkron. Pesan baru dan histori yang tersedia dari WhatsApp akan tampil di sini.</p></div></div>}
-                  {messages.data?.map((item) => (
-                    <div key={item.id} className={cn('flex', item.isFromMe ? 'justify-end' : 'justify-start')}>
-                      <div className={cn('max-w-[84%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm', item.isFromMe ? 'rounded-br-md bg-zinc-950 text-white' : 'rounded-bl-md border bg-white text-zinc-800')}>
-                        <p className="whitespace-pre-wrap leading-5">{item.messageText || `[${item.messageType}]`}</p>
-                        <span className={cn('mt-1.5 flex items-center justify-end gap-1 text-[9px]', item.isFromMe ? 'text-zinc-500' : 'text-zinc-400')}>
-                          {new Date(item.timestamp * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}{item.isFromMe && <CheckCheck size={12} />}
+          {isConnected && (
+            <div className="p-2 border-b border-[#e9edef] bg-white shrink-0 space-y-2">
+              {/* WhatsApp Web Search Bar */}
+              <div className="relative flex items-center">
+                <Search className="absolute left-3 text-[#54656f]" size={15} />
+                <input
+                  aria-label="Cari atau mulai chat baru"
+                  className="h-9 w-full rounded-lg bg-[#f0f2f5] pl-9 pr-8 text-xs text-[#111b21] placeholder:text-[#8696a0] outline-none transition focus:bg-white focus:ring-1 focus:ring-[#00a884]"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Cari atau mulai chat baru"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    aria-label="Hapus pencarian"
+                    className="absolute right-2.5 text-[#8696a0] hover:text-[#111b21]"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* WhatsApp Web Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto thin-scrollbar pb-0.5 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setChatFilter('all')}
+                  className={cn(
+                    'rounded-full px-3 py-1 transition-colors whitespace-nowrap',
+                    chatFilter === 'all'
+                      ? 'bg-[#d9fdd3] text-[#008069] font-bold'
+                      : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                  )}
+                >
+                  Semua ({filterCounts.all})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChatFilter('unread')}
+                  className={cn(
+                    'rounded-full px-3 py-1 transition-colors whitespace-nowrap',
+                    chatFilter === 'unread'
+                      ? 'bg-[#d9fdd3] text-[#008069] font-bold'
+                      : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                  )}
+                >
+                  Belum dibaca {filterCounts.unread > 0 ? `(${filterCounts.unread})` : ''}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChatFilter('personal')}
+                  className={cn(
+                    'rounded-full px-3 py-1 transition-colors whitespace-nowrap',
+                    chatFilter === 'personal'
+                      ? 'bg-[#d9fdd3] text-[#008069] font-bold'
+                      : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                  )}
+                >
+                  Pribadi ({filterCounts.personal})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChatFilter('group')}
+                  className={cn(
+                    'rounded-full px-3 py-1 transition-colors whitespace-nowrap',
+                    chatFilter === 'group'
+                      ? 'bg-[#d9fdd3] text-[#008069] font-bold'
+                      : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                  )}
+                >
+                  Grup ({filterCounts.group})
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isConnected && (
+            <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] text-amber-900" role="status">
+              <WifiOff size={14} className="mt-0.5 shrink-0 text-amber-600" />
+              <div className="min-w-0">
+                <p className="font-semibold">WhatsApp terputus — mode baca</p>
+                <p className="text-amber-800">Riwayat tetap bisa dibaca; pesan baru belum masuk dan belum bisa dikirim.</p>
+                {canManageDevice && (
+                  <Link to={`/devices/${brandId}`} className="mt-1 inline-flex items-center gap-1 font-semibold underline">
+                    <Smartphone size={12} /> Hubungkan WA
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+          {(
+            <div className="thin-scrollbar flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
+            {filtered.length === 0 ? (
+              <div className="p-8 text-center text-xs text-[#8696a0]">
+                <p className="font-semibold text-[#54656f]">Tidak ada chat</p>
+                <p className="mt-1">Coba ubah kata kunci atau ganti filter di atas.</p>
+              </div>
+            ) : (
+              filtered.map((item) => {
+                const last = item.messages?.[0];
+                const active = item.id === selectedId;
+                const hasUnread = (item.unreadCount ?? 0) > 0;
+                const isGroup = Boolean(item.isGroup);
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => handleSelectConversation(item.id)}
+                    aria-current={active ? 'true' : undefined}
+                    aria-label={`Percakapan dengan ${item.name}`}
+                    className={cn(
+                      'flex h-[72px] items-center gap-3 px-3.5 cursor-pointer transition-colors select-none',
+                      active ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'
+                    )}
+                  >
+                    {/* Avatar */}
+                    <ContactAvatar
+                      size="lg"
+                      photoUrl={item.photoUrl}
+                      name={item.name}
+                      isGroup={isGroup}
+                      isWhatsAppOfficial={item.remoteJid === '0@s.whatsapp.net' || item.name === 'WhatsApp'}
+                    />
+
+                    {/* Content Column */}
+                    <div className="min-w-0 flex-1 pr-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="truncate text-[15px] font-semibold text-[#111b21]">
+                          {item.name}
                         </span>
+                        <time className={cn(
+                          'shrink-0 text-[12px]',
+                          hasUnread ? 'font-semibold text-[#00a884]' : 'text-[#667781]'
+                        )}>
+                          {formatWaTimestamp(last?.timestamp)}
+                        </time>
+                      </div>
+
+                      <div className="mt-0.5 flex items-center justify-between gap-1">
+                        <span className="truncate text-[13px] text-[#667781] flex items-center gap-1">
+                          {last?.isFromMe && (
+                            last.status === 'pending' ? (
+                              <span title="Menunggu" className="shrink-0 flex items-center text-[#8696a0]">
+                                <Clock size={12} />
+                              </span>
+                            ) : last.status === 'sent' ? (
+                              <span title="Terkirim" className="shrink-0 flex items-center">
+                                <Check size={14} className="text-[#8696a0]" />
+                              </span>
+                            ) : (
+                              <span title={last.status === 'read' ? 'Sudah dibaca' : 'Tersampaikan'} className="shrink-0 flex items-center">
+                                <CheckCheck
+                                  size={15}
+                                  className={last.status === 'read' ? 'text-[#53bdeb]' : 'text-[#8696a0]'}
+                                />
+                              </span>
+                            )
+                          )}
+                          {last?.messageType === 'imageMessage' ? (
+                            <span className="inline-flex items-center gap-1"><ImageIcon size={13} /> Foto</span>
+                          ) : last?.messageType === 'documentMessage' ? (
+                            <span className="inline-flex items-center gap-1"><FileText size={13} /> Dokumen</span>
+                          ) : last?.messageType === 'audioMessage' ? (
+                            <span className="inline-flex items-center gap-1"><Mic size={13} /> Pesan suara</span>
+                          ) : (
+                            <span className="truncate">{last?.messageText || 'Belum ada pesan'}</span>
+                          )}
+                        </span>
+
+                        {hasUnread && (
+                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[#25d366] px-1.5 text-[11px] font-bold text-white shadow-2xs animate-fade-in">
+                            {item.unreadCount}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  </div>
+                );
+              })
+            )}
+            </div>
+          )}
+        </aside>
+
+        {/* Center Column: WhatsApp Web Chat Space */}
+        <section className={cn(
+          'inbox-chat flex flex-col bg-white min-w-0',
+          mobileView === 'list' && 'hidden md:flex'
+        )}>
+          {!isConnected && !selected ? (
+            <div className="grid h-full place-items-center p-8 bg-zinc-50/40">
+              <div className="max-w-md text-center">
+                <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-amber-50 text-amber-600 border border-amber-200 shadow-sm">
+                  <WifiOff size={36} />
+                </div>
+                <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700">
+                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>
+                    Status: {sessionQuery.data?.status === 'qr_ready' ? 'Menunggu Scan QR' : sessionQuery.data?.status === 'connecting' ? 'Menghubungkan...' : 'Tidak Terhubung'}
+                  </span>
+                </div>
+                <h2 className="mt-4 font-display text-2xl font-black tracking-tight text-zinc-950">
+                  WhatsApp Tidak Terhubung
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+                  Perangkat WhatsApp untuk brand <strong>{activeBrand?.name ?? ''}</strong> saat ini tidak terhubung. Riwayat percakapan tetap bisa dibuka dari daftar; pesan baru dan pengiriman menunggu perangkat terhubung.
+                </p>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  {canManageDevice ? (
+                    <Link to={`/devices/${brandId}`}>
+                      <Button size="md" className="gap-2 shadow-sm font-bold">
+                        <Smartphone size={16} />
+                        Hubungkan Perangkat Sekarang
+                      </Button>
+                    </Link>
+                  ) : (
+                    <p className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs text-zinc-600">
+                      Silakan hubungi Administrator untuk menghubungkan perangkat WhatsApp biro ini.
+                    </p>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => {
+                      void sessionQuery.refetch();
+                      void conversations.refetch();
+                    }}
+                    className="gap-2"
+                  >
+                    <RefreshCw size={14} className={sessionQuery.isFetching ? 'animate-spin' : ''} />
+                    Periksa Status
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : selected ? (
+            <>
+              {/* WhatsApp Web Chat Header */}
+              <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-[#e9edef] bg-[#f0f2f5] px-4">
+                <div
+                  className="flex items-center gap-3 min-w-0 cursor-pointer select-none"
+                  onClick={() => setSidePanelTab((prev) => (prev ? null : 'profile'))}
+                  title={sidePanelTab ? 'Klik untuk menutup panel samping' : 'Klik untuk membuka profil prospek'}
+                >
+                  {/* Mobile Back Button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden mr-0.5 shrink-0 text-[#54656f]"
+                    onClick={() => setMobileView('list')}
+                    aria-label="Kembali ke daftar percakapan"
+                  >
+                    <ArrowLeft size={18} />
+                  </Button>
+
+                  {/* Avatar */}
+                  <ContactAvatar
+                    size="md"
+                    photoUrl={selected.photoUrl}
+                    name={selected.name}
+                    isGroup={selected.isGroup}
+                    isWhatsAppOfficial={selected.remoteJid === '0@s.whatsapp.net' || selected.name === 'WhatsApp'}
+                  />
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate text-sm font-semibold text-[#111b21]">{selected.name}</h3>
+                      {selected.leadSource === 'meta_ads' && (
+                        <span
+                          title={[selected.adHeadline, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-950 px-2 py-0.5 text-[9px] font-bold text-white"
+                        >
+                          <Megaphone size={10} />Meta Ads
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="truncate text-[11px] text-[#667781]">
+                      {selected.remoteJid === '0@s.whatsapp.net' || selected.name === 'WhatsApp'
+                        ? 'Akun Resmi WhatsApp'
+                        : selected.name?.includes('(Anda)')
+                        ? 'Pesan ke nomor Anda sendiri'
+                        : selected.isGroup
+                        ? 'Grup WhatsApp'
+                        : selected.phone
+                        ? (selected.phone.startsWith('+') ? selected.phone : `+${selected.phone}`)
+                        : 'WhatsApp'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right Action Tools */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Status Pipeline Badge */}
+                  {!selected.isGroup && (
+                    <span
+                      onClick={() => setSidePanelTab('profile')}
+                      className="cursor-pointer"
+                      title="Status Pipeline (Klik untuk membuka profil)"
+                    >
+                      <Badge value={selected.status || 'new'} className="shrink-0 cursor-pointer hover:opacity-85 transition-opacity" />
+                    </span>
+                  )}
+
+                  {/* PIC Status Badge */}
+                  {selected.user?.name ? (
+                    <span
+                      onClick={() => setSidePanelTab('profile')}
+                      className={cn(
+                        'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:opacity-85 transition-opacity',
+                        isPic
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
+                      )}
+                      title={`Penanggung jawab chat: ${selected.user.name} (Klik untuk membuka profil)`}
+                    >
+                      {isPic ? 'PIC Anda' : `PIC: ${selected.user.name}`}
+                    </span>
+                  ) : (
+                    <span
+                      onClick={() => setSidePanelTab('profile')}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:opacity-85 transition-opacity"
+                      title="Percakapan belum memiliki PIC (Klik untuk membuka profil)"
+                    >
+                      Belum ada PIC
+                    </span>
+                  )}
+
+                  {user?.role === 'cs' && isUnassigned && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="gap-1.5 text-xs bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 font-semibold ml-0.5"
+                      onClick={() => claimMutation.mutate(selected.id)}
+                      disabled={claimMutation.isPending}
+                      title="Klaim percakapan ini sebagai PIC Anda"
+                    >
+                      <UserPlus2 size={14} />
+                      <span className="hidden sm:inline">Klaim PIC</span>
+                    </Button>
+                  )}
+
+                  {!sidePanelTab && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSidePanelTab('profile')}
+                      className="gap-1.5 text-xs text-[#54656f] hover:text-[#111b21] hover:bg-black/5"
+                      title="Buka Profil Prospek & Copilot"
+                    >
+                      <User size={15} className="text-[#00a884]" />
+                      <span className="hidden sm:inline">Info Prospek</span>
+                    </Button>
+                  )}
+                </div>
+              </header>
+
+              {/* Chat Message Timeline with WhatsApp Web Wallpaper */}
+              <div ref={timelineRef} className="thin-scrollbar flex-1 overflow-y-auto wa-chat-bg px-3 py-4 sm:px-6">
+                <div className="mx-auto max-w-3xl space-y-1.5">
+                  {/* Encrypted Notice Banner */}
+                  <div className="mb-4 text-center">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffeecd] px-3 py-1 text-[11px] text-[#54656f] shadow-2xs">
+                      <ShieldCheck size={12} className="text-[#008069]" />
+                      Pesan terenkripsi secara end-to-end oleh WhatsApp
+                    </span>
+                  </div>
+
+                  {messages.isLoading && (
+                    <div className="space-y-3" role="status" aria-label="Memuat percakapan">
+                      <div className="h-14 w-2/3 animate-pulse rounded-lg bg-white/70" />
+                      <div className="ml-auto h-16 w-3/4 animate-pulse rounded-lg bg-[#d9fdd3]/70" />
+                      <div className="h-12 w-1/2 animate-pulse rounded-lg bg-white/70" />
+                    </div>
+                  )}
+
+                  {messages.isError && (
+                    <div className="mx-auto max-w-sm rounded-2xl border border-red-200 bg-white p-5 text-center shadow-sm">
+                      <p className="text-sm font-bold text-red-600">Pesan gagal dimuat</p>
+                      <p className="mt-1 text-xs text-zinc-500">{messages.error.message}</p>
+                      <Button size="sm" variant="secondary" className="mt-3" onClick={() => void messages.refetch()}>
+                        <RefreshCw size={13} />Coba lagi
+                      </Button>
+                    </div>
+                  )}
+
+                  {!messages.isLoading && !messages.isError && messages.data?.length === 0 && (
+                    <div className="grid min-h-[260px] place-items-center text-center">
+                      <div className="rounded-2xl bg-white/90 p-6 shadow-sm max-w-xs">
+                        <MessageSquareText className="mx-auto text-[#00a884]" size={36} />
+                        <p className="mt-3 text-sm font-bold text-[#111b21]">Belum ada riwayat pesan</p>
+                        <p className="mt-1 text-xs leading-5 text-[#667781]">
+                          Pesan baru dan riwayat WhatsApp akan otomatis tersinkronisasi di sini.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Render Message List with WhatsApp Bubbles */}
+                  {(messages.data ?? [])
+                    .filter((item) => item.messageType !== 'protocolMessage' && item.messageType !== 'reactionMessage')
+                    .map((item, index, arr) => {
+                    const prev = arr[index - 1];
+                    const isNewDate = !prev || formatDateSeparator(item.timestamp) !== formatDateSeparator(prev.timestamp);
+                    const isMessageDeleted = Boolean(item.isDeleted);
+                    const isRevealedByAdmin = isAdmin && (showDeletedMessages || revealedDeletedIds.has(item.id));
+
+                    return (
+                      <div key={item.id} id={`msg-${item.messageId}`} className="transition-colors duration-500 rounded-lg">
+                        {isNewDate && (
+                          <div className="my-3 flex items-center justify-center">
+                            <span className="rounded-lg bg-white/95 px-3 py-1 text-[11px] font-medium text-[#54656f] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] uppercase">
+                              {formatDateSeparator(item.timestamp)}
+                            </span>
+                          </div>
+                        )}
+
+                        {(() => {
+                          const isPickerOpen = activeReactionMessageId === item.id;
+
+                          const reactionTrigger = (
+                            <div className="relative shrink-0 flex items-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveReactionMessageId((prev) => (prev === item.id ? null : item.id));
+                                }}
+                                className={cn(
+                                  'h-6 w-6 sm:h-7 sm:w-7 rounded-full bg-white text-[#54656f] hover:text-[#111b21] shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-black/10 flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer',
+                                  isPickerOpen
+                                    ? 'opacity-100 ring-2 ring-[#00a884]/30'
+                                    : 'opacity-0 group-hover:opacity-100 transition-opacity duration-150'
+                                )}
+                                title="Beri reaksi"
+                                aria-label="Beri reaksi"
+                              >
+                                <Smile size={15} />
+                              </button>
+
+                              {/* Quick Reaction Floating Popover */}
+                              {isPickerOpen && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-30 cursor-default"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveReactionMessageId(null);
+                                    }}
+                                  />
+                                  <div
+                                    className={cn(
+                                      'absolute bottom-full mb-2 z-40 flex items-center gap-1 rounded-full bg-white px-2 py-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.18)] border border-black/10 animate-in fade-in zoom-in-95 duration-150 select-none',
+                                      item.isFromMe ? 'right-0 sm:right-auto sm:left-0' : 'left-0'
+                                    )}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {QUICK_REACTIONS.map((emoji) => {
+                                      const isSelected = item.reaction === emoji;
+                                      // Jika emoji ini sudah dipilih oleh orang lain (bukan saya), disable toggle
+                                      const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
+                                      const isProspectReaction = isSelected && item.reactionUserId === null && !item.isFromMe;
+                                      const isOtherCSReaction = isSelected && item.reactionUserId !== null && item.reactionUserId !== user?.id && !isAdmin;
+                                      const canToggleThisEmoji = !isProspectReaction && !isOtherCSReaction;
+                                      return (
+                                        <button
+                                          key={emoji}
+                                          type="button"
+                                          disabled={!canToggleThisEmoji}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (canToggleThisEmoji) reactMutation.mutate({ messageId: item.id, emoji });
+                                          }}
+                                          className={cn(
+                                            'h-8 w-8 rounded-full flex items-center justify-center text-lg hover:scale-125 active:scale-90 transition-all hover:bg-black/5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100',
+                                            isSelected && 'bg-emerald-100 ring-1 ring-emerald-500 scale-110'
+                                          )}
+                                          title={
+                                            isProspectReaction ? 'Reaksi jamaah (tidak bisa dihapus)' :
+                                            isOtherCSReaction ? 'Reaksi CS lain (tidak bisa dihapus)' :
+                                            isSelected ? `Hapus reaksi ${emoji}` : `Beri reaksi ${emoji}`
+                                          }
+                                        >
+                                          <span className="leading-none">{emoji}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+
+                          return (
+                            <div className={cn(
+                              'group relative flex items-center gap-1.5 my-1',
+                              item.isFromMe ? 'justify-end' : 'justify-start',
+                              item.reaction ? 'mb-3' : 'mb-1'
+                            )}>
+                              {item.isFromMe && !isMessageDeleted && canSend && reactionTrigger}
+
+                              <div className={cn(
+                                'relative max-w-[82%] sm:max-w-[65%] rounded-lg px-3 py-1.5 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] transition-all',
+                                item.isFromMe
+                                  ? 'rounded-tr-none bg-[#d9fdd3] text-[#111b21]'
+                                  : 'rounded-tl-none bg-white text-[#111b21]',
+                                isMessageDeleted && !isRevealedByAdmin && 'opacity-85 bg-[#f0f2f5] text-[#667781] border border-black/5'
+                              )}>
+                                {/* WhatsApp Web Context Menu Trigger (ChevronDown) on Bubble Hover */}
+                                <div className="absolute top-1 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                  <DropdownMenu.Root>
+                                    <DropdownMenu.Trigger asChild>
+                                      <button
+                                        type="button"
+                                        className="h-5 w-5 rounded-full bg-white/90 hover:bg-white text-[#54656f] hover:text-[#111b21] shadow-xs flex items-center justify-center transition cursor-pointer border border-black/5"
+                                        title="Menu pesan"
+                                        aria-label="Menu pesan"
+                                      >
+                                        <ChevronDown size={13} />
+                                      </button>
+                                    </DropdownMenu.Trigger>
+                                    <DropdownMenu.Portal>
+                                      <DropdownMenu.Content
+                                        align={item.isFromMe ? 'end' : 'start'}
+                                        sideOffset={4}
+                                        className="z-50 min-w-[160px] rounded-xl bg-white p-1 shadow-[0_4px_16px_rgba(0,0,0,0.15)] border border-black/10 text-xs animate-in fade-in zoom-in-95"
+                                      >
+                                        <DropdownMenu.Item
+                                          disabled={!canReply}
+                                          onClick={() => {
+                                            if (!canReply) return;
+                                            setReplyingTo({
+                                              id: item.id,
+                                              messageId: item.messageId,
+                                              senderName: item.isFromMe ? 'Anda' : (item.senderName || selected.name),
+                                              text: item.messageText || (item.messageType === 'imageMessage' ? 'Foto' : 'Pesan'),
+                                            });
+                                            composerRef.current?.focus();
+                                          }}
+                                          className={cn(
+                                            'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] outline-none',
+                                            canReply ? 'hover:bg-[#f0f2f5] cursor-pointer' : 'opacity-40 cursor-not-allowed'
+                                          )}
+                                          title={canReply ? 'Balas pesan' : `Hanya Admin dan PIC (${selected.user?.name || 'CS lain'}) yang dapat membalas`}
+                                        >
+                                          <CornerUpLeft size={14} className="text-[#54656f]" />
+                                          <span>Balas {!canReply && '(Hanya Admin/PIC)'}</span>
+                                        </DropdownMenu.Item>
+
+                                        {item.messageText && !isMessageDeleted && (
+                                          <DropdownMenu.Item
+                                            onClick={() => {
+                                              void navigator.clipboard.writeText(item.messageText);
+                                              showToast('Teks pesan disalin');
+                                            }}
+                                            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer"
+                                          >
+                                            <Copy size={14} className="text-[#54656f]" />
+                                            <span>Salin</span>
+                                          </DropdownMenu.Item>
+                                        )}
+
+                                        {!isMessageDeleted && canSend && (
+                                          <DropdownMenu.Item
+                                            onClick={() => {
+                                              setActiveReactionMessageId(item.id);
+                                            }}
+                                            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer"
+                                          >
+                                            <Smile size={14} className="text-[#54656f]" />
+                                            <span>Reaksi</span>
+                                          </DropdownMenu.Item>
+                                        )}
+
+                                        <DropdownMenu.Item
+                                          onClick={() => {
+                                            starMutation.mutate(item.id);
+                                          }}
+                                          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer"
+                                        >
+                                          <Star size={14} className={cn(item.isStarred ? 'fill-amber-400 text-amber-500' : 'text-[#54656f]')} />
+                                          <span>{item.isStarred ? 'Hapus bintang' : 'Beri bintang'}</span>
+                                        </DropdownMenu.Item>
+
+                                        {/* Bukti transfer langsung dari chat: server menyalin berkas, tanpa unduh-unggah ulang */}
+                                        {!isMessageDeleted && !item.isFromMe && item.mediaUrl && (item.messageType === 'imageMessage' || item.messageType === 'documentMessage') && (
+                                          selected?.paymentProofMessageId === item.messageId ? (
+                                            <DropdownMenu.Item
+                                              disabled
+                                              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-emerald-700 outline-none"
+                                            >
+                                              <ShieldCheck size={14} />
+                                              <span>Sudah diajukan ke Finance</span>
+                                            </DropdownMenu.Item>
+                                          ) : (
+                                            <DropdownMenu.Item
+                                              onClick={() => proofFromMessage.mutate(item.id)}
+                                              disabled={proofFromMessage.isPending}
+                                              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer"
+                                            >
+                                              <ShieldCheck size={14} className="text-emerald-600" />
+                                              <span>Kirim ke Finance sebagai bukti transfer</span>
+                                            </DropdownMenu.Item>
+                                          )
+                                        )}
+
+                                        {!isMessageDeleted && item.isFromMe && canSend && (
+                                          <>
+                                            <DropdownMenu.Separator className="my-1 h-px bg-[#e9edef]" />
+                                            <DropdownMenu.Item
+                                              onClick={() => setDeleteConfirmId(item.id)}
+                                              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-red-600 hover:bg-red-50 outline-none cursor-pointer font-medium"
+                                            >
+                                              <Trash2 size={14} />
+                                              <span>Hapus pesan</span>
+                                            </DropdownMenu.Item>
+                                          </>
+                                        )}
+                                      </DropdownMenu.Content>
+                                    </DropdownMenu.Portal>
+                                  </DropdownMenu.Root>
+                                </div>
+
+                                {isMessageDeleted && !isRevealedByAdmin ? (
+                                  /* Deleted Message view for regular user / unrevealed */
+                                  <div className="flex items-center gap-1.5 py-0.5 pr-6 text-[13px] italic text-[#667781] select-none">
+                                    <Ban size={14} className="shrink-0 text-[#8696a0]" />
+                                    <span>{item.isFromMe ? 'Anda telah menghapus pesan ini' : 'Pesan ini telah dihapus'}</span>
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setRevealedDeletedIds((prev) => {
+                                            const next = new Set(prev);
+                                            next.add(item.id);
+                                            return next;
+                                          });
+                                        }}
+                                        className="ml-2 inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 hover:bg-amber-500/25 not-italic cursor-pointer"
+                                        title="Lihat pesan yang dihapus (Mode Admin)"
+                                      >
+                                        <Eye size={11} /> Lihat
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  /* Normal Message or Admin-Revealed Deleted Message */
+                                  <>
+                                    {/* Admin Revealed Banner */}
+                                    {isMessageDeleted && isRevealedByAdmin && (
+                                      <div className="mb-1.5 flex items-center justify-between gap-2 border-b border-amber-500/30 pb-1 text-[10.5px] font-bold text-amber-800">
+                                        <span className="flex items-center gap-1">
+                                          <Eye size={12} className="text-amber-600" />
+                                          Pesan Dihapus {item.deletedAt ? `(${new Date(item.deletedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})` : ''}
+                                        </span>
+                                        {!showDeletedMessages && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setRevealedDeletedIds((prev) => {
+                                                const next = new Set(prev);
+                                                next.delete(item.id);
+                                                return next;
+                                              });
+                                            }}
+                                            className="text-amber-700 hover:underline cursor-pointer"
+                                          >
+                                            Tutup
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Sender Name (CS name on outgoing, contact name on incoming) - always shown */}
+                                    {item.isFromMe && item.senderName && (
+                                      <p className="text-[10.5px] font-bold text-[#008069] mb-0.5 leading-tight">
+                                        {item.senderName}
+                                      </p>
+                                    )}
+                                    {!item.isFromMe && (
+                                      <p className="text-[10.5px] font-bold text-[#53bdeb] mb-0.5 leading-tight">
+                                        {item.senderName || selected.name || 'Jamaah'}
+                                      </p>
+                                    )}
+
+                                    {/* Quoted Message Preview inside bubble */}
+                                    {(item.quotedText || item.quotedMessageId) && (
+                                      <div
+                                        onClick={() => scrollToMessage(item.quotedMessageId)}
+                                        className={cn(
+                                          'mb-1.5 rounded border-l-4 px-2.5 py-1.5 text-xs cursor-pointer select-none transition-opacity hover:opacity-85',
+                                          item.isFromMe
+                                            ? 'border-[#00a884] bg-black/[0.04]'
+                                            : 'border-[#53bdeb] bg-[#f0f2f5]'
+                                        )}
+                                        title="Klik untuk menuju ke pesan yang dikutip"
+                                      >
+                                        <div className="font-bold text-[11px] text-[#008069]">
+                                          {item.quotedSender || (item.isFromMe ? 'Anda' : selected.name)}
+                                        </div>
+                                        <div className="truncate text-[12px] text-[#54656f]">
+                                          {item.quotedText || 'Pesan'}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                     {/* Image Media Preview */}
+                                     {item.messageType === 'imageMessage' && (
+                                       <div className="mb-1.5 overflow-hidden rounded-xl max-w-[280px]">
+                                         {item.mediaUrl ? (
+                                           <div
+                                             className="relative group cursor-pointer overflow-hidden rounded-xl border border-black/10 bg-zinc-100"
+                                             onClick={() => setPreviewFlyer(item.mediaUrl)}
+                                           >
+                                             <img
+                                               src={resolveMediaUrl(item.mediaUrl)}
+                                               alt={item.messageText && item.messageText !== '[Gambar]' ? item.messageText : 'Foto'}
+                                               className="w-full max-h-[300px] object-cover rounded-xl transition duration-200 group-hover:scale-[1.01]"
+                                               loading="lazy"
+                                             />
+                                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                               <span className="bg-black/70 text-white text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md">
+                                                 <Eye size={13} /> Perbesar
+                                               </span>
+                                             </div>
+                                           </div>
+                                         ) : (
+                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
+                                             <ImageIcon size={16} className="shrink-0 text-[#00a884]" />
+                                             <span className="font-semibold">Foto / Gambar</span>
+                                           </div>
+                                         )}
+                                       </div>
+                                     )}
+
+                                     {/* Video Media Preview */}
+                                     {item.messageType === 'videoMessage' && (
+                                       <div className="mb-1.5 overflow-hidden rounded-xl max-w-[280px]">
+                                         {item.mediaUrl ? (
+                                           <div className="rounded-xl overflow-hidden bg-black border border-black/10">
+                                             <video
+                                               src={resolveMediaUrl(item.mediaUrl)}
+                                               controls
+                                               playsInline
+                                               className="w-full rounded-xl max-h-[220px]"
+                                               preload="metadata"
+                                             />
+                                           </div>
+                                         ) : (
+                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
+                                             <ImageIcon size={16} className="shrink-0 text-purple-500" />
+                                             <span className="font-semibold">Video</span>
+                                           </div>
+                                         )}
+                                       </div>
+                                     )}
+
+                                     {/* Audio / Voicenote Player */}
+                                     {(item.messageType === 'audioMessage' || item.messageType === 'pttMessage') && (
+                                       <div className="mb-1.5">
+                                         {item.mediaUrl ? (
+                                           <div className="flex items-center gap-2 rounded-2xl bg-black/5 p-2 min-w-[220px] max-w-[280px] border border-black/5">
+                                             <div className="grid h-8 w-8 place-items-center rounded-full bg-emerald-100 text-emerald-700 shrink-0">
+                                               <Mic size={16} />
+                                             </div>
+                                             <audio
+                                               src={resolveMediaUrl(item.mediaUrl)}
+                                               controls
+                                               className="h-8 flex-1 outline-none min-w-0"
+                                               preload="metadata"
+                                             />
+                                           </div>
+                                         ) : (
+                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
+                                             <Mic size={16} className="shrink-0 text-amber-600" />
+                                             <span className="font-semibold">Pesan Suara (Voice Note)</span>
+                                           </div>
+                                         )}
+                                       </div>
+                                     )}
+
+                                     {/* Document / File */}
+                                     {item.messageType === 'documentMessage' && (
+                                       <div className="mb-1.5">
+                                         {item.mediaUrl ? (
+                                           <a
+                                             href={resolveMediaUrl(item.mediaUrl)}
+                                             download={item.messageText || 'dokumen'}
+                                             target="_blank"
+                                             rel="noopener noreferrer"
+                                             className="flex items-center justify-between gap-3 rounded-xl bg-black/5 p-2.5 text-xs hover:bg-black/10 transition border border-black/5 group"
+                                             title="Klik untuk mengunduh berkas"
+                                           >
+                                             <div className="flex items-center gap-2.5 min-w-0">
+                                               <div className="grid h-9 w-9 place-items-center rounded-lg bg-purple-100 text-purple-700 shrink-0">
+                                                 <FileText size={18} />
+                                               </div>
+                                               <div className="min-w-0">
+                                                 <p className="font-bold text-zinc-900 truncate max-w-[160px]">
+                                                   {item.messageText || 'Dokumen'}
+                                                 </p>
+                                                 <p className="text-[10px] text-zinc-500">Klik untuk mengunduh</p>
+                                               </div>
+                                             </div>
+                                             <div className="grid h-7 w-7 place-items-center rounded-full bg-white text-zinc-600 shadow-2xs group-hover:text-[#00a884] shrink-0">
+                                               <Download size={14} />
+                                             </div>
+                                           </a>
+                                         ) : (
+                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
+                                             <FileText size={16} className="shrink-0 text-sky-600" />
+                                             <span className="font-semibold">{item.messageText || 'Dokumen Berkas / PDF'}</span>
+                                           </div>
+                                         )}
+                                       </div>
+                                     )}
+
+                                     {Boolean(item.messageText) &&
+                                       !['[Gambar]', '[Video]', '[Audio]', '[Voice Note]', '[Dokumen]', '[Stiker]', '[Lokasi]'].includes(item.messageText!.trim()) && (
+                                         <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-[#111b21] mt-1">
+                                           {item.messageText}
+                                         </p>
+                                     )}
+                                   </>
+                                 )}
+
+                                {/* Timestamp & Read Receipts inside bubble */}
+                                <span className="float-right ml-3 mt-1 inline-flex items-center gap-1 text-[11px] text-[#667781] select-none leading-none">
+                                  {item.isStarred && (
+                                    <span title="Pesan berbintang">
+                                      <Star size={11} className="fill-amber-400 text-amber-500" />
+                                    </span>
+                                  )}
+                                  <span>{formatBubbleTime(item.timestamp)}</span>
+                                  {item.isFromMe && !isMessageDeleted && (
+                                    item.status === 'failed' ? (
+                                      <span title="Gagal terkirim" className="text-red-500">
+                                        <AlertCircle size={12} />
+                                      </span>
+                                    ) : item.status === 'pending' ? (
+                                      <span title="Menunggu" className="text-[#8696a0]">
+                                        <Clock size={11} />
+                                      </span>
+                                    ) : item.status === 'sent' ? (
+                                      <span title="Terkirim" className="text-[#8696a0] inline-flex items-center">
+                                        <Check size={14} />
+                                      </span>
+                                    ) : (
+                                      <span title={item.status === 'read' ? 'Sudah dibaca' : 'Tersampaikan'} className="inline-flex items-center">
+                                        <CheckCheck
+                                          size={15}
+                                          className={item.status === 'read' ? 'text-[#53bdeb]' : 'text-[#8696a0]'}
+                                        />
+                                      </span>
+                                    )
+                                  )}
+                                </span>
+
+                                {/* Pinned Reaction Emoji Badge on Bubble */}
+                                {item.reaction && !isMessageDeleted && (() => {
+                                  const isAdminUser = user?.role === 'superadmin' || user?.role === 'admin';
+                                  const isProspectReaction = item.reactionUserId === null && !item.isFromMe;
+                                  const isMyReaction = item.reactionUserId === user?.id;
+                                  const canRemoveReaction = !isProspectReaction && (isMyReaction || isAdminUser);
+                                  return (
+                                    <button
+                                      type="button"
+                                      disabled={!canRemoveReaction}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (canRemoveReaction) reactMutation.mutate({ messageId: item.id, emoji: item.reaction! });
+                                      }}
+                                      title={
+                                        isProspectReaction ? 'Reaksi dari jamaah' :
+                                        !isMyReaction && !isAdminUser ? 'Reaksi dari CS lain' :
+                                        'Klik untuk menghapus reaksi'
+                                      }
+                                      className={cn(
+                                        'absolute -bottom-2.5 right-2 flex items-center gap-0.5 rounded-full bg-white px-1.5 py-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.15)] border border-black/10 select-none z-10 transition-all',
+                                        canRemoveReaction ? 'cursor-pointer hover:scale-110 active:scale-95' : 'cursor-default opacity-90'
+                                      )}
+                                    >
+                                      <span className="text-[13px] leading-none">{item.reaction}</span>
+                                    </button>
+                                  );
+                                })()}
+                              </div>
+
+                              {!item.isFromMe && !isMessageDeleted && canSend && reactionTrigger}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    );
+                  })}
                   <div ref={endRef} />
                 </div>
               </div>
 
-              <form onSubmit={submit} className="border-t bg-white p-3 sm:p-4">
-                <div className="mx-auto flex max-w-3xl items-end gap-2">
-                  <Button type="button" size="icon" variant="ghost"><Paperclip size={18} /></Button>
-                  <textarea
-                    ref={composerRef}
-                    rows={1}
-                    value={message}
-                    onChange={(event) => setMessage(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
-                        event.preventDefault();
-                        event.currentTarget.form?.requestSubmit();
-                      }
-                    }}
-                    placeholder="Tulis pesan atau pilih skrip Copilot…"
-                    className="min-h-11 max-h-32 flex-1 resize-none rounded-xl border bg-zinc-50 px-3 py-3 text-sm"
-                  />
-                  <Button size="icon" disabled={!message.trim() || send.isPending} aria-label="Kirim pesan"><ArrowUp size={18} /></Button>
+              {/* Quick Reply Chips Bar */}
+              {selected && canSend && (
+                <div className="border-t border-[#e9edef] bg-[#f0f2f5] px-3 py-1.5 shrink-0">
+                  <div className="thin-scrollbar mx-auto flex max-w-3xl items-center gap-1.5 overflow-x-auto pb-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#667781] shrink-0 mr-1">
+                      Template:
+                    </span>
+                    {quickReplyChips.map((chip) => {
+                      const Icon = chip.icon;
+                      return (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => handleInsertTemplate(chip.id)}
+                          className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#e9edef] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#111b21] shadow-2xs transition hover:bg-[#f0f2f5] active:scale-95 cursor-pointer"
+                        >
+                          <Icon size={12} className="text-[#008069]" />
+                          <span>{chip.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                {send.error && <p className="mx-auto mt-2 max-w-3xl text-xs text-zinc-500">{send.error.message}</p>}
-              </form>
+              )}
+
+              {/* WhatsApp Web Chat Composer Form or Locked Notice */}
+              {!isConnected ? (
+                <div className="border-t border-[#e9edef] bg-[#f0f2f5] p-3.5 shrink-0" role="status">
+                  <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <WifiOff size={16} className="shrink-0 text-amber-600" />
+                    <span>Pengiriman dinonaktifkan karena WhatsApp brand terputus. Riwayat dan profil tetap dapat dibaca.</span>
+                  </div>
+                </div>
+              ) : canReply ? (
+                <form onSubmit={submit} className="border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
+                  {/* Hidden file inputs: Dokumen, Foto & Video, dan Flyer Paket */}
+                  <input
+                    ref={documentInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleProcessFile(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <input
+                    ref={mediaInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,video/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleProcessFile(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <input
+                    ref={flyerInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleProcessFlyerFile(file);
+                      e.target.value = '';
+                    }}
+                  />
+
+                  {/* Autocompress loading indicator */}
+                  {isCompressing && (
+                    <div className="mx-auto mb-2 max-w-3xl flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2 text-xs text-emerald-800 shadow-2xs animate-pulse">
+                      <RefreshCw size={14} className="animate-spin text-[#00a884] shrink-0" />
+                      <span className="font-medium">Sedang mengompres gambar otomatis agar tidak membebani server...</span>
+                    </div>
+                  )}
+
+                  {/* WhatsApp Web Media Preview Card (before sending) */}
+                  {mediaPreview && (
+                    <div className="mx-auto mb-2 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="relative rounded-2xl border border-[#e9edef] bg-white p-3.5 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-2.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-zinc-800">Pratinjau Media</span>
+                            {mediaPreview.isPackageFlyer && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-800 border border-emerald-300/60">
+                                🕋 {mediaPreview.packageName}
+                              </span>
+                            )}
+                            {mediaPreview.isCompressed ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200">
+                                📉 Dicompress: {formatFileSize(mediaPreview.originalSize)} ➔ {formatFileSize(mediaPreview.compressedSize)} (Hemat {mediaPreview.savingsPercent}%)
+                              </span>
+                            ) : (
+                              <span className="text-[10.5px] text-zinc-500 font-medium">
+                                Ukuran: {formatFileSize(mediaPreview.compressedSize)}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              URL.revokeObjectURL(mediaPreview.url);
+                              setMediaPreview(null);
+                            }}
+                            className="h-6 w-6 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer"
+                            title="Batal"
+                          >
+                            <X size={15} />
+                          </button>
+                        </div>
+
+                        <div className="flex items-start gap-3.5">
+                          {mediaPreview.type.startsWith('image/') ? (
+                            <div className="relative h-20 w-20 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-zinc-100">
+                              <img src={mediaPreview.url} alt="Preview" className="h-full w-full object-cover" />
+                            </div>
+                          ) : mediaPreview.type.startsWith('video/') ? (
+                            <div className="relative h-20 w-20 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-black">
+                              <video src={mediaPreview.url} className="h-full w-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="grid h-20 w-20 place-items-center rounded-xl bg-purple-50 border border-purple-200 shrink-0">
+                              <FileText size={30} className="text-purple-600" />
+                            </div>
+                          )}
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-zinc-900 truncate">{mediaPreview.name}</p>
+                            <p className="text-[11px] text-zinc-500 mt-0.5">{mediaPreview.type || 'Dokumen'}</p>
+                            {mediaPreview.isPackageFlyer && (
+                              <p className="text-[11px] text-emerald-800 mt-1 font-medium">
+                                📄 Flyer resmi umroh siap dikirim dengan rincian jadwal, maskapai, hotel, dan rincian harga.
+                              </p>
+                            )}
+                            {mediaPreview.isCompressed && (
+                              <p className="text-[11px] text-emerald-700 mt-0.5">
+                                ✅ Resolusi dan ukuran telah dioptimalkan otomatis agar server tetap cepat dan hemat penyimpanan.
+                              </p>
+                            )}
+
+                            <div className="mt-2.5 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  URL.revokeObjectURL(mediaPreview.url);
+                                  setMediaPreview(null);
+                                }}
+                                className="rounded-lg px-3 py-1 text-xs font-semibold text-zinc-600 border border-zinc-200 bg-white hover:bg-zinc-50 transition cursor-pointer"
+                              >
+                                Batal
+                              </button>
+                              {mediaPreview.isPackageFlyer && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPackagePickerModal(true)}
+                                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 transition cursor-pointer"
+                                >
+                                  Ganti Paket
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={uploadingMedia}
+                                onClick={() => void handleSendMedia()}
+                                className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1 text-xs font-bold text-white bg-[#00a884] hover:bg-[#008f6f] active:scale-95 transition cursor-pointer disabled:opacity-60 shadow-xs"
+                              >
+                                {uploadingMedia ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                                <span>{uploadingMedia ? 'Mengirim...' : 'Kirim'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* WhatsApp Web Quoted Reply Preview Bar */}
+                  {replyingTo && (
+                    <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border-l-4 border-[#00a884] bg-white p-2.5 shadow-2xs animate-fade-in">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#00a884]">
+                          <CornerUpLeft size={13} />
+                          <span>Membalas {replyingTo.senderName}</span>
+                        </div>
+                        <p className="truncate text-xs text-[#667781] mt-0.5">{replyingTo.text}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReplyingTo(null)}
+                        className="h-6 w-6 rounded-full flex items-center justify-center text-[#54656f] hover:bg-black/5 hover:text-[#111b21] transition cursor-pointer"
+                        title="Batal membalas"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="mx-auto flex max-w-3xl items-end gap-1.5 sm:gap-2">
+                    {/* Emoji Button & Picker Popover */}
+                    <div className="relative shrink-0" ref={emojiPickerContainerRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowEmojiPicker((v) => !v)}
+                        aria-label="Pilih Emoji"
+                        title="Emoji (WhatsApp Web)"
+                        className={cn(
+                          'h-10 w-10 flex items-center justify-center rounded-full transition cursor-pointer',
+                          showEmojiPicker ? 'text-[#00a884] bg-black/5' : 'text-[#54656f] hover:text-[#111b21] hover:bg-black/5'
+                        )}
+                      >
+                        <Smile size={22} />
+                      </button>
+
+                      {showEmojiPicker && (
+                        <div className="absolute bottom-12 left-0 z-50 shadow-2xl">
+                          <EmojiPicker
+                            onSelectEmoji={handleInsertEmoji}
+                            onClose={() => setShowEmojiPicker(false)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Attachment Button & Dropdown Menu (Flyer Paket, Foto & Video, Dokumen) */}
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Lampirkan Dokumen, Foto & Video, atau Flyer Paket"
+                          title="Lampirkan berkas atau flyer"
+                          className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full text-[#54656f] hover:text-[#111b21] hover:bg-black/5 transition cursor-pointer"
+                        >
+                          <Paperclip size={20} />
+                        </button>
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content
+                          side="top"
+                          align="start"
+                          sideOffset={14}
+                          className="z-50 min-w-[230px] rounded-2xl bg-white p-2 shadow-2xl border border-zinc-200 animate-in fade-in slide-in-from-bottom-2 duration-150"
+                        >
+                          {/* Flyer Paket */}
+                          <DropdownMenu.Item
+                            onClick={() => openSendFlyerModal()}
+                            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer transition border-b border-zinc-100"
+                          >
+                            <div className="grid h-8 w-8 place-items-center rounded-full bg-emerald-600 text-white shadow-xs shrink-0">
+                              <ImageIcon size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="font-semibold text-zinc-900">Flyer Paket</p>
+                                {currentPackage && (
+                                  <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 rounded px-1.5 py-0.5">
+                                    Terpilih
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] font-normal text-zinc-500 truncate">
+                                {currentPackage ? currentPackage.name : 'Brosur & jadwal resmi'}
+                              </p>
+                            </div>
+                          </DropdownMenu.Item>
+
+                          {currentPackage && (
+                            <DropdownMenu.Item
+                              onClick={() => setShowPackagePickerModal(true)}
+                              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 outline-none cursor-pointer transition border-b border-zinc-100"
+                            >
+                              <span className="text-[10px]">🔄</span>
+                              <span>Pilih brosur paket lain...</span>
+                            </DropdownMenu.Item>
+                          )}
+
+                          {/* Foto & Video */}
+                          <DropdownMenu.Item
+                            onClick={() => mediaInputRef.current?.click()}
+                            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer transition"
+                          >
+                            <div className="grid h-8 w-8 place-items-center rounded-full bg-[#007bfc] text-white shadow-xs shrink-0">
+                              <ImageIcon size={16} />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-zinc-900">Foto & Video</p>
+                              <p className="text-[10px] font-normal text-zinc-500">Gambar (Autocompress), Video</p>
+                            </div>
+                          </DropdownMenu.Item>
+
+                          {/* Dokumen */}
+                          <DropdownMenu.Item
+                            onClick={() => documentInputRef.current?.click()}
+                            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer transition"
+                          >
+                            <div className="grid h-8 w-8 place-items-center rounded-full bg-[#7f66ff] text-white shadow-xs shrink-0">
+                              <FileText size={16} />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-zinc-900">Dokumen</p>
+                              <p className="text-[10px] font-normal text-zinc-500">PDF, Word, Excel, ZIP</p>
+                            </div>
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu.Root>
+
+                    <textarea
+                      ref={composerRef}
+                      rows={1}
+                      value={message}
+                      onChange={handleComposerChange}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                          event.preventDefault();
+                          event.currentTarget.form?.requestSubmit();
+                        }
+                      }}
+                      placeholder={mediaPreview ? "Tambahkan keterangan (opsional)..." : "Ketik pesan..."}
+                      aria-label="Tulis pesan WhatsApp"
+                      className="min-h-10 max-h-36 flex-1 resize-none rounded-lg bg-white px-4 py-2.5 text-sm text-[#111b21] placeholder:text-[#8696a0] border border-transparent focus:border-[#00a884]/30 outline-none leading-relaxed shadow-2xs"
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={(!message.trim() && !mediaPreview) || send.isPending || uploadingMedia}
+                      aria-label="Kirim pesan WhatsApp"
+                      title="Kirim pesan (Enter)"
+                      className={cn(
+                        'h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-white transition shadow-xs cursor-pointer',
+                        (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia
+                          ? 'bg-[#00a884] hover:bg-[#008f6f] active:scale-95'
+                          : 'bg-[#8696a0] opacity-60 cursor-not-allowed'
+                      )}
+                    >
+                      {send.isPending || uploadingMedia ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+                    </button>
+                  </div>
+
+                  {send.error && (
+                    <div className="mx-auto mt-2 flex max-w-3xl items-center justify-between rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700" role="alert">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle size={15} className="shrink-0" />
+                        <span>{send.error.message}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void send.mutate(message.trim())}
+                        className="font-bold underline hover:no-underline ml-3 shrink-0"
+                      >
+                        Coba kirim lagi
+                      </button>
+                    </div>
+                  )}
+                </form>
+              ) : (
+                /* Locked Composer Banner when not Admin and not PIC */
+                <div className="border-t border-[#e9edef] bg-[#f0f2f5] p-3.5 shrink-0">
+                  <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs">
+                    <div className="flex items-center gap-3 text-xs text-zinc-700">
+                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200">
+                        <Lock size={16} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-zinc-950">
+                          Hanya Admin dan PIC yang dapat membalas chat
+                        </p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                          Percakapan ini ditugaskan kepada PIC <strong>{selected.user?.name || 'CS lain'}</strong>. Anda hanya memiliki akses membaca pesan.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
-            <div className="grid h-full place-items-center text-center"><div><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-zinc-100"><MessageSquareText size={24} /></span><h3 className="mt-4 font-display font-bold">Pilih percakapan</h3><p className="mt-1 text-sm text-zinc-400">Riwayat pesan akan muncul di sini.</p></div></div>
+            /* WhatsApp Web Default Empty Landing View */
+            <div className="grid h-full place-items-center text-center p-8 bg-[#f0f2f5] border-b-[6px] border-[#25d366]">
+              <div className="max-w-md">
+                <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-50 text-[#00a884] mb-6 shadow-sm border border-emerald-100">
+                  <MessageSquareText size={38} />
+                </div>
+                <h3 className="font-display text-2xl font-light tracking-tight text-[#41525d]">WhatsApp Web</h3>
+                <p className="mt-3 text-sm leading-relaxed text-[#667781]">
+                  Kirim dan terima pesan WhatsApp secara real-time. Semua percakapan tersinkronisasi langsung dengan WhatsApp di handphone Anda.
+                </p>
+                <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#8696a0]">
+                  <ShieldCheck size={14} className="text-[#8696a0]" />
+                  <span>Terenkripsi secara end-to-end</span>
+                </div>
+              </div>
+            </div>
           )}
         </section>
 
-        {sidePanel === 'copilot' ? <CopilotPanel
-            selected={selected}
-            activeTab={copilotTab}
-            onTabChange={setCopilotTab}
-            scripts={scripts}
-            loading={copilot.isLoading}
-            copiedId={copiedId}
-            open={copilotOpen}
-            onClose={() => setCopilotOpen(false)}
-            onUse={useScript}
-            onCopy={(id, script) => void copyScript(id, script)}
-          /> : <ProfilePanel selected={selected} query={query} open={copilotOpen} onClose={() => setCopilotOpen(false)} />}
+        {/* Right Panel Backdrop (mobile/tablet) */}
+        {selected && sidePanelTab && isConnected && (
+          <div
+            className="inbox-copilot-backdrop"
+            onClick={() => setSidePanelTab(null)}
+            aria-label="Tutup Panel Kanan"
+          />
+        )}
+
+        {/* Right Panel: Profil Prospek & Copilot Script */}
+        {selected && sidePanelTab && isConnected && (
+          <ChatSidePanel
+            isOpen={Boolean(sidePanelTab)}
+            activeTab={sidePanelTab}
+            onChangeTab={(tab) => setSidePanelTab(tab)}
+            onClose={() => setSidePanelTab(null)}
+            prospectId={selected.id}
+            prospectName={selected.name}
+            phone={selected.phone}
+            packageId={currentPackage?.id ?? selected.packageId}
+            packageName={currentPackage?.name}
+            brandId={brandId}
+            query={query}
+            activeBrand={activeBrand}
+            packages={packages.data ?? []}
+            onInsertText={handleInsertDirectText}
+            onSendFlyer={(pkg) => openSendFlyerModal(pkg)}
+            onOpenPackagePicker={() => setShowPackagePickerModal(true)}
+            onPreviewImage={(url) => setPreviewFlyer(url)}
+            onShowToast={showToast}
+          />
+        )}
       </div>
-    </div>
-  );
-}
 
-function normalizePhone(value?: string | null) {
-  const digits = value?.replace(/\D/g, '') ?? '';
-  if (digits.startsWith('62')) return digits;
-  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
-  if (digits.startsWith('8')) return `62${digits}`;
-  return digits;
-}
-
-function CopilotPanel({
-  selected,
-  activeTab,
-  onTabChange,
-  scripts,
-  loading,
-  copiedId,
-  open,
-  onClose,
-  onUse,
-  onCopy,
-}: {
-  selected: any;
-  activeTab: CopilotTab;
-  onTabChange(tab: CopilotTab): void;
-  scripts: any[];
-  loading: boolean;
-  copiedId: string | null;
-  open: boolean;
-  onClose(): void;
-  onUse(script: string): void;
-  onCopy(id: string, script: string): void;
-}) {
-  return (
-    <aside className={cn(
-      'inbox-copilot flex-col border-l bg-zinc-50',
-      open && 'is-open animate-slide-in',
-    )}>
-      <header className="flex h-[73px] shrink-0 items-center gap-3 border-b bg-white px-4">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-zinc-950 text-white"><WandSparkles size={18} /></span>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-display text-sm font-extrabold">Copilot percakapan</h3>
-          <p className="truncate text-[10px] text-zinc-400">Skrip untuk {selected?.name ?? 'jamaah terpilih'}</p>
-        </div>
-        <button className="inbox-copilot-close rounded-lg p-2 text-zinc-500 hover:bg-zinc-100" onClick={onClose}><X size={18} /></button>
-      </header>
-
-      {selected ? (
-        <>
-          <div className="shrink-0 border-b bg-white px-3 pb-3 pt-3">
-            <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
-              <div className="min-w-0">
-                <p className="truncate text-xs font-bold">{selected.name}</p>
-                <p className="mt-0.5 truncate text-[9px] text-zinc-500">{selected.package?.name ?? 'Paket belum dipilih'}</p>
-              </div>
-              <Badge value={selected.status} className="shrink-0 px-2 py-0.5 text-[8px]" />
-            </div>
-            <div className="thin-scrollbar flex gap-1.5 overflow-x-auto pb-0.5">
-              {copilotTabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabChange(tab.id)}
-                  className={cn('shrink-0 rounded-lg border px-3 py-2 text-[10px] font-bold transition', activeTab === tab.id ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-500 hover:border-zinc-400 hover:text-zinc-950')}
+      {/* Media Lightbox Modal */}
+      {previewFlyer && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xs p-4 animate-fade-in"
+          onClick={() => setPreviewFlyer(null)}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-2xl bg-zinc-900 shadow-2xl border border-zinc-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-950/90 px-4 py-3 text-white">
+              <span className="text-xs font-bold">Pratinjau Media</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={resolveMediaUrl(previewFlyer)}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
+                  title="Unduh Berkas / Foto"
                 >
-                  {tab.label}
+                  <Download size={16} />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewFlyer(null)}
+                  className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
+                  title="Tutup"
+                >
+                  <X size={18} />
                 </button>
-              ))}
+              </div>
+            </div>
+            <div className="p-3 flex justify-center items-center max-h-[80vh] overflow-auto bg-black/30">
+              <img
+                src={resolveMediaUrl(previewFlyer)}
+                alt="Pratinjau Media"
+                className="max-h-[75vh] w-auto rounded-xl object-contain shadow-2xl"
+              />
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
-            <div className="mb-3 flex items-center justify-between px-1">
-              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-zinc-400">Rekomendasi skrip</p>
-              <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[9px] font-bold text-zinc-600">{scripts.length}</span>
+      {/* Delete Message Confirmation Modal */}
+      {deleteConfirmId !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fade-in"
+          onClick={() => setDeleteConfirmId(null)}
+        >
+          <div
+            className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-red-600 mb-2">
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-red-50 border border-red-100 shrink-0">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-zinc-950">Hapus pesan?</h4>
+                <p className="text-xs text-zinc-500">Hapus pesan untuk semua orang di chat ini?</p>
+              </div>
             </div>
 
-            <div className="space-y-2.5">
-              {loading && [1, 2, 3].map((item) => <div key={item} className="h-40 animate-pulse rounded-2xl border bg-zinc-100" />)}
-              {!loading && scripts.map((script, index) => (
-                <article key={script.id ?? index} className="rounded-xl border bg-white p-3 shadow-sm transition hover:border-zinc-400">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[9px] font-bold uppercase tracking-[.1em] text-zinc-400">{script.category?.replaceAll('_', ' ') ?? 'Rekomendasi'}</p>
-                      <h4 className="mt-1 text-xs font-bold leading-5 text-zinc-900">{script.title}</h4>
-                    </div>
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-zinc-100 text-[9px] font-extrabold">{String(index + 1).padStart(2, '0')}</span>
-                  </div>
-                  {script.use_when && <p className="mt-1.5 line-clamp-1 text-[10px] leading-4 text-zinc-400">{script.use_when}</p>}
-                  <div className="mt-2.5 rounded-lg bg-zinc-50 p-2.5">
-                    <p className="line-clamp-4 whitespace-pre-wrap text-[11px] leading-[1.55] text-zinc-600">{script.script}</p>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Button size="sm" className="flex-1" onClick={() => onUse(script.script)}><Sparkles size={13} />Pakai skrip</Button>
-                    <Button size="icon" variant="secondary" className="h-9 w-9" onClick={() => onCopy(script.id ?? String(index), script.script)} aria-label="Salin skrip">
-                      {copiedId === (script.id ?? String(index)) ? <Check size={14} /> : <Clipboard size={14} />}
-                    </Button>
-                  </div>
-                </article>
-              ))}
-              {!loading && !scripts.length && (
-                <div className="rounded-2xl border border-dashed p-7 text-center">
-                  <Bot className="mx-auto text-zinc-400" size={22} />
-                  <p className="mt-3 text-xs font-bold">Belum ada skrip</p>
-                  <p className="mt-1 text-[10px] leading-4 text-zinc-400">Pilih tab percakapan lain untuk melihat rekomendasi.</p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setDeleteConfirmId(null)}
+                disabled={deleteMutation.isPending}
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white font-bold"
+                onClick={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? <RefreshCw size={14} className="animate-spin mr-1.5" /> : null}
+                Hapus untuk semua
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Package Picker Modal (Brosur & Flyer Paket Umroh) */}
+      {showPackagePickerModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in"
+          onClick={() => setShowPackagePickerModal(false)}
+        >
+          <div
+            className="relative flex flex-col max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 bg-[#f0f2f5]">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-600 text-white shadow-sm">
+                  <ImageIcon size={20} />
                 </div>
+                <div>
+                  <h3 className="font-display text-base font-bold text-zinc-900">
+                    Kirim Flyer Brosur Paket Umroh
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Pilih paket umroh untuk menyiapkan flyer resmi & rincian jadwal ke WhatsApp prospek
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPackagePickerModal(false)}
+                className="h-8 w-8 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 transition cursor-pointer"
+                title="Tutup"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Search & Options */}
+            <div className="border-b border-zinc-100 p-4 bg-zinc-50/70 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  value={packageSearch}
+                  onChange={(e) => setPackageSearch(e.target.value)}
+                  placeholder="Cari nama paket, maskapai, tanggal, atau hotel..."
+                  className="w-full rounded-xl border border-zinc-200 bg-white pl-10 pr-4 py-2 text-xs text-zinc-800 placeholder:text-zinc-400 focus:border-[#00a884] focus:ring-1 focus:ring-[#00a884] outline-none"
+                />
+              </div>
+              <label className="inline-flex items-center gap-2 text-xs text-zinc-600 font-medium cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={linkPackageToProspect}
+                  onChange={(e) => setLinkPackageToProspect(e.target.checked)}
+                  className="rounded border-zinc-300 text-[#00a884] focus:ring-[#00a884]"
+                />
+                <span>Hubungkan paket ke profil prospek</span>
+              </label>
+            </div>
+
+            {/* Package List */}
+            <div className="thin-scrollbar flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+              {filteredPackages.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-zinc-100 text-zinc-400 mb-3">
+                    <Search size={22} />
+                  </div>
+                  <p className="text-sm font-bold text-zinc-700">Tidak ada paket umroh yang cocok</p>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    {packageSearch ? 'Coba kata kunci pencarian yang lain' : 'Belum ada paket umroh aktif pada brand ini'}
+                  </p>
+                </div>
+              ) : (
+                filteredPackages.map((pkg) => {
+                  const isCurrent = pkg.id === currentPackage?.id;
+                  const hasFlyer = Boolean(pkg.flyerImage);
+                  const departureStr = pkg.departureDate
+                    ? new Date(pkg.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : (pkg.departureInfo || 'Sesuai Jadwal');
+
+                  return (
+                    <div
+                      key={pkg.id}
+                      className={cn(
+                        'group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border p-4 transition duration-150',
+                        isCurrent
+                          ? 'border-emerald-300 bg-emerald-50/40 shadow-xs'
+                          : 'border-zinc-200 bg-white hover:border-emerald-300 hover:shadow-xs'
+                      )}
+                    >
+                      <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                        {/* Flyer Thumbnail Preview */}
+                        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-zinc-100">
+                          {hasFlyer ? (
+                            <img
+                              src={resolveMediaUrl(pkg.flyerImage)}
+                              alt={pkg.name}
+                              className="h-full w-full object-cover group-hover:scale-105 transition duration-200"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="grid h-full w-full place-items-center bg-emerald-50 text-emerald-600">
+                              <ImageIcon size={22} />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-bold text-sm text-zinc-900 truncate">{pkg.name}</h4>
+                            {isCurrent && (
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                Paket Terhubung
+                              </span>
+                            )}
+                            {hasFlyer ? (
+                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                                🖼️ Flyer Siap
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
+                                📁 Upload Saat Kirim
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+                            <span>📅 {departureStr} ({pkg.duration || '9 Hari'})</span>
+                            {pkg.airline && <span>✈️ {pkg.airline}</span>}
+                            {(pkg.hotelMakkah || pkg.hotelMadinah) && (
+                              <span>🏨 {pkg.hotelMakkah || pkg.hotelMadinah}</span>
+                            )}
+                          </div>
+
+                          <div className="mt-1 text-xs font-bold text-[#00a884]">
+                            Quad Mulai: Rp {pkg.priceQuad || pkg.price}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            if (selectedId) {
+                              void api.patch(`/prospects/${selectedId}/profile`, {
+                                packageId: pkg.id,
+                                ...(user?.role === 'superadmin' ? { brandId } : {}),
+                              })
+                                .then(() => {
+                                  void queryClient.invalidateQueries({ queryKey: ['prospect', selectedId] });
+                                  void queryClient.invalidateQueries({ queryKey: ['conversations', brandId] });
+                                  void queryClient.invalidateQueries({ queryKey: ['prospects'] });
+                                  setShowPackagePickerModal(false);
+                                  showToast(`Paket berhasil dihubungkan: ${pkg.name}`);
+                                })
+                                .catch((err: any) => {
+                                  showToast(err?.message || 'Gagal mengubah paket umroh');
+                                });
+                            }
+                          }}
+                          className="w-full sm:w-auto gap-1 text-xs font-bold border-zinc-300 hover:bg-zinc-100 cursor-pointer"
+                        >
+                          <Check size={14} className="text-[#00a884]" />
+                          <span>Pilih Paket Ini</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            if (linkPackageToProspect && selectedId) {
+                              void api.patch(`/prospects/${selectedId}/profile`, {
+                                packageId: pkg.id,
+                                ...(user?.role === 'superadmin' ? { brandId } : {}),
+                              })
+                                .then(() => {
+                                  void queryClient.invalidateQueries({ queryKey: ['prospect', selectedId] });
+                                  void queryClient.invalidateQueries({ queryKey: ['conversations', brandId] });
+                                  void queryClient.invalidateQueries({ queryKey: ['prospects'] });
+                                })
+                                .catch(() => null);
+                            }
+                            setShowPackagePickerModal(false);
+                            void loadFlyerAsMediaPreview(pkg);
+                          }}
+                          className="w-full sm:w-auto gap-1.5 bg-[#00a884] hover:bg-[#008f6f] text-white font-bold text-xs shadow-xs cursor-pointer"
+                        >
+                          <ImageIcon size={14} />
+                          <span>Pilih & Siapkan Flyer</span>
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-zinc-200 px-6 py-3 bg-zinc-50 text-xs text-zinc-500">
+              <span>Total paket aktif: <strong>{packages.data?.filter((p: any) => p.isActive).length ?? 0}</strong></span>
+              <Button variant="ghost" size="sm" onClick={() => setShowPackagePickerModal(false)}>
+                Tutup
+              </Button>
+            </div>
           </div>
-
-          <footer className="shrink-0 border-t bg-white p-3">
-            <div className="flex items-center gap-2 rounded-xl bg-zinc-950 px-3 py-2.5 text-white">
-              <Sparkles size={14} className="shrink-0 text-zinc-400" />
-              <p className="text-[9px] leading-4 text-zinc-400">Skrip sudah dipersonalisasi sesuai jamaah, brand, dan paket.</p>
-            </div>
-          </footer>
-        </>
-      ) : (
-        <div className="grid flex-1 place-items-center p-8 text-center"><div><Bot className="mx-auto text-zinc-400" /><p className="mt-3 text-xs font-bold">Pilih percakapan</p><p className="mt-1 text-[10px] text-zinc-400">Copilot akan menyesuaikan rekomendasi.</p></div></div>
-      )}
-    </aside>
-  );
-}
-
-function ProfilePanel({
-  selected,
-  query,
-  open,
-  onClose,
-}: {
-  selected: any;
-  query: string;
-  open: boolean;
-  onClose(): void;
-}) {
-  const profile = useQuery({
-    queryKey: ['prospect', selected?.id, query],
-    queryFn: () => api.get<any>(`/prospects/${selected.id}${query}`),
-    enabled: Boolean(selected?.id),
-  });
-  const data = profile.data ?? selected;
-
-  return (
-    <aside className={cn('inbox-copilot flex-col border-l bg-zinc-50', open && 'is-open animate-slide-in')}>
-      <header className="flex h-[73px] shrink-0 items-center gap-3 border-b bg-white px-4">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-zinc-950 text-white"><CircleUserRound size={18} /></span>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-display text-sm font-extrabold">Profil jamaah</h3>
-          <p className="truncate text-[10px] text-zinc-400">CRM 360° di samping percakapan</p>
-        </div>
-        <button className="inbox-copilot-close rounded-lg p-2 text-zinc-500 hover:bg-zinc-100" onClick={onClose} aria-label="Tutup profil"><X size={18} /></button>
-      </header>
-
-      {!selected ? (
-        <div className="grid flex-1 place-items-center p-8 text-center"><div><CircleUserRound className="mx-auto text-zinc-400" /><p className="mt-3 text-xs font-bold">Pilih percakapan</p><p className="mt-1 text-[10px] text-zinc-400">Profil jamaah akan tampil di sini.</p></div></div>
-      ) : profile.isLoading ? (
-        <div className="space-y-3 p-4" role="status" aria-label="Memuat profil jamaah"><div className="h-32 animate-pulse rounded-2xl bg-zinc-200" /><div className="h-48 animate-pulse rounded-2xl bg-zinc-100" /></div>
-      ) : profile.isError ? (
-        <div className="p-4"><div className="rounded-2xl border bg-white p-5 text-center"><p className="text-sm font-bold">Profil gagal dimuat</p><button className="mt-2 text-xs font-semibold underline" onClick={() => void profile.refetch()}>Coba lagi</button></div></div>
-      ) : (
-        <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
-          <section className="rounded-2xl bg-zinc-950 p-4 text-white">
-            <div className="flex items-center gap-3">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white text-sm font-extrabold text-zinc-950">{String(data?.name ?? '?').slice(0, 2).toUpperCase()}</span>
-              <div className="min-w-0 flex-1"><h4 className="truncate font-display font-extrabold">{data?.name}</h4><p className="mt-1 truncate text-[10px] text-zinc-400">{data?.phone || 'Nomor belum tersedia'}</p></div>
-              <Badge value={data?.status} className="shrink-0 bg-white text-zinc-950" />
-            </div>
-          </section>
-
-          <section className="mt-3 overflow-hidden rounded-2xl border bg-white">
-            <ProfileRow icon={Phone} label="WhatsApp" value={data?.phone || 'Belum diisi'} />
-            <ProfileRow icon={MapPin} label="Kota" value={data?.city || 'Belum diisi'} />
-            <ProfileRow icon={UserRound} label="CS PIC" value={data?.user?.name || 'Belum ada PIC'} />
-            <ProfileRow icon={Sparkles} label="Sumber lead" value={String(data?.leadSource || 'whatsapp').replaceAll('_', ' ')} />
-          </section>
-
-          <section className="mt-3 rounded-2xl border bg-white p-4">
-            <p className="text-[10px] font-bold uppercase tracking-[.12em] text-zinc-400">Kualifikasi & kebutuhan</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <ProfileFact label="Paket" value={data?.package?.name || 'Belum dipilih'} />
-              <ProfileFact label="Target berangkat" value={data?.targetMonth || 'Belum diisi'} />
-              <ProfileFact label="Budget" value={data?.budgetRange || 'Belum diisi'} />
-              <ProfileFact label="Pengambil keputusan" value={data?.decisionMaker || 'Belum diisi'} />
-            </div>
-            {data?.specialNeeds && <div className="mt-3 rounded-xl bg-zinc-50 p-3"><p className="text-[9px] font-bold uppercase tracking-wide text-zinc-400">Kebutuhan khusus</p><p className="mt-1 text-xs leading-5 text-zinc-700">{data.specialNeeds}</p></div>}
-          </section>
-
-          {data?.notes && <section className="mt-3 rounded-2xl border bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-zinc-400">Catatan internal</p><p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-zinc-600">{data.notes}</p></section>}
         </div>
       )}
 
-      {selected && <footer className="shrink-0 border-t bg-white p-3"><Link to={`/prospects/${selected.id}`} className="flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-4 text-xs font-bold text-white hover:bg-zinc-800"><ExternalLink size={14} />Buka editor profil lengkap</Link></footer>}
-    </aside>
+      {/* Action Toast Notification */}
+      {actionToast && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-[#111b21] text-white px-4 py-2.5 text-xs font-medium shadow-xl border border-white/10 animate-in fade-in slide-in-from-bottom-2 pointer-events-none">
+          {actionToast}
+        </div>
+      )}
+    </div>
   );
-}
-
-function ProfileRow({ icon: Icon, label, value }: { icon: typeof Phone; label: string; value: string }) {
-  return <div className="flex items-center gap-3 border-b px-4 py-3 last:border-b-0"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-zinc-100 text-zinc-600"><Icon size={14} /></span><div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-zinc-400">{label}</p><p className="mt-0.5 truncate text-xs font-semibold capitalize text-zinc-800">{value}</p></div></div>;
-}
-
-function ProfileFact({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-zinc-50 p-3"><p className="text-[9px] font-bold uppercase tracking-wide text-zinc-400">{label}</p><p className="mt-1 text-[11px] font-semibold leading-4 text-zinc-700">{value}</p></div>;
 }

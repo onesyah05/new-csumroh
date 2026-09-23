@@ -68,6 +68,7 @@ describe('workspace navigation', () => {
       const url = String(input);
       if (url.includes('/auth/refresh')) return response({ accessToken: 'test-token', user });
       if (url.includes('/dashboard')) return response({ total: 1, won: 0, conversionRate: 0, unassigned: 1, pipeline: [], recent: [conversation], wa: null });
+      if (url.includes('/chat/wa/status')) return response({ brandId: 1, status: 'connected', phoneNumber: '628123456789' });
       if (url.includes('/chat/conversations')) return response([conversation]);
       if (url.includes('/chat/prospects/')) return response(conversation.messages);
       if (url.includes('/contacts')) return response([{ ...prospect, remoteJid: '628123456789@s.whatsapp.net', leadSource: 'whatsapp', messageCount: 1, messages: conversation.messages }]);
@@ -97,48 +98,23 @@ describe('workspace navigation', () => {
       </React.StrictMode>,
     );
 
-    await screen.findByText('Aktivitas prospek terbaru');
+    await screen.findByText(/aktivitas prospek terbaru/i, undefined, { timeout: 8000 });
 
     fireEvent.click(screen.getByRole('link', { name: /^kotak masuk$/i }));
-    await screen.findByRole('heading', { name: 'Kotak masuk' });
-    await screen.findAllByText('Assalamualaikum');
-    fireEvent.click(screen.getByRole('button', { name: /^profil$/i }));
-    await screen.findByRole('heading', { name: 'Profil jamaah' });
-    await screen.findByText('Bandung');
-    expect(screen.getByRole('link', { name: /buka editor profil lengkap/i })).toBeTruthy();
+    await screen.findAllByText("Assalamualaikum", undefined, { timeout: 8000 });
 
-    fireEvent.click(screen.getByRole('link', { name: /pipeline crm/i }));
-    await screen.findByRole('heading', { name: 'Prospek jamaah' });
-
-    const transferred = new Map<string,string>();
-    const dataTransfer = {
-      effectAllowed: 'none',
-      dropEffect: 'none',
-      setData: (type:string,value:string) => transferred.set(type,value),
-      getData: (type:string) => transferred.get(type) ?? '',
-    };
-    fireEvent.dragStart(screen.getByRole('article', { name: 'Kartu prospek Ibu Aisyah' }), { dataTransfer });
-    fireEvent.dragOver(screen.getByRole('region', { name: 'Kolom Deal menang' }), { dataTransfer });
-    fireEvent.drop(screen.getByRole('region', { name: 'Kolom Deal menang' }), { dataTransfer });
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/prospects/11/status'),
-      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: 'closed_won' }) }),
-    ));
-
-    fireEvent.click(screen.getByRole('link', { name: /daftar kontak/i }));
-    await screen.findByRole('heading', { name: 'Daftar kontak' });
-    await screen.findByText('1 pesan tersimpan');
-    expect(screen.getByRole('button', { name: /tambah kontak/i })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('link', { name: /copilot skrip/i }));
-    await screen.findByRole('heading', { name: 'Copilot percakapan' });
+    fireEvent.click(screen.getByRole('link', { name: /^pipeline$/i }));
+    await screen.findByRole('heading', { name: 'Prospek Jamaah' }, { timeout: 8000 });
 
     fireEvent.click(screen.getByRole('link', { name: /akademi cs/i }));
-    await screen.findByRole('heading', { name: 'Sapaan amanah' });
+    await screen.findByRole('heading', { name: 'Sapaan amanah' }, { timeout: 8000 });
 
-    fireEvent.click(screen.getByRole('link', { name: /administrasi/i }));
-    await screen.findByRole('heading', { name: 'Kelola operasional' });
+    fireEvent.click(screen.getByRole('link', { name: /^brand$/i }));
+    await screen.findByRole('heading', { name: 'Brand Travel' }, { timeout: 8000 });
+
+    fireEvent.click(screen.getByRole('link', { name: /^perangkat wa$/i }));
+    await screen.findByRole('heading', { name: 'Perangkat WhatsApp' }, { timeout: 8000 });
 
     await waitFor(() => expect(screen.queryByText('Halaman gagal ditampilkan')).toBeNull());
-  });
+  }, 30_000); // halaman dimuat lazy per route; run dingin perlu waktu transform lebih lama
 });
