@@ -11,18 +11,24 @@ enum Role {
   superadmin
   admin
   cs
+  finance
 }
 
 enum ProspectStatus {
   new
-  identifying
-  offered
+  contact
+  qualified
+  offer
   objection
   followup
   closing
-  nurture
+  deal
+  lose
+  identifying
+  offered
   closed_won
   closed_lost
+  nurture
 }
 
 enum PaymentStatus {
@@ -36,6 +42,11 @@ enum WaStatus {
   connecting
   connected
   qr_ready
+}
+
+enum PaymentRecordStatus {
+  verified
+  reversed
 }
 
 enum CapiStatus {
@@ -53,6 +64,7 @@ model Brand {
   bankAccountNumber String?          @map("bank_account_number") @db.VarChar(50)
   bankAccountHolder String?          @map("bank_account_holder") @db.VarChar(100)
   address           String?          @db.Text
+  gmapsUrl          String?          @map("gmaps_url") @db.Text
   phone             String?          @db.VarChar(30)
   metaPixelId       String?          @map("meta_pixel_id") @db.VarChar(50)
   metaAccessToken   String?          @map("meta_access_token") @db.Text
@@ -68,6 +80,8 @@ model Brand {
   whatsappSession   WhatsappSession?
   chatMessages      ChatMessage[]
   capiLogs          MetaCapiLog[]
+  userBrands        UserBrand[]
+  payments          Payment[]
 
   @@map("brands")
 }
@@ -85,9 +99,23 @@ model User {
   prospects     Prospect[]
   prospectLogs  ProspectLog[]
   refreshTokens RefreshToken[]
+  userBrands    UserBrand[]
 
   @@index([brandId, isActive])
   @@map("users")
+}
+
+model UserBrand {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  brandId   Int      @map("brand_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, brandId])
+  @@index([brandId])
+  @@map("user_brands")
 }
 
 model Package {
@@ -148,7 +176,12 @@ model Prospect {
   passportStatus     String?        @map("passport_status") @db.VarChar(50)
   vaccineStatus      String?        @map("vaccine_status") @db.VarChar(50)
   dealValue          Decimal        @default(0) @map("deal_value") @db.Decimal(15, 2)
+  // Kas terverifikasi kumulatif; hanya ditulis oleh verifikasi Finance (= SUM payments verified)
   dpAmount           Decimal        @default(0) @map("dp_amount") @db.Decimal(15, 2)
+  // Nominal tagihan invoice terakhir, terpisah dari uang yang benar-benar diterima
+  invoiceAmount      Decimal        @default(0) @map("invoice_amount") @db.Decimal(15, 2)
+  // Seat paket yang sudah dipotong dari kuota untuk booking ini
+  seatsReserved      Int            @default(0) @map("seats_reserved")
   dpPaidAt           DateTime?      @map("dp_paid_at")
   paymentStatus      PaymentStatus  @default(unpaid) @map("payment_status")
   lostReason         String?        @map("lost_reason") @db.VarChar(100)
@@ -162,6 +195,19 @@ model Prospect {
   closedWonCount     Int            @default(0) @map("closed_won_count")
   photoUrl           String?        @map("photo_url") @db.Text
   notes              String?        @db.Text
+  objectionCategory  String?        @map("objection_category") @db.VarChar(50)
+  objectionNotes     String?        @map("objection_notes") @db.Text
+  offerSentAt        DateTime?      @map("offer_sent_at")
+  offerMessageId     String?        @map("offer_message_id") @db.VarChar(100)
+  invoiceNumber      String?        @map("invoice_number") @db.VarChar(100)
+  invoiceDueAt       DateTime?      @map("invoice_due_at")
+  invoiceSentAt      DateTime?      @map("invoice_sent_at")
+  invoiceMessageId   String?        @map("invoice_message_id") @db.VarChar(100)
+  paymentProofUrl    String?        @map("payment_proof_url") @db.Text
+  // Pesan WhatsApp asal bukti (bila diambil dari live chat) dan waktu bukti diajukan ke Finance
+  paymentProofMessageId String?     @map("payment_proof_message_id") @db.VarChar(100)
+  paymentProofSubmittedAt DateTime? @map("payment_proof_submitted_at")
+  verifiedByUserId   Int?           @map("verified_by_user_id")
   nextFollowupDate   DateTime?      @map("next_followup_date") @db.Date
   lastFollowupAt     DateTime?      @map("last_followup_at")
   createdAt          DateTime       @default(now()) @map("created_at")
@@ -172,10 +218,35 @@ model Prospect {
   logs               ProspectLog[]
   messages           ChatMessage[]
   capiLogs           MetaCapiLog[]
+  payments           Payment[]
 
   @@index([brandId, status])
   @@index([userId])
   @@map("prospects")
+}
+
+// Ledger pembayaran: satu baris per mutasi yang diverifikasi Finance
+model Payment {
+  id               Int                 @id @default(autoincrement())
+  brandId          Int                 @map("brand_id")
+  prospectId       Int                 @map("prospect_id")
+  amount           Decimal             @db.Decimal(15, 2)
+  bankName         String              @map("bank_name") @db.VarChar(50)
+  referenceNo      String?             @map("reference_no") @db.VarChar(100)
+  mutationDate     DateTime?           @map("mutation_date") @db.Date
+  idempotencyKey   String              @unique @map("idempotency_key") @db.VarChar(120)
+  status           PaymentRecordStatus @default(verified)
+  notes            String?             @db.Text
+  proofUrl         String?             @map("proof_url") @db.Text
+  proofMessageId   String?             @map("proof_message_id") @db.VarChar(100)
+  verifiedByUserId Int?                @map("verified_by_user_id")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  brand            Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  prospect         Prospect            @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, referenceNo])
+  @@index([prospectId, createdAt])
+  @@map("payments")
 }
 
 model ProspectLog {
@@ -224,7 +295,10 @@ model ChatMessage {
   metaReferralData Json?     @map("meta_referral_data")
   isDeleted        Boolean   @default(false) @map("is_deleted")
   deletedAt        DateTime? @map("deleted_at")
+  isStarred        Boolean   @default(false) @map("is_starred")
   reaction         String?   @db.VarChar(10)
+  reactionUserId   Int?      @map("reaction_user_id")
+
   quotedMessageId  String?   @map("quoted_message_id") @db.VarChar(100)
   quotedText       String?   @map("quoted_text") @db.Text
   quotedSender     String?   @map("quoted_sender") @db.VarChar(100)
