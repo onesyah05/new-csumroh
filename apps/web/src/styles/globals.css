@@ -4,24 +4,27 @@
 
 @layer base {
   * { @apply border-zinc-200; }
-  html { @apply bg-zinc-50 antialiased; }
-  body { @apply m-0 min-w-[320px] bg-zinc-50 font-sans text-zinc-900; }
-  ::selection { @apply bg-zinc-900 text-white; }
-  input, textarea { @apply outline-none; }
-  input:focus, textarea:focus { @apply border-zinc-500 ring-2 ring-zinc-900/10; }
+  html { @apply bg-[#fafafa] antialiased; }
+  body { @apply m-0 min-w-[320px] bg-[#fafafa] font-sans text-zinc-900; }
+  ::selection { @apply bg-black text-white; }
+  input, textarea, select { @apply outline-none; }
+  input:focus, textarea:focus, select:focus { @apply border-black ring-1 ring-black; }
   button, a { -webkit-tap-highlight-color: transparent; }
-  button:focus-visible, a:focus-visible, [role='button']:focus-visible { @apply outline-none ring-2 ring-zinc-950 ring-offset-2; }
+  button:focus-visible, a:focus-visible, [role='button']:focus-visible { @apply outline-none ring-2 ring-black ring-offset-2; }
 }
 
 @layer components {
-  .surface { @apply rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,.03)]; }
-  .field { @apply h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm text-zinc-900 placeholder:text-zinc-400 transition; }
-  .label { @apply mb-1.5 block text-xs font-bold uppercase tracking-[.08em] text-zinc-500; }
-  .page-title { @apply font-display text-2xl font-extrabold tracking-[-.035em] text-zinc-950 sm:text-3xl; }
+  .surface {
+    @apply rounded-xl border border-zinc-200/90 bg-white;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+  .field { @apply h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs sm:text-sm text-zinc-900 placeholder:text-zinc-400 outline-none transition focus:border-black focus:ring-1 focus:ring-black; }
+  .label { @apply mb-1.5 block text-xs font-medium text-zinc-700; }
+  .page-title { @apply font-sans text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl; }
   .app-page { @apply mx-auto w-full max-w-[1440px] space-y-6 animate-fade-up; }
   .page-header { @apply flex flex-col justify-between gap-4 lg:flex-row lg:items-end; }
-  .page-kicker { @apply mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[.14em] text-zinc-400; }
-  .page-subtitle { @apply mt-2 max-w-2xl text-sm leading-6 text-zinc-500; }
+  .page-kicker { @apply mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400; }
+  .page-subtitle { @apply mt-1 max-w-2xl text-xs sm:text-sm leading-relaxed text-zinc-500; }
 }
 
 .thin-scrollbar { scrollbar-color: #d4d4d8 transparent; scrollbar-width: thin; }
@@ -31,10 +34,16 @@
    breakpoints prevents browser zoom and lazy-route CSS ordering from collapsing it. */
 .inbox-workspace {
   display: grid;
-  grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
   height: 100%;
   min-width: 0;
   overflow: hidden;
+}
+
+.wa-chat-bg {
+  background-color: #efeae2;
+  background-image: radial-gradient(#d4cbbe 0.9px, transparent 0.9px);
+  background-size: 24px 24px;
 }
 
 .inbox-conversation-list,
@@ -76,11 +85,11 @@
 
 @media (min-width: 1280px) {
   .inbox-workspace {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 360px minmax(0, 1fr);
   }
 
   .inbox-workspace.has-side-panel {
-    grid-template-columns: 280px minmax(400px, 1fr) 360px;
+    grid-template-columns: 360px minmax(400px, 1fr) 360px;
   }
 
   .inbox-copilot {
@@ -101,11 +110,11 @@
 
 @media (min-width: 1536px) {
   .inbox-workspace {
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-columns: 380px minmax(0, 1fr);
   }
 
   .inbox-workspace.has-side-panel {
-    grid-template-columns: 300px minmax(460px, 1fr) 380px;
+    grid-template-columns: 380px minmax(460px, 1fr) 380px;
   }
 }
 
