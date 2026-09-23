@@ -1,7 +1,8 @@
 export const SCRIPT_VARIABLES = [
-  'nama', 'cs_name', 'travel', 'ppiu', 'bank', 'rekening', 'nama_rekening', 'alamat', 'telepon',
-  'paket', 'harga', 'dp', 'airline', 'hotel', 'hotel_makkah', 'hotel_madinah', 'durasi',
-  'keberangkatan', 'highlights',
+  'nama', 'cs_name', 'agent_name', 'travel', 'ppiu', 'bank', 'rekening', 'nama_rekening', 'alamat', 'telepon',
+  'paket', 'harga', 'dp', 'airline', 'maskapai', 'hotel', 'jarak_hotel', 'hotel_makkah', 'hotel_madinah',
+  'duration', 'durasi', 'keberangkatan', 'tanggal', 'highlights', 'fasilitas_utama',
+  'bulan', 'deadline', 'seat', 'promo', 'jumlah_jamaah', 'budget', 'nama_pendamping', 'followup_date', 'kota', 'sumber',
 ] as const;
 
 export type ScriptVariables = Partial<Record<(typeof SCRIPT_VARIABLES)[number], string | number>>;
@@ -20,8 +21,9 @@ export function normalizeScriptNarrative(input: string) {
 
 export function interpolateScript(input: string, variables: ScriptVariables) {
   const normalized = normalizeScriptNarrative(input);
-  return normalized.replace(/\{\{([a-z_]+)\}\}/gi, (match, key: string) => {
-    const value = variables[key as keyof ScriptVariables];
+  return normalized.replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, key: string) => {
+    const lookupKey = key.toLowerCase() as keyof ScriptVariables;
+    const value = variables[lookupKey];
     return value === undefined || value === null || value === '' ? match : String(value);
   });
 }
