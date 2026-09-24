@@ -4,6 +4,7 @@ import { prisma } from '../../db/prisma.js';
 import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/http.js';
 import { refreshProspectAvatars } from '../chat/avatar.service.js';
+import { tasksForCs, tasksForFinance, tasksForManager } from './tasks.service.js';
 
 export const dashboardRouter = Router();
 dashboardRouter.use(authGuard);
@@ -188,6 +189,23 @@ dashboardRouter.get('/', asyncHandler(async (req, res) => {
       brands: allBrands,
     },
   });
+}));
+
+// "Perlu dikerjakan sekarang" per role. CS: brand aktif (scope biasa). Pengawas holding: semua brand
+// (brandId kosong/'all') atau satu brand yang dipilih di Ringkasan.
+dashboardRouter.get('/tasks', asyncHandler(async (req, res) => {
+  const role = req.user!.role;
+  const raw = req.query.brandId;
+  const isHoldingRole = role === 'superadmin' || role === 'admin' || role === 'finance';
+  const brandIds = isHoldingRole && (!raw || raw === 'all')
+    ? (await prisma.brand.findMany({ select: { id: true } })).map((b) => b.id)
+    : [scopedBrandId(req, raw && raw !== 'all' ? Number(raw) : undefined)];
+  const data = role === 'cs'
+    ? await tasksForCs(req.user!, brandIds)
+    : role === 'finance'
+      ? await tasksForFinance(brandIds)
+      : await tasksForManager(brandIds);
+  res.json({ success: true, data });
 }));
 
 type FinanceRow = { status: string; dealValue: unknown; dpAmount: unknown };

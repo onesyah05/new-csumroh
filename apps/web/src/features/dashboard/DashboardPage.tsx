@@ -23,6 +23,7 @@ import { Select } from '../../components/ui/select';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { useAuth } from '../../app/auth';
+import { TodayTasks } from './TodayTasks';
 import { PageError, PageLoading, SectionEmpty } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { ProspectAvatar } from '../../components/ui/avatar';
@@ -114,11 +115,11 @@ export function DashboardPage() {
       {/* 1. CLEAN PAGE HEADER */}
       <PageHeader
         kicker={isHolding ? undefined : currentBrandName}
-        title="Ringkasan Sales"
+        title="Ringkasan"
         subtitle={
           isHolding
-            ? `Performa akuisisi prospek, aktivitas CS WhatsApp, dan konversi closing seluruh brand.`
-            : `Performa akuisisi prospek, aktivitas CS WhatsApp, dan konversi closing.`
+            ? `Performa akuisisi prospek, aktivitas CS WhatsApp, dan konversi deal seluruh brand.`
+            : `Performa akuisisi prospek, aktivitas CS WhatsApp, dan konversi deal.`
         }
         actions={
           <div className="flex flex-wrap items-center gap-2.5">
@@ -158,8 +159,11 @@ export function DashboardPage() {
         }
       />
 
-      {/* RECONCILIATION NOTICE (ONLY IF DISCREPANCY EXISTS) */}
-      {(Number(data?.totalOverpayment) > 0 || Number(data?.cashOnCancelled) > 0) && (
+      {/* Daftar kerja per role, di atas metrik: apa yang perlu ditindaklanjuti sekarang. */}
+      <TodayTasks scope={scopeParam} />
+
+      {/* Rekonsiliasi keuangan: urusan Finance/Admin, bukan CS. */}
+      {isSuperOrFinance && (Number(data?.totalOverpayment) > 0 || Number(data?.cashOnCancelled) > 0) && (
         <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
           <div className="flex items-center gap-2">
             <ShieldAlert size={16} className="text-amber-600 shrink-0" />
@@ -173,8 +177,8 @@ export function DashboardPage() {
               )}
             </span>
           </div>
-          <Link to="/finance" className="font-semibold text-amber-900 hover:underline shrink-0 ml-3">
-            Cek Finance &rarr;
+          <Link to="/verifikasi" className="font-semibold text-amber-900 hover:underline shrink-0 ml-3">
+            Buka Verifikasi &rarr;
           </Link>
         </div>
       )}
@@ -183,16 +187,16 @@ export function DashboardPage() {
       <section className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Total Prospek */}
         <div className="surface p-5">
-          <div className="flex items-center justify-between text-zinc-400">
+          <div className="flex items-center justify-between text-zinc-500">
             <span className="text-xs font-medium text-zinc-500">
               Total Prospek
             </span>
-            <Inbox size={16} className="text-zinc-400" />
+            <Inbox size={16} className="text-zinc-500" />
           </div>
           <p className="mt-2 font-sans text-3xl font-bold tracking-tight text-zinc-950">
             {totalCount}
           </p>
-          <div className="mt-2 flex items-center justify-between text-xs text-zinc-400">
+          <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
             <span>Akuisisi prospek</span>
             {unassignedCount > 0 ? (
               <Link
@@ -209,43 +213,43 @@ export function DashboardPage() {
 
         {/* Card 2: Total Deal */}
         <div className="surface p-5">
-          <div className="flex items-center justify-between text-zinc-400">
+          <div className="flex items-center justify-between text-zinc-500">
             <span className="text-xs font-medium text-zinc-500">Total Deal</span>
-            <Users2 size={16} className="text-zinc-400" />
+            <Users2 size={16} className="text-zinc-500" />
           </div>
           <p className="mt-2 font-sans text-3xl font-bold tracking-tight text-zinc-950">
             {wonCount}
           </p>
-          <p className="mt-2 text-xs text-zinc-400">
+          <p className="mt-2 text-xs text-zinc-500">
             {data?.totalPax ?? 0} Pax seat terjual
           </p>
         </div>
 
         {/* Card 3: Nilai Deal */}
         <div className="surface p-5">
-          <div className="flex items-center justify-between text-zinc-400">
+          <div className="flex items-center justify-between text-zinc-500">
             <span className="text-xs font-medium text-zinc-500">Nilai Deal</span>
-            <CircleDollarSign size={16} className="text-zinc-400" />
+            <CircleDollarSign size={16} className="text-zinc-500" />
           </div>
           <p className="mt-2 font-sans text-3xl font-bold tracking-tight text-zinc-950 truncate">
             {moneyCompact(dealValue)}
           </p>
-          <div className="mt-2 flex items-center justify-between text-xs text-zinc-400">
+          <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
             <span>Terverifikasi: <b className="text-zinc-700 font-medium">{moneyCompact(verifiedCash)}</b></span>
           </div>
         </div>
 
-        {/* Card 4: Konversi Closing */}
+        {/* Card 4: Konversi Deal */}
         <div className="surface p-5">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-xs font-medium text-zinc-500">Konversi Closing</span>
-            <Trophy size={16} className="text-zinc-400" />
+          <div className="flex items-center justify-between text-zinc-500">
+            <span className="text-xs font-medium text-zinc-500">Konversi Deal</span>
+            <Trophy size={16} className="text-zinc-500" />
           </div>
           <p className="mt-2 font-sans text-3xl font-bold tracking-tight text-zinc-950">
             {data?.conversionRate ?? 0}%
           </p>
-          <p className="mt-2 text-xs text-zinc-400">
-            {wonCount} closing dari {totalCount} prospek
+          <p className="mt-2 text-xs text-zinc-500">
+            {wonCount} deal dari {totalCount} prospek
           </p>
         </div>
       </section>
@@ -260,7 +264,7 @@ export function DashboardPage() {
               <div className="border-b border-zinc-200/90 px-5 py-3.5 flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-zinc-950">Performa Sales per Brand</h3>
-                  <p className="text-xs text-zinc-400">Akuisisi prospek, transaksi deal, dan closing per brand</p>
+                  <p className="text-xs text-zinc-500">Akuisisi prospek, deal, dan konversi per brand</p>
                 </div>
                 <span className="text-xs font-medium text-zinc-500 bg-zinc-100 rounded-md px-2 py-0.5">
                   {brandCount} Brand
@@ -269,7 +273,7 @@ export function DashboardPage() {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50/80 border-b border-zinc-200/70 text-zinc-500 font-semibold uppercase text-[10px] tracking-wider">
+                  <thead className="bg-zinc-50/80 border-b border-zinc-200/70 text-zinc-500 font-semibold uppercase text-xs tracking-wider">
                     <tr>
                       <th className="py-2.5 px-4">Brand</th>
                       <th className="py-2.5 px-3 text-center">Prospek</th>
@@ -277,7 +281,7 @@ export function DashboardPage() {
                       <th className="py-2.5 px-3 text-center">Pax</th>
                       <th className="py-2.5 px-3 text-right">Nilai Paket</th>
                       <th className="py-2.5 px-3 text-right">Terverifikasi</th>
-                      <th className="py-2.5 px-4 text-center">Closing</th>
+                      <th className="py-2.5 px-4 text-center">Konversi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
@@ -289,7 +293,7 @@ export function DashboardPage() {
                             onClick={() => setHoldingScope(String(b.id))}
                             className="text-left group"
                           >
-                            <span className="font-semibold text-zinc-900 group-hover:text-blue-600 transition">
+                            <span className="font-semibold text-zinc-900 group-hover:text-zinc-600 transition">
                               {b.name}
                             </span>
                           </button>
@@ -310,7 +314,7 @@ export function DashboardPage() {
                           {moneyCompact(b.verifiedCash)}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span className="inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold text-zinc-700 bg-zinc-100">
+                          <span className="inline-block rounded px-1.5 py-0.5 text-xs font-semibold text-zinc-700 bg-zinc-100">
                             {b.conversionRate}%
                           </span>
                         </td>
@@ -327,7 +331,7 @@ export function DashboardPage() {
             <div className="border-b border-zinc-200/90 px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-zinc-950">Aktivitas Prospek Terbaru</h3>
-                <p className="text-xs text-zinc-400">Follow-up CS dan status prospek terkini</p>
+                <p className="text-xs text-zinc-500">Follow-up CS dan status prospek terkini</p>
               </div>
 
               {/* Filter Tabs */}
@@ -370,17 +374,17 @@ export function DashboardPage() {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-xs sm:text-sm text-zinc-950 group-hover:text-blue-600 transition truncate">
+                          <span className="font-semibold text-xs sm:text-sm text-zinc-950 group-hover:text-zinc-600 transition truncate">
                             {item.name}
                           </span>
                           {item.brand?.name && isHolding && (
-                            <span className="text-[10px] text-zinc-500 bg-zinc-100 rounded px-1.5 py-0.2 shrink-0">
+                            <span className="text-xs text-zinc-500 bg-zinc-100 rounded px-1.5 py-0.2 shrink-0">
                               {item.brand.name}
                             </span>
                           )}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400 mt-0.5">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 mt-0.5">
                           <span>{item.phone}</span>
                           {item.city && <span>· {item.city}</span>}
                           <span>·</span>
@@ -399,7 +403,7 @@ export function DashboardPage() {
                     </Link>
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-[11px] text-zinc-400 hidden sm:inline">
+                      <span className="text-xs text-zinc-500 hidden sm:inline">
                         {formatRelativeTime(item.updatedAt || item.createdAt)}
                       </span>
                       <Badge value={item.status} />
@@ -419,7 +423,7 @@ export function DashboardPage() {
             </div>
 
             <div className="border-t border-zinc-100 px-5 py-3 bg-zinc-50/40 flex items-center justify-between text-xs">
-              <span className="text-zinc-400">
+              <span className="text-zinc-500">
                 Menampilkan {recentProspects.length} dari {totalCount} prospek
               </span>
               <Link
@@ -445,7 +449,7 @@ export function DashboardPage() {
               </div>
 
               <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border ${
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border ${
                   data?.wa?.status === 'connected'
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : data?.wa?.status === 'connecting'
@@ -475,7 +479,7 @@ export function DashboardPage() {
             </p>
 
             <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-zinc-400">
+              <span className="text-zinc-500">
                 {isHolding
                   ? `${data?.wa?.connectedChannels ?? 0} dari ${data?.wa?.totalChannels ?? 0} channel CS aktif`
                   : 'Channel WhatsApp CS aktif'}
@@ -511,7 +515,7 @@ export function DashboardPage() {
                     >
                       <div className="min-w-0 pr-2">
                         <p className="font-medium text-zinc-900 truncate">{pkg.name}</p>
-                        <p className="text-[10px] text-zinc-400">
+                        <p className="text-xs text-zinc-500">
                           {pkg.departureInfo ||
                             (pkg.departureDate
                               ? new Date(pkg.departureDate).toLocaleDateString('id-ID', {
@@ -525,7 +529,7 @@ export function DashboardPage() {
                       </div>
 
                       <span
-                        className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded border shrink-0 ${
+                        className={`text-xs font-mono font-semibold px-2 py-0.5 rounded border shrink-0 ${
                           isLow
                             ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : 'bg-zinc-100 text-zinc-700 border-zinc-200'
@@ -540,38 +544,6 @@ export function DashboardPage() {
             </section>
           )}
 
-          {/* Akses Cepat */}
-          <section className="surface p-4 text-xs space-y-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 block">
-              Akses Cepat
-            </span>
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <Link
-                to="/contacts"
-                className="p-2.5 rounded-lg border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition font-medium text-zinc-800 text-center"
-              >
-                Buku Kontak
-              </Link>
-              <Link
-                to="/scripts"
-                className="p-2.5 rounded-lg border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition font-medium text-zinc-800 text-center"
-              >
-                Script CS
-              </Link>
-              <Link
-                to="/packages"
-                className="p-2.5 rounded-lg border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition font-medium text-zinc-800 text-center"
-              >
-                Katalog Paket
-              </Link>
-              <Link
-                to="/finance"
-                className="p-2.5 rounded-lg border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition font-medium text-zinc-800 text-center"
-              >
-                Verifikasi Pembayaran
-              </Link>
-            </div>
-          </section>
         </div>
       </div>
     </div>
