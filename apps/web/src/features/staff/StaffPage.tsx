@@ -72,6 +72,10 @@ const roleLabel = (role: string) =>
   role === 'superadmin' ? 'Superadmin' : role === 'admin' ? 'Admin Brand' : role === 'finance' ? 'Finance' : 'Customer Service';
 
 /* ─── Brand Multi-Checkbox Component ────────────────────────── */
+/** Catatan toast saat prospek terbuka milik CS dilepas ke antrean (nonaktif, dihapus, atau akses brand dicabut). */
+const releasedNote = (count?: number) =>
+  count ? ` ${count} prospek terbuka kembali ke antrean "Belum ada PIC".` : '';
+
 function BrandCheckList({
   brands,
   selected,
@@ -212,7 +216,7 @@ function StaffFormModal({
       if (form.brandIds.length === 0) throw new Error('Pilih minimal 1 brand yang dikaitkan.');
 
       if (isEdit && editing) {
-        await api.patch(`/catalog/users/${editing.id}`, {
+        return api.patch<{ releasedProspects?: number }>(`/catalog/users/${editing.id}`, {
           name: form.name.trim(),
           email: form.email.trim(),
           ...(form.password ? { password: form.password } : {}),
@@ -221,7 +225,7 @@ function StaffFormModal({
           brandIds: form.brandIds,
         });
       } else {
-        await api.post('/catalog/users', {
+        return api.post<{ releasedProspects?: number }>('/catalog/users', {
           name: form.name.trim(),
           email: form.email.trim(),
           password: form.password,
@@ -230,8 +234,8 @@ function StaffFormModal({
         });
       }
     },
-    onSuccess: () => {
-      onSaved(isEdit ? 'Data staff berhasil diperbarui.' : 'Akun staff baru berhasil dibuat.');
+    onSuccess: (data) => {
+      onSaved(isEdit ? `Data staff berhasil diperbarui.${releasedNote(data?.releasedProspects)}` : 'Akun staff baru berhasil dibuat.');
       onClose();
     },
     onError: (e: any) => setError(e?.message || 'Gagal menyimpan data staff.'),
@@ -496,7 +500,7 @@ export function StaffPage() {
   });
 
   const toggleActive = useMutation({
-    mutationFn: (id: number) => api.patch<{ id: number; isActive: boolean }>(`/catalog/users/${id}/toggle`),
+    mutationFn: (id: number) => api.patch<{ id: number; isActive: boolean; releasedProspects?: number }>(`/catalog/users/${id}/toggle`),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['staff'] });
       const prev = queryClient.getQueryData<StaffUser[]>(['staff', brandId]);
@@ -513,8 +517,8 @@ export function StaffPage() {
       const isNowActive = data?.isActive !== undefined ? data.isActive : !staff?.isActive;
       showToast(
         staff
-          ? `${staff.name} berhasil ${isNowActive ? 'diaktifkan' : 'dinonaktifkan'}.`
-          : `Staff berhasil ${isNowActive ? 'diaktifkan' : 'dinonaktifkan'}.`
+          ? `${staff.name} berhasil ${isNowActive ? 'diaktifkan' : 'dinonaktifkan'}.${releasedNote(data?.releasedProspects)}`
+          : `Staff berhasil ${isNowActive ? 'diaktifkan' : 'dinonaktifkan'}.${releasedNote(data?.releasedProspects)}`
       );
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['staff'] }),
@@ -523,12 +527,12 @@ export function StaffPage() {
 
 
   const deleteStaff = useMutation({
-    mutationFn: (id: number) => api.delete(`/catalog/users/${id}`),
-    onSuccess: () => {
+    mutationFn: (id: number) => api.delete<{ releasedProspects?: number }>(`/catalog/users/${id}`),
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['staff'] });
       const name = deleteTarget?.name ?? 'Staff';
       setDeleteTarget(null);
-      showToast(`Staff "${name}" berhasil dihapus.`);
+      showToast(`Staff "${name}" berhasil dihapus.${releasedNote(data?.releasedProspects)}`);
     },
     onError: (e: any) => showToast(e?.message || 'Gagal menghapus staff.'),
   });

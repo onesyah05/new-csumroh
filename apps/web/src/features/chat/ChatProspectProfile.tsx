@@ -52,6 +52,7 @@ import { FinanceVerifyModal } from './FinanceVerifyModal';
 import { PrivateProofThumb } from './PrivateProof';
 import { LostReasonModal } from './LostReasonModal';
 import { QualificationModal } from './QualificationModal';
+import { PicDialog, isLockedForCs } from '../prospects/PicDialog';
 
 const n = (value: unknown) => Number(String(value ?? 0).replace(/\D/g, '')) || 0;
 const rupiah = (value: unknown) =>
@@ -115,12 +116,15 @@ export function ChatProspectProfile({
   });
 
   const p = prospectQuery.data;
+  // CS yang bukan PIC hanya membaca profil; server juga menolak perubahannya.
+  const locked = Boolean(p) && isLockedForCs(user, p);
+  const [showHandover, setShowHandover] = useState(false);
 
   const draft = useProfileDraft(`${user?.id}:${brandId}:${prospectId}`, p);
   const form = draft.form;
   const isDirty = draft.dirty;
-  const updateFormField = (key: string, value: any) => { setSaveError(null); draft.update({ [key]: value }); };
-  const updateFormFields = (patch: Record<string, any>) => { setSaveError(null); draft.update(patch); };
+  const updateFormField = (key: string, value: any) => { if (locked) return; setSaveError(null); draft.update({ [key]: value }); };
+  const updateFormFields = (patch: Record<string, any>) => { if (locked) return; setSaveError(null); draft.update(patch); };
   const handleResetForm = () => { draft.clear(); setSaveError(null); };
 
   const selectedPackage = useMemo(() => {
@@ -258,6 +262,7 @@ export function ChatProspectProfile({
   const won = ['deal', 'closed_won'].includes(p.status);
   const financialRole = ['finance', 'admin', 'superadmin'].includes(user?.role || '');
   function openAction(setter: (open: boolean) => void) {
+    if (locked) { setSaveError(`Prospek ini ditangani ${p?.user?.name ?? 'CS lain'}. Hanya PIC atau Admin yang dapat mengubahnya.`); return; }
     if (isDirty) { setSaveError('Simpan atau buang draft profil sebelum melanjutkan tindakan.'); return; }
     setter(true);
   }
@@ -318,7 +323,17 @@ export function ChatProspectProfile({
               <span className="truncate max-w-[90px]">
                 {p?.user?.name ? (isPic ? 'Anda' : p.user.name) : 'Belum Ada PIC'}
               </span>
-              {user?.role === 'cs' && isUnassigned && (
+              {user?.role === 'cs' && isPic && (
+                <Button variant="ghost"
+                  type="button"
+                  onClick={() => setShowHandover(true)}
+                  className="font-semibold text-zinc-800 hover:underline cursor-pointer ml-0.5"
+                  title="Serahkan prospek ini ke CS lain"
+                >
+                  Serahkan
+                </Button>
+              )}
+              {user?.role === 'cs' && isUnassigned && !['deal', 'closed_won', 'lose', 'closed_lost'].includes(p.status) && (
                 <Button variant="ghost"
                   type="button"
                   onClick={() => claimPicMutation.mutate()}
@@ -334,6 +349,11 @@ export function ChatProspectProfile({
       </div>
 
       <div className="px-4 py-2 text-xs text-zinc-600 border-b border-zinc-200">{activeBrand?.name || p.brand?.name || 'Brand aktif'}{!connected && <p className="mt-1 text-amber-800">WhatsApp terputus. Anda tetap dapat mengerjakan profil dan draft.</p>}</div>
+      {locked && (
+        <p role="note" className="border-b border-zinc-200 bg-zinc-50 px-4 py-2 text-xs text-zinc-700">
+          Ditangani <strong>{p.user?.name ?? 'CS lain'}</strong>. Anda hanya dapat membaca profil ini; perubahan dilakukan oleh PIC atau Admin.
+        </p>
+      )}
       {/* 2. Contextual Next Action Card */}
       <div className="shrink-0 px-3 pt-2 pb-2.5 bg-white border-b border-zinc-200/80">
         <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-2.5 shadow-2xs space-y-2">
@@ -993,6 +1013,14 @@ export function ChatProspectProfile({
             onShowToast={onShowToast}
           />)}
 
+          {showHandover && (
+            <PicDialog
+              mode="handover"
+              prospect={{ id: p.id, name: p.name, brandId: p.brandId, userId: p.userId }}
+              onDone={(message) => { onShowToast(message); setShowHandover(false); }}
+              onClose={() => setShowHandover(false)}
+            />
+          )}
           {showOfferModal && (          <OfficialOfferModal
             open={showOfferModal}
             onClose={() => setShowOfferModal(false)}

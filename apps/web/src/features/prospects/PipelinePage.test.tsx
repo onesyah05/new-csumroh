@@ -11,9 +11,11 @@ import { PipelinePage } from './PipelinePage';
 const brand = { id: 1, name: 'Hana', code: 'HANA' };
 const prospects = [
   { id: 1, brandId: 1, name: 'Deal Syawal', phone: '62811', status: 'deal', packageId: 10, package: { id: 10, name: 'Syawal' }, dealValue: 60_000_000, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
+  { id: 6, brandId: 1, name: 'Baru Menunggu', phone: '62816', status: 'contact', awaitingSince: Math.floor(Date.now() / 1000) - 5 * 60, packageId: null, dealValue: 0, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
   { id: 2, brandId: 1, name: 'Deal Ramadhan', phone: '62812', status: 'closed_won', packageId: 11, package: { id: 11, name: 'Ramadhan' }, dealValue: 50_000_000, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
   { id: 3, brandId: 1, name: '62813', phone: '62813', status: 'new', packageId: null, dealValue: 0, userId: null, user: null, leadSource: 'whatsapp', messages: [{ timestamp: Math.floor(Date.now() / 1000) - 600, isFromMe: false }] },
-  { id: 4, brandId: 1, name: 'Keberatan Harga', phone: '62814', status: 'objection', objectionCategory: 'price', photoUrl: `/uploads/avatars/p4-${Date.now()}-ab12.jpg`, packageId: null, dealValue: 0, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
+  { id: 4, brandId: 1, name: 'Keberatan Harga', phone: '62814', status: 'objection', objectionCategory: 'price', awaitingSince: Math.floor(Date.now() / 1000) - 20 * 60, photoUrl: `/uploads/avatars/p4-${Date.now()}-ab12.jpg`, packageId: null, dealValue: 0, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
+  { id: 5, brandId: 1, name: 'Milik Tester', phone: '62815', status: 'contact', packageId: null, dealValue: 0, userId: 9, user: { id: 9, name: 'Tester' }, leadSource: 'whatsapp', messages: [] },
 ];
 
 function json(data: unknown) {
@@ -25,6 +27,7 @@ function renderAs(role: string, url = '/pipeline') {
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
     const u = String(input);
     if (u.includes('/auth/refresh')) return json({ accessToken: 't', user });
+    if (u.includes('/pic-candidates')) return json([{ id: 7, name: 'CS Fitri', openProspects: 3 }, { id: 9, name: 'Tester', openProspects: 1 }]);
     if (u.includes('/prospects')) return json(prospects);
     if (u.includes('/catalog/packages')) return json([{ id: 10, name: 'Syawal' }, { id: 11, name: 'Ramadhan' }]);
     return json([]);
@@ -103,5 +106,49 @@ describe('Pipeline', () => {
     expect(await screen.findByText('Tidak ada prospek yang cocok dengan pencarian atau filter ini.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Hapus semua filter' }));
     expect(await screen.findByText('Deal Syawal')).toBeTruthy();
+  });
+
+  it('CS bukan PIC: kartu hanya-baca (tanpa follow-up dan tidak bisa diseret)', async () => {
+    renderAs('cs');
+    const card = await screen.findByRole('article', { name: 'Kartu prospek Keberatan Harga' });
+    expect(card.getAttribute('draggable')).toBe('false');
+    expect(within(card).queryByRole('button', { name: /Catat follow-up/ })).toBeNull();
+    const own = screen.getByRole('article', { name: 'Kartu prospek Milik Tester' });
+    expect(own.getAttribute('draggable')).toBe('true');
+    expect(within(own).getByRole('button', { name: 'Catat follow-up Milik Tester' })).toBeTruthy();
+  });
+
+  it('PIC dapat menyerahkan prospeknya; daftar CS menampilkan beban kerja', async () => {
+    renderAs('cs');
+    const own = await screen.findByRole('article', { name: 'Kartu prospek Milik Tester' });
+    fireEvent.click(within(own).getByRole('button', { name: /^Serahkan PIC Milik Tester/ }));
+    expect(await screen.findByRole('dialog', { name: 'Serahkan PIC' })).toBeTruthy();
+    expect(screen.getByLabelText('Alasan')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Serahkan' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('filter "PIC saya" dari URL hanya menampilkan prospek milik CS ini', async () => {
+    renderAs('cs', '/pipeline?view=table&pic=mine');
+    expect(await screen.findByText('Milik Tester')).toBeTruthy();
+    expect(screen.queryByText('Deal Syawal')).toBeNull();
+  });
+
+  it('ambil alih muncul hanya setelah jamaah belum dibalas lebih dari 15 menit', async () => {
+    renderAs('cs');
+    const late = await screen.findByRole('article', { name: 'Kartu prospek Keberatan Harga' });
+    const button = within(late).getByRole('button', { name: 'Ambil alih Keberatan Harga dari CS Fitri' });
+    const early = screen.getByRole('article', { name: 'Kartu prospek Baru Menunggu' });
+    expect(within(early).queryByRole('button', { name: /Ambil alih/ })).toBeNull();
+    fireEvent.click(button);
+    await vi.waitFor(() => {
+      const calls = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
+      expect(calls.some((u) => u.includes('/prospects/4/takeover'))).toBe(true);
+    });
+  });
+
+  it('admin tidak mendapat tombol ambil alih (memakai Tugaskan PIC)', async () => {
+    renderAs('admin');
+    const late = await screen.findByRole('article', { name: 'Kartu prospek Keberatan Harga' });
+    expect(within(late).queryByRole('button', { name: /Ambil alih/ })).toBeNull();
   });
 });

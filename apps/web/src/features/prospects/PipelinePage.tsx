@@ -37,6 +37,7 @@ import {
   dateOnlyKey,
   isLostStatus,
   isWonStatus,
+  isTakeoverOpen,
   objectionLabel,
   pipelineStatuses,
   type ProspectStatus,
@@ -54,6 +55,8 @@ import { PageHeader } from '../../components/ui/page-header';
 import { cn } from '../../lib/cn';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { useWhatsAppAvatars } from '../../lib/avatars';
+import { PicDialog, isLockedForCs } from './PicDialog';
+import { useNow } from '../../lib/useNow';
 import { OfficialOfferModal } from '../chat/OfficialOfferModal';
 import { ObjectionModal } from '../chat/ObjectionModal';
 import { OfficialInvoiceModal } from '../chat/OfficialInvoiceModal';
@@ -185,6 +188,7 @@ export function PipelinePage() {
   const search = params.get('q') ?? '';
   const filterPaket = params.get('paket') ?? '';
   const filterLeadSource = params.get('sumber') ?? '';
+  const filterPic = params.get('pic') ?? '';
   const setParam = (key: string, value: string | null) => {
     setParams((current) => {
       const next = new URLSearchParams(current);
@@ -194,15 +198,16 @@ export function PipelinePage() {
     }, { replace: true });
   };
 
-  const [showFilters, setShowFilters] = useState(Boolean(filterPaket || filterLeadSource));
+  const [showFilters, setShowFilters] = useState(Boolean(filterPaket || filterLeadSource || filterPic));
   const [followupFor, setFollowupFor] = useState<Prospect | null>(null);
-  const [assignFor, setAssignFor] = useState<Prospect | null>(null);
+  const [picDialog, setPicDialog] = useState<{ mode: 'assign' | 'handover'; prospect: Prospect } | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<ProspectStatus | null>(null);
   const [moveAnnouncement, setMoveAnnouncement] = useState('');
   const [collapsed, setCollapsed] = useState<string[]>(readCollapsed);
   const [guided, setGuided] = useState<{ type: GuidedType; prospect: Prospect } | null>(null);
   const toast = useToast();
+  const now = useNow();
   // Kolom/tabel panjang dirender bertahap agar board tetap ringan (virtualize-lists: 50+ item).
   const [columnLimit, setColumnLimit] = useState<Record<string, number>>({});
   const [tableLimit, setTableLimit] = useState(TABLE_PAGE);
@@ -236,9 +241,23 @@ export function PipelinePage() {
       if (q && !`${p.name} ${p.phone ?? ''} ${p.city ?? ''}`.toLowerCase().includes(q)) return false;
       if (filterPaket && p.packageId !== Number(filterPaket)) return false;
       if (filterLeadSource && p.leadSource !== filterLeadSource) return false;
+      if (filterPic === 'mine' && p.userId !== user?.id) return false;
+      if (filterPic === 'none' && p.userId) return false;
+      if (filterPic.startsWith('user:') && p.userId !== Number(filterPic.slice(5))) return false;
       return true;
     });
-  }, [prospects.data, search, filterPaket, filterLeadSource]);
+  }, [prospects.data, search, filterPaket, filterLeadSource, filterPic, user?.id]);
+  // Pilihan PIC: CS melihat "PIC saya"; Admin memilih per CS dari PIC yang ada di data.
+  const picOptions = useMemo(() => {
+    const team = new Map<number, string>();
+    for (const p of prospects.data ?? []) if (p.userId && p.user?.name) team.set(p.userId, p.user.name);
+    return [
+      { value: 'all', label: 'Semua PIC' },
+      ...(user?.role === 'cs' ? [{ value: 'mine', label: 'PIC saya' }] : []),
+      { value: 'none', label: 'Belum ada PIC' },
+      ...(user?.role === 'cs' ? [] : [...team].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => ({ value: `user:${id}`, label: name }))),
+    ];
+  }, [prospects.data, user?.role]);
   const quickCounts = useMemo(
     () => Object.fromEntries(QUICK_FILTERS.map((f) => [f.id, base.filter((p) => f.test(p, today)).length])),
     [base, today],
@@ -299,6 +318,14 @@ export function PipelinePage() {
       toast.show('Anda menjadi PIC prospek ini.');
     },
     onError: (error: Error) => toast.show(`Klaim gagal: ${error.message}`, { error: true }),
+  });
+  const takeover = useMutation({
+    mutationFn: (p: Prospect) => api.post(`/prospects/${p.id}/takeover`, { brandId: p.brandId }),
+    onSuccess: (_data, p) => {
+      void queryClient.invalidateQueries({ queryKey: ['prospects'] });
+      toast.show(`Anda mengambil alih ${p.name} dari ${p.user?.name ?? 'PIC sebelumnya'}. Segera balas jamaah.`);
+    },
+    onError: (error: Error) => toast.show(`Ambil alih gagal: ${error.message}`, { error: true }),
   });
 
   const handleStatusChange = useCallback(
@@ -406,12 +433,12 @@ export function PipelinePage() {
   if (!brandId) return <PageError title="Belum ada brand aktif" description="Buat brand melalui menu Brand agar pipeline dapat memakai data prospek sebenarnya." />;
   if (prospects.isError) return <PageError description={prospects.error.message} onRetry={() => void prospects.refetch()} />;
 
-  const activeFiltersCount = [filterPaket, filterLeadSource].filter(Boolean).length;
-  const hasAnyFilter = Boolean(search || quick !== 'all' || filterPaket || filterLeadSource);
+  const activeFiltersCount = [filterPaket, filterLeadSource, filterPic].filter(Boolean).length;
+  const hasAnyFilter = Boolean(search || quick !== 'all' || filterPaket || filterLeadSource || filterPic);
   const clearAllFilters = () => {
     setParams((current) => {
       const next = new URLSearchParams(current);
-      ['q', 'quick', 'paket', 'sumber'].forEach((key) => next.delete(key));
+      ['q', 'quick', 'paket', 'sumber', 'pic'].forEach((key) => next.delete(key));
       return next;
     }, { replace: true });
   };
@@ -420,10 +447,16 @@ export function PipelinePage() {
     prospect: p,
     photoUrl: photoFor(p),
     today,
-    canClaim: isCs && !p.userId,
+    canClaim: isCs && !p.userId && isOpen(p),
     canAssign: isManager,
+    canHandover: isCs && p.userId === user?.id,
+    // Aturan ambil alih: jamaah belum dibalas lebih dari 15 menit (server memeriksa ulang dari riwayat chat).
+    canTakeOver: isLockedForCs(user, p) && isOpen(p) && isTakeoverOpen(p.awaitingSince, now),
+    onTakeOver: () => takeover.mutate(p),
+    locked: isLockedForCs(user, p),
     onClaim: () => claim.mutate(p.id),
-    onAssign: () => setAssignFor(p),
+    onAssign: () => setPicDialog({ mode: 'assign', prospect: p }),
+    onHandover: () => setPicDialog({ mode: 'handover', prospect: p }),
     onLogFollowup: () => setFollowupFor(p),
     onStatus: (status: string) => handleStatusChange(p.id, status),
     role: user?.role,
@@ -528,8 +561,18 @@ export function PipelinePage() {
               className="w-full"
             />
           </div>
+          <div className="min-w-[180px] flex-1">
+            <p className="mb-1 text-xs font-semibold text-zinc-500">PIC</p>
+            <Select
+              value={filterPic || 'all'}
+              onValueChange={(value) => setParam('pic', value === 'all' ? null : value)}
+              aria-label="Filter PIC"
+              options={picOptions}
+              className="w-full"
+            />
+          </div>
           {activeFiltersCount > 0 && (
-            <button onClick={() => { setParam('paket', null); setParam('sumber', null); }} className="min-h-6 rounded px-1.5 py-1 text-xs font-semibold text-zinc-700 underline hover:text-zinc-950">
+            <button onClick={() => { setParam('paket', null); setParam('sumber', null); setParam('pic', null); }} className="min-h-6 rounded px-1.5 py-1 text-xs font-semibold text-zinc-700 underline hover:text-zinc-950">
               Reset filter
             </button>
           )}
@@ -726,7 +769,7 @@ export function PipelinePage() {
                       <td className="px-4 text-xs text-zinc-600">{p.package?.name ?? '—'}</td>
                       <td className="px-4 text-xs">{Number(p.dealValue) > 0 ? <b>Rp {money(p.dealValue)}</b> : <span className="text-zinc-500">Belum ada penawaran</span>}</td>
                       <td className="px-4 text-xs">
-                        <PicControl prospect={p} canClaim={isCs && !p.userId} canAssign={isManager} onClaim={() => claim.mutate(p.id)} onAssign={() => setAssignFor(p)} />
+                        <PicControl {...cardProps(p)} />
                       </td>
                       <td className="px-4 text-xs">
                         {due ? (
@@ -743,9 +786,11 @@ export function PipelinePage() {
                           <Link to={`/inbox?prospectId=${p.id}`} aria-label={`Chat ${p.name}`} title="Buka chat" className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950">
                             <MessageSquareText size={15} />
                           </Link>
-                          <button onClick={() => setFollowupFor(p)} aria-label={`Catat follow-up ${p.name}`} title="Catat follow-up" className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950">
-                            <ClipboardList size={15} />
-                          </button>
+                          {!isLockedForCs(user, p) && (
+                            <button onClick={() => setFollowupFor(p)} aria-label={`Catat follow-up ${p.name}`} title="Catat follow-up" className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950">
+                              <ClipboardList size={15} />
+                            </button>
+                          )}
                           <Link to={`/prospects/${p.id}`} aria-label={`Buka profil ${p.name}`} title="Buka profil" className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950">
                             <ArrowUpRight size={15} />
                           </Link>
@@ -785,11 +830,12 @@ export function PipelinePage() {
           onClose={() => setFollowupFor(null)}
         />
       )}
-      {assignFor && (
-        <AssignPicDialog
-          prospect={assignFor}
-          onDone={(message) => { toast.show(message); setAssignFor(null); }}
-          onClose={() => setAssignFor(null)}
+      {picDialog && (
+        <PicDialog
+          mode={picDialog.mode}
+          prospect={picDialog.prospect as { id: number; name: string; brandId: number; userId?: number | null }}
+          onDone={(message) => { toast.show(message); setPicDialog(null); }}
+          onClose={() => setPicDialog(null)}
         />
       )}
 
@@ -862,13 +908,36 @@ function CardBadge({ urgent, icon: Icon, children, title }: { urgent?: boolean; 
   );
 }
 
-function PicControl({ prospect, canClaim, canAssign, onClaim, onAssign }: {
-  prospect: Prospect; canClaim: boolean; canAssign: boolean; onClaim(): void; onAssign(): void;
+function PicControl({ prospect, canClaim, canAssign, canHandover, canTakeOver, onClaim, onAssign, onHandover, onTakeOver }: {
+  prospect: Prospect; canClaim: boolean; canAssign: boolean; canHandover: boolean; canTakeOver: boolean;
+  onClaim(): void; onAssign(): void; onHandover(): void; onTakeOver(): void;
 }) {
+  if (prospect.user?.name && canTakeOver) {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <span className="inline-flex min-w-0 max-w-[110px] items-center gap-1 text-xs text-zinc-700">
+          <UserRound size={12} className="shrink-0" /><span className="truncate">{prospect.user.name}</span>
+        </span>
+        <button
+          onClick={onTakeOver}
+          title="Jamaah belum dibalas lebih dari 15 menit"
+          aria-label={`Ambil alih ${prospect.name} dari ${prospect.user.name}`}
+          className="inline-flex min-h-6 shrink-0 items-center gap-1 rounded-md border border-zinc-900 bg-white px-2 py-0.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-100"
+        >
+          <UserPlus2 size={12} />Ambil alih
+        </button>
+      </span>
+    );
+  }
   if (prospect.user?.name) {
-    return canAssign ? (
-      <button onClick={onAssign} title="Ganti PIC" className="inline-flex max-w-[180px] items-center gap-1 truncate rounded-md px-1 text-xs text-zinc-700 hover:bg-zinc-100">
-        <UserRound size={12} className="shrink-0" /><span className="truncate">{prospect.user.name}</span>
+    return canAssign || canHandover ? (
+      <button
+        onClick={canAssign ? onAssign : onHandover}
+        title={canAssign ? 'Ganti PIC' : 'Serahkan ke CS lain'}
+        aria-label={`${canAssign ? 'Ganti PIC' : 'Serahkan PIC'} ${prospect.name} (saat ini ${prospect.user.name})`}
+        className="inline-flex min-h-6 max-w-[180px] items-center gap-1 truncate rounded-md px-1 text-xs text-zinc-700 hover:bg-zinc-100"
+      >
+        <UserRound size={12} className="shrink-0" /><span className="truncate">{canHandover ? 'Anda' : prospect.user.name}</span>
       </button>
     ) : (
       <span className="inline-flex max-w-[180px] items-center gap-1 truncate text-xs text-zinc-700" title="PIC">
@@ -894,7 +963,7 @@ function PicControl({ prospect, canClaim, canAssign, onClaim, onAssign }: {
 }
 
 function ProspectCard({
-  prospect, photoUrl, today, role, dragging, disabled, onDragStart, onDragEnd, onStatus, onClaim, onAssign, onLogFollowup, canClaim, canAssign,
+  prospect, photoUrl, today, role, dragging, disabled, onDragStart, onDragEnd, onStatus, onClaim, onAssign, onHandover, onLogFollowup, onTakeOver, canClaim, canAssign, canHandover, canTakeOver, locked,
 }: {
   prospect: Prospect;
   photoUrl: string | null;
@@ -907,9 +976,15 @@ function ProspectCard({
   onStatus(status: string): void;
   onClaim(): void;
   onAssign(): void;
+  onHandover(): void;
   onLogFollowup(): void;
   canClaim: boolean;
   canAssign: boolean;
+  canHandover: boolean;
+  canTakeOver: boolean;
+  onTakeOver(): void;
+  /** CS yang bukan PIC: kartu hanya-baca (server menolak perubahan dari selain PIC/Admin). */
+  locked: boolean;
 }) {
   const due = dateOnlyKey(prospect.nextFollowupDate);
   const open = isOpen(prospect);
@@ -922,16 +997,18 @@ function ProspectCard({
   const activity = timeAgo(lastActivity(prospect));
   const value = Number(prospect.dealValue) || 0;
   // Menu "Pindahkan status" hanya berisi langkah yang memang bisa dilakukan manual.
-  const moves = pipelineStatuses.filter((status) => dropAction(status, prospect, role).allowed);
+  const moves = locked ? [] : pipelineStatuses.filter((status) => dropAction(status, prospect, role).allowed);
 
   return (
     <article
       aria-label={`Kartu prospek ${prospect.name}`}
-      draggable={!disabled}
+      draggable={!disabled && !locked}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      title={locked ? `Ditangani ${prospect.user?.name ?? 'CS lain'}: hanya PIC atau Admin yang dapat mengubah` : undefined}
       className={cn(
-        'group cursor-grab rounded-xl border border-zinc-200 bg-white p-3 shadow-2xs transition hover:border-zinc-300 hover:shadow-xs active:cursor-grabbing',
+        'group rounded-xl border border-zinc-200 bg-white p-3 shadow-2xs transition hover:border-zinc-300 hover:shadow-xs',
+        !locked && 'cursor-grab active:cursor-grabbing',
         dragging && 'scale-95 opacity-40 ring-2 ring-zinc-950/20',
         disabled && 'cursor-wait',
       )}
@@ -951,9 +1028,27 @@ function ProspectCard({
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
             <DropdownMenu.Content align="end" className="z-50 w-60 rounded-xl border bg-white p-1 shadow-lift">
-              <DropdownMenu.Item onSelect={onLogFollowup} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs outline-none data-[highlighted]:bg-zinc-100">
-                <ClipboardList size={13} className="text-zinc-500" />Catat follow-up
-              </DropdownMenu.Item>
+              {!locked && (
+                <DropdownMenu.Item onSelect={onLogFollowup} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs outline-none data-[highlighted]:bg-zinc-100">
+                  <ClipboardList size={13} className="text-zinc-500" />Catat follow-up
+                </DropdownMenu.Item>
+              )}
+              {canHandover && (
+                <DropdownMenu.Item onSelect={onHandover} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs outline-none data-[highlighted]:bg-zinc-100">
+                  <UserPlus2 size={13} className="text-zinc-500" />Serahkan ke CS lain
+                </DropdownMenu.Item>
+              )}
+              {locked && (
+                <p className="px-2 py-2 text-xs text-zinc-600">
+                  Ditangani {prospect.user?.name ?? 'CS lain'}. Hanya PIC atau Admin yang dapat mengubah prospek ini
+                  {canTakeOver ? '.' : ', kecuali jamaah belum dibalas lebih dari 15 menit.'}
+                </p>
+              )}
+              {canTakeOver && (
+                <DropdownMenu.Item onSelect={onTakeOver} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold outline-none data-[highlighted]:bg-zinc-100">
+                  <UserPlus2 size={13} className="text-zinc-500" />Ambil alih (belum dibalas 15+ menit)
+                </DropdownMenu.Item>
+              )}
               {canAssign && (
                 <DropdownMenu.Item onSelect={onAssign} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs outline-none data-[highlighted]:bg-zinc-100">
                   <UserPlus2 size={13} className="text-zinc-500" />{prospect.userId ? 'Ganti PIC' : 'Tugaskan PIC'}
@@ -1009,7 +1104,10 @@ function ProspectCard({
       )}
 
       <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-zinc-100 pt-2">
-        <PicControl prospect={prospect} canClaim={canClaim} canAssign={canAssign} onClaim={onClaim} onAssign={onAssign} />
+        <PicControl
+          prospect={prospect} canClaim={canClaim} canAssign={canAssign} canHandover={canHandover} canTakeOver={canTakeOver}
+          onClaim={onClaim} onAssign={onAssign} onHandover={onHandover} onTakeOver={onTakeOver}
+        />
         <div className="flex shrink-0 items-center gap-0.5">
           {due && !followupOverdue && !followupToday && open && (
             <span className="mr-1 inline-flex items-center gap-1 text-xs text-zinc-500" title="Follow-up berikutnya">
@@ -1025,84 +1123,19 @@ function ProspectCard({
           >
             <MessageSquareText size={14} />
           </Link>
-          <button
-            onClick={onLogFollowup}
-            aria-label={`Catat follow-up ${prospect.name}`}
-            title="Catat follow-up"
-            className="rounded-md p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
-          >
-            <ClipboardList size={14} />
-          </button>
+          {!locked && (
+            <button
+              onClick={onLogFollowup}
+              aria-label={`Catat follow-up ${prospect.name}`}
+              title="Catat follow-up"
+              className="rounded-md p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
+            >
+              <ClipboardList size={14} />
+            </button>
+          )}
         </div>
       </div>
     </article>
-  );
-}
-
-/** Admin/Superadmin menugaskan atau melepas PIC; backend memvalidasi CS aktif dengan akses brand prospek. */
-function AssignPicDialog({ prospect, onDone, onClose }: { prospect: Prospect; onDone(message: string): void; onClose(): void }) {
-  const [userId, setUserId] = useState<string>(prospect.userId ? String(prospect.userId) : '');
-  const staff = useQuery({
-    queryKey: ['staff', prospect.brandId],
-    queryFn: () => api.get<any[]>(`/catalog/users?brandId=${prospect.brandId}`),
-  });
-  const candidates = (staff.data ?? []).filter((s) =>
-    s.role === 'cs' && s.isActive && (s.brandId === prospect.brandId || s.userBrands?.some((ub: any) => ub.brand?.id === prospect.brandId)),
-  );
-  const assign = useMutation({
-    mutationFn: (target: number | null) => api.post(`/prospects/${prospect.id}/assign`, { userId: target, brandId: prospect.brandId }),
-    onSuccess: (_data, target) => {
-      void queryClient.invalidateQueries({ queryKey: ['prospects'] });
-      const name = candidates.find((c) => c.id === target)?.name;
-      onDone(target ? `PIC ${prospect.name} sekarang ${name ?? 'CS terpilih'}.` : `PIC ${prospect.name} dilepas ke antrean.`);
-    },
-  });
-
-  return (
-    <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-white p-6 shadow-lift">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <Dialog.Title className="text-base font-bold text-zinc-950">Tugaskan PIC</Dialog.Title>
-              <Dialog.Description className="mt-0.5 text-xs text-zinc-500">
-                Pilih CS aktif yang menangani <strong>{prospect.name}</strong>.
-              </Dialog.Description>
-            </div>
-            <Dialog.Close className="rounded-lg p-2 hover:bg-zinc-100" aria-label="Tutup"><X size={18} /></Dialog.Close>
-          </div>
-          <div className="mt-5">
-            {staff.isLoading ? (
-              <p className="text-xs text-zinc-500">Memuat daftar CS…</p>
-            ) : candidates.length === 0 ? (
-              <p className="text-xs text-zinc-600">Belum ada CS aktif untuk brand ini. Tambahkan di menu Staff.</p>
-            ) : (
-              <Select
-                value={userId || undefined}
-                onValueChange={setUserId}
-                aria-label="CS penanggung jawab"
-                placeholder="Pilih CS"
-                className="w-full"
-                options={candidates.map((c) => ({ value: String(c.id), label: c.name }))}
-              />
-            )}
-            {assign.error && <p className="mt-2 text-xs text-red-700" role="alert">{assign.error.message}</p>}
-          </div>
-          <div className="mt-6 flex items-center justify-between gap-2">
-            {prospect.userId ? (
-              <Button type="button" variant="ghost" onClick={() => assign.mutate(null)} disabled={assign.isPending}>Lepas PIC</Button>
-            ) : <span />}
-            <div className="flex gap-2">
-              <Button type="button" variant="secondary" onClick={onClose}>Batal</Button>
-              <Button type="button" onClick={() => assign.mutate(Number(userId))} disabled={!userId || assign.isPending || Number(userId) === prospect.userId}>
-                {assign.isPending ? 'Menyimpan…' : 'Simpan'}
-              </Button>
-            </div>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
   );
 }
 

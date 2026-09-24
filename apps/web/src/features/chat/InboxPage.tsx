@@ -1,7 +1,7 @@
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { businessDateKey } from '@csumroh/shared-types';
+import { businessDateKey, isLostStatus, isTakeoverOpen, isWonStatus } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle,
@@ -44,6 +44,7 @@ import {
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useWhatsAppAvatars } from '../../lib/avatars';
+import { useNow } from '../../lib/useNow';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { cn } from '../../lib/cn';
 import { ChatSidePanel, type ChatSidePanelTab } from './ChatSidePanel';
@@ -321,6 +322,13 @@ export function InboxPage() {
   const isPic = Boolean(selected?.userId && selected.userId === user?.id);
   const isUnassigned = !selected?.userId;
   const canReply = isAdmin || isPic || (isUnassigned && user?.role === 'cs');
+  // Aturan ambil alih: CS lain boleh mengambil prospek bila jamaah belum dibalas lebih dari 15 menit.
+  const now = useNow();
+  const canTakeOver = Boolean(
+    selected && user?.role === 'cs' && !isPic && !isUnassigned && !selected.isGroup
+    && !isWonStatus(selected.status) && !isLostStatus(selected.status)
+    && isTakeoverOpen(selected.awaitingSince, now),
+  );
   // Hak membalas (role/PIC) dan kemampuan mengirim (perangkat terhubung) dibedakan.
   const canSend = canReply && isConnected;
 
@@ -525,6 +533,16 @@ export function InboxPage() {
     onError: (err: any) => {
       showToast(err?.message || 'Gagal mengklaim PIC');
     },
+  });
+
+  const takeoverMutation = useMutation({
+    mutationFn: (prospect: { id: number; brandId?: number }) => api.post(`/prospects/${prospect.id}/takeover`, { brandId: prospect.brandId ?? brandId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations', brandId] });
+      void queryClient.invalidateQueries({ queryKey: ['prospects'] });
+      showToast('Anda sekarang PIC percakapan ini. Segera balas jamaah.');
+    },
+    onError: (err: any) => showToast(err?.message || 'Gagal mengambil alih percakapan'),
   });
 
   const reactMutation = useMutation({
@@ -1332,7 +1350,7 @@ export function InboxPage() {
                     </span>
                   )}
 
-                  {user?.role === 'cs' && isUnassigned && (
+                  {user?.role === 'cs' && isUnassigned && !isWonStatus(selected.status) && !isLostStatus(selected.status) && (
                     <Button
                       size="sm"
                       variant="secondary"
@@ -1343,6 +1361,20 @@ export function InboxPage() {
                     >
                       <UserPlus2 size={14} />
                       <span className="hidden sm:inline">Klaim PIC</span>
+                    </Button>
+                  )}
+
+                  {canTakeOver && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="gap-1.5 text-xs font-semibold ml-0.5"
+                      onClick={() => takeoverMutation.mutate(selected)}
+                      disabled={takeoverMutation.isPending}
+                      title={`Jamaah belum dibalas lebih dari 15 menit oleh ${selected.user?.name ?? 'PIC'}`}
+                    >
+                      <UserPlus2 size={14} />
+                      <span className="hidden sm:inline">Ambil alih</span>
                     </Button>
                   )}
 
@@ -2272,10 +2304,23 @@ export function InboxPage() {
                           Hanya Admin dan PIC yang dapat membalas chat
                         </p>
                         <p className="text-[11px] text-zinc-500 mt-0.5">
-                          Percakapan ini ditugaskan kepada PIC <strong>{selected.user?.name || 'CS lain'}</strong>. Anda hanya memiliki akses membaca pesan.
+                          Percakapan ini ditugaskan kepada PIC <strong>{selected.user?.name || 'CS lain'}</strong>.{' '}
+                          {canTakeOver
+                            ? 'Jamaah belum dibalas lebih dari 15 menit, jadi Anda boleh mengambil alih.'
+                            : 'Anda hanya dapat membaca pesan. Bila jamaah belum dibalas lebih dari 15 menit, CS lain boleh mengambil alih.'}
                         </p>
                       </div>
                     </div>
+                    {canTakeOver && (
+                      <Button
+                        size="sm"
+                        onClick={() => takeoverMutation.mutate(selected)}
+                        disabled={takeoverMutation.isPending}
+                        icon={<UserPlus2 size={14} />}
+                      >
+                        {takeoverMutation.isPending ? 'Memproses…' : 'Ambil alih'}
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}

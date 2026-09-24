@@ -17,7 +17,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { calculateDealValue, type ProspectStatus } from '@csumroh/shared-types';
+import { calculateDealValue, isLostStatus, isWonStatus, type ProspectStatus } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
 import { useBrandScope } from '../../lib/scope';
 import { useAuth } from '../../app/auth';
@@ -28,6 +28,7 @@ import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
+import { isLockedForCs } from '../prospects/PicDialog';
 
 const n = (value: unknown) => Number(String(value ?? 0).replace(/\D/g, '')) || 0;
 const rupiah = (value: unknown) =>
@@ -144,6 +145,8 @@ export function ProspectDetailPage() {
       />
     );
 
+  const locked = isLockedForCs(user, p);
+
   return (
     <div className="app-page space-y-6">
       <PageHeader
@@ -153,7 +156,7 @@ export function ProspectDetailPage() {
         subtitle={`${p.phone || 'Nomor belum ada'} · ${p.city || 'Kota belum diisi'} · Sumber: ${p.leadSource}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {user?.role === 'cs' && !p.user && (
+            {user?.role === 'cs' && !p.user && !isWonStatus(p.status) && !isLostStatus(p.status) && (
               <Button variant="secondary" size="md" onClick={() => claim.mutate()} icon={<UserPlus2 size={14} />}>
                 Klaim PIC
               </Button>
@@ -394,10 +397,13 @@ export function ProspectDetailPage() {
                     placeholder="Tuliskan poin penting preferensi jamaah…"
                   />
                 </Field>
-                <Button className="w-full" onClick={() => save.mutate()} disabled={save.isPending}>
+                <Button className="w-full" onClick={() => save.mutate()} disabled={save.isPending || locked}>
                   <Save size={14} />
                   <span>{save.isPending ? 'Menyimpan…' : 'Simpan Perubahan'}</span>
                 </Button>
+                {locked && (
+                  <p className="text-xs text-zinc-600">Ditangani {p.user?.name ?? 'CS lain'}. Hanya PIC atau Admin yang dapat menyimpan perubahan.</p>
+                )}
                 {save.isSuccess && (
                   <p className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
                     <CheckCircle2 size={14} />
