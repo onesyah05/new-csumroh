@@ -32,6 +32,7 @@ import { queueCapiForStatus } from '../capi/capi.service.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
+import { env } from '../../config/env.js';
 
 export const prospectsRouter = Router();
 prospectsRouter.use(authGuard);
@@ -115,6 +116,32 @@ prospectsRouter.get('/', asyncHandler(async (req, res) => {
     prospects = prospects.filter((p) =>
       `${p.name ?? ''} ${p.phone ?? ''} ${p.city ?? ''}`.toLowerCase().includes(search)
     );
+  }
+
+  // Lazy fetch profile pictures in background for pipeline prospects missing photoUrl
+  const missing = prospects.filter((item) => !item.photoUrl && !item.isGroup && item.remoteJid && item.remoteJid !== '0@s.whatsapp.net');
+  if (missing.length > 0) {
+    setImmediate(async () => {
+      for (const item of missing.slice(0, 10)) {
+        try {
+          const params = new URLSearchParams();
+          if (item.remoteJid) params.set('jid', item.remoteJid);
+          if (item.phone) params.set('phone', item.phone);
+          const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/profile-pic?${params.toString()}`, {
+            headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
+          });
+          if (response.ok) {
+            const body = await response.json() as { success: boolean; data?: { url?: string | null } };
+            if (body.data?.url) {
+              await prisma.prospect.updateMany({
+                where: { brandId, id: { in: [item.id, ...(item.duplicateIds || [])] } },
+                data: { photoUrl: body.data.url },
+              });
+            }
+          }
+        } catch {}
+      }
+    });
   }
 
   res.json({ success: true, data: prospects });

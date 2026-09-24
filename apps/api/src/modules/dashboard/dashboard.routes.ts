@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { isWonStatus } from '@csumroh/shared-types';
+import { avatarNeedsRefresh, isWonStatus } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/http.js';
+import { refreshProspectAvatars } from '../chat/avatar.service.js';
 
 export const dashboardRouter = Router();
 dashboardRouter.use(authGuard);
@@ -39,6 +40,8 @@ dashboardRouter.get('/', asyncHandler(async (req, res) => {
       phone: true,
       city: true,
       status: true,
+      photoUrl: true,
+      remoteJid: true,
       paymentStatus: true,
       dealValue: true,
       dpAmount: true,
@@ -151,6 +154,16 @@ dashboardRouter.get('/', asyncHandler(async (req, res) => {
 
   // 8. Recent 10 prospects
   const recent = prospects.slice(0, 10);
+
+  // Foto profil WhatsApp disalin ke server di latar belakang (URL CDN WA kedaluwarsa, jadi tidak disimpan).
+  const missingRecent = recent.filter((p) => avatarNeedsRefresh(p.photoUrl) && p.remoteJid && !p.remoteJid.endsWith('@g.us') && p.remoteJid !== '0@s.whatsapp.net');
+  if (missingRecent.length > 0) {
+    setImmediate(() => {
+      void refreshProspectAvatars(missingRecent.map((p) => ({
+        id: p.id, brandId: p.brandId, remoteJid: p.remoteJid, phone: p.phone, photoUrl: p.photoUrl,
+      })));
+    });
+  }
 
   res.json({
     success: true,

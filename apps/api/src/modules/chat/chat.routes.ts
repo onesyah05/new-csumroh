@@ -13,6 +13,8 @@ import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from './outbound.js';
 import { resolveFlyerFile } from '../../utils/safe-path.js';
+import { avatarNeedsRefresh } from '@csumroh/shared-types';
+import { refreshProspectAvatar, refreshProspectAvatars } from './avatar.service.js';
 
 export const chatRouter = Router();
 chatRouter.use(authGuard);
@@ -267,31 +269,13 @@ chatRouter.get('/conversations', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
   const data = await getLivechatConversationsForBrand(brandId);
 
-  // Lazy fetch profile pictures in the background for prospects missing photoUrl
-  const missing = data.filter((item) => !item.photoUrl && !item.isGroup && item.remoteJid !== '0@s.whatsapp.net');
+  // Salin foto profil WhatsApp yang belum ada / basi ke server di latar belakang (URL CDN WA kedaluwarsa).
+  const missing = data.filter((item) => avatarNeedsRefresh(item.photoUrl) && !item.isGroup && item.remoteJid !== '0@s.whatsapp.net');
   if (missing.length > 0) {
-    setImmediate(async () => {
-      for (const item of missing.slice(0, 10)) {
-        try {
-          const params = new URLSearchParams();
-          if (item.remoteJid) params.set('jid', item.remoteJid);
-          if (item.phone) params.set('phone', item.phone);
-          const res = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/profile-pic?${params.toString()}`, {
-            headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
-          });
-          if (res.ok) {
-            const body = await res.json() as { success: boolean; data?: { url?: string | null } };
-            if (body.data?.url) {
-              await prisma.prospect.updateMany({
-                where: { brandId, id: { in: [item.id, ...(item.duplicateIds || [])] } },
-                data: { photoUrl: body.data.url },
-              });
-            }
-          }
-        } catch {
-          // ignore background errors
-        }
-      }
+    setImmediate(() => {
+      void refreshProspectAvatars(missing.slice(0, 10).map((item) => ({
+        id: item.id, brandId, remoteJid: item.remoteJid, phone: item.phone, photoUrl: item.photoUrl,
+      })));
     });
   }
 
@@ -309,30 +293,23 @@ chatRouter.get('/prospects/:id/avatar', asyncHandler(async (req, res) => {
     res.status(404).json({ success: false, error: 'Prospek tidak ditemukan' });
     return;
   }
-  if (prospect.photoUrl) {
-    res.json({ success: true, data: { photoUrl: prospect.photoUrl } });
-    return;
-  }
-  let photoUrl: string | null = null;
-  try {
-    const params = new URLSearchParams();
-    if (prospect.remoteJid) params.set('jid', prospect.remoteJid);
-    if (prospect.phone) params.set('phone', prospect.phone);
-    const gwRes = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/profile-pic?${params.toString()}`, {
-      headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
-    });
-    if (gwRes.ok) {
-      const body = await gwRes.json() as { success: boolean; data?: { url?: string | null } };
-      photoUrl = body.data?.url ?? null;
-      if (photoUrl) {
-        await prisma.prospect.update({
-          where: { id: prospect.id },
-          data: { photoUrl },
-        });
-      }
-    }
-  } catch {}
+  const photoUrl = await refreshProspectAvatar({ ...prospect, brandId }).catch(() => null);
   res.json({ success: true, data: { photoUrl } });
+}));
+
+// Batch: pastikan foto profil WhatsApp tersalin untuk prospek yang ditampilkan (Pipeline, Dashboard).
+chatRouter.post('/avatars/refresh', asyncHandler(async (req, res) => {
+  const input = z.object({
+    brandId: z.coerce.number().int().positive().optional(),
+    prospectIds: z.array(z.number().int().positive()).max(40),
+  }).parse(req.body);
+  const brandId = scopedBrandId(req, input.brandId);
+  const prospects = await prisma.prospect.findMany({
+    where: { brandId, id: { in: input.prospectIds } },
+    select: { id: true, brandId: true, remoteJid: true, phone: true, photoUrl: true },
+  });
+  const data = await refreshProspectAvatars(prospects);
+  res.json({ success: true, data });
 }));
 
 chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {

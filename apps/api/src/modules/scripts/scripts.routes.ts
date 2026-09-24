@@ -139,13 +139,13 @@ scriptsRouter.get('/', asyncHandler(async (req, res) => {
   const customerName = rawName || 'Bapak/Ibu';
 
   const hotelList = [selectedPackage?.hotelMakkah, selectedPackage?.hotelMadinah].filter(Boolean);
-  const hotel = hotelList.length > 0 ? hotelList.join(' & ') : 'hotel bintang sesuai paket';
+  const hotel = hotelList.length > 0 ? hotelList.join(' & ') : '{{hotel}}';
   const jarakHotel = selectedPackage?.hotelMakkah ? 'jarak akomodasi tertera pada rincian brosur paket' : 'informasi akomodasi tertera pada paket';
-  const airline = selectedPackage?.airline || 'maskapai resmi sesuai rincian paket';
-  const departure = selectedPackage?.departureDate?.toLocaleDateString('id-ID') ?? selectedPackage?.departureInfo ?? 'jadwal keberangkatan resmi';
-  const duration = selectedPackage?.duration || 'Sesuai durasi paket';
-  const highlights = selectedPackage?.highlights || selectedPackage?.facilitiesIncluded || 'akomodasi, visa umroh, pembimbing ibadah, dan perlengkapan';
-  const ppiu = brand.ppiuNumber && brand.ppiuNumber !== '-' ? brand.ppiuNumber : `Izin PPIU ${brand.name}`;
+  const airline = selectedPackage?.airline || '{{maskapai}}';
+  const departure = selectedPackage?.departureDate?.toLocaleDateString('id-ID') ?? selectedPackage?.departureInfo ?? '{{keberangkatan}}';
+  const duration = selectedPackage?.duration || '{{durasi}}';
+  const highlights = selectedPackage?.highlights || selectedPackage?.facilitiesIncluded || '{{fasilitas_utama}}';
+  const ppiu = brand.ppiuNumber && brand.ppiuNumber !== '-' ? brand.ppiuNumber : '{{ppiu}}';
 
   const variables = {
     nama: customerName,
@@ -153,14 +153,14 @@ scriptsRouter.get('/', asyncHandler(async (req, res) => {
     agent_name: req.user!.name,
     travel: brand.name,
     ppiu,
-    bank: brand.bankName ?? `Bank Rekening Resmi ${brand.name}`,
-    rekening: brand.bankAccountNumber ?? '-',
-    nama_rekening: brand.bankAccountHolder ?? brand.name,
+    bank: brand.bankName || '{{bank}}',
+    rekening: brand.bankAccountNumber || '{{rekening}}',
+    nama_rekening: brand.bankAccountHolder || '{{nama_rekening}}',
     alamat: brand.address ?? '',
     telepon: brand.phone ?? '',
     paket: selectedPackage?.name ?? 'Paket Umroh Pilihan',
-    harga: formatRupiah(selectedPackage?.price) || 'harga resmi katalog',
-    dp: formatRupiah(selectedPackage?.dp) || 'DP resmi paket',
+    harga: formatRupiah(selectedPackage?.price) || '{{harga}}',
+    dp: formatRupiah(selectedPackage?.dp) || '{{dp}}',
     airline,
     maskapai: airline,
     hotel,
@@ -173,15 +173,15 @@ scriptsRouter.get('/', asyncHandler(async (req, res) => {
     tanggal: departure,
     highlights,
     fasilitas_utama: highlights,
-    jumlah_jamaah: 'Kakak dan keluarga',
-    bulan: new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
-    deadline: 'besok pukul 17:00 WIB',
-    seat: 'sisa 4 seat lagi',
-    promo: 'free perlengkapan eksklusif & handling bandara',
+    jumlah_jamaah: '{{jumlah_jamaah}}',
+    bulan: '{{bulan}}',
+    deadline: '{{deadline}}',
+    seat: selectedPackage?.quotaRemaining == null ? '{{seat}}' : `${selectedPackage.quotaRemaining} seat`,
+    promo: selectedPackage?.isPromo && selectedPackage.promoDiscount ? selectedPackage.promoDiscount : '{{promo}}',
     budget: 'anggaran yang sesuai',
     nama_pendamping: 'keluarga tercinta',
-    followup_date: 'jadwal yang ditentukan',
-    kota: 'Jakarta',
+    followup_date: '{{followup_date}}',
+    kota: '{{kota}}',
     sumber: 'WhatsApp resmi',
   };
   res.json({ success: true, data: { variables, categories: Object.fromEntries(data.map(([key, value]) => [key, transformScriptTree(value, variables)])) } });
