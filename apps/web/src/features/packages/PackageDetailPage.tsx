@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import {
   Check,
   CheckCircle2,
   Copy,
-  ExternalLink,
   ImageIcon,
   MessageSquare,
   Pencil,
@@ -15,7 +13,6 @@ import {
   ToggleLeft,
   ToggleRight,
   Trash2,
-  X,
   XCircle,
   ZoomIn,
 } from 'lucide-react';
@@ -27,6 +24,9 @@ import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { StatusBadge } from '../../components/ui/status-badge';
+import { showFeedback } from '../../app/toast';
+import { ConfirmDialog } from '../../components/ui/modal';
+import { ImageLightbox } from '../../components/ui/image-lightbox';
 
 export interface PackageItem {
   id: number;
@@ -86,11 +86,11 @@ function HotelInfo({ label, rawName }: { label: string; rawName?: string | null 
   const { name, stars } = parseHotel(rawName);
   return (
     <div>
-      <span className="text-zinc-400 block text-[11px] font-medium">{label}</span>
+      <span className="text-zinc-500 block text-xs font-medium">{label}</span>
       <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
         <span className="font-semibold text-zinc-900">{name}</span>
         {stars > 0 && (
-          <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200/60">
+          <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-xs font-bold text-amber-700 border border-amber-200/60">
             <Star size={10} className="fill-amber-400 text-amber-500 shrink-0" />
             <span>★{stars}</span>
           </span>
@@ -111,11 +111,9 @@ export function PackageDetailPage() {
   const [copied, setCopied] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
 
   function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3600);
+    showFeedback(msg);
   }
 
   // Fetch package details
@@ -244,7 +242,7 @@ export function PackageDetailPage() {
         badges={
           <>
             {pkg.brand && (
-              <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">
+              <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-700">
                 {pkg.brand.code}
               </span>
             )}
@@ -254,7 +252,7 @@ export function PackageDetailPage() {
               dot
             />
             {pkg.isPromo && (
-              <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+              <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
                 Promo {cleanPromo ? formatRupiah(cleanPromo) : ''}
               </span>
             )}
@@ -274,7 +272,7 @@ export function PackageDetailPage() {
                   pkg.isActive ? (
                     <ToggleRight size={17} className="text-emerald-600" />
                   ) : (
-                    <ToggleLeft size={17} className="text-zinc-400" />
+                    <ToggleLeft size={17} className="text-zinc-500" />
                   )
                 }
                 title={pkg.isActive ? 'Arsipkan paket' : 'Aktifkan paket'}
@@ -296,7 +294,7 @@ export function PackageDetailPage() {
                 variant="outline"
                 size="icon"
                 onClick={() => setDeleteConfirmOpen(true)}
-                className="text-zinc-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 cursor-pointer"
+                className="text-zinc-500 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 cursor-pointer"
                 title="Hapus paket"
               >
                 <Trash2 size={14} />
@@ -343,16 +341,16 @@ export function PackageDetailPage() {
               </h3>
               <div className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4 text-xs">
                 <div>
-                  <span className="text-zinc-400 block text-[11px] font-medium">Maskapai</span>
+                  <span className="text-zinc-500 block text-xs font-medium">Maskapai</span>
                   <span className="font-semibold text-zinc-900 mt-0.5 block">{pkg.airline || 'TBA'}</span>
-                  <span className="text-[10px] text-zinc-500 font-medium">{flightTypeLabel}</span>
+                  <span className="text-xs text-zinc-500 font-medium">{flightTypeLabel}</span>
                 </div>
                 <HotelInfo label="Hotel Makkah" rawName={pkg.hotelMakkah} />
                 <HotelInfo label="Hotel Madinah" rawName={pkg.hotelMadinah} />
                 <div>
-                  <span className="text-zinc-400 block text-[11px] font-medium">Durasi Program</span>
+                  <span className="text-zinc-500 block text-xs font-medium">Durasi Program</span>
                   <span className="font-semibold text-zinc-900 mt-0.5 block">{durationStr}</span>
-                  <span className="text-[10px] text-zinc-500 font-medium">Hari Perjalanan</span>
+                  <span className="text-xs text-zinc-500 font-medium">Hari Perjalanan</span>
                 </div>
               </div>
             </div>
@@ -363,19 +361,19 @@ export function PackageDetailPage() {
               </h3>
               <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                 <div className="rounded-xl bg-zinc-50/80 p-3.5 border border-zinc-200/80 shadow-xs">
-                  <span className="text-[10px] font-bold text-zinc-500 block uppercase tracking-wider">Quad (Ber-4)</span>
+                  <span className="text-xs font-bold text-zinc-500 block uppercase tracking-wider">Quad (Ber-4)</span>
                   <span className="mt-1 font-mono text-sm font-bold text-zinc-950 block">{quadPrice}</span>
                 </div>
                 <div className="rounded-xl bg-zinc-50/80 p-3.5 border border-zinc-200/80 shadow-xs">
-                  <span className="text-[10px] font-bold text-zinc-500 block uppercase tracking-wider">Triple (Ber-3)</span>
+                  <span className="text-xs font-bold text-zinc-500 block uppercase tracking-wider">Triple (Ber-3)</span>
                   <span className="mt-1 font-mono text-sm font-bold text-zinc-950 block">{formatRupiah(pkg.priceTriple)}</span>
                 </div>
                 <div className="rounded-xl bg-zinc-50/80 p-3.5 border border-zinc-200/80 shadow-xs">
-                  <span className="text-[10px] font-bold text-zinc-500 block uppercase tracking-wider">Double (Ber-2)</span>
+                  <span className="text-xs font-bold text-zinc-500 block uppercase tracking-wider">Double (Ber-2)</span>
                   <span className="mt-1 font-mono text-sm font-bold text-zinc-950 block">{formatRupiah(pkg.priceDouble)}</span>
                 </div>
                 <div className="rounded-xl bg-zinc-50/80 p-3.5 border border-zinc-200/80 shadow-xs">
-                  <span className="text-[10px] font-bold text-zinc-500 block uppercase tracking-wider">Infant (&lt; 2 Thn)</span>
+                  <span className="text-xs font-bold text-zinc-500 block uppercase tracking-wider">Infant (&lt; 2 Thn)</span>
                   <span className="mt-1 font-mono text-sm font-bold text-zinc-950 block">{formatRupiah(pkg.priceInfant)}</span>
                 </div>
               </div>
@@ -397,7 +395,7 @@ export function PackageDetailPage() {
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-                    <span className="font-bold text-emerald-900 text-[11px] uppercase tracking-wider">
+                    <span className="font-bold text-emerald-900 text-xs uppercase tracking-wider">
                       Termasuk (Include)
                     </span>
                   </div>
@@ -411,15 +409,15 @@ export function PackageDetailPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-zinc-400 italic text-[11px]">Belum ada rincian fasilitas termasuk.</p>
+                    <p className="text-zinc-500 italic text-xs">Belum ada rincian fasilitas termasuk.</p>
                   )}
                 </div>
 
                 {/* Tidak Termasuk */}
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4">
                   <div className="flex items-center gap-1.5 mb-2.5">
-                    <XCircle size={13} className="text-zinc-400 shrink-0" />
-                    <span className="font-bold text-zinc-600 text-[11px] uppercase tracking-wider">
+                    <XCircle size={13} className="text-zinc-500 shrink-0" />
+                    <span className="font-bold text-zinc-600 text-xs uppercase tracking-wider">
                       Tidak Termasuk (Exclude)
                     </span>
                   </div>
@@ -427,13 +425,13 @@ export function PackageDetailPage() {
                     <ul className="space-y-1.5 text-zinc-600">
                       {excItems.map((item, i) => (
                         <li key={i} className="flex items-start gap-2 text-xs leading-relaxed">
-                          <span className="text-zinc-400 mt-0.5 shrink-0 font-bold">•</span>
+                          <span className="text-zinc-500 mt-0.5 shrink-0 font-bold">•</span>
                           <span>{item}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-zinc-400 italic text-[11px]">Belum ada rincian fasilitas tidak termasuk.</p>
+                    <p className="text-zinc-500 italic text-xs">Belum ada rincian fasilitas tidak termasuk.</p>
                   )}
                 </div>
               </div>
@@ -445,7 +443,7 @@ export function PackageDetailPage() {
                   Itinerary Perjalanan
                 </h3>
                 {itinLines.length > 0 && (
-                  <span className="text-[11px] font-semibold text-zinc-400">
+                  <span className="text-xs font-semibold text-zinc-500">
                     Total {itinLines.length} Hari Agenda
                   </span>
                 )}
@@ -457,7 +455,7 @@ export function PackageDetailPage() {
                       key={idx}
                       className="flex items-start gap-3 rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 hover:bg-zinc-50 hover:border-zinc-200 transition-colors"
                     >
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-[10px] font-bold text-white shadow-xs">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-xs font-bold text-white shadow-xs">
                         {idx + 1}
                       </span>
                       <p className="text-[13px] leading-relaxed text-zinc-800">{line}</p>
@@ -465,7 +463,7 @@ export function PackageDetailPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-zinc-400 italic">Belum ada data agenda perjalanan.</p>
+                <p className="text-xs text-zinc-500 italic">Belum ada data agenda perjalanan.</p>
               )}
             </div>
           </Card>
@@ -515,7 +513,7 @@ export function PackageDetailPage() {
               </div>
             ) : (
               <div className="grid aspect-3/4 place-items-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50 text-center p-4">
-                <div className="space-y-1 text-zinc-400">
+                <div className="space-y-1 text-zinc-500">
                   <ImageIcon size={28} className="mx-auto opacity-30" />
                   <p className="text-xs font-semibold text-zinc-600">Belum ada poster flyer</p>
                 </div>
@@ -571,7 +569,7 @@ export function PackageDetailPage() {
                 <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                   Biro Penyelenggara
                 </h3>
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
                   <ShieldCheck size={12} className="text-emerald-600" />
                   <span>Terverifikasi</span>
                 </span>
@@ -579,11 +577,11 @@ export function PackageDetailPage() {
               <div className="text-xs space-y-2">
                 <div>
                   <p className="font-bold text-zinc-900 text-sm">{pkg.brand.name}</p>
-                  <span className="text-zinc-400 font-mono text-[11px]">Kode: {pkg.brand.code}</span>
+                  <span className="text-zinc-500 font-mono text-xs">Kode: {pkg.brand.code}</span>
                 </div>
                 {pkg.brand.ppiuNumber && (
                   <div className="rounded-lg bg-zinc-50 p-2 border border-zinc-100">
-                    <span className="text-[10px] text-zinc-400 block font-medium">Izin Resmi PPIU</span>
+                    <span className="text-xs text-zinc-500 block font-medium">Izin Resmi PPIU</span>
                     <p className="font-mono text-xs font-bold text-zinc-800 mt-0.5">{pkg.brand.ppiuNumber}</p>
                   </div>
                 )}
@@ -610,82 +608,24 @@ export function PackageDetailPage() {
 
       {/* Lightbox Flyer Modal */}
       {pkg.flyerImage && (
-        <Dialog.Root open={lightboxOpen} onOpenChange={setLightboxOpen}>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm animate-in fade-in-0" />
-            <Dialog.Content className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 outline-none">
-              <div className="relative max-h-[92vh] max-w-[92vw] overflow-hidden rounded-2xl bg-zinc-950 p-2 shadow-2xl border border-zinc-800 flex flex-col items-center">
-                <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-                  <a
-                    href={resolveMediaUrl(pkg.flyerImage)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-black/60 p-2 text-white/80 hover:text-white hover:bg-black/80 transition backdrop-blur-xs"
-                    title="Buka gambar asli di tab baru"
-                  >
-                    <ExternalLink size={16} />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setLightboxOpen(false)}
-                    className="rounded-full bg-black/60 p-2 text-white/80 hover:text-white hover:bg-black/80 transition backdrop-blur-xs cursor-pointer"
-                    title="Tutup preview"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                <img
-                  src={resolveMediaUrl(pkg.flyerImage)}
-                  alt={`Flyer ${pkg.name}`}
-                  className="max-h-[86vh] w-auto max-w-full rounded-xl object-contain"
-                />
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
+        <ImageLightbox
+          open={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          src={resolveMediaUrl(pkg.flyerImage)}
+          alt={`Flyer ${pkg.name}`}
+        />
       )}
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl outline-none border border-zinc-200">
-            <Dialog.Title className="text-base font-bold text-zinc-950 font-display">
-              Hapus Paket
-            </Dialog.Title>
-            <Dialog.Description className="mt-2 text-xs text-zinc-500 leading-relaxed">
-              Hapus paket <strong className="text-zinc-900">{pkg.name}</strong>? Tindakan ini tidak dapat dibatalkan.
-            </Dialog.Description>
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setDeleteConfirmOpen(false)}
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => deleteMutation.mutate()}
-                loading={deleteMutation.isPending}
-              >
-                Hapus
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        pending={deleteMutation.isPending}
+        title="Hapus paket?"
+        description={<>Paket <strong>{pkg.name}</strong> akan dihapus. Tindakan ini tidak dapat dibatalkan.</>}
+        confirmLabel="Hapus paket"
+      />
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl bg-zinc-950 px-4 py-3 text-xs font-semibold text-white shadow-lift border border-zinc-800 animate-in fade-in-0 slide-in-from-bottom-2">
-          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-          <span>{toast}</span>
-        </div>
-      )}
     </div>
   );
 }

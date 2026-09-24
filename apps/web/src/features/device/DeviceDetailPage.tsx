@@ -43,7 +43,7 @@ export function DeviceDetailPage() {
         badges={
           <>
             {brand.code && (
-              <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">
+              <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-700">
                 {brand.code}
               </span>
             )}

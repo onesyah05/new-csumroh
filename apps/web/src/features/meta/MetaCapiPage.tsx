@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import {
   Activity,
   AlertCircle,
@@ -21,7 +20,6 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
-  X,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../app/auth';
@@ -34,6 +32,8 @@ import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { Select } from '../../components/ui/select';
 import { StatusBadge } from '../../components/ui/status-badge';
 import { PageError, PageLoading, SectionEmpty } from '../../components/ui/page-feedback';
+import { showFeedback } from '../../app/toast';
+import { ConfirmDialog, Modal } from '../../components/ui/modal';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface Brand {
@@ -101,6 +101,7 @@ export function MetaCapiPage() {
 
   // Active brand selection
   const [selectedBrandId, setSelectedBrandId] = useState<number | null>(null);
+  const [confirmTokenOpen, setConfirmTokenOpen] = useState(false);
 
   useEffect(() => {
     if (scopedId) {
@@ -135,7 +136,6 @@ export function MetaCapiPage() {
   // Form state
   const [form, setForm] = useState(emptyForm);
   const [showPassword, setShowPassword] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Search & Filter state for logs
   const [logSearch, setLogSearch] = useState('');
@@ -157,8 +157,7 @@ export function MetaCapiPage() {
   }
 
   function showToast(msg: string) {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+    showFeedback(msg);
   }
 
   // Populate form on settings load
@@ -256,16 +255,6 @@ export function MetaCapiPage() {
 
   return (
     <div className="app-page space-y-6 pb-16">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div
-          role="status"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-xs font-semibold text-white shadow-lift animate-in fade-in-0 slide-in-from-bottom-2"
-        >
-          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
 
       {/* Standard Page Header */}
       <PageHeader
@@ -335,7 +324,7 @@ export function MetaCapiPage() {
               ? 'text-emerald-700'
               : settings?.connectionConfigured
               ? 'text-amber-700'
-              : 'text-zinc-400'
+              : 'text-zinc-500'
           }
         />
         <StatCard
@@ -348,7 +337,7 @@ export function MetaCapiPage() {
           label="Access Token"
           value={settings?.accessTokenConfigured ? 'Tersimpan' : 'Belum Ada'}
           note={settings?.maskedAccessToken ? settings.maskedAccessToken : 'Terenkripsi AES-GCM'}
-          valueColor={settings?.accessTokenConfigured ? 'text-zinc-950' : 'text-zinc-400'}
+          valueColor={settings?.accessTokenConfigured ? 'text-zinc-950' : 'text-zinc-500'}
         />
         <StatCard
           label="Event Audit Terkirim"
@@ -377,7 +366,7 @@ export function MetaCapiPage() {
                   : 'text-zinc-600 hover:text-zinc-950'
               }`}
             >
-              <Icon size={13} className={active ? 'text-white' : 'text-zinc-400'} />
+              <Icon size={13} className={active ? 'text-white' : 'text-zinc-500'} />
               <span>{tab.label}</span>
             </button>
           );
@@ -480,7 +469,7 @@ export function MetaCapiPage() {
                       Access Token Permanen (EAAB...) <span className="text-rose-500">*</span>
                     </label>
                     {settings?.accessTokenConfigured && (
-                      <span className="font-mono text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                      <span className="font-mono text-xs text-emerald-600 font-semibold flex items-center gap-1">
                         <CheckCircle2 size={12} />
                         Token tersimpan terenkripsi
                       </span>
@@ -504,7 +493,7 @@ export function MetaCapiPage() {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 cursor-pointer p-0.5"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 cursor-pointer p-0.5"
                         title={showPassword ? 'Sembunyikan token' : 'Lihat token'}
                       >
                         {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -517,11 +506,7 @@ export function MetaCapiPage() {
                         variant="danger"
                         size="md"
                         disabled={saveMutation.isPending}
-                        onClick={() => {
-                          if (confirm('Hapus access token tersimpan untuk brand ini?')) {
-                            saveMutation.mutate(true);
-                          }
-                        }}
+                        onClick={() => setConfirmTokenOpen(true)}
                       >
                         Hapus Token
                       </Button>
@@ -536,14 +521,14 @@ export function MetaCapiPage() {
                   <AlertCircle size={15} className="mt-0.5 text-rose-600 shrink-0" />
                   <div className="space-y-0.5">
                     <p className="font-semibold text-rose-900">Perhatian: Error Terakhir dari Meta</p>
-                    <p className="font-mono text-[11px] text-rose-700 break-all">{settings.lastError}</p>
+                    <p className="font-mono text-xs text-rose-700 break-all">{settings.lastError}</p>
                   </div>
                 </div>
               )}
 
               {/* Action Footer */}
               <div className="flex items-center justify-between border-t border-zinc-100 pt-5">
-                <div className="text-[11px] text-zinc-500">
+                <div className="text-xs text-zinc-500">
                   {settings?.verifiedAt ? (
                     <span className="text-emerald-600 font-medium">
                       Terakhir diverifikasi: {new Date(settings.verifiedAt).toLocaleString('id-ID')}
@@ -577,7 +562,7 @@ export function MetaCapiPage() {
             <div className="flex flex-wrap items-center gap-2 flex-1">
               {/* Search */}
               <div className="relative flex-1 min-w-[220px] max-w-sm">
-                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                 <input
                   type="text"
                   className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-400 shadow-xs"
@@ -639,12 +624,12 @@ export function MetaCapiPage() {
           {/* Standard Independent Table Container (No Card Wrapper) */}
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             {logsQuery.isLoading ? (
-              <div className="py-16 text-center text-xs text-zinc-400">Memuat log audit Meta CAPI…</div>
+              <div className="py-16 text-center text-xs text-zinc-500">Memuat log audit Meta CAPI…</div>
             ) : filteredLogs.length === 0 ? (
-              <div className="py-16 text-center text-xs text-zinc-400">
+              <div className="py-16 text-center text-xs text-zinc-500">
                 <Activity size={32} className="mx-auto mb-2 opacity-25" />
                 <p className="font-bold text-zinc-700">Belum Ada Log Audit</p>
-                <p className="mt-1 text-zinc-400">
+                <p className="mt-1 text-zinc-500">
                   {logSearch || logEventFilter !== 'all' || logStatusFilter !== 'all'
                     ? 'Tidak ada log event yang sesuai dengan filter pencarian.'
                     : 'Log akan tercatat secara otomatis saat prospek bergerak di pipeline atau saat event diuji.'}
@@ -652,13 +637,14 @@ export function MetaCapiPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-xs">
-                  <thead className="border-b border-zinc-200 bg-zinc-50/75 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                {/* Di bawah lg kolom respons Meta disembunyikan; lengkap di modal detail log (tombol Aksi). */}
+                <table className="w-full text-left text-xs lg:min-w-[760px]">
+                  <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500">
                     <tr>
                       <th className="px-4 py-3">Event & Event ID</th>
                       <th className="px-4 py-3">Calon Jamaah</th>
                       <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Respons Meta Graph</th>
+                      <th className="hidden px-4 py-3 lg:table-cell">Respons Meta Graph</th>
                       <th className="px-4 py-3">Waktu</th>
                       <th className="px-4 py-3 text-right">Aksi</th>
                     </tr>
@@ -673,7 +659,7 @@ export function MetaCapiPage() {
                           <td className="px-4 py-3.5">
                             <span className="font-bold text-xs text-zinc-950 block">{log.eventName}</span>
                             <span
-                              className="font-mono text-[10px] text-zinc-400 block truncate max-w-[200px] mt-0.5"
+                              className="font-mono text-xs text-zinc-500 block truncate max-w-[200px] mt-0.5"
                               title={log.eventId}
                             >
                               {log.eventId}
@@ -683,7 +669,7 @@ export function MetaCapiPage() {
                           <td className="px-4 py-3.5">
                             <p className="font-bold text-xs text-zinc-900">{log.prospect?.name ?? '—'}</p>
                             {log.prospect?.phone && (
-                              <p className="font-mono text-[11px] text-zinc-400 mt-0.5">{log.prospect.phone}</p>
+                              <p className="font-mono text-xs text-zinc-500 mt-0.5">{log.prospect.phone}</p>
                             )}
                           </td>
 
@@ -695,18 +681,18 @@ export function MetaCapiPage() {
                             />
                           </td>
 
-                          <td className="px-4 py-3.5">
+                          <td className="hidden px-4 py-3.5 lg:table-cell">
                             <span className="font-mono font-bold text-xs text-zinc-800">
                               {log.responseStatus ? `HTTP ${log.responseStatus}` : '—'}
                             </span>
                             {log.responseBody && (
-                              <p className="mt-0.5 max-w-[220px] truncate text-[11px] text-zinc-400" title={log.responseBody}>
+                              <p className="mt-0.5 max-w-[220px] truncate text-xs text-zinc-500" title={log.responseBody}>
                                 {log.responseBody}
                               </p>
                             )}
                           </td>
 
-                          <td className="px-4 py-3.5 text-zinc-500 whitespace-nowrap text-[11px]">
+                          <td className="px-4 py-3.5 text-zinc-500 whitespace-nowrap text-xs">
                             {new Date(log.createdAt).toLocaleString('id-ID', {
                               day: 'numeric',
                               month: 'short',
@@ -781,24 +767,24 @@ export function MetaCapiPage() {
                 {
                   step: '04',
                   event: 'Purchase',
-                  trigger: 'Deal Closing (Won)',
+                  trigger: 'Deal (diverifikasi Finance)',
                   desc: 'Prospek resmi terdaftar (Closed Won). Mengirimkan total nilai transaksi riil paket umroh.',
                 },
               ].map((stage) => (
                 <Card key={stage.step} className="p-4 space-y-3 flex flex-col justify-between">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
-                      <span className="font-mono text-xs font-bold text-zinc-400">TAHAP {stage.step}</span>
-                      <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-[10px] font-bold text-zinc-800">
+                      <span className="font-mono text-xs font-bold text-zinc-500">TAHAP {stage.step}</span>
+                      <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-xs font-bold text-zinc-800">
                         {stage.event}
                       </span>
                     </div>
                     <h4 className="text-xs font-bold text-zinc-950">{stage.trigger}</h4>
                     <p className="text-xs text-zinc-500 leading-relaxed">{stage.desc}</p>
                   </div>
-                  <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-[11px] font-medium text-zinc-600">
+                  <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-xs font-medium text-zinc-600">
                     <span>Server-Side CAPI</span>
-                    <ArrowRight size={12} className="text-zinc-400" />
+                    <ArrowRight size={12} className="text-zinc-500" />
                   </div>
                 </Card>
               ))}
@@ -851,47 +837,36 @@ export function MetaCapiPage() {
       )}
 
       {/* MODAL: DETAIL LOG AUDIT */}
-      <Dialog.Root open={Boolean(selectedLog)} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs animate-in fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl animate-in fade-in-0 zoom-in-95 max-h-[90vh] overflow-y-auto">
+      <Modal
+        open={Boolean(selectedLog)}
+        onClose={() => setSelectedLog(null)}
+        size="xl"
+        title={selectedLog?.eventName ?? 'Detail event'}
+        description="Audit detail event Meta CAPI"
+        footer={<Button variant="secondary" size="sm" onClick={() => setSelectedLog(null)}>Tutup</Button>}
+      >
             {selectedLog && (
               <div className="space-y-5">
-                <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Audit Detail Event</span>
-                    <h3 className="font-display text-base font-bold text-zinc-950">{selectedLog.eventName}</h3>
-                  </div>
-                  <Dialog.Close asChild>
-                    <button
-                      type="button"
-                      className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer"
-                      aria-label="Tutup"
-                    >
-                      <X size={16} />
-                    </button>
-                  </Dialog.Close>
-                </div>
 
                 {/* 4-Item Grid Info */}
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 space-y-0.5">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase">Event ID</span>
+                    <span className="text-xs font-bold text-zinc-500 uppercase">Event ID</span>
                     <p className="font-mono font-bold text-zinc-900 break-all">{selectedLog.eventId}</p>
                   </div>
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 space-y-0.5">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase">Calon Jamaah</span>
+                    <span className="text-xs font-bold text-zinc-500 uppercase">Calon Jamaah</span>
                     <p className="font-bold text-zinc-900">{selectedLog.prospect?.name ?? '—'}</p>
-                    <p className="font-mono text-[11px] text-zinc-500">{selectedLog.prospect?.phone ?? '-'}</p>
+                    <p className="font-mono text-xs text-zinc-500">{selectedLog.prospect?.phone ?? '-'}</p>
                   </div>
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 space-y-0.5">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase">Status & Respon</span>
+                    <span className="text-xs font-bold text-zinc-500 uppercase">Status & Respon</span>
                     <p className="font-bold capitalize text-zinc-900">
                       {selectedLog.status} ({selectedLog.responseStatus ? `HTTP ${selectedLog.responseStatus}` : 'No Response'})
                     </p>
                   </div>
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 space-y-0.5">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase">Waktu Dispatch</span>
+                    <span className="text-xs font-bold text-zinc-500 uppercase">Waktu Dispatch</span>
                     <p className="font-bold text-zinc-900">{new Date(selectedLog.createdAt).toLocaleString('id-ID')}</p>
                   </div>
                 </div>
@@ -904,14 +879,14 @@ export function MetaCapiPage() {
                       <button
                         type="button"
                         onClick={() => copyText('payload', selectedLog.payload!)}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 hover:text-zinc-950 cursor-pointer"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-600 hover:text-zinc-950 cursor-pointer"
                       >
                         {copiedKey === 'payload' ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
                         {copiedKey === 'payload' ? 'Tersalin' : 'Salin JSON'}
                       </button>
                     )}
                   </div>
-                  <pre className="max-h-40 overflow-y-auto rounded-xl bg-zinc-950 p-3 font-mono text-[11px] text-emerald-400 border border-zinc-900">
+                  <pre className="max-h-40 overflow-y-auto rounded-xl bg-zinc-950 p-3 font-mono text-xs text-emerald-400 border border-zinc-900">
                     {selectedLog.payload
                       ? (() => {
                           try {
@@ -932,14 +907,14 @@ export function MetaCapiPage() {
                       <button
                         type="button"
                         onClick={() => copyText('response', selectedLog.responseBody!)}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 hover:text-zinc-950 cursor-pointer"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-600 hover:text-zinc-950 cursor-pointer"
                       >
                         {copiedKey === 'response' ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
                         {copiedKey === 'response' ? 'Tersalin' : 'Salin Respons'}
                       </button>
                     )}
                   </div>
-                  <pre className="max-h-40 overflow-y-auto rounded-xl bg-zinc-900 p-3 font-mono text-[11px] text-zinc-300 border border-zinc-800">
+                  <pre className="max-h-40 overflow-y-auto rounded-xl bg-zinc-900 p-3 font-mono text-xs text-zinc-300 border border-zinc-800">
                     {selectedLog.responseBody
                       ? (() => {
                           try {
@@ -952,42 +927,44 @@ export function MetaCapiPage() {
                   </pre>
                 </div>
 
-                <div className="flex justify-end pt-2">
-                  <Dialog.Close asChild>
-                    <Button variant="secondary" size="sm">Tutup</Button>
-                  </Dialog.Close>
-                </div>
               </div>
             )}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmTokenOpen}
+        onClose={() => setConfirmTokenOpen(false)}
+        onConfirm={() => saveMutation.mutate(true, { onSettled: () => setConfirmTokenOpen(false) })}
+        pending={saveMutation.isPending}
+        title="Hapus access token?"
+        description="Token Meta tersimpan untuk brand ini dihapus. Event konversi tidak terkirim sampai token baru dimasukkan."
+        confirmLabel="Hapus token"
+      />
 
       {/* MODAL: TEST EVENT SANDBOX */}
-      <Dialog.Root open={testModalOpen} onOpenChange={setTestModalOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs animate-in fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl animate-in fade-in-0 zoom-in-95">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Sandbox Uji Coba</span>
-                <h3 className="font-display text-base font-bold text-zinc-950">Kirim Event Uji Coba Meta CAPI</h3>
-              </div>
-              <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer"
-                  aria-label="Tutup"
-                >
-                  <X size={16} />
-                </button>
-              </Dialog.Close>
-            </div>
+      <Modal
+        open={testModalOpen}
+        onClose={() => setTestModalOpen(false)}
+        size="lg"
+        title="Kirim event uji coba Meta CAPI"
+        description="Sandbox: periksa apakah Pixel dan Events Manager menerima payload dengan benar."
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setTestModalOpen(false)}>Tutup</Button>
+            <Button
+              size="sm"
+              disabled={testEventMutation.isPending || !settings?.connectionConfigured}
+              loading={testEventMutation.isPending}
+              onClick={() => testEventMutation.mutate()}
+              icon={<Send size={13} />}
+            >
+              Kirim Sekarang
+            </Button>
+          </>
+        }
+      >
 
-            <div className="mt-4 space-y-4">
-              <p className="text-xs text-zinc-600 leading-relaxed">
-                Kirimkan sample event langsung ke Meta Conversions API untuk memeriksa apakah Pixel dan Events Manager Anda menerima payload dengan benar.
-              </p>
+            <div className="space-y-4">
 
               <div className="space-y-1.5">
                 <label className="label text-xs font-semibold">Pilih Jenis Event</label>
@@ -998,7 +975,7 @@ export function MetaCapiPage() {
                     { value: 'Contact', label: 'Contact (Prospek Baru)' },
                     { value: 'AddToCart', label: 'AddToCart (Penawaran Program)' },
                     { value: 'InitiateCheckout', label: 'InitiateCheckout (Booking / DP)' },
-                    { value: 'Purchase', label: 'Purchase (Deal Closing Won)' },
+                    { value: 'Purchase', label: 'Purchase (Deal)' },
                   ]}
                 />
               </div>
@@ -1012,7 +989,7 @@ export function MetaCapiPage() {
                   placeholder="Contoh: TEST12345"
                   className="field font-mono uppercase"
                 />
-                <p className="text-[11px] text-zinc-400">
+                <p className="text-xs text-zinc-500">
                   Dapatkan kode ini dari tab <strong>Test Events</strong> di Meta Events Manager agar event muncul langsung.
                 </p>
               </div>
@@ -1035,33 +1012,17 @@ export function MetaCapiPage() {
                       {testResult.status === 'success' ? 'Event Diterima Meta (200 OK)' : 'Meta Menolak Event'}
                     </span>
                   </div>
-                  <p className="font-mono text-[10px] text-zinc-600">Event ID: {testResult.eventId}</p>
+                  <p className="font-mono text-xs text-zinc-600">Event ID: {testResult.eventId}</p>
                   {testResult.responseBody && (
-                    <pre className="mt-1.5 max-h-28 overflow-y-auto rounded-lg bg-black/10 p-2 font-mono text-[10px]">
+                    <pre className="mt-1.5 max-h-28 overflow-y-auto rounded-lg bg-black/10 p-2 font-mono text-xs">
                       {testResult.responseBody}
                     </pre>
                   )}
                 </div>
               )}
 
-              <div className="mt-6 flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
-                <Dialog.Close asChild>
-                  <Button variant="secondary" size="sm">Tutup</Button>
-                </Dialog.Close>
-                <Button
-                  size="sm"
-                  disabled={testEventMutation.isPending || !settings?.connectionConfigured}
-                  loading={testEventMutation.isPending}
-                  onClick={() => testEventMutation.mutate()}
-                  icon={<Send size={13} />}
-                >
-                  Kirim Sekarang
-                </Button>
-              </div>
             </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      </Modal>
     </div>
   );
 }

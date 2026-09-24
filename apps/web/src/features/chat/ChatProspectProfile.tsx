@@ -713,9 +713,19 @@ export function ChatProspectProfile({
                 <div className="flex items-start gap-2.5 rounded-xl border border-zinc-200 bg-white p-2.5 shadow-2xs">
                   <div
                     className={cn(
-                      'relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100',
+                      'relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]',
                       selectedPackage.flyerImage ? 'cursor-pointer group' : ''
                     )}
+                    {...(selectedPackage.flyerImage && onPreviewImage ? {
+                      role: 'button',
+                      tabIndex: 0,
+                      'aria-label': `Lihat flyer ${selectedPackage.name}`,
+                      onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        onPreviewImage(resolveMediaUrl(selectedPackage.flyerImage));
+                      },
+                    } : {})}
                     onClick={() => {
                       if (selectedPackage.flyerImage && onPreviewImage) {
                         onPreviewImage(resolveMediaUrl(selectedPackage.flyerImage));

@@ -51,7 +51,7 @@ export function LmsPage() {
     <div className="app-page space-y-6">
       <PageHeader
         title="Akademi CS"
-        subtitle="Kurikulum praktis alur konsultasi calon jamaah dari sapaan awal hingga closing yang amanah."
+        subtitle="Kurikulum praktis alur konsultasi calon jamaah dari sapaan awal hingga deal yang amanah."
         actions={
           <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2 shadow-xs">
             <div className="space-y-1">
@@ -82,7 +82,7 @@ export function LmsPage() {
         <aside className="surface h-fit overflow-hidden">
           <div className="border-b border-zinc-200/90 px-4 py-3.5">
             <h3 className="font-sans text-sm font-semibold text-zinc-950">Daftar Modul</h3>
-            <p className="mt-0.5 text-xs text-zinc-400">9 bab conversion cycle</p>
+            <p className="mt-0.5 text-xs text-zinc-500">9 bab conversion cycle</p>
           </div>
           <div className="max-h-[620px] overflow-y-auto p-2 space-y-1">
             {stages.map((item, index) => {
@@ -110,11 +110,11 @@ export function LmsPage() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <b className="block truncate text-xs font-medium">{item.nama}</b>
-                    <span className={`block text-[10px] ${isActive ? 'text-zinc-400' : 'text-zinc-400'}`}>
+                    <span className={`block text-xs ${isActive ? 'text-zinc-400' : 'text-zinc-500'}`}>
                       ± 8 menit
                     </span>
                   </div>
-                  <ChevronRight size={13} className={isActive ? 'text-zinc-400' : 'text-zinc-300'} />
+                  <ChevronRight size={13} className={isActive ? 'text-zinc-400' : 'text-zinc-500'} />
                 </button>
               );
             })}
@@ -126,7 +126,7 @@ export function LmsPage() {
             <>
               <div className="flex flex-col justify-between gap-4 border-b border-zinc-200/90 pb-6 sm:flex-row sm:items-start">
                 <div>
-                  <p className="text-xs font-medium text-zinc-400">
+                  <p className="text-xs font-medium text-zinc-500">
                     Modul {active + 1} · Conversion Cycle
                   </p>
                   <h3 className="mt-1.5 font-sans text-2xl font-bold tracking-tight text-zinc-950">
@@ -157,7 +157,7 @@ export function LmsPage() {
                           <ul className="mt-2.5 space-y-2">
                             {value.slice(0, 6).map((line: any, i: number) => (
                               <li key={i} className="flex gap-2 text-xs sm:text-sm leading-relaxed text-zinc-600">
-                                <Circle size={5} className="mt-2 shrink-0 fill-zinc-400 text-zinc-400" />
+                                <Circle size={5} className="mt-2 shrink-0 fill-zinc-400 text-zinc-500" />
                                 <span>{typeof line === 'string' ? line : JSON.stringify(line)}</span>
                               </li>
                             ))}
@@ -174,7 +174,7 @@ export function LmsPage() {
               </div>
 
               <div className="mt-7 flex flex-col items-start justify-between gap-3 border-t border-zinc-200/90 pt-5 sm:flex-row sm:items-center">
-                <p className="text-xs text-zinc-400">Pelajari materi sebelum menandai selesai.</p>
+                <p className="text-xs text-zinc-500">Pelajari materi sebelum menandai selesai.</p>
                 <Button onClick={complete}>
                   {done.includes(module.id) ? <Check size={14} /> : <Award size={14} />}
                   <span>{done.includes(module.id) ? 'Sudah Selesai' : 'Tandai Selesai'}</span>
@@ -182,7 +182,7 @@ export function LmsPage() {
               </div>
             </>
           ) : (
-            <div className="grid min-h-96 place-items-center text-xs text-zinc-400">
+            <div className="grid min-h-96 place-items-center text-xs text-zinc-500">
               Materi belum tersedia.
             </div>
           )}

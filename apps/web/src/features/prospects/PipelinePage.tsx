@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertTriangle,
@@ -50,13 +49,15 @@ import { useAuth } from '../../app/auth';
 import { Badge, statusLabels } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
-import { PageError } from '../../components/ui/page-feedback';
+import { PageError, EmptyState } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { cn } from '../../lib/cn';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { useWhatsAppAvatars } from '../../lib/avatars';
 import { PicDialog, isLockedForCs } from './PicDialog';
 import { useNow } from '../../lib/useNow';
+import { showFeedback } from '../../app/toast';
+import { Modal } from '../../components/ui/modal';
 import { OfficialOfferModal } from '../chat/OfficialOfferModal';
 import { ObjectionModal } from '../chat/ObjectionModal';
 import { OfficialInvoiceModal } from '../chat/OfficialInvoiceModal';
@@ -149,18 +150,9 @@ function dropAction(target: ProspectStatus, prospect: Prospect | undefined, role
   return { allowed: true, label: labels[target] ?? 'Lepaskan di sini' };
 }
 
-/** Info hilang sendiri setelah 5 detik; error tetap tampil sampai ditutup (tidak kritis vs kritis). */
+/** Info hilang sendiri; error tetap tampil sampai ditutup. Memakai tumpukan toast global aplikasi. */
 function useToast() {
-  const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  const show = useCallback((message: string, options?: { error?: boolean }) => {
-    const error = Boolean(options?.error);
-    setToast({ message, error });
-    clearTimeout(timer.current);
-    if (!error) timer.current = setTimeout(() => setToast(null), 5000);
-  }, []);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  return { message: toast?.message ?? '', error: toast?.error ?? false, show, dismiss: () => setToast(null) };
+  return useMemo(() => ({ show: (message: string, options?: { error?: boolean }) => showFeedback(message, options) }), []);
 }
 
 /** Gulir halus kecuali pengguna meminta gerak minimal (opsi JS tidak ikut aturan CSS reduced-motion). */
@@ -465,7 +457,7 @@ export function PipelinePage() {
   return (
     <div className="app-page space-y-4">
       <PageHeader
-        title="Prospek Jamaah"
+        title="Pipeline"
         subtitle="Kelola perjalanan setiap calon jamaah dari sapaan pertama hingga deal."
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -533,7 +525,7 @@ export function PipelinePage() {
         >
           <SlidersHorizontal size={13} />Filter
           {activeFiltersCount > 0 && (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[11px] font-bold text-zinc-950">{activeFiltersCount}</span>
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-xs font-bold text-zinc-950">{activeFiltersCount}</span>
           )}
           <ChevronDown size={12} className={cn('transition', showFilters && 'rotate-180')} />
         </button>
@@ -738,13 +730,14 @@ export function PipelinePage() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
           <div className="thin-scrollbar overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left">
+            {/* Split-screen (±700 px) membuka Tabel secara bawaan: Paket & Nilai baru tampil mulai lg (ada di Kanban/Detail). */}
+            <table className="w-full text-left lg:min-w-[960px]">
               <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-600">
                 <tr>
                   <th className="px-5 py-3">Jamaah</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Paket</th>
-                  <th className="px-4 py-3">Nilai</th>
+                  <th className="hidden px-4 py-3 lg:table-cell">Paket</th>
+                  <th className="hidden px-4 py-3 lg:table-cell">Nilai</th>
                   <th className="px-4 py-3">PIC</th>
                   <th className="px-4 py-3">Follow-up</th>
                   <th className="px-4 py-3">Aktivitas</th>
@@ -766,8 +759,8 @@ export function PipelinePage() {
                         </div>
                       </td>
                       <td className="px-4"><Badge value={p.status} /></td>
-                      <td className="px-4 text-xs text-zinc-600">{p.package?.name ?? '—'}</td>
-                      <td className="px-4 text-xs">{Number(p.dealValue) > 0 ? <b>Rp {money(p.dealValue)}</b> : <span className="text-zinc-500">Belum ada penawaran</span>}</td>
+                      <td className="hidden px-4 text-xs text-zinc-600 lg:table-cell">{p.package?.name ?? '—'}</td>
+                      <td className="hidden px-4 text-xs lg:table-cell">{Number(p.dealValue) > 0 ? <b>Rp {money(p.dealValue)}</b> : <span className="text-zinc-500">Belum ada penawaran</span>}</td>
                       <td className="px-4 text-xs">
                         <PicControl {...cardProps(p)} />
                       </td>
@@ -801,8 +794,13 @@ export function PipelinePage() {
                 })}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-12 text-center text-sm text-zinc-600">
-                      {hasAnyFilter ? 'Tidak ada prospek yang cocok dengan filter.' : 'Belum ada prospek.'}
+                    <td colSpan={8}>
+                      <EmptyState
+                        icon={KanbanSquare}
+                        title={hasAnyFilter ? 'Tidak ada prospek yang cocok' : 'Belum ada prospek'}
+                        // Saat filter aktif, banner di atas papan sudah memberi tombol "Hapus semua filter".
+                        description={hasAnyFilter ? 'Ubah pencarian atau filter di atas.' : 'Prospek muncul otomatis saat jamaah mengirim pesan WhatsApp pertama.'}
+                      />
                     </td>
                   </tr>
                 )}
@@ -849,20 +847,6 @@ export function PipelinePage() {
           <FinanceVerifyModal open={guided.type === 'finance_verify'} onClose={() => setGuided(null)} prospect={guided.prospect} brandId={brandId} onShowToast={toast.show} />
           <LostReasonModal open={guided.type === 'lose'} onClose={() => setGuided(null)} prospect={guided.prospect} brandId={brandId} onShowToast={toast.show} />
         </>
-      )}
-
-      {toast.message && (
-        <div
-          role={toast.error ? 'alert' : 'status'}
-          className={cn(
-            'fixed bottom-6 right-6 z-50 flex max-w-sm items-start gap-3 rounded-xl px-4 py-3 text-xs font-semibold text-white shadow-lift animate-fade-up',
-            toast.error ? 'bg-rose-700' : 'bg-zinc-950',
-          )}
-        >
-          {toast.error && <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />}
-          <span className="flex-1">{toast.message}</span>
-          <button onClick={toast.dismiss} aria-label="Tutup notifikasi" className="-my-1 -mr-1.5 grid h-6 w-6 shrink-0 place-items-center rounded text-zinc-300 hover:bg-white/10 hover:text-white"><X size={14} /></button>
-        </div>
       )}
     </div>
   );
@@ -1156,25 +1140,20 @@ function FollowupLogDialog({
     onSave({ type, note: note.trim(), nextFollowupDate: nextDate || undefined });
   }
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-white p-6 shadow-lift">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zinc-950">
-                <ClipboardList size={18} className="text-white" />
-              </span>
-              <div>
-                <Dialog.Title className="text-base font-bold text-zinc-950">Catat follow-up</Dialog.Title>
-                <Dialog.Description className="mt-0.5 text-xs text-zinc-500">
-                  Interaksi dengan <strong>{prospectName}</strong>
-                </Dialog.Description>
-              </div>
-            </div>
-            <Dialog.Close className="rounded-lg p-2 hover:bg-zinc-100" aria-label="Tutup"><X size={18} /></Dialog.Close>
-          </div>
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+    <Modal
+      open
+      onClose={onClose}
+      title="Catat follow-up"
+      description={<>Interaksi dengan <strong>{prospectName}</strong></>}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>Batal</Button>
+          {/* Tombol di footer modal (di luar <form>): terhubung lewat atribut form agar Enter & validasi tetap jalan. */}
+          <Button type="submit" form="followup-form" disabled={!note.trim() || isSaving}>{isSaving ? 'Menyimpan...' : 'Simpan catatan'}</Button>
+        </>
+      }
+    >
+          <form id="followup-form" onSubmit={handleSubmit} className="space-y-4">
             <div>
               <span className="label">Jenis interaksi</span>
               <div className="mt-1.5 grid grid-cols-4 gap-2" role="group" aria-label="Jenis interaksi">
@@ -1218,13 +1197,7 @@ function FollowupLogDialog({
                 min={businessDateKey()}
               />
             </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="secondary" onClick={onClose}>Batal</Button>
-              <Button disabled={!note.trim() || isSaving}>{isSaving ? 'Menyimpan...' : 'Simpan catatan'}</Button>
-            </div>
           </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </Modal>
   );
 }

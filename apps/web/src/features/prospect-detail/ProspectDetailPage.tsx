@@ -25,7 +25,7 @@ import { queryClient } from '../../app/query';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
-import { PageError, PageLoading } from '../../components/ui/page-feedback';
+import { PageError, PageLoading, EmptyState } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { isLockedForCs } from '../prospects/PicDialog';
@@ -294,7 +294,7 @@ export function ProspectDetailPage() {
                 ))}
               </div>
               <div className="mt-4 rounded-xl border border-zinc-900 bg-zinc-950 p-4 text-white shadow-xs">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
                   Estimasi nilai transaksi
                 </p>
                 <p className="mt-1 font-mono text-xl font-bold tracking-tight">{rupiah(dealValue)}</p>
@@ -341,15 +341,15 @@ export function ProspectDetailPage() {
                 <div className="sm:col-span-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Nilai booking</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Nilai booking</p>
                       <p className="font-mono font-bold text-zinc-900">{rupiah(p.dealValue)}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Kas terverifikasi</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Kas terverifikasi</p>
                       <p className="font-mono font-bold text-emerald-700">{rupiah(p.dpAmount)}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Sisa tagihan</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Sisa tagihan</p>
                       <p className="font-mono font-bold text-zinc-900">
                         {rupiah(Math.max(0, Number(p.dealValue ?? 0) - Number(p.dpAmount ?? 0)))}
                       </p>
@@ -357,7 +357,7 @@ export function ProspectDetailPage() {
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2 border-t border-zinc-200 pt-2">
                     <Badge value={p.paymentStatus} />
-                    <span className="text-[10px] text-zinc-500">
+                    <span className="text-xs text-zinc-500">
                       Nilai & pembayaran hanya berubah lewat penawaran resmi dan verifikasi Finance.
                     </span>
                   </div>
@@ -369,14 +369,14 @@ export function ProspectDetailPage() {
           <aside className="space-y-6">
             <div className="surface p-5">
               <h3 className="text-sm font-semibold text-zinc-950">Kontrol Pipeline</h3>
-              <p className="mt-0.5 text-xs text-zinc-400">Jadwal tindak lanjut dan catatan prospek.</p>
+              <p className="mt-0.5 text-xs text-zinc-500">Jadwal tindak lanjut dan catatan prospek.</p>
               <div className="mt-5 space-y-4">
                 <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-1.5 shadow-2xs">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-zinc-700">Status Pipeline</span>
                     <Badge value={p.status} />
                   </div>
-                  <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  <p className="text-xs text-zinc-500 leading-relaxed">
                     Perpindahan status berjalan otomatis berdasarkan aksi (kirim chat, kualifikasi, penawaran resmi, invoice DP, dan verifikasi keuangan).
                   </p>
                 </div>
@@ -439,7 +439,7 @@ export function ProspectDetailPage() {
                 <div className="pt-0.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <b className="text-xs sm:text-sm font-semibold text-zinc-900">{log.title}</b>
-                    <span className="text-[10px] text-zinc-400 font-mono">
+                    <span className="text-xs text-zinc-500 font-mono">
                       {new Date(log.createdAt).toLocaleString('id-ID')}
                     </span>
                   </div>
@@ -450,7 +450,7 @@ export function ProspectDetailPage() {
               </div>
             ))}
             {!(p.logs ?? []).length && (
-              <p className="py-12 text-center text-xs text-zinc-400">Belum ada aktivitas untuk prospek ini.</p>
+              <EmptyState title="Belum ada aktivitas" description="Riwayat chat, follow-up, dan perubahan status prospek ini akan tampil di sini." />
             )}
           </div>
         </div>
@@ -489,7 +489,7 @@ function FormSection({
         </span>
         <div>
           <h3 className="font-sans text-sm font-semibold text-zinc-950">{title}</h3>
-          <p className="text-xs text-zinc-400">{subtitle}</p>
+          <p className="text-xs text-zinc-500">{subtitle}</p>
         </div>
       </div>
       {children}
@@ -509,7 +509,7 @@ function TgjpWizard({ name }: { name: string }) {
   return (
     <div className="surface p-6 sm:p-8">
       <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
           <Sparkles size={13} className="text-zinc-500" />
           <span>Framework Keberatan</span>
         </div>
@@ -546,7 +546,7 @@ function TgjpWizard({ name }: { name: string }) {
       </div>
 
       <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5 shadow-2xs">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Langkah {active + 1} dari 4
         </p>
         <h4 className="mt-1 font-sans text-base font-bold text-zinc-950">{steps[active]?.title}</h4>

@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -28,6 +26,9 @@ import { Button } from '../../components/ui/button';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { StatusBadge } from '../../components/ui/status-badge';
 import { PackageItem } from './PackageDetailPage';
+import { showFeedback } from '../../app/toast';
+import { ConfirmDialog } from '../../components/ui/modal';
+import { EmptyState } from '../../components/ui/page-feedback';
 
 /* ─── Thumbnail Component with Error Fallback ────────────────── */
 function PackageThumbnail({
@@ -45,7 +46,7 @@ function PackageThumbnail({
     <button
       type="button"
       onClick={onClick}
-      className="group relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 flex items-center justify-center text-zinc-400 hover:opacity-90 transition cursor-pointer shadow-2xs"
+      className="group relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 flex items-center justify-center text-zinc-500 hover:opacity-90 transition cursor-pointer shadow-2xs"
       title="Lihat detail paket"
     >
       {src && !hasError ? (
@@ -56,7 +57,7 @@ function PackageThumbnail({
           className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
         />
       ) : (
-        <PackageOpen size={18} className="text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+        <PackageOpen size={18} className="text-zinc-500 group-hover:text-zinc-600 transition-colors" />
       )}
     </button>
   );
@@ -128,11 +129,9 @@ export function PackagesPage() {
   }, [packages]);
 
   // Toast state
-  const [toast, setToast] = useState<string | null>(null);
 
   function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3600);
+    showFeedback(msg);
   }
 
   // Mutations
@@ -243,7 +242,7 @@ export function PackagesPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {/* Search */}
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
             className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-400 shadow-xs"
             placeholder="Cari nama paket, maskapai, hotel…"
@@ -353,53 +352,48 @@ export function PackagesPage() {
       {/* Packages Listing */}
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
         {packagesQuery.isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-20 text-zinc-400">
+          <div className="flex items-center justify-center gap-2 py-20 text-zinc-500">
             <Loader2 size={18} className="animate-spin" />
             <span className="text-xs">Memuat katalog paket…</span>
           </div>
         ) : packages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-            <PackageOpen size={36} className="mb-3 opacity-25" />
-            <p className="text-sm font-bold text-zinc-700">Tidak ada paket ditemukan</p>
-            <p className="mt-1 text-xs text-zinc-400">
-              {hasActiveFilters
-                ? 'Coba sesuaikan kata kunci pencarian atau filter yang aktif.'
-                : 'Belum ada data paket umroh yang terdaftar.'}
-            </p>
-            {hasActiveFilters ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={resetFilters}
-                className="mt-4"
-              >
-                Reset Filter
-              </Button>
-            ) : canManage ? (
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={() => navigate('/packages/new')}
-                icon={<Plus size={14} />}
-                className="mt-4"
-              >
-                Tambah Paket
-              </Button>
-            ) : null}
-          </div>
+          <EmptyState
+            icon={PackageOpen}
+            title="Tidak ada paket ditemukan"
+            description={hasActiveFilters ? 'Coba sesuaikan kata kunci pencarian atau filter yang aktif.' : 'Belum ada paket umroh yang terdaftar.'}
+            action={hasActiveFilters ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={resetFilters}
+                >
+                  Reset Filter
+                </Button>
+              ) : canManage ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => navigate('/packages/new')}
+                  icon={<Plus size={14} />}
+                >
+                  Tambah Paket
+                </Button>
+              ) : null}
+          />
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[940px] text-left text-xs">
-                <thead className="border-b border-zinc-200 bg-zinc-50/75 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              {/* Di bawah lg kolom Brand & Promo disembunyikan agar nyaman di split-screen; lengkap di Detail Paket. */}
+              <table className="w-full text-left text-xs lg:min-w-[940px]">
+                <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">Paket Umroh</th>
-                    <th className="px-4 py-3">Brand</th>
+                    <th className="hidden px-4 py-3 lg:table-cell">Brand</th>
                     <th className="px-4 py-3">Keberangkatan</th>
                     <th className="px-4 py-3">Harga (Quad)</th>
-                    <th className="px-4 py-3">Promo</th>
+                    <th className="hidden px-4 py-3 lg:table-cell">Promo</th>
                     <th className="px-4 py-3 text-center">Sisa Kuota</th>
                     <th className="px-4 py-3 text-center">Status</th>
                     <th className="px-4 py-3 text-right">Aksi</th>
@@ -440,7 +434,7 @@ export function PackagesPage() {
                               >
                                 {item.name}
                               </button>
-                              <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+                              <p className="text-xs text-zinc-500 truncate mt-0.5">
                                 {item.airline || 'Maskapai TBA'} · {item.flightType === 'transit' ? 'Transit' : 'Direct'}
                               </p>
                             </div>
@@ -448,7 +442,7 @@ export function PackagesPage() {
                         </td>
 
                         {/* Brand */}
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="hidden px-4 py-3 whitespace-nowrap lg:table-cell">
                           <span className="font-semibold text-zinc-800">
                             {item.brand?.name || '-'}
                           </span>
@@ -457,7 +451,7 @@ export function PackagesPage() {
                         {/* Departure Date & Duration */}
                         <td className="px-4 py-3 whitespace-nowrap">
                           <b className="block font-bold text-zinc-900">{departureStr}</b>
-                          <span className="text-[11px] text-zinc-400">{item.duration || '9 Hari'}</span>
+                          <span className="text-xs text-zinc-500">{item.duration || '9 Hari'}</span>
                         </td>
 
                         {/* Quad Price */}
@@ -466,7 +460,7 @@ export function PackagesPage() {
                         </td>
 
                         {/* Promo */}
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="hidden px-4 py-3 whitespace-nowrap lg:table-cell">
                           {item.isPromo ? (
                             <div>
                               <span className="block font-mono text-xs font-semibold text-zinc-950">
@@ -478,13 +472,13 @@ export function PackagesPage() {
                                   : 'Promo'}
                               </span>
                               {item.promoDeadline && (
-                                <span className="block text-[11px] text-zinc-400">
+                                <span className="block text-xs text-zinc-500">
                                   Hingga {new Date(item.promoDeadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-zinc-300 font-mono text-xs">-</span>
+                            <span className="text-zinc-500 font-mono text-xs">-</span>
                           )}
                         </td>
 
@@ -516,7 +510,7 @@ export function PackagesPage() {
                             <DropdownMenu.Trigger asChild>
                               <button
                                 type="button"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-zinc-400 hover:border-zinc-200 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-950/15"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-950/15"
                                 title="Menu opsi paket"
                                 aria-label={`Aksi paket ${item.name}`}
                               >
@@ -533,7 +527,7 @@ export function PackagesPage() {
                                   onSelect={() => navigate(`/packages/${item.id}`)}
                                   className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 outline-none hover:bg-zinc-100 hover:text-zinc-950 transition-colors"
                                 >
-                                  <Eye size={13} className="text-zinc-400" />
+                                  <Eye size={13} className="text-zinc-500" />
                                   <span>Lihat Detail</span>
                                 </DropdownMenu.Item>
 
@@ -543,7 +537,7 @@ export function PackagesPage() {
                                       onSelect={() => navigate(`/packages/${item.id}/edit`)}
                                       className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 outline-none hover:bg-zinc-100 hover:text-zinc-950 transition-colors"
                                     >
-                                      <Pencil size={13} className="text-zinc-400" />
+                                      <Pencil size={13} className="text-zinc-500" />
                                       <span>Edit Paket</span>
                                     </DropdownMenu.Item>
 
@@ -553,7 +547,7 @@ export function PackagesPage() {
                                     >
                                       {item.isActive ? (
                                         <>
-                                          <ToggleLeft size={14} className="text-zinc-400" />
+                                          <ToggleLeft size={14} className="text-zinc-500" />
                                           <span>Arsipkan Paket</span>
                                         </>
                                       ) : (
@@ -609,7 +603,7 @@ export function PackagesPage() {
                   <div className="flex items-center gap-1">
                     {pageNumbers.map((p, idx) =>
                       p === '...' ? (
-                        <span key={`dots-${idx}`} className="px-1.5 text-zinc-400 select-none">
+                        <span key={`dots-${idx}`} className="px-1.5 text-zinc-500 select-none">
                           …
                         </span>
                       ) : (
@@ -645,47 +639,16 @@ export function PackagesPage() {
         )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog.Root open={Boolean(deleteConfirmItem)} onOpenChange={(v) => !v && setDeleteConfirmItem(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl outline-none border border-zinc-200">
-            <Dialog.Title className="text-base font-bold text-zinc-950 font-display">
-              Hapus Paket
-            </Dialog.Title>
-            <Dialog.Description className="mt-2 text-xs text-zinc-500 leading-relaxed">
-              Hapus paket <strong className="text-zinc-900">{deleteConfirmItem?.name}</strong>? Tindakan ini tidak dapat dibatalkan.
-            </Dialog.Description>
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setDeleteConfirmItem(null)}
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => deleteConfirmItem && deleteMutation.mutate(deleteConfirmItem.id)}
-                loading={deleteMutation.isPending}
-              >
-                Hapus
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <ConfirmDialog
+        open={Boolean(deleteConfirmItem)}
+        onClose={() => setDeleteConfirmItem(null)}
+        onConfirm={() => deleteConfirmItem && deleteMutation.mutate(deleteConfirmItem.id)}
+        pending={deleteMutation.isPending}
+        title="Hapus paket?"
+        description={<>Paket <strong>{deleteConfirmItem?.name}</strong> akan dihapus. Tindakan ini tidak dapat dibatalkan.</>}
+        confirmLabel="Hapus paket"
+      />
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl bg-zinc-950 px-4 py-3 text-xs font-semibold text-white shadow-lift border border-zinc-800 animate-in fade-in-0 slide-in-from-bottom-2">
-          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-          <span>{toast}</span>
-        </div>
-      )}
     </div>
   );
 }

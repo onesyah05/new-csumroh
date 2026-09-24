@@ -1,5 +1,5 @@
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { businessDateKey, isLostStatus, isTakeoverOpen, isWonStatus } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -45,6 +45,7 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useWhatsAppAvatars } from '../../lib/avatars';
 import { useNow } from '../../lib/useNow';
+import { NotificationBell } from '../notifications/NotificationBell';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { cn } from '../../lib/cn';
 import { ChatSidePanel, type ChatSidePanelTab } from './ChatSidePanel';
@@ -60,6 +61,9 @@ import { formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packag
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxWorkFilters, type InboxWorkFilter } from './inboxFilters';
+import { showFeedback } from '../../app/toast';
+import { ConfirmDialog, ModalFrame } from '../../components/ui/modal';
+import { ImageLightbox } from '../../components/ui/image-lightbox';
 
 const MAX_UPLOAD_MB = 30;
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
@@ -116,6 +120,13 @@ function formatBubbleTime(timestampSeconds?: number): string {
   if (!timestampSeconds) return '';
   const date = new Date(timestampSeconds * 1000);
   return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+}
+
+/** Elemen non-tombol yang bisa diklik juga harus bisa diaktifkan dengan Enter/Spasi (WCAG 2.1.1). */
+function activateWithKeyboard(event: ReactKeyboardEvent<HTMLElement>, action: () => void) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  action();
 }
 
 function normalizePhone(value?: string | null) {
@@ -204,7 +215,6 @@ export function InboxPage() {
     setOwnerFilter('all');
   }, [brandId]);
   const [message, setMessage] = useConversationDraft(`${user?.id}:${brandId}:${selectedId}`);
-  const [actionToast, setActionToast] = useState<string | null>(null);
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [previewFlyer, setPreviewFlyer] = useState<string | null>(null);
@@ -666,12 +676,8 @@ export function InboxPage() {
     }
   }
 
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => () => clearTimeout(toastTimer.current), []);
   function showToast(msg: string) {
-    clearTimeout(toastTimer.current);
-    setActionToast(msg);
-    toastTimer.current = setTimeout(() => setActionToast(null), 5000);
+    showFeedback(msg);
   }
 
   function openSendFlyerModal(targetPkg?: any) {
@@ -918,13 +924,6 @@ export function InboxPage() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-white">
-      {/* Toast Feedback */}
-      {actionToast && (
-        <div role="status" aria-live="polite" className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-zinc-950 px-4 py-2.5 text-xs font-semibold text-white shadow-lift animate-fade-up">
-          <Check size={14} className="text-emerald-400" />
-          <span>{actionToast}</span>
-        </div>
-      )}
 
       <div className={cn('inbox-workspace', selected && sidePanelTab && 'has-side-panel')}>
         {/* Left Column: WhatsApp Web Conversation List */}
@@ -1028,17 +1027,17 @@ export function InboxPage() {
                 </div>
               )}
             </div>
-            {isConnected && (
-              <div className="flex items-center gap-1">
-                {canManageDevice && (
-                  <Link to={`/devices/${brandId}`} title="Kelola Perangkat WA">
-                    <Button size="icon" variant="ghost" className="text-[#54656f] hover:text-[#111b21]">
-                      <Smartphone size={18} />
-                    </Button>
-                  </Link>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-1">
+              {/* Inbox tanpa header aplikasi: di layar kecil lonceng notifikasi ada di sini (desktop: rail sidebar). */}
+              <NotificationBell placement="header" className="lg:hidden" />
+              {isConnected && canManageDevice && (
+                <Link to={`/devices/${brandId}`} title="Kelola Perangkat WA">
+                  <Button size="icon" variant="ghost" className="text-[#54656f] hover:text-[#111b21]">
+                    <Smartphone size={18} />
+                  </Button>
+                </Link>
+              )}
+            </div>
           </div>
 
           {(
@@ -1131,11 +1130,14 @@ export function InboxPage() {
                 return (
                   <div
                     key={item.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleSelectConversation(item.id)}
+                    onKeyDown={(event) => activateWithKeyboard(event, () => handleSelectConversation(item.id))}
                     aria-current={active ? 'true' : undefined}
                     aria-label={`Percakapan dengan ${item.name}`}
                     className={cn(
-                      'flex h-[72px] items-center gap-3 px-3.5 cursor-pointer transition-colors select-none',
+                      'flex h-[72px] items-center gap-3 px-3.5 cursor-pointer transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00a884]',
                       active ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'
                     )}
                   >
@@ -1262,12 +1264,8 @@ export function InboxPage() {
             <>
               {/* WhatsApp Web Chat Header */}
               <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-[#e9edef] bg-[#f0f2f5] px-4">
-                <div
-                  className="flex items-center gap-3 min-w-0 cursor-pointer select-none"
-                  onClick={() => setSidePanelTab((prev) => (prev ? null : 'profile'))}
-                  title={sidePanelTab ? 'Klik untuk menutup panel samping' : 'Klik untuk membuka profil prospek'}
-                >
-                  {/* Mobile Back Button */}
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* Mobile Back Button — di luar area profil agar kliknya tidak ikut membuka/menutup panel. */}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1278,7 +1276,14 @@ export function InboxPage() {
                     <ArrowLeft size={18} />
                   </Button>
 
-                  {/* Avatar */}
+                  {/* Avatar + nama: satu tombol untuk membuka/menutup panel Profil & Copilot (bisa dengan keyboard). */}
+                  <button
+                    type="button"
+                    onClick={() => setSidePanelTab((prev) => (prev ? null : 'profile'))}
+                    title={sidePanelTab ? 'Klik untuk menutup panel samping' : 'Klik untuk membuka profil prospek'}
+                    aria-expanded={Boolean(sidePanelTab)}
+                    className="flex min-w-0 items-center gap-3 rounded-lg text-left outline-none cursor-pointer select-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
+                  >
                   <ContactAvatar
                     size="md"
                     photoUrl={photoFor(selected)}
@@ -1286,9 +1291,9 @@ export function InboxPage() {
                     isWhatsAppOfficial={selected.remoteJid === '0@s.whatsapp.net' || selected.name === 'WhatsApp'}
                   />
 
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="truncate text-sm font-semibold text-[#111b21]">{selected.name}</h3>
+                  <span className="block min-w-0">
+                    <span className="flex items-center gap-2">
+                      <span className="block truncate text-sm font-semibold text-[#111b21]">{selected.name}</span>
                       {selected.leadSource === 'meta_ads' && (
                         <span
                           title={[selected.adHeadline, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
@@ -1297,9 +1302,9 @@ export function InboxPage() {
                           <Megaphone size={10} />Meta Ads
                         </span>
                       )}
-                    </div>
+                    </span>
 
-                    <p className="truncate text-[11px] text-[#667781]">
+                    <span className="block truncate text-[11px] text-[#667781]">
                       {selected.remoteJid === '0@s.whatsapp.net' || selected.name === 'WhatsApp'
                         ? 'Akun Resmi WhatsApp'
                         : selected.name?.includes('(Anda)')
@@ -1309,29 +1314,33 @@ export function InboxPage() {
                         : selected.phone
                         ? (selected.phone.startsWith('+') ? selected.phone : `+${selected.phone}`)
                         : 'WhatsApp'}
-                    </p>
-                  </div>
+                    </span>
+                  </span>
+                  </button>
                 </div>
 
                 {/* Right Action Tools */}
                 <div className="flex items-center gap-2 shrink-0">
                   {/* Status Pipeline Badge */}
                   {!selected.isGroup && (
-                    <span
+                    <button
+                      type="button"
                       onClick={() => setSidePanelTab('profile')}
-                      className="cursor-pointer"
+                      className="cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
                       title="Status Pipeline (Klik untuk membuka profil)"
+                      aria-label={`Status ${selected.status || 'new'}: buka profil prospek`}
                     >
                       <Badge value={selected.status || 'new'} className="shrink-0 cursor-pointer hover:opacity-85 transition-opacity" />
-                    </span>
+                    </button>
                   )}
 
                   {/* PIC Status Badge */}
                   {selected.user?.name ? (
-                    <span
+                    <button
+                      type="button"
                       onClick={() => setSidePanelTab('profile')}
                       className={cn(
-                        'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:opacity-85 transition-opacity',
+                        'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:opacity-85 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]',
                         isPic
                           ? 'bg-emerald-100 text-emerald-800'
                           : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
@@ -1339,15 +1348,16 @@ export function InboxPage() {
                       title={`Penanggung jawab chat: ${selected.user.name} (Klik untuk membuka profil)`}
                     >
                       {isPic ? 'PIC Anda' : `PIC: ${selected.user.name}`}
-                    </span>
+                    </button>
                   ) : (
-                    <span
+                    <button
+                      type="button"
                       onClick={() => setSidePanelTab('profile')}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:opacity-85 transition-opacity"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:opacity-85 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
                       title="Percakapan belum memiliki PIC (Klik untuk membuka profil)"
                     >
                       Belum ada PIC
-                    </span>
+                    </button>
                   )}
 
                   {user?.role === 'cs' && isUnassigned && !isWonStatus(selected.status) && !isLostStatus(selected.status) && (
@@ -1724,7 +1734,11 @@ export function InboxPage() {
                                     {/* Quoted Message Preview inside bubble */}
                                     {(item.quotedText || item.quotedMessageId) && (
                                       <div
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label="Lompat ke pesan yang dikutip"
                                         onClick={() => scrollToMessage(item.quotedMessageId)}
+                                        onKeyDown={(event) => activateWithKeyboard(event, () => scrollToMessage(item.quotedMessageId))}
                                         className={cn(
                                           'mb-1.5 rounded border-l-4 px-2.5 py-1.5 text-xs cursor-pointer select-none transition-opacity hover:opacity-85',
                                           item.isFromMe
@@ -1747,8 +1761,12 @@ export function InboxPage() {
                                        <div className="mb-1.5 overflow-hidden rounded-xl max-w-[280px]">
                                          {item.mediaUrl ? (
                                            <div
-                                             className="relative group cursor-pointer overflow-hidden rounded-xl border border-black/10 bg-zinc-100"
+                                             role="button"
+                                             tabIndex={0}
+                                             aria-label="Lihat gambar"
+                                             className="relative group cursor-pointer overflow-hidden rounded-xl border border-black/10 bg-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
                                              onClick={() => setPreviewFlyer(item.mediaUrl)}
+                                             onKeyDown={(event) => activateWithKeyboard(event, () => setPreviewFlyer(item.mediaUrl))}
                                            >
                                              <img
                                                src={resolveMediaUrl(item.mediaUrl)}
@@ -2372,106 +2390,28 @@ export function InboxPage() {
         )}
       </div>
 
-      {/* Media Lightbox Modal */}
-      {previewFlyer && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xs p-4 animate-fade-in"
-          onClick={() => setPreviewFlyer(null)}
-        >
-          <div
-            className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-2xl bg-zinc-900 shadow-2xl border border-zinc-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-950/90 px-4 py-3 text-white">
-              <span className="text-xs font-bold">Pratinjau Media</span>
-              <div className="flex items-center gap-2">
-                <a
-                  href={resolveMediaUrl(previewFlyer)}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
-                  title="Unduh Berkas / Foto"
-                >
-                  <Download size={16} />
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setPreviewFlyer(null)}
-                  className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
-                  title="Tutup"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-            <div className="p-3 flex justify-center items-center max-h-[80vh] overflow-auto bg-black/30">
-              <img
-                src={resolveMediaUrl(previewFlyer)}
-                alt="Pratinjau Media"
-                className="max-h-[75vh] w-auto rounded-xl object-contain shadow-2xl"
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Pratinjau media: komponen bersama (kunci fokus, Escape, fokus kembali ke pemicu). */}
+      <ImageLightbox
+        open={Boolean(previewFlyer)}
+        onClose={() => setPreviewFlyer(null)}
+        src={previewFlyer ? resolveMediaUrl(previewFlyer) : ''}
+        alt="Pratinjau media"
+        download
+      />
 
-      {/* Delete Message Confirmation Modal */}
-      {deleteConfirmId !== null && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fade-in"
-          onClick={() => setDeleteConfirmId(null)}
-        >
-          <div
-            className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 text-red-600 mb-2">
-              <div className="grid h-10 w-10 place-items-center rounded-full bg-red-50 border border-red-100 shrink-0">
-                <Trash2 size={20} />
-              </div>
-              <div>
-                <h4 className="text-base font-bold text-zinc-950">Hapus pesan?</h4>
-                <p className="text-xs text-zinc-500">Hapus pesan untuk semua orang di chat ini?</p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setDeleteConfirmId(null)}
-                disabled={deleteMutation.isPending}
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                className="bg-red-600 hover:bg-red-700 text-white font-bold"
-                onClick={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? <RefreshCw size={14} className="animate-spin mr-1.5" /> : null}
-                Hapus untuk semua
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={deleteConfirmId !== null}
+        onClose={() => setDeleteConfirmId(null)}
+        onConfirm={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
+        pending={deleteMutation.isPending}
+        title="Hapus pesan?"
+        description="Pesan dihapus untuk semua orang di chat ini."
+        confirmLabel="Hapus untuk semua"
+      />
 
       {/* Package Picker Modal (Brosur & Flyer Paket Umroh) */}
-      {showPackagePickerModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in"
-          onClick={() => setShowPackagePickerModal(false)}
-        >
-          <div
-            className="relative flex flex-col max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <ModalFrame open={showPackagePickerModal} onClose={() => setShowPackagePickerModal(false)} title="Kirim flyer brosur paket umroh">
+          <div className="relative flex flex-col max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 bg-[#f0f2f5]">
               <div className="flex items-center gap-3">
@@ -2479,9 +2419,9 @@ export function InboxPage() {
                   <ImageIcon size={20} />
                 </div>
                 <div>
-                  <h3 className="font-display text-base font-bold text-zinc-900">
+                  <p aria-hidden="true" className="font-display text-base font-bold text-zinc-900">
                     Kirim Flyer Brosur Paket Umroh
-                  </h3>
+                  </p>
                   <p className="text-xs text-zinc-500">
                     Pilih paket umroh untuk menyiapkan flyer resmi & rincian jadwal ke WhatsApp prospek
                   </p>
@@ -2668,8 +2608,7 @@ export function InboxPage() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+      </ModalFrame>
 
 
     </div>

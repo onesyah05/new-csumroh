@@ -4,6 +4,8 @@ import { getAccessToken, onSessionChange, refreshSession } from '../lib/api';
 import { queryClient } from './query';
 import { useAuth } from './auth';
 import { useUiStore } from './store';
+import { pushToast } from './toast';
+import { playNotificationSound } from '../lib/notificationSound';
 
 export function SocketBridge() {
   const { user } = useAuth();
@@ -104,6 +106,22 @@ export function SocketBridge() {
     socket.on('conversation:read', refresh);
     socket.on('prospect:updated', refresh);
     socket.on('prospect:claimed', refresh);
+
+    // Notifikasi in-app: lencana/panel disegarkan; tindakan & mendesak juga muncul sebagai toast,
+    // kecuali user sedang melihat objeknya (mis. chat prospek yang sama sudah terbuka).
+    const refreshNotifications = () => void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    // Server sudah menghitung preferensi penerima (toast/suara) untuk tiap notifikasi.
+    const onNotification = (data?: {
+      id: number; priority: 'info' | 'action' | 'urgent'; title: string; body?: string | null; link?: string | null; toast?: boolean; sound?: boolean;
+    }) => {
+      refreshNotifications();
+      if (!data || isViewing(data.link)) return;
+      if (data.toast) pushToast({ id: `notification-${data.id}`, title: data.title, body: data.body, link: data.link, priority: data.priority });
+      if (data.sound) playNotificationSound({ urgent: data.priority === 'urgent' });
+    };
+    socket.on('notification:new', onNotification);
+    socket.on('notification:updated', refreshNotifications);
+    socket.on('notification:read', refreshNotifications);
     socket.on('finance:payment_proof_new', onFinanceProof);
     socket.on('package:quota_updated', onQuotaUpdated);
     socket.on('wa:status', refreshWhatsApp);
@@ -118,4 +136,15 @@ export function SocketBridge() {
   }, [userId, setRealtimeStatus]);
 
   return null;
+}
+
+/** Tautan notifikasi menunjuk halaman yang sedang dibuka (prospek yang sama di Inbox/detail). */
+function isViewing(link?: string | null) {
+  if (!link || typeof window === 'undefined') return false;
+  const target = new URL(link, window.location.origin);
+  const here = window.location;
+  if (target.pathname !== here.pathname) return false;
+  const prospectId = target.searchParams.get('prospectId');
+  if (prospectId) return new URLSearchParams(here.search).get('prospectId') === prospectId;
+  return target.pathname.startsWith('/prospects/');
 }

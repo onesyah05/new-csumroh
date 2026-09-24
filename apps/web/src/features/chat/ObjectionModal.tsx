@@ -67,12 +67,12 @@ export function ObjectionModal({
             </span>
             <div>
               <h3 className="font-bold text-sm text-zinc-900">Catat Keberatan Jamaah</h3>
-              <p className="text-[11px] text-zinc-500">Mempromosikan status ke Keberatan (objection)</p>
+              <p className="text-xs text-zinc-500">Mempromosikan status ke Keberatan (objection)</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 transition"
+            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 transition"
           >
             <X size={18} />
           </button>
@@ -81,7 +81,7 @@ export function ObjectionModal({
         {/* Form Body */}
         <div className="p-5 space-y-4 text-xs">
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Kategori Keberatan Utama
             </label>
             <Select
@@ -93,7 +93,7 @@ export function ObjectionModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Rincian Keberatan & Solusi dari CS (Wajib Diisi)
             </label>
             <textarea

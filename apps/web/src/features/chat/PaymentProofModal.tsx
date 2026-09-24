@@ -81,12 +81,12 @@ export function PaymentProofModal({
             </span>
             <div>
               <h3 className="font-bold text-sm text-zinc-900">Unggah Bukti Transfer</h3>
-              <p className="text-[11px] text-zinc-500">Kirim ke Finance untuk verifikasi mutasi & deal</p>
+              <p className="text-xs text-zinc-500">Kirim ke Finance untuk verifikasi mutasi & deal</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 transition"
+            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 transition"
           >
             <X size={18} />
           </button>
@@ -95,7 +95,7 @@ export function PaymentProofModal({
         {/* Content */}
         <div className="thin-scrollbar flex-1 overflow-y-auto p-5 space-y-4 text-xs">
           <div className="space-y-2">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Pilih Foto / PDF Bukti Transfer (maks. 5MB)
             </label>
             <input
@@ -104,19 +104,19 @@ export function PaymentProofModal({
               onChange={handleFileChange}
               className="w-full text-xs text-zinc-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
             />
-            {fileError && <p className="text-[11px] text-red-600">{fileError}</p>}
+            {fileError && <p className="text-xs text-rose-600">{fileError}</p>}
           </div>
 
           {/* Preview: berkas baru, atau bukti yang sudah tersimpan (dibaca privat) */}
           {(fileData || prospect?.paymentProofUrl) && (
             <div className="space-y-1">
-              <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+              <span className="font-bold uppercase tracking-wider text-xs text-zinc-500">
                 {fileData ? 'Pratinjau Bukti Baru:' : 'Bukti Tersimpan Saat Ini:'}
               </span>
               <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-50 min-h-20 flex items-center justify-center p-2">
                 {fileData ? (
                   isPdf ? (
-                    <span className="flex items-center gap-2 text-[11px] text-zinc-700">
+                    <span className="flex items-center gap-2 text-xs text-zinc-700">
                       <FileText size={16} className="text-emerald-700" /> {fileName}
                     </span>
                   ) : (
@@ -131,7 +131,7 @@ export function PaymentProofModal({
 
           {/* Notes for Finance */}
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Catatan untuk Tim Finance (Opsional)
             </label>
             <textarea
@@ -143,8 +143,8 @@ export function PaymentProofModal({
             />
           </div>
 
-          <div className="rounded-xl bg-amber-50/70 border border-amber-200 p-2.5 text-[11px] text-amber-900 leading-relaxed">
-            🛡️ <strong>Info Keamanan Anti-Fraud:</strong> Setelah bukti diunggah, status prospek tetap aman di Closing sampai diverifikasi langsung oleh tim <strong>Finance</strong>. CS tidak dapat mengubah ke Deal secara sepihak.
+          <div className="rounded-xl bg-amber-50/70 border border-amber-200 p-2.5 text-xs text-amber-900 leading-relaxed">
+            🛡️ <strong>Info Keamanan Anti-Fraud:</strong> Setelah bukti diunggah, status prospek tetap di Tunggu Verifikasi sampai diverifikasi langsung oleh tim <strong>Finance</strong>. CS tidak dapat mengubah ke Deal secara sepihak.
           </div>
         </div>
 

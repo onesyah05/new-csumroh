@@ -1,13 +1,10 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import {
-  AlertTriangle,
   ArrowLeft,
   Building2,
   Check,
-  CheckCircle2,
   Copy,
   CreditCard,
   ExternalLink,
@@ -30,6 +27,8 @@ import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { StatusBadge } from '../../components/ui/status-badge';
+import { showFeedback } from '../../app/toast';
+import { ConfirmDialog } from '../../components/ui/modal';
 
 interface BrandDetail {
   id: number;
@@ -71,11 +70,9 @@ export function BrandDetailPage() {
 
   const [copiedBank, setCopiedBank] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
 
   function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3600);
+    showFeedback(msg);
   }
 
   // Query brand details
@@ -132,7 +129,7 @@ export function BrandDetailPage() {
         title={brand.name}
         badges={
           <>
-            <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">
+            <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-700">
               {brand.code}
             </span>
             <StatusBadge
@@ -169,7 +166,7 @@ export function BrandDetailPage() {
                   variant="outline"
                   size="icon"
                   onClick={() => setDeleteConfirmOpen(true)}
-                  className="text-zinc-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50"
+                  className="text-zinc-500 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50"
                   title="Hapus brand"
                 >
                   <Trash2 size={14} />
@@ -182,7 +179,7 @@ export function BrandDetailPage() {
 
       {/* 4 Metric Stats */}
       <StatGrid cols={4}>
-        <StatCard label="Total Staff Tim" value={brand._count?.users ?? 0} note="Akses sales & CS" />
+        <StatCard label="Total Staf Tim" value={brand._count?.users ?? 0} note="Akses sales & CS" />
         <StatCard label="Total Paket Umroh" value={brand._count?.packages ?? 0} note="Katalog program" />
         <StatCard label="Total Prospek" value={brand._count?.prospects ?? 0} note="Pipeline prospek" />
         <StatCard
@@ -204,20 +201,20 @@ export function BrandDetailPage() {
                 <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                   Legalitas & Kontak Resmi
                 </h3>
-                <p className="text-[11px] text-zinc-400">Identitas resmi biro dan alamat kantor.</p>
+                <p className="text-xs text-zinc-500">Identitas resmi biro dan alamat kantor.</p>
               </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 text-xs">
               <div>
-                <span className="text-[11px] text-zinc-400 block font-medium">Izin PPIU Kemenag</span>
+                <span className="text-xs text-zinc-500 block font-medium">Izin PPIU Kemenag</span>
                 <span className="font-bold text-zinc-900 text-xs block font-mono mt-0.5">
                   {brand.ppiuNumber || 'Belum didaftarkan'}
                 </span>
               </div>
 
               <div>
-                <span className="text-[11px] text-zinc-400 block font-medium">Hotline / No. Telepon</span>
+                <span className="text-xs text-zinc-500 block font-medium">Hotline / No. Telepon</span>
                 <span className="font-bold text-zinc-900 text-xs block font-mono mt-0.5">
                   {brand.phone || 'Belum diisi'}
                 </span>
@@ -225,13 +222,13 @@ export function BrandDetailPage() {
 
               <div className="sm:col-span-2 pt-2 border-t border-zinc-100">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-zinc-400 font-medium">Alamat Kantor</span>
+                  <span className="text-xs text-zinc-500 font-medium">Alamat Kantor</span>
                   {brand.gmapsUrl && /^https?:\/\//i.test(brand.gmapsUrl) && (
                     <a
                       href={brand.gmapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-700 hover:text-zinc-950 transition"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-700 hover:text-zinc-950 transition"
                     >
                       <MapPin size={11} className="text-zinc-500" />
                       <span>Buka Google Maps</span>
@@ -255,7 +252,7 @@ export function BrandDetailPage() {
                   <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                     Rekening Resmi Bank
                   </h3>
-                  <p className="text-[11px] text-zinc-400">Rekening tujuan transfer DP dan pelunasan paket jamaah.</p>
+                  <p className="text-xs text-zinc-500">Rekening tujuan transfer DP dan pelunasan paket jamaah.</p>
                 </div>
               </div>
 
@@ -286,7 +283,7 @@ export function BrandDetailPage() {
                 </p>
               </div>
             ) : (
-              <p className="text-xs text-zinc-400 italic py-2">Belum ada data rekening resmi yang didaftarkan.</p>
+              <p className="text-xs text-zinc-500 italic py-2">Belum ada data rekening resmi yang didaftarkan.</p>
             )}
           </Card>
         </div>
@@ -301,8 +298,8 @@ export function BrandDetailPage() {
                 WhatsApp Gateway
               </h3>
               <span
-                className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-                  waConnected ? 'text-emerald-700' : 'text-zinc-400'
+                className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                  waConnected ? 'text-emerald-700' : 'text-zinc-500'
                 }`}
               >
                 {waConnected ? <Wifi size={11} /> : <WifiOff size={11} />}
@@ -312,11 +309,11 @@ export function BrandDetailPage() {
 
             <div className="space-y-1.5 text-xs text-zinc-700">
               <div className="flex justify-between">
-                <span className="text-zinc-400">Nomor WhatsApp:</span>
+                <span className="text-zinc-500">Nomor WhatsApp:</span>
                 <strong className="font-mono text-zinc-900">{brand.whatsappSession?.phoneNumber || '-'}</strong>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-400">Nama Device:</span>
+                <span className="text-zinc-500">Nama Device:</span>
                 <strong className="text-zinc-900 truncate max-w-[150px]">{brand.whatsappSession?.pushName || brand.name}</strong>
               </div>
             </div>
@@ -332,15 +329,15 @@ export function BrandDetailPage() {
             </Button>
           </Card>
 
-          {/* Tim Sales & Staff */}
+          {/* Tim Sales & Staf */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700 flex items-center gap-1.5">
                 <Users size={14} className="text-zinc-500" />
-                Staff Tim ({brand.users?.length ?? 0})
+                Staf Tim ({brand.users?.length ?? 0})
               </h3>
               <Link to="/staff" className="text-xs font-bold text-zinc-950 hover:underline">
-                Kelola Staff
+                Kelola Staf
               </Link>
             </div>
 
@@ -350,10 +347,10 @@ export function BrandDetailPage() {
                   <div key={member.id} className="py-2 flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-bold text-xs text-zinc-900 truncate">{member.name}</p>
-                      <p className="text-[11px] text-zinc-400 truncate">{member.email}</p>
+                      <p className="text-xs text-zinc-500 truncate">{member.email}</p>
                     </div>
                     <span
-                      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                      className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs font-bold ${
                         member.role === 'admin'
                           ? 'bg-amber-50 text-amber-800 border border-amber-200'
                           : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
@@ -365,64 +362,32 @@ export function BrandDetailPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-zinc-400 italic py-2">Belum ada staff yang ditugaskan ke brand ini.</p>
+              <p className="text-xs text-zinc-500 italic py-2">Belum ada staf yang ditugaskan ke brand ini.</p>
             )}
           </Card>
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl outline-none border border-zinc-200">
-            <div className="flex items-center gap-3 text-rose-600 mb-3">
-              <AlertTriangle size={22} />
-              <Dialog.Title className="text-base font-bold text-zinc-950 font-display">
-                Hapus Brand Travel?
-              </Dialog.Title>
-            </div>
+      <ConfirmDialog
+        open={Boolean(deleteConfirmOpen)}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.isError ? (deleteMutation.error as Error)?.message || 'Gagal menghapus brand.' : null}
+        // API menolak menghapus brand yang masih punya prospek atau paket: jangan janjikan "hapus semua data".
+        confirmDisabled={((brand?._count?.prospects ?? 0) + (brand?._count?.packages ?? 0)) > 0}
+        title="Hapus Brand Travel?"
+        description={<>Brand <strong>{brand?.name}</strong> ({brand?.code}) akan dihapus beserta sesi WhatsApp-nya. Tindakan ini tidak dapat dibatalkan.</>}
+        confirmLabel="Hapus Brand"
+      >
+        {((brand?._count?.prospects ?? 0) + (brand?._count?.packages ?? 0)) > 0 ? (
+          <p className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700">
+            Brand ini masih punya <strong>{brand?._count?.prospects ?? 0}</strong> prospek dan <strong>{brand?._count?.packages ?? 0}</strong> paket,
+            sehingga tidak dapat dihapus. Arsipkan paketnya atau hubungi tim holding.
+          </p>
+        ) : undefined}
+      </ConfirmDialog>
 
-            <Dialog.Description className="text-xs text-zinc-600 leading-relaxed">
-              Menghapus biro <strong>{brand.name}</strong> ({brand.code}) akan menghapus seluruh data turunan berikut:
-            </Dialog.Description>
-
-            <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50/60 p-3.5 text-xs text-rose-900 space-y-1">
-              <p>• <strong>{brand._count?.prospects ?? 0}</strong> data calon jamaah (prospek)</p>
-              <p>• <strong>{brand._count?.packages ?? 0}</strong> paket umroh biro</p>
-              <p>• Riwayat chat dan sesi WhatsApp gateway</p>
-            </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setDeleteConfirmOpen(false)}
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => deleteMutation.mutate()}
-                loading={deleteMutation.isPending}
-              >
-                Hapus Brand
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl bg-zinc-950 px-4 py-3 text-xs font-semibold text-white shadow-lift border border-zinc-800 animate-in fade-in-0 slide-in-from-bottom-2">
-          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-          <span>{toast}</span>
-        </div>
-      )}
     </div>
   );
 }

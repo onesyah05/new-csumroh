@@ -1,9 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import {
-  AlertTriangle,
   ArrowLeft,
   Building2,
   CreditCard,
@@ -22,6 +20,7 @@ import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { ConfirmDialog } from '../../components/ui/modal';
 
 interface BrandFormData {
   name: string;
@@ -196,7 +195,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                   Identitas Brand
                 </h3>
-                <p className="text-[11px] text-zinc-400">Nama resmi biro dan kode identifikasi sistem.</p>
+                <p className="text-xs text-zinc-500">Nama resmi biro dan kode identifikasi sistem.</p>
               </div>
             </div>
 
@@ -206,7 +205,7 @@ export function BrandFormPage() {
                 <span className="grid h-14 w-14 place-items-center rounded-xl bg-zinc-950 font-display text-base font-extrabold text-white shadow-xs">
                   {avatarPreview}
                 </span>
-                <span className="text-[10px] font-mono uppercase text-zinc-400">Avatar</span>
+                <span className="text-xs font-mono uppercase text-zinc-500">Avatar</span>
               </div>
 
               <div className="grid gap-4 flex-1 w-full sm:grid-cols-2">
@@ -251,7 +250,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                   Legalitas & Kontak Resmi
                 </h3>
-                <p className="text-[11px] text-zinc-400">Izin Kemenag dan kontak layanan jamaah.</p>
+                <p className="text-xs text-zinc-500">Izin Kemenag dan kontak layanan jamaah.</p>
               </div>
             </div>
 
@@ -261,7 +260,7 @@ export function BrandFormPage() {
                   Nomor Izin PPIU (Kemenag)
                 </label>
                 <div className="relative">
-                  <FileText size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  <FileText size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                   <input
                     id="brand-ppiu"
                     className="field pl-9"
@@ -277,7 +276,7 @@ export function BrandFormPage() {
                   Hotline / No. Telepon Kantor
                 </label>
                 <div className="relative">
-                  <Phone size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  <Phone size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                   <input
                     id="brand-phone"
                     className="field pl-9"
@@ -298,7 +297,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                   Rekening Resmi Bank
                 </h3>
-                <p className="text-[11px] text-zinc-400">Rekening tujuan transfer DP dan pelunasan paket umroh.</p>
+                <p className="text-xs text-zinc-500">Rekening tujuan transfer DP dan pelunasan paket umroh.</p>
               </div>
             </div>
 
@@ -352,7 +351,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                   Alamat Kantor & Lokasi Google Maps
                 </h3>
-                <p className="text-[11px] text-zinc-400">Alamat kantor biro dan tautan peta lokasi.</p>
+                <p className="text-xs text-zinc-500">Alamat kantor biro dan tautan peta lokasi.</p>
               </div>
             </div>
 
@@ -381,14 +380,14 @@ export function BrandFormPage() {
                       href={form.gmapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-zinc-600 hover:text-zinc-800 hover:underline"
                     >
                       <ExternalLink size={12} /> Buka Peta ↗
                     </a>
                   )}
                 </div>
                 <div className="relative">
-                  <MapPin size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  <MapPin size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                   <input
                     id="brand-gmaps"
                     className="field pl-9"
@@ -447,52 +446,25 @@ export function BrandFormPage() {
         </Card>
       </form>
 
-      {/* Confirmation Dialog Hapus Brand via Radix */}
-      <Dialog.Root open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl outline-none border border-zinc-200">
-            <div className="flex items-center gap-3 text-rose-600 mb-3">
-              <AlertTriangle size={22} />
-              <Dialog.Title className="text-base font-bold text-zinc-950 font-display">
-                Hapus Brand Travel?
-              </Dialog.Title>
-            </div>
-
-            <Dialog.Description className="text-xs text-zinc-600 leading-relaxed">
-              Tindakan ini tidak dapat dibatalkan. Menghapus brand{' '}
-              <strong>{currentBrand?.name}</strong> ({currentBrand?.code}) akan otomatis menghapus data prospek, paket umroh, dan sesi WhatsApp biro ini.
-            </Dialog.Description>
-
-            {deleteMutation.isError && (
-              <p className="mt-3 text-xs text-rose-600">
-                {(deleteMutation.error as Error)?.message || 'Gagal menghapus brand.'}
-              </p>
-            )}
-
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setConfirmDeleteOpen(false)}
-                disabled={deleteMutation.isPending}
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => deleteMutation.mutate()}
-                loading={deleteMutation.isPending}
-              >
-                Ya, Hapus Brand
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <ConfirmDialog
+        open={Boolean(confirmDeleteOpen)}
+        onClose={() => setConfirmDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.isError ? (deleteMutation.error as Error)?.message || 'Gagal menghapus brand.' : null}
+        // API menolak menghapus brand yang masih punya prospek atau paket: jangan janjikan "hapus semua data".
+        confirmDisabled={(((currentBrand as any)?._count?.prospects ?? 0) + ((currentBrand as any)?._count?.packages ?? 0)) > 0}
+        title="Hapus Brand Travel?"
+        description={<>Brand <strong>{(currentBrand as any)?.name}</strong> ({(currentBrand as any)?.code}) akan dihapus beserta sesi WhatsApp-nya. Tindakan ini tidak dapat dibatalkan.</>}
+        confirmLabel="Hapus Brand"
+      >
+        {(((currentBrand as any)?._count?.prospects ?? 0) + ((currentBrand as any)?._count?.packages ?? 0)) > 0 ? (
+          <p className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700">
+            Brand ini masih punya <strong>{(currentBrand as any)?._count?.prospects ?? 0}</strong> prospek dan <strong>{(currentBrand as any)?._count?.packages ?? 0}</strong> paket,
+            sehingga tidak dapat dihapus. Arsipkan paketnya atau hubungi tim holding.
+          </p>
+        ) : undefined}
+      </ConfirmDialog>
     </div>
   );
 }

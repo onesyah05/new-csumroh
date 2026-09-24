@@ -67,6 +67,7 @@ describe('workspace navigation', () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/auth/refresh')) return response({ accessToken: 'test-token', user });
+      if (url.includes('/dashboard/tasks')) return response({ role: 'manager', tasks: [], waiting: null });
       if (url.includes('/dashboard')) return response({ total: 1, won: 0, conversionRate: 0, unassigned: 1, pipeline: [], recent: [conversation], wa: null });
       if (url.includes('/chat/wa/status')) return response({ brandId: 1, status: 'connected', phoneNumber: '628123456789' });
       if (url.includes('/chat/conversations')) return response([conversation]);
@@ -102,17 +103,25 @@ describe('workspace navigation', () => {
 
     fireEvent.click(screen.getByRole('link', { name: /^kotak masuk$/i }));
     await screen.findAllByText("Assalamualaikum", undefined, { timeout: 8000 });
+    // Header chat: avatar + nama adalah tombol (keyboard) yang membuka/menutup panel Profil & Copilot.
+    const profileToggle = screen.getByRole('button', { name: /^Ibu Aisyah/ });
+    expect(profileToggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(profileToggle);
+    expect(profileToggle.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(profileToggle);
+    // Item daftar percakapan bisa difokus keyboard.
+    expect(screen.getByRole('button', { name: 'Percakapan dengan Ibu Aisyah' }).getAttribute('tabindex')).toBe('0');
 
     fireEvent.click(screen.getByRole('link', { name: /^pipeline$/i }));
-    await screen.findByRole('heading', { name: 'Prospek Jamaah' }, { timeout: 8000 });
+    await screen.findByRole('heading', { name: 'Pipeline' }, { timeout: 8000 });
 
     fireEvent.click(screen.getByRole('link', { name: /akademi cs/i }));
     await screen.findByRole('heading', { name: 'Sapaan amanah' }, { timeout: 8000 });
 
-    fireEvent.click(screen.getByRole('link', { name: /^brand$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^brand travel$/i }));
     await screen.findByRole('heading', { name: 'Brand Travel' }, { timeout: 8000 });
 
-    fireEvent.click(screen.getByRole('link', { name: /^perangkat wa$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^perangkat whatsapp$/i }));
     await screen.findByRole('heading', { name: 'Perangkat WhatsApp' }, { timeout: 8000 });
 
     await waitFor(() => expect(screen.queryByText('Halaman gagal ditampilkan')).toBeNull());

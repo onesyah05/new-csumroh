@@ -1,13 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Smartphone, Wifi, WifiOff, Clock3, QrCode,
   PhoneCall, Building2, Settings2, MessageSquare,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { useAuth } from '../../app/auth';
 import { useUiStore } from '../../app/store';
-import { useBrandScope } from '../../lib/scope';
 import { PageError, PageLoading, SectionEmpty } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 
@@ -16,7 +14,7 @@ type WhatsAppStatus = 'disconnected' | 'connecting' | 'qr_ready' | 'connected';
 const statusConfig: Record<WhatsAppStatus, { label: string; color: string; dot: string; bar: string; icon: typeof Wifi }> = {
   connected:    { label: 'Terhubung',       color: 'text-emerald-700 bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500 animate-pulse', bar: 'bg-emerald-500', icon: Wifi },
   qr_ready:     { label: 'Menunggu QR',     color: 'text-amber-700 bg-amber-50 border-amber-200',       dot: 'bg-amber-400 animate-pulse',   bar: 'bg-amber-400',   icon: QrCode },
-  connecting:   { label: 'Menyambungkan…',  color: 'text-blue-700 bg-blue-50 border-blue-200',           dot: 'bg-blue-400 animate-pulse',    bar: 'bg-blue-400',    icon: Clock3 },
+  connecting:   { label: 'Menyambungkan…',  color: 'text-zinc-700 bg-zinc-50 border-zinc-200',           dot: 'bg-zinc-400 animate-pulse',    bar: 'bg-zinc-400',    icon: Clock3 },
   disconnected: { label: 'Tidak Terhubung', color: 'text-zinc-500 bg-zinc-100 border-zinc-200',          dot: 'bg-zinc-300',                  bar: 'bg-zinc-300',    icon: WifiOff },
 };
 
@@ -39,8 +37,6 @@ function formatDate(iso?: string | null) {
 }
 
 export function DevicePage() {
-  const { user } = useAuth();
-  const { brandId } = useBrandScope();
   const setActiveBrandId = useUiStore((s) => s.setActiveBrandId);
   const navigate = useNavigate();
 
@@ -52,9 +48,9 @@ export function DevicePage() {
   if (brands.isLoading) return <PageLoading label="Memuat status perangkat…" />;
   if (brands.isError) return <PageError description={brands.error.message} onRetry={() => void brands.refetch()} />;
 
-  const brandList = (brands.data ?? []).filter((b) =>
-    user?.role === 'superadmin' ? true : b.id === brandId
-  );
+  // API hanya mengembalikan brand yang boleh diakses (Admin & Superadmin: semua). Halaman ini tidak
+  // mengikuti brand aktif di header, sehingga semua perangkat tampil sekaligus.
+  const brandList = brands.data ?? [];
 
   const connectedCount    = brandList.filter((b) => b.whatsappSession?.status === 'connected').length;
   const disconnectedCount = brandList.length - connectedCount;
@@ -75,14 +71,14 @@ export function DevicePage() {
           { icon: WifiOff,   value: disconnectedCount,     label: 'Tidak Terhubung', note: 'Perlu scan QR ulang' },
         ].map(({ icon: Icon, value, label, note }) => (
           <article key={label} className="surface p-5">
-            <div className="flex items-center justify-between text-zinc-400">
+            <div className="flex items-center justify-between text-zinc-500">
               <span className="text-xs font-medium text-zinc-500">{label}</span>
               <span className="grid h-7 w-7 place-items-center rounded-md bg-zinc-100 text-zinc-600">
                 <Icon size={14} />
               </span>
             </div>
             <p className="mt-3 font-sans text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">{value}</p>
-            <p className="mt-1 text-xs text-zinc-400">{note}</p>
+            <p className="mt-1 text-xs text-zinc-500">{note}</p>
           </article>
         ))}
       </section>
@@ -114,8 +110,17 @@ export function DevicePage() {
                       {String(brand.code ?? 'BRD').slice(0, 3)}
                     </span>
                     <div className="min-w-0">
-                      <h3 className="font-display font-bold text-zinc-950 leading-tight truncate">{brand.name}</h3>
-                      <span className="text-[10px] font-mono text-zinc-500">{brand.code}</span>
+                      <h3 className="font-display font-bold text-zinc-950 leading-tight truncate">
+                        {/* Pintasan keyboard untuk kartu yang bisa diklik (kartu berisi tombol lain, jadi bukan <button>). */}
+                        <Link
+                          to={`/devices/${brand.id}`}
+                          onClick={(event) => event.stopPropagation()}
+                          className="rounded outline-none hover:underline focus-visible:ring-2 focus-visible:ring-zinc-950"
+                        >
+                          {brand.name}
+                        </Link>
+                      </h3>
+                      <span className="text-xs font-mono text-zinc-500">{brand.code}</span>
                     </div>
                   </div>
 
@@ -129,10 +134,10 @@ export function DevicePage() {
                   {/* Session details */}
                   <dl className="space-y-2 text-xs">
                     <div className="flex items-center gap-2 text-zinc-600">
-                      <PhoneCall size={13} className="shrink-0 text-zinc-400" />
+                      <PhoneCall size={13} className="shrink-0 text-zinc-500" />
                       <span className="font-medium">{formatPhone(session?.phoneNumber)}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-zinc-400">
+                    <div className="flex items-center gap-2 text-zinc-500">
                       <Clock3 size={13} className="shrink-0" />
                       <span>
                         Terkoneksi terakhir:{' '}
@@ -140,7 +145,7 @@ export function DevicePage() {
                       </span>
                     </div>
                     {session?.sessionName && (
-                      <div className="flex items-center gap-2 text-zinc-400">
+                      <div className="flex items-center gap-2 text-zinc-500">
                         <Smartphone size={13} className="shrink-0" />
                         <span className="font-mono text-zinc-500 truncate">{session.sessionName}</span>
                       </div>
@@ -164,7 +169,7 @@ export function DevicePage() {
                       Buka Live Chat
                     </button>
                   ) : (
-                    <span className="text-xs text-zinc-400">Klik untuk mengelola</span>
+                    <span className="text-xs text-zinc-500">Klik untuk mengelola</span>
                   )}
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-700 hover:text-zinc-950">
                     <Settings2 size={13} /> Kelola

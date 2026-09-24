@@ -473,7 +473,7 @@ export function PackageFormPage() {
                       placeholder="9"
                       className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-xs font-mono font-medium focus:border-zinc-950 focus:outline-none pr-12"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 pointer-events-none select-none font-sans">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500 pointer-events-none select-none font-sans">
                       Hari
                     </span>
                   </div>
@@ -503,7 +503,7 @@ export function PackageFormPage() {
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div>
-                  <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
+                  <label className="text-xs font-semibold text-zinc-700 block mb-1">
                     Quad (Ber-4) <span className="text-rose-500">*</span>
                   </label>
                   <RupiahInput
@@ -516,7 +516,7 @@ export function PackageFormPage() {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
+                  <label className="text-xs font-semibold text-zinc-700 block mb-1">
                     Triple (Ber-3)
                   </label>
                   <RupiahInput
@@ -528,7 +528,7 @@ export function PackageFormPage() {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
+                  <label className="text-xs font-semibold text-zinc-700 block mb-1">
                     Double (Ber-2)
                   </label>
                   <RupiahInput
@@ -540,7 +540,7 @@ export function PackageFormPage() {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
+                  <label className="text-xs font-semibold text-zinc-700 block mb-1">
                     Infant (&lt; 2 Thn)
                   </label>
                   <RupiahInput
@@ -758,7 +758,16 @@ export function PackageFormPage() {
               </div>
             ) : (
               <div
+                role="button"
+                tabIndex={0}
+                aria-label="Unggah flyer paket"
                 onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
                 onDragOver={(e) => {
                   e.preventDefault();
                   setIsDragging(true);
@@ -773,16 +782,16 @@ export function PackageFormPage() {
                   const f = e.dataTransfer.files?.[0];
                   if (f) void handleFileSelect(f);
                 }}
-                className={`grid aspect-3/4 place-items-center rounded-xl border-2 border-dashed p-4 text-center transition cursor-pointer ${
+                className={`grid aspect-3/4 place-items-center rounded-xl border-2 border-dashed p-4 text-center transition cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 ${
                   isDragging
                     ? 'border-zinc-950 bg-zinc-100'
                     : 'border-zinc-200 bg-zinc-50/60 hover:border-zinc-950 hover:bg-zinc-50'
                 }`}
               >
                 <div className="space-y-1.5">
-                  <UploadCloud size={24} className="mx-auto text-zinc-400" />
+                  <UploadCloud size={24} className="mx-auto text-zinc-500" />
                   <p className="text-xs font-semibold text-zinc-800">Upload Poster Flyer</p>
-                  <p className="text-[11px] text-zinc-400">Klik atau seret gambar ke sini</p>
+                  <p className="text-xs text-zinc-500">Klik atau seret gambar ke sini</p>
                 </div>
               </div>
             )}
@@ -835,7 +844,7 @@ export function PackageFormPage() {
               {form.isPromo && (
                 <div className="space-y-2 pt-1">
                   <div>
-                    <label className="text-[11px] font-semibold text-zinc-600 block mb-1">
+                    <label className="text-xs font-semibold text-zinc-600 block mb-1">
                       Potongan Harga Promo
                     </label>
                     <input
@@ -847,7 +856,7 @@ export function PackageFormPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-semibold text-zinc-600 block mb-1">
+                    <label className="text-xs font-semibold text-zinc-600 block mb-1">
                       Batas Waktu Promo
                     </label>
                     <input

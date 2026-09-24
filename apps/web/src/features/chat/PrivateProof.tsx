@@ -38,17 +38,17 @@ export function usePrivateFile(url?: string | null) {
 export function PrivateProofPreview({ url }: { url: string }) {
   const { objectUrl, mime, error } = usePrivateFile(url);
 
-  if (error) return <p className="p-3 text-[11px] text-red-600">Bukti transfer tidak dapat dimuat: {error}</p>;
-  if (!objectUrl) return <p className="p-3 text-[11px] text-zinc-500">Memuat bukti transfer…</p>;
+  if (error) return <p className="p-3 text-xs text-rose-600">Bukti transfer tidak dapat dimuat: {error}</p>;
+  if (!objectUrl) return <p className="p-3 text-xs text-zinc-500">Memuat bukti transfer…</p>;
   if (mime === 'application/pdf') {
     return (
       <div className="flex w-full flex-col gap-2">
         <object data={objectUrl} type="application/pdf" className="h-56 w-full rounded-lg bg-white">
-          <div className="flex items-center gap-2 p-3 text-[11px] text-zinc-600">
+          <div className="flex items-center gap-2 p-3 text-xs text-zinc-600">
             <FileText size={14} /> Pratinjau PDF tidak didukung browser ini.
           </div>
         </object>
-        <a href={objectUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline">
+        <a href={objectUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">
           <ExternalLink size={12} /> Buka PDF di tab baru
         </a>
       </div>
@@ -65,9 +65,9 @@ export function PrivateProofPreview({ url }: { url: string }) {
 export function PrivateProofThumb({ url }: { url: string }) {
   const { objectUrl, mime, error } = usePrivateFile(url);
   const content = error ? (
-    <span className="text-[9px] text-red-600">Gagal</span>
+    <span className="text-xs text-rose-600">Gagal</span>
   ) : !objectUrl ? (
-    <span className="text-[9px] text-zinc-400">…</span>
+    <span className="text-xs text-zinc-500">…</span>
   ) : mime === 'application/pdf' ? (
     <FileText size={18} className="text-emerald-700" />
   ) : (

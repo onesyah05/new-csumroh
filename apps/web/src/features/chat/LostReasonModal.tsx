@@ -77,12 +77,12 @@ export function LostReasonModal({
             </span>
             <div>
               <h3 className="font-bold text-sm text-zinc-900">Batalkan Prospek (Lose)</h3>
-              <p className="text-[11px] text-zinc-500">Wajib mengisi alasan pembatalan jamaah</p>
+              <p className="text-xs text-zinc-500">Wajib mengisi alasan pembatalan jamaah</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 transition"
+            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 transition"
           >
             <X size={18} />
           </button>
@@ -91,7 +91,7 @@ export function LostReasonModal({
         {/* Content */}
         <div className="p-5 space-y-4 text-xs">
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Alasan Pembatalan Utama
             </label>
             <Select
@@ -103,7 +103,7 @@ export function LostReasonModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Catatan Detail Pembatalan (Wajib jika alasan lainnya)
             </label>
             <textarea

@@ -38,7 +38,7 @@ export function LoginPage() {
           </span>
           <div>
             <b className="font-sans text-sm tracking-tight">CRM AZHAN</b>
-            <p className="text-[10px] uppercase tracking-[.2em] text-zinc-400">Conversion Desk</p>
+            <p className="text-xs uppercase tracking-[.2em] text-zinc-400">Conversion Desk</p>
           </div>
         </div>
 
@@ -85,7 +85,7 @@ export function LoginPage() {
               AZ
             </span>
           </div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">
             Selamat datang kembali
           </p>
           <h2 className="font-sans text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950">
@@ -131,7 +131,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShow(!show)}
-                  className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition"
+                  className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 transition"
                   aria-label="Tampilkan kata sandi"
                 >
                   {show ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -151,7 +151,7 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 flex items-center gap-2 border-t border-zinc-200/90 pt-4 text-xs text-zinc-400">
+          <div className="mt-6 flex items-center gap-2 border-t border-zinc-200/90 pt-4 text-xs text-zinc-500">
             <LockKeyhole size={13} className="text-zinc-500" />
             <span>Akses terenkripsi dan terisolasi per brand.</span>
           </div>

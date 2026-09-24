@@ -126,7 +126,7 @@ export function QualificationModal({
               <h3 className="font-display text-sm font-bold text-zinc-900">
                 Formulir Kualifikasi Prospek (NPGD)
               </h3>
-              <p className="text-[11px] text-zinc-500">
+              <p className="text-xs text-zinc-500">
                 Untuk prospek: <strong className="text-zinc-800">{prospect.name}</strong>
               </p>
             </div>
@@ -134,7 +134,7 @@ export function QualificationModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition"
+            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 transition"
           >
             <X size={17} />
           </button>
@@ -148,7 +148,7 @@ export function QualificationModal({
             </div>
           )}
 
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[11px] text-emerald-900 space-y-1">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900 space-y-1">
             <div className="flex items-center gap-1.5 font-bold">
               <Sparkles size={13} className="text-emerald-600" />
               <span>Kriteria Otomatis Naik ke Tahap Terkualifikasi:</span>
@@ -162,7 +162,7 @@ export function QualificationModal({
 
           {/* 1. Target Bulan */}
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-600 mb-1">
+            <label className="block text-xs font-bold uppercase text-zinc-600 mb-1">
               1. Target Bulan / Waktu Keberangkatan <span className="text-rose-500">*</span>
             </label>
             <input
@@ -170,7 +170,7 @@ export function QualificationModal({
               value={targetMonth}
               onChange={(e) => setTargetMonth(e.target.value)}
               placeholder="Contoh: Ramadan 1448H / Oktober 2026"
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-[#00a884] focus:ring-1 focus:ring-[#00a884]"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
             />
             {/* Quick Chips */}
             <div className="flex flex-wrap gap-1 mt-1.5">
@@ -179,7 +179,7 @@ export function QualificationModal({
                   key={m}
                   type="button"
                   onClick={() => setTargetMonth(m)}
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition cursor-pointer ${
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium transition cursor-pointer ${
                     targetMonth === m
                       ? 'bg-emerald-600 text-white'
                       : 'border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100'
@@ -193,7 +193,7 @@ export function QualificationModal({
 
           {/* 2. Pilihan Kamar */}
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-600 mb-1">
+            <label className="block text-xs font-bold uppercase text-zinc-600 mb-1">
               2. Pilihan Tipe Kamar Utama <span className="text-rose-500">*</span>
             </label>
             <Select
@@ -207,7 +207,7 @@ export function QualificationModal({
           {/* 3. Jumlah Pax Counter */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] font-bold uppercase text-zinc-600">
+              <label className="text-xs font-bold uppercase text-zinc-600">
                 3. Perkiraan Jumlah Jamaah (Pax) <span className="text-rose-500">*</span>
               </label>
               <span className={`font-bold text-xs ${totalPax > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
@@ -222,14 +222,14 @@ export function QualificationModal({
                 { label: 'Infant', val: paxInfant, set: setPaxInfant, hint: '<2 thn' },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-2">
-                  <span className="block text-[10px] font-bold text-zinc-700">{item.label}</span>
-                  <span className="block text-[9px] text-zinc-400 mb-1">{item.hint}</span>
+                  <span className="block text-xs font-bold text-zinc-700">{item.label}</span>
+                  <span className="block text-xs text-zinc-500 mb-1">{item.hint}</span>
                   <input
                     type="number"
                     min="0"
                     value={item.val}
                     onChange={(e) => item.set(Math.max(0, Number(e.target.value) || 0))}
-                    className="w-full text-center font-bold text-sm text-zinc-900 bg-white border border-zinc-200 rounded-lg py-1 outline-none focus:border-[#00a884]"
+                    className="w-full text-center font-bold text-sm text-zinc-900 bg-white border border-zinc-200 rounded-lg py-1 outline-none focus:border-zinc-900"
                   />
                 </div>
               ))}
@@ -239,7 +239,7 @@ export function QualificationModal({
           {/* 4. Optional Fields: Budget & Decision Maker */}
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-100">
             <div>
-              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">
+              <label className="block text-xs font-bold uppercase text-zinc-500 mb-1">
                 Kisaran Budget (Opsional)
               </label>
               <input
@@ -247,12 +247,12 @@ export function QualificationModal({
                 value={budgetRange}
                 onChange={(e) => setBudgetRange(e.target.value)}
                 placeholder="Misal: 30-35 juta"
-                className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 outline-none focus:border-[#00a884]"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 outline-none focus:border-zinc-900"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">
+              <label className="block text-xs font-bold uppercase text-zinc-500 mb-1">
                 Pengambil Keputusan (Opsional)
               </label>
               <input
@@ -260,7 +260,7 @@ export function QualificationModal({
                 value={decisionMaker}
                 onChange={(e) => setDecisionMaker(e.target.value)}
                 placeholder="Misal: Suami / Istri / Sendiri"
-                className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 outline-none focus:border-[#00a884]"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 outline-none focus:border-zinc-900"
               />
             </div>
           </div>

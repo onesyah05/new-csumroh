@@ -1,11 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import {
-  AlertTriangle,
   Building2,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CreditCard,
@@ -30,6 +27,9 @@ import { PageHeader } from '../../components/ui/page-header';
 import { Button } from '../../components/ui/button';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { StatusBadge } from '../../components/ui/status-badge';
+import { showFeedback } from '../../app/toast';
+import { ConfirmDialog } from '../../components/ui/modal';
+import { EmptyState } from '../../components/ui/page-feedback';
 
 interface BrandItem {
   id: number;
@@ -70,11 +70,9 @@ export function BrandPage() {
 
   // Modals & Feedback
   const [deleteTarget, setDeleteTarget] = useState<BrandItem | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
   function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3600);
+    showFeedback(msg);
   }
 
   // Fetch brands
@@ -172,7 +170,7 @@ export function BrandPage() {
       {/* 4 Metric Stats */}
       <StatGrid cols={4}>
         <StatCard label="Total Brand" value={brands.length} note="Biro terdaftar" />
-        <StatCard label="Total Staff Tim" value={totalUsers} note="Tim sales & CS" />
+        <StatCard label="Total Staf Tim" value={totalUsers} note="Tim sales & CS" />
         <StatCard label="Total Paket Umroh" value={totalPackages} note="Katalog program" />
         <StatCard label="WhatsApp Terhubung" value={`${connectedCount}/${brands.length}`} note="Status gateway aktif" />
       </StatGrid>
@@ -181,7 +179,7 @@ export function BrandPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {/* Search Input */}
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
             className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-400 shadow-xs"
             placeholder="Cari nama atau kode brand…"
@@ -229,44 +227,40 @@ export function BrandPage() {
       {/* Brand Table Listing */}
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
         {brandsQuery.isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-20 text-zinc-400">
+          <div className="flex items-center justify-center gap-2 py-20 text-zinc-500">
             <Loader2 size={18} className="animate-spin" />
             <span className="text-xs">Memuat data brand travel…</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-            <Building2 size={36} className="mb-3 opacity-25" />
-            <p className="text-sm font-bold text-zinc-700">Tidak ada brand travel ditemukan</p>
-            <p className="mt-1 text-xs text-zinc-400">
-              {hasActiveFilters
-                ? 'Coba sesuaikan kata kunci pencarian atau filter yang aktif.'
-                : 'Belum ada data biro travel yang didaftarkan ke sistem.'}
-            </p>
-            {hasActiveFilters ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={resetFilters}
-                className="mt-4"
-              >
-                Reset Filter
-              </Button>
-            ) : canManage ? (
-              <Button variant="primary" size="sm" to="/brands/new" icon={<Plus size={14} />} className="mt-4">
-                Tambah Brand
-              </Button>
-            ) : null}
-          </div>
+          <EmptyState
+            icon={Building2}
+            title="Tidak ada brand travel ditemukan"
+            description={hasActiveFilters ? 'Coba sesuaikan kata kunci pencarian atau filter yang aktif.' : 'Belum ada biro travel yang didaftarkan ke sistem.'}
+            action={hasActiveFilters ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={resetFilters}
+                >
+                  Reset Filter
+                </Button>
+              ) : canManage ? (
+                <Button variant="primary" size="sm" to="/brands/new" icon={<Plus size={14} />}>
+                  Tambah Brand
+                </Button>
+              ) : null}
+          />
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] text-left text-xs">
-                <thead className="border-b border-zinc-200 bg-zinc-50/75 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              {/* Di bawah lg (split-screen ±700 px) kolom legalitas & rekening disembunyikan; lengkap di Detail Brand. */}
+              <table className="w-full text-left text-xs lg:min-w-[820px]">
+                <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">Brand Travel</th>
-                    <th className="px-4 py-3">Legalitas & Kontak</th>
-                    <th className="px-4 py-3">Rekening Resmi</th>
+                    <th className="hidden px-4 py-3 lg:table-cell">Legalitas & Kontak</th>
+                    <th className="hidden px-4 py-3 lg:table-cell">Rekening Resmi</th>
                     <th className="px-4 py-3">Statistik Data</th>
                     <th className="px-4 py-3 text-center">Status WA</th>
                     <th className="px-4 py-3 text-right">Aksi</th>
@@ -292,11 +286,11 @@ export function BrandPage() {
                                 >
                                   {brand.name}
                                 </Link>
-                                <span className="rounded-md border border-zinc-200 bg-zinc-100 px-1.5 py-0.2 font-mono text-[10px] font-semibold text-zinc-700">
+                                <span className="rounded-md border border-zinc-200 bg-zinc-100 px-1.5 py-0.2 font-mono text-xs font-semibold text-zinc-700">
                                   {brand.code}
                                 </span>
                               </div>
-                              <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+                              <p className="text-xs text-zinc-500 truncate mt-0.5">
                                 {brand.phone || 'Hotline belum diatur'}
                               </p>
                             </div>
@@ -304,36 +298,36 @@ export function BrandPage() {
                         </td>
 
                         {/* Legal & Contact */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+                        <td className="hidden px-4 py-3.5 whitespace-nowrap lg:table-cell">
                           <b className="block font-mono text-zinc-900">{brand.ppiuNumber || 'PPIU -'}</b>
-                          <span className="text-[11px] text-zinc-400 truncate max-w-[200px] block">
+                          <span className="text-xs text-zinc-500 truncate max-w-[200px] block">
                             {brand.address || 'Alamat belum diatur'}
                           </span>
                         </td>
 
                         {/* Bank Account */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+                        <td className="hidden px-4 py-3.5 whitespace-nowrap lg:table-cell">
                           {brand.bankName ? (
                             <>
                               <b className="block font-mono text-zinc-900">
                                 {brand.bankName} {brand.bankAccountNumber}
                               </b>
-                              <span className="text-[11px] text-zinc-400">a/n {brand.bankAccountHolder || '-'}</span>
+                              <span className="text-xs text-zinc-500">a/n {brand.bankAccountHolder || '-'}</span>
                             </>
                           ) : (
-                            <span className="text-zinc-400 italic">Belum ada</span>
+                            <span className="text-zinc-500 italic">Belum ada</span>
                           )}
                         </td>
 
                         {/* Stats Counts */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
-                          <div className="flex items-center gap-3 text-[11px] text-zinc-600">
-                            <span title="Total staff tim" className="flex items-center gap-1 font-medium">
-                              <Users size={12} className="text-zinc-400" />
+                          <div className="flex items-center gap-3 text-xs text-zinc-600">
+                            <span title="Total staf tim" className="flex items-center gap-1 font-medium">
+                              <Users size={12} className="text-zinc-500" />
                               {brand._count?.users ?? 0}
                             </span>
                             <span title="Total paket umroh" className="flex items-center gap-1 font-medium">
-                              <PackageOpen size={12} className="text-zinc-400" />
+                              <PackageOpen size={12} className="text-zinc-500" />
                               {brand._count?.packages ?? 0}
                             </span>
                           </div>
@@ -379,7 +373,7 @@ export function BrandPage() {
                                 <button
                                   type="button"
                                   onClick={() => setDeleteTarget(brand)}
-                                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
+                                  className="rounded-lg p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
                                   title="Hapus brand"
                                 >
                                   <Trash2 size={14} />
@@ -418,7 +412,7 @@ export function BrandPage() {
                   <div className="hidden sm:flex items-center gap-1">
                     {pageNumbers.map((p, idx) =>
                       p === '...' ? (
-                        <span key={`dots-${idx}`} className="px-2 text-zinc-400">
+                        <span key={`dots-${idx}`} className="px-2 text-zinc-500">
                           …
                         </span>
                       ) : (
@@ -454,58 +448,26 @@ export function BrandPage() {
         )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog.Root open={Boolean(deleteTarget)} onOpenChange={(v) => !v && setDeleteTarget(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl outline-none border border-zinc-200">
-            <div className="flex items-center gap-3 text-rose-600 mb-3">
-              <AlertTriangle size={22} />
-              <Dialog.Title className="text-base font-bold text-zinc-950 font-display">
-                Hapus Brand Travel?
-              </Dialog.Title>
-            </div>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.isError ? (deleteMutation.error as Error)?.message || 'Gagal menghapus brand.' : null}
+        // API menolak menghapus brand yang masih punya prospek atau paket: jangan janjikan "hapus semua data".
+        confirmDisabled={((deleteTarget?._count?.prospects ?? 0) + (deleteTarget?._count?.packages ?? 0)) > 0}
+        title="Hapus Brand Travel?"
+        description={<>Brand <strong>{deleteTarget?.name}</strong> ({deleteTarget?.code}) akan dihapus beserta sesi WhatsApp-nya. Tindakan ini tidak dapat dibatalkan.</>}
+        confirmLabel="Hapus Brand"
+      >
+        {((deleteTarget?._count?.prospects ?? 0) + (deleteTarget?._count?.packages ?? 0)) > 0 ? (
+          <p className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700">
+            Brand ini masih punya <strong>{deleteTarget?._count?.prospects ?? 0}</strong> prospek dan <strong>{deleteTarget?._count?.packages ?? 0}</strong> paket,
+            sehingga tidak dapat dihapus. Arsipkan paketnya atau hubungi tim holding.
+          </p>
+        ) : undefined}
+      </ConfirmDialog>
 
-            <Dialog.Description className="text-xs text-zinc-600 leading-relaxed">
-              Menghapus biro <strong>{deleteTarget?.name}</strong> ({deleteTarget?.code}) akan menghapus seluruh data turunan berikut:
-            </Dialog.Description>
-
-            <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50/60 p-3.5 text-xs text-rose-900 space-y-1">
-              <p>• <strong>{deleteTarget?._count?.prospects ?? 0}</strong> data calon jamaah</p>
-              <p>• <strong>{deleteTarget?._count?.packages ?? 0}</strong> paket umroh biro</p>
-              <p>• Riwayat chat dan sesi WhatsApp gateway</p>
-            </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setDeleteTarget(null)}
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-                loading={deleteMutation.isPending}
-              >
-                Hapus Brand
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl bg-zinc-950 px-4 py-3 text-xs font-semibold text-white shadow-lift border border-zinc-800 animate-in fade-in-0 slide-in-from-bottom-2">
-          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-          <span>{toast}</span>
-        </div>
-      )}
     </div>
   );
 }

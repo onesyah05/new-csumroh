@@ -107,7 +107,7 @@ export function FinanceVerifyModal({
             </span>
             <div>
               <h3 className="font-bold text-sm">{alreadyWon ? 'Catat Pembayaran Lanjutan' : 'Verifikasi Finance (Deal Pembayaran)'}</h3>
-              <p className="text-[11px] text-emerald-100">Validasi mutasi bank · satu mutasi = satu baris ledger</p>
+              <p className="text-xs text-emerald-100">Validasi mutasi bank · satu mutasi = satu baris ledger</p>
             </div>
           </div>
           <button
@@ -126,11 +126,11 @@ export function FinanceVerifyModal({
               <span>{prospect?.name || 'Jamaah'}</span>
               <span className="text-emerald-700">{prospect?.phone}</span>
             </div>
-            <p className="text-[11px] text-zinc-500">
+            <p className="text-xs text-zinc-500">
               Paket: {prospect?.package?.name || 'Paket Umroh'} · Invoice: {prospect?.invoiceNumber || '-'}
               {Number(prospect?.invoiceAmount) > 0 ? ` (${rupiah(prospect.invoiceAmount)})` : ''}
             </p>
-            <div className="grid grid-cols-3 gap-2 border-t border-zinc-200 pt-2 text-[11px]">
+            <div className="grid grid-cols-3 gap-2 border-t border-zinc-200 pt-2 text-xs">
               <div>
                 <p className="text-zinc-500">Nilai booking</p>
                 <p className="font-bold text-zinc-900">{bookingValue > 0 ? rupiah(bookingValue) : 'Belum ditetapkan'}</p>
@@ -149,7 +149,7 @@ export function FinanceVerifyModal({
           {/* Payment Proof Preview if uploaded */}
           {prospect?.paymentProofUrl && (
             <div className="space-y-1.5">
-              <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
                 Bukti Transfer yang Diunggah CS:
               </label>
               <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-100 min-h-24 flex items-center justify-center p-2">
@@ -160,7 +160,7 @@ export function FinanceVerifyModal({
 
           {/* Approved Amount */}
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Nominal Mutasi Ini (Rp)
             </label>
             <input
@@ -170,7 +170,7 @@ export function FinanceVerifyModal({
               onChange={(e) => setApprovedAmount(Number(e.target.value))}
               className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs font-bold text-emerald-700 focus:border-emerald-500 focus:outline-none"
             />
-            <span className="text-[10px] text-zinc-400">
+            <span className="text-xs text-zinc-500">
               {rupiah(approvedAmount)} · total kas setelah verifikasi {rupiah(totalAfter)}
             </span>
           </div>
@@ -178,7 +178,7 @@ export function FinanceVerifyModal({
           <div className="grid grid-cols-2 gap-3">
             {/* Bank Selection */}
             <div className="space-y-1.5">
-              <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
                 Bank Tujuan Mutasi
               </label>
               <Select
@@ -191,7 +191,7 @@ export function FinanceVerifyModal({
 
             {/* Mutation Date */}
             <div className="space-y-1.5">
-              <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
                 Tanggal Mutasi
               </label>
               <input
@@ -205,7 +205,7 @@ export function FinanceVerifyModal({
 
           {/* Reference number */}
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               No. Referensi Mutasi (disarankan)
             </label>
             <input
@@ -215,12 +215,12 @@ export function FinanceVerifyModal({
               placeholder="Contoh: FT2609231015XYZ"
               className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs font-mono focus:border-emerald-500 focus:outline-none"
             />
-            <span className="text-[10px] text-zinc-400">Nomor unik per brand; mencegah satu mutasi dipakai dua booking.</span>
+            <span className="text-xs text-zinc-500">Nomor unik per brand; mencegah satu mutasi dipakai dua booking.</span>
           </div>
 
           {/* Notes */}
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Catatan Validasi Finance (Opsional)
             </label>
             <input
@@ -232,9 +232,9 @@ export function FinanceVerifyModal({
             />
           </div>
 
-          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-2.5 text-[11px] text-emerald-900 leading-relaxed">
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-2.5 text-xs text-emerald-900 leading-relaxed">
             🎯 <strong>Dampak Verifikasi:</strong>
-            <ul className="list-disc list-inside mt-1 space-y-0.5 text-[10px]">
+            <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
               {!alreadyWon && <li>Status prospek berubah menjadi <strong>DEAL</strong> dan kuota seat paket dipotong</li>}
               <li>Mutasi dicatat di ledger pembayaran; kas terverifikasi menjadi <strong>{rupiah(totalAfter)}</strong></li>
               <li>Status pembayaran menjadi <strong>{willBePaidFull ? 'Lunas (paid_full)' : 'DP sebagian (partial_dp)'}</strong></li>

@@ -4,6 +4,7 @@ import { useAuth } from './auth';
 import { AppShell } from './AppShell';
 import { LoginPage } from '../features/auth/LoginPage';
 import { SocketBridge } from './socket';
+import { Toaster } from './toast';
 
 // Setiap halaman dimuat saat dibuka: CS tidak mengunduh modul admin/paket/Meta yang tidak dipakainya.
 function page<K extends string>(loader: () => Promise<Record<K, ComponentType>>, name: K) {
@@ -26,6 +27,7 @@ const DeviceDetailPage = page(() => import('../features/device/DeviceDetailPage'
 const StaffPage = page(() => import('../features/staff/StaffPage'), 'StaffPage');
 const VerificationPage = page(() => import('../features/finance/VerificationPage'), 'VerificationPage');
 const MetaCapiPage = page(() => import('../features/meta/MetaCapiPage'), 'MetaCapiPage');
+const NotificationSettingsPage = page(() => import('../features/notifications/NotificationSettingsPage'), 'NotificationSettingsPage');
 
 export function App() {
   const { user, loading } = useAuth();
@@ -39,10 +41,10 @@ export function App() {
   const canEditPackages = user.role === 'superadmin' || user.role === 'admin';
   const canVerifyPayments = user.role === 'finance' || isManager;
 
-  // ADMIN ROUTE (/admin) — disembunyikan sementara dan diarahkan ke beranda.
   return (
     <>
       <SocketBridge />
+      <Toaster />
       <Routes>
           <Route element={<AppShell />}>
             <Route index element={<DashboardPage />} />
@@ -64,7 +66,7 @@ export function App() {
             <Route path="devices/:brandId" element={managerOnly(<DeviceDetailPage />)} />
             <Route path="staff" element={managerOnly(<StaffPage />)} />
             <Route path="meta-capi" element={managerOnly(<MetaCapiPage />)} />
-            <Route path="admin" element={<Navigate to="/" replace />} />
+            <Route path="pengaturan/notifikasi" element={<NotificationSettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
       </Routes>

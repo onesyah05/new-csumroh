@@ -119,17 +119,17 @@ export function OfficialOfferModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 bg-zinc-50">
           <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-indigo-100 text-indigo-700">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-zinc-100 text-zinc-700">
               <FileCheck size={18} />
             </span>
             <div>
               <h3 className="font-bold text-sm text-zinc-900">Buat Penawaran Resmi</h3>
-              <p className="text-[11px] text-zinc-500">Mempromosikan status prospek ke Ditawarkan (offer)</p>
+              <p className="text-xs text-zinc-500">Mempromosikan status prospek ke Ditawarkan (offer)</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 transition"
+            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 transition"
           >
             <X size={18} />
           </button>
@@ -139,7 +139,7 @@ export function OfficialOfferModal({
         <div className="thin-scrollbar flex-1 overflow-y-auto p-5 space-y-4 text-xs">
           {/* Package Selection */}
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Pilih Paket Umroh
             </label>
             <Select
@@ -156,17 +156,17 @@ export function OfficialOfferModal({
           {/* Deal Value Breakdown */}
           <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 flex items-center justify-between">
             <div>
-              <p className="text-[11px] text-zinc-500">Estimasi Total Deal ({totalPax} Pax):</p>
-              <p className="text-base font-extrabold text-indigo-700">{rupiah(dealValue)}</p>
+              <p className="text-xs text-zinc-500">Estimasi Total Deal ({totalPax} Pax):</p>
+              <p className="text-base font-extrabold text-zinc-700">{rupiah(dealValue)}</p>
             </div>
-            <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-full px-2.5 py-1">
+            <span className="text-xs font-semibold bg-zinc-50 text-zinc-800 border border-zinc-200 rounded-full px-2.5 py-1">
               Trigger CAPI: AddToCart
             </span>
           </div>
 
           {/* Custom Notes */}
           <div className="space-y-1">
-            <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500">
+            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
               Catatan Khusus / Promo Tambahan (Opsional)
             </label>
             <input
@@ -174,24 +174,24 @@ export function OfficialOfferModal({
               value={customNote}
               onChange={(e) => setCustomNote(e.target.value)}
               placeholder="Contoh: Diskon khusus booking hari ini Rp 1 Juta..."
-              className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs focus:border-zinc-500 focus:outline-none"
             />
           </div>
 
           {/* WhatsApp Script Preview */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="font-bold uppercase tracking-wider text-[10px] text-zinc-500 flex items-center gap-1">
+              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500 flex items-center gap-1">
                 <Sparkles size={12} className="text-amber-500" />
                 Pratinjau Pesan Penawaran WhatsApp
               </label>
-              <span className="text-[10px] text-zinc-400">Naskah yang dikirim ke WhatsApp jamaah</span>
+              <span className="text-xs text-zinc-500">Naskah yang dikirim ke WhatsApp jamaah</span>
             </div>
             <textarea
               readOnly
               value={generatedScript}
               rows={8}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 font-mono text-[11px] text-zinc-700 leading-relaxed resize-none focus:outline-none"
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 font-mono text-xs text-zinc-700 leading-relaxed resize-none focus:outline-none"
             />
           </div>
         </div>
@@ -218,7 +218,7 @@ export function OfficialOfferModal({
               size="sm"
               onClick={() => sendOfferMutation.mutate(true)}
               disabled={sendOfferMutation.isPending || !selectedPkgId || dealValue <= 0}
-              className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+              className="gap-1.5 bg-zinc-600 hover:bg-zinc-700 text-white font-bold"
             >
               <FileCheck size={14} />
               {sendOfferMutation.isPending ? 'Mengirim...' : 'Kirim via WhatsApp'}

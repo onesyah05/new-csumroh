@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import {
   AlertCircle,
-  CheckCircle2,
   Edit2,
   Eye,
   EyeOff,
@@ -22,17 +20,18 @@ import {
   UserPlus,
   Users,
   Wallet,
-  X,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { queryClient } from '../../app/query';
-import { useBrandScope } from '../../lib/scope';
 import { Select } from '../../components/ui/select';
 import { PageHeader } from '../../components/ui/page-header';
 import { Button } from '../../components/ui/button';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { StatusBadge } from '../../components/ui/status-badge';
+import { showFeedback } from '../../app/toast';
+import { ConfirmDialog, Modal } from '../../components/ui/modal';
+import { EmptyState } from '../../components/ui/page-feedback';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface Brand {
@@ -61,11 +60,11 @@ interface StaffUser {
 /* ─── Helpers ────────────────────────────────────────────────── */
 const roleBadge = (role: string) =>
   role === 'superadmin'
-    ? 'border-purple-200 bg-purple-50/80 text-purple-800'
+    ? 'border-zinc-200 bg-zinc-50/80 text-zinc-800'
     : role === 'admin'
     ? 'border-amber-200 bg-amber-50/80 text-amber-800'
     : role === 'finance'
-    ? 'border-sky-200 bg-sky-50/80 text-sky-800'
+    ? 'border-zinc-200 bg-zinc-50/80 text-zinc-800'
     : 'border-emerald-200 bg-emerald-50/80 text-emerald-800';
 
 const roleLabel = (role: string) =>
@@ -106,7 +105,7 @@ function BrandCheckList({
     <div className="rounded-lg border border-zinc-200 bg-white overflow-hidden">
       {brands.length > 4 && (
         <div className="relative border-b border-zinc-100 p-2">
-          <Search size={13} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+          <Search size={13} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
             className="w-full rounded-md border border-zinc-200 bg-zinc-50/50 pl-8 pr-3 py-1.5 text-xs text-zinc-800 placeholder-zinc-400 outline-none focus:bg-white focus:border-zinc-950 transition"
             placeholder="Cari brand..."
@@ -138,7 +137,7 @@ function BrandCheckList({
           );
         })}
         {filtered.length === 0 && (
-          <p className="text-xs text-zinc-400 text-center py-3">
+          <p className="text-xs text-zinc-500 text-center py-3">
             {filter ? 'Tidak ada brand yang cocok' : 'Tidak ada brand tersedia'}
           </p>
         )}
@@ -149,7 +148,7 @@ function BrandCheckList({
 
 
 
-/* ─── Staff Form Modal (Create & Edit) ───────────────────────── */
+/* ─── Staf Form Modal (Create & Edit) ───────────────────────── */
 function StaffFormModal({
   open,
   onClose,
@@ -235,40 +234,29 @@ function StaffFormModal({
       }
     },
     onSuccess: (data) => {
-      onSaved(isEdit ? `Data staff berhasil diperbarui.${releasedNote(data?.releasedProspects)}` : 'Akun staff baru berhasil dibuat.');
+      onSaved(isEdit ? `Data staf berhasil diperbarui.${releasedNote(data?.releasedProspects)}` : 'Akun staf baru berhasil dibuat.');
       onClose();
     },
-    onError: (e: any) => setError(e?.message || 'Gagal menyimpan data staff.'),
+    onError: (e: any) => setError(e?.message || 'Gagal menyimpan data staf.'),
   });
 
   return (
-    <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white shadow-2xl outline-none flex flex-col max-h-[85vh] overflow-hidden border border-zinc-200">
-          {/* Modal Header */}
-          <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/70 px-5 py-3.5 shrink-0">
-            <div>
-              <Dialog.Title className="text-base font-bold text-zinc-950 font-display">
-                {isEdit ? 'Edit Akun Staff' : 'Tambah Staff Baru'}
-              </Dialog.Title>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                {isEdit ? 'Perbarui data dan hak akses staff.' : 'Tambah akun staff dan atur hak akses brand.'}
-              </p>
-            </div>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-700 transition outline-none"
-                aria-label="Tutup modal"
-              >
-                <X size={16} />
-              </button>
-            </Dialog.Close>
-          </div>
-
-          {/* Modal Body */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5 thin-scrollbar">
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title={isEdit ? 'Edit Akun Staf' : 'Tambah Staf Baru'}
+      description={isEdit ? 'Perbarui data dan hak akses staf.' : 'Tambah akun staf dan atur hak akses brand.'}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={save.isPending}>Batal</Button>
+          <Button type="button" onClick={() => save.mutate()} loading={save.isPending} disabled={save.isPending}>
+            {isEdit ? 'Simpan' : 'Tambah Staf'}
+          </Button>
+        </>
+      }
+    >
+          <div className="space-y-3.5">
             {/* Profil: Nama & Email (2 Kolom) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -276,13 +264,13 @@ function StaffFormModal({
                   Nama Lengkap <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                   <input
                     id="sf-name"
                     className="w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 transition placeholder:text-zinc-400"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="Nama staff"
+                    placeholder="Nama staf"
                     required
                   />
                 </div>
@@ -293,7 +281,7 @@ function StaffFormModal({
                   Email <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                   <input
                     id="sf-email"
                     type="email"
@@ -314,12 +302,12 @@ function StaffFormModal({
                   {isEdit ? 'Kata Sandi Baru' : 'Kata Sandi'}{' '}
                   {!isEdit && <span className="text-rose-500">*</span>}
                 </label>
-                <span className="text-[10px] text-zinc-400">
+                <span className="text-xs text-zinc-500">
                   {isEdit ? 'Kosongkan jika tidak diubah' : 'Min. 8 karakter'}
                 </span>
               </div>
               <div className="relative">
-                <Key size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                <Key size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                 <input
                   id="sf-pass"
                   type={showPassword ? 'text' : 'password'}
@@ -333,14 +321,14 @@ function StaffFormModal({
                   type="button"
                   tabIndex={-1}
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 transition"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 transition"
                   title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
                 >
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
               {!isEdit && form.password.length > 0 && form.password.length < 8 && (
-                <p className="text-[11px] text-amber-600 font-medium">
+                <p className="text-xs text-amber-600 font-medium">
                   Minimal 8 karakter ({form.password.length}/8)
                 </p>
               )}
@@ -348,14 +336,14 @@ function StaffFormModal({
 
             {/* Role Selector (Segmented Toggle, superadmin only; role superadmin terkunci) */}
             {isSuperadmin && editing?.role === 'superadmin' && (
-              <p className="rounded-lg border border-purple-200 bg-purple-50/60 px-3 py-2 text-[11px] text-purple-800">
+              <p className="rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs text-zinc-800">
                 Role Superadmin terkunci dan tidak dapat diubah dari form ini.
               </p>
             )}
             {isSuperadmin && editing?.role !== 'superadmin' && (
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-zinc-800">
-                  Role Staff
+                  Role Staf
                 </label>
                 <div className="grid grid-cols-3 p-1 bg-zinc-100 rounded-lg gap-1 border border-zinc-200/50">
                   {ASSIGNABLE_ROLES.map((role: AssignableRole) => {
@@ -371,14 +359,14 @@ function StaffFormModal({
                           active ? 'bg-white text-zinc-950 font-semibold shadow-xs' : 'text-zinc-600 hover:text-zinc-950 font-medium'
                         }`}
                       >
-                        <Icon size={14} className={active ? 'text-zinc-950' : 'text-zinc-400'} />
+                        <Icon size={14} className={active ? 'text-zinc-950' : 'text-zinc-500'} />
                         <span>{role === 'cs' ? 'CS' : roleLabel(role)}</span>
                       </button>
                     );
                   })}
                 </div>
                 {isEdit && editing && form.role !== editing.role && (
-                  <p className="text-[11px] text-amber-700">
+                  <p className="text-xs text-amber-700">
                     Role akan diubah dari {roleLabel(editing.role)} menjadi {roleLabel(form.role)}.
                   </p>
                 )}
@@ -392,7 +380,7 @@ function StaffFormModal({
                   Akses Brand <span className="text-rose-500">*</span>
                 </label>
                 {brands.length > 1 && (
-                  <div className="flex items-center gap-2 text-[11px]">
+                  <div className="flex items-center gap-2 text-xs">
                     <button
                       type="button"
                       onClick={() => setForm({ ...form, brandIds: brands.map((b) => b.id) })}
@@ -400,11 +388,11 @@ function StaffFormModal({
                     >
                       Pilih Semua
                     </button>
-                    <span className="text-zinc-300">·</span>
+                    <span className="text-zinc-500">·</span>
                     <button
                       type="button"
                       onClick={() => setForm({ ...form, brandIds: [] })}
-                      className="text-zinc-400 hover:text-zinc-700"
+                      className="text-zinc-500 hover:text-zinc-700"
                     >
                       Reset
                     </button>
@@ -419,7 +407,7 @@ function StaffFormModal({
                 radio={false}
               />
 
-              <div className="flex items-center justify-between text-[11px]">
+              <div className="flex items-center justify-between text-xs">
                 {form.brandIds.length > 0 ? (
                   <span className="font-medium text-zinc-500">
                     {form.brandIds.length} brand dipilih
@@ -440,38 +428,14 @@ function StaffFormModal({
               </div>
             )}
           </div>
-
-          {/* Modal Footer */}
-          <div className="border-t border-zinc-100 px-5 py-3.5 flex justify-end items-center gap-2 shrink-0 bg-zinc-50/70">
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className="rounded-lg px-3.5 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-200/70 transition"
-              >
-                Batal
-              </button>
-            </Dialog.Close>
-            <button
-              type="button"
-              disabled={save.isPending}
-              onClick={() => save.mutate()}
-              className="flex items-center gap-2 rounded-lg bg-zinc-950 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition shadow-xs active:scale-95"
-            >
-              {save.isPending && <Loader2 size={13} className="animate-spin" />}
-              {isEdit ? 'Simpan' : 'Tambah Staff'}
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </Modal>
   );
 }
 
-/* ─── Main Staff Page ────────────────────────────────────────── */
+/* ─── Main Staf Page ────────────────────────────────────────── */
 export function StaffPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { brandId, query } = useBrandScope();
   const isSuperadmin = user?.role === 'superadmin';
   const isAdmin = user?.role === 'admin';
 
@@ -481,11 +445,12 @@ export function StaffPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<StaffUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffUser | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  // Superadmin memilih brand di halaman ini ("Semua Brand" = semua staf). Admin melihat staf brand utamanya
+  // (bawaan API), karena Admin hanya dapat mengelola CS brand sendiri. Pemilih brand header tidak dipakai di sini.
+  const staffQuery = isSuperadmin && brandFilter !== 'all' ? `?brandId=${brandFilter}` : '';
 
   function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3600);
+    showFeedback(msg);
   }
 
   const brands = useQuery({
@@ -494,23 +459,22 @@ export function StaffPage() {
   });
 
   const staffList = useQuery({
-    queryKey: ['staff', brandId],
-    queryFn: () => api.get<StaffUser[]>(`/catalog/users${query}`),
-    enabled: isSuperadmin || !!brandId,
+    queryKey: ['staff', staffQuery],
+    queryFn: () => api.get<StaffUser[]>(`/catalog/users${staffQuery}`),
   });
 
   const toggleActive = useMutation({
     mutationFn: (id: number) => api.patch<{ id: number; isActive: boolean; releasedProspects?: number }>(`/catalog/users/${id}/toggle`),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['staff'] });
-      const prev = queryClient.getQueryData<StaffUser[]>(['staff', brandId]);
+      const prev = queryClient.getQueryData<StaffUser[]>(['staff', staffQuery]);
       queryClient.setQueriesData<StaffUser[]>({ queryKey: ['staff'] }, (old) =>
         old?.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s))
       );
       return { prev };
     },
     onError: (_e, _id, ctx) => {
-      if (ctx?.prev) queryClient.setQueryData(['staff', brandId], ctx.prev);
+      if (ctx?.prev) queryClient.setQueryData(['staff', staffQuery], ctx.prev);
     },
     onSuccess: (data: any, id) => {
       const staff = staffList.data?.find((s) => s.id === id);
@@ -518,7 +482,7 @@ export function StaffPage() {
       showToast(
         staff
           ? `${staff.name} berhasil ${isNowActive ? 'diaktifkan' : 'dinonaktifkan'}.${releasedNote(data?.releasedProspects)}`
-          : `Staff berhasil ${isNowActive ? 'diaktifkan' : 'dinonaktifkan'}.${releasedNote(data?.releasedProspects)}`
+          : `Staf berhasil ${isNowActive ? 'diaktifkan' : 'dinonaktifkan'}.${releasedNote(data?.releasedProspects)}`
       );
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['staff'] }),
@@ -530,14 +494,14 @@ export function StaffPage() {
     mutationFn: (id: number) => api.delete<{ releasedProspects?: number }>(`/catalog/users/${id}`),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['staff'] });
-      const name = deleteTarget?.name ?? 'Staff';
+      const name = deleteTarget?.name ?? 'Staf';
       setDeleteTarget(null);
-      showToast(`Staff "${name}" berhasil dihapus.${releasedNote(data?.releasedProspects)}`);
+      showToast(`Staf "${name}" berhasil dihapus.${releasedNote(data?.releasedProspects)}`);
     },
-    onError: (e: any) => showToast(e?.message || 'Gagal menghapus staff.'),
+    onError: (e: any) => showToast(e?.message || 'Gagal menghapus staf.'),
   });
 
-  // Filter staff list
+  // Filter staf list
   const filtered = (staffList.data ?? []).filter((s) => {
     const q = search.toLowerCase();
     const matchQuery = !search || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
@@ -564,7 +528,7 @@ export function StaffPage() {
     <div className="app-page space-y-6">
       {/* Header */}
       <PageHeader
-        title="Manajemen Staff"
+        title="Staf"
         subtitle="Kelola akun dan hak akses tim sales, CS, dan admin."
         actions={
           (isSuperadmin || isAdmin) ? (
@@ -577,7 +541,7 @@ export function StaffPage() {
               }}
               icon={<Plus size={14} />}
             >
-              Tambah Staff
+              Tambah Staf
             </Button>
           ) : undefined
         }
@@ -585,7 +549,7 @@ export function StaffPage() {
 
       {/* 4 Metric Stats */}
       <StatGrid cols={4}>
-        <StatCard label="Total Staff" value={total} note="Semua akun" />
+        <StatCard label="Total Staf" value={total} note="Semua akun" />
         <StatCard label="Customer Service" value={csCount} note="Tim CS" />
         <StatCard label="Admin Brand" value={adminCount} note="Admin brand" />
         <StatCard label="Akun Aktif" value={activeCount} note="Status aktif" />
@@ -595,10 +559,10 @@ export function StaffPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {/* Search */}
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
             className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-400 shadow-xs"
-            placeholder="Cari nama atau email staff…"
+            placeholder="Cari nama atau email staf…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -637,25 +601,25 @@ export function StaffPage() {
         </div>
       </div>
 
-      {/* Staff Table */}
+      {/* Staf Table */}
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
         {staffList.isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-20 text-zinc-400">
+          <div className="flex items-center justify-center gap-2 py-20 text-zinc-500">
             <Loader2 size={18} className="animate-spin" />
-            <span className="text-xs">Memuat data staff…</span>
+            <span className="text-xs">Memuat data staf…</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-            <Users size={36} className="mb-3 opacity-25" />
-            <p className="text-sm font-bold text-zinc-700">Tidak ada staff ditemukan</p>
-            <p className="text-xs mt-1 text-zinc-400">Coba ubah kata kunci pencarian atau filter role/brand.</p>
-          </div>
+          <EmptyState
+            icon={Users}
+            title="Tidak ada staf ditemukan"
+            description={search || roleFilter !== 'all' || brandFilter !== 'all' ? 'Coba ubah kata kunci pencarian atau filter role/brand.' : 'Belum ada akun staf. Tambahkan lewat tombol Tambah Staf.'}
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-xs">
-              <thead className="border-b border-zinc-200 bg-zinc-50/75 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            <table className="w-full text-left text-xs lg:min-w-[720px]">
+              <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500">
                 <tr>
-                  <th className="px-4 py-3">Staff</th>
+                  <th className="px-4 py-3">Staf</th>
                   <th className="px-4 py-3">Role</th>
                   <th className="px-4 py-3">Akses Brand</th>
                   <th className="px-4 py-3">Status</th>
@@ -683,12 +647,12 @@ export function StaffPage() {
                             <div className="flex items-center gap-1.5">
                               <p className="font-bold text-zinc-900 text-xs truncate">{staff.name}</p>
                               {isSelf && (
-                                <span className="shrink-0 text-[9px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded">
+                                <span className="shrink-0 text-xs font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded">
                                   Anda
                                 </span>
                               )}
                             </div>
-                            <p className="text-[11px] text-zinc-400 truncate">{staff.email}</p>
+                            <p className="text-xs text-zinc-500 truncate">{staff.email}</p>
                           </div>
                         </div>
                       </td>
@@ -696,14 +660,14 @@ export function StaffPage() {
                       {/* Role Badge */}
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium shadow-2xs ${roleBadge(
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium shadow-2xs ${roleBadge(
                             staff.role
                           )}`}
                         >
                           <span
                             className={`h-1.5 w-1.5 rounded-full shrink-0 ${
                               staff.role === 'superadmin'
-                                ? 'bg-purple-500'
+                                ? 'bg-zinc-500'
                                 : staff.role === 'admin'
                                 ? 'bg-amber-500'
                                 : 'bg-emerald-500'
@@ -716,21 +680,21 @@ export function StaffPage() {
                       {/* Brand Access Badges */}
                       <td className="px-4 py-3">
                         {staff.role === 'superadmin' ? (
-                          <span className="text-xs text-zinc-400">Semua brand</span>
+                          <span className="text-xs text-zinc-500">Semua brand</span>
                         ) : allBrands.length > 0 ? (
                           <div className="flex flex-wrap items-center gap-1.5">
                             {allBrands.map((b) => (
                               <span
                                 key={b.id}
                                 title={b.name}
-                                className="inline-flex items-center rounded-md border border-zinc-200/80 bg-zinc-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-zinc-700"
+                                className="inline-flex items-center rounded-md border border-zinc-200/80 bg-zinc-100 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-700"
                               >
                                 {b.code}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-xs text-zinc-400">Belum ada brand</span>
+                          <span className="text-xs text-zinc-500">Belum ada brand</span>
                         )}
                       </td>
 
@@ -755,7 +719,7 @@ export function StaffPage() {
                                 setEditing(staff);
                                 setFormOpen(true);
                               }}
-                              title="Edit staff"
+                              title="Edit staf"
                               className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition"
                             >
                               <Edit2 size={13} />
@@ -773,7 +737,7 @@ export function StaffPage() {
                               {staff.isActive ? (
                                 <ToggleRight size={17} className="text-emerald-600" />
                               ) : (
-                                <ToggleLeft size={17} className="text-zinc-400" />
+                                <ToggleLeft size={17} className="text-zinc-500" />
                               )}
                             </button>
                           )}
@@ -783,8 +747,8 @@ export function StaffPage() {
                             <button
                               type="button"
                               onClick={() => setDeleteTarget(staff)}
-                              title="Hapus staff"
-                              className="rounded-lg p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                              title="Hapus staf"
+                              className="rounded-lg p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-600 transition"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -800,7 +764,7 @@ export function StaffPage() {
         )}
       </div>
 
-      {/* Staff Form Modal */}
+      {/* Staf Form Modal */}
       <StaffFormModal
         open={formOpen}
         onClose={() => {
@@ -810,57 +774,23 @@ export function StaffPage() {
         brands={brands.data ?? []}
         editing={editing}
         isSuperadmin={isSuperadmin}
-        defaultBrandId={isSuperadmin ? null : (brandId ?? null)}
+        defaultBrandId={isSuperadmin ? (typeof brandFilter === 'number' ? brandFilter : null) : (user?.brandId ?? null)}
         onSaved={(msg) => {
           void queryClient.invalidateQueries({ queryKey: ['staff'] });
           showToast(msg);
         }}
       />
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog.Root open={Boolean(deleteTarget)} onOpenChange={(v) => !v && setDeleteTarget(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl outline-none border border-zinc-200">
-            <Dialog.Title className="text-base font-bold text-zinc-950 font-display">
-              Hapus Staff?
-            </Dialog.Title>
-            <p className="mt-2 text-xs text-zinc-600 leading-relaxed">
-              Hapus akun <strong>{deleteTarget?.name}</strong> ({deleteTarget?.email})? Akses akun ini akan dicabut secara permanen.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setDeleteTarget(null)}
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => deleteTarget && deleteStaff.mutate(deleteTarget.id)}
-                loading={deleteStaff.isPending}
-              >
-                Hapus
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteStaff.mutate(deleteTarget.id)}
+        pending={deleteStaff.isPending}
+        title="Hapus staf?"
+        description={<>Akun <strong>{deleteTarget?.name}</strong> ({deleteTarget?.email}) dihapus permanen. Prospek terbukanya kembali ke antrean "Belum ada PIC".</>}
+        confirmLabel="Hapus staf"
+      />
 
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl border border-emerald-500/30 bg-zinc-950 px-4 py-3 text-sm font-semibold text-white shadow-2xl animate-fade-up"
-        >
-          <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
-          <span>{toast}</span>
-        </div>
-      )}
     </div>
   );
 }

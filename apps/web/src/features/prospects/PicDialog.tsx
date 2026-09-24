@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
-import { ModalFrame } from '../../components/ui/modal';
+import { Modal } from '../../components/ui/modal';
 import { Select } from '../../components/ui/select';
 
 type PicProspect = { id: number; name: string; brandId: number; userId?: number | null };
@@ -62,27 +61,36 @@ export function PicDialog({ mode, prospect, onDone, onClose }: {
   ];
 
   return (
-    <ModalFrame open onClose={onClose} title={title}>
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-lift">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            {/* Nama dialog untuk pembaca layar sudah dari ModalFrame (Dialog.Title). */}
-            <p aria-hidden="true" className="text-base font-bold text-zinc-950">{title}</p>
-            <p className="mt-0.5 text-xs text-zinc-600">
-              {mode === 'assign'
-                ? <>Pilih CS aktif yang menangani <strong>{prospect.name}</strong>.</>
-                : <>Serahkan <strong>{prospect.name}</strong> ke CS lain. Alasan tercatat di riwayat prospek.</>}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-zinc-100" aria-label="Tutup"><X size={18} /></button>
-        </div>
-        <div className="mt-5 space-y-3">
+    <Modal
+      open
+      onClose={onClose}
+      title={title}
+      description={mode === 'assign'
+        ? <>Pilih CS aktif yang menangani <strong>{prospect.name}</strong>.</>
+        : <>Serahkan <strong>{prospect.name}</strong> ke CS lain. Alasan tercatat di riwayat prospek.</>}
+      footer={
+        <>
+          {mode === 'assign' && prospect.userId ? (
+            <Button type="button" variant="ghost" className="mr-auto" onClick={() => save.mutate(null)} disabled={save.isPending}>Lepas PIC</Button>
+          ) : null}
+          <Button type="button" variant="secondary" onClick={onClose}>Batal</Button>
+          <Button
+            type="button"
+            onClick={() => save.mutate(targetId)}
+            disabled={!target || unchanged || needsReason || save.isPending}
+          >
+            {save.isPending ? 'Menyimpan…' : mode === 'assign' ? 'Simpan' : 'Serahkan'}
+          </Button>
+        </>
+      }
+    >
+        <div className="space-y-3">
           {candidatesQuery.isLoading ? (
             <p className="text-xs text-zinc-600">Memuat daftar CS…</p>
           ) : candidatesQuery.isError ? (
-            <p className="text-xs text-red-700" role="alert">{(candidatesQuery.error as Error).message}</p>
+            <p className="text-xs text-rose-700" role="alert">{(candidatesQuery.error as Error).message}</p>
           ) : options.length === 0 ? (
-            <p className="text-xs text-zinc-600">Belum ada CS aktif lain untuk brand ini. Tambahkan di menu Staff.</p>
+            <p className="text-xs text-zinc-600">Belum ada CS aktif lain untuk brand ini. Tambahkan di menu Staf.</p>
           ) : (
             <Select
               value={target || undefined}
@@ -106,24 +114,8 @@ export function PicDialog({ mode, prospect, onDone, onClose }: {
               />
             </label>
           )}
-          {save.error && <p className="text-xs text-red-700" role="alert">{save.error.message}</p>}
+          {save.error && <p className="text-xs text-rose-700" role="alert">{save.error.message}</p>}
         </div>
-        <div className="mt-5 flex items-center justify-between gap-2">
-          {mode === 'assign' && prospect.userId ? (
-            <Button type="button" variant="ghost" onClick={() => save.mutate(null)} disabled={save.isPending}>Lepas PIC</Button>
-          ) : <span />}
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>Batal</Button>
-            <Button
-              type="button"
-              onClick={() => save.mutate(targetId)}
-              disabled={!target || unchanged || needsReason || save.isPending}
-            >
-              {save.isPending ? 'Menyimpan…' : mode === 'assign' ? 'Simpan' : 'Serahkan'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </ModalFrame>
+    </Modal>
   );
 }

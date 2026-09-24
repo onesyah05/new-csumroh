@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import * as Dialog from '@radix-ui/react-dialog';
 import {
-  AlertCircle, AlertTriangle, CheckCircle2, Clock3, QrCode,
+  AlertCircle, CheckCircle2, Clock3, QrCode,
   RefreshCw, ShieldCheck, Smartphone, Unplug, Wifi, WifiOff
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
+import { ConfirmDialog } from '../../components/ui/modal';
 
 type WhatsAppStatus = 'disconnected' | 'connecting' | 'qr_ready' | 'connected';
 type WhatsAppSession = {
@@ -110,7 +110,7 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
           </div>
           <div className="flex items-center gap-2">
             {!canManage && (
-              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[10px] font-semibold text-zinc-600">
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-semibold text-zinc-600">
                 Mode Pantau
               </span>
             )}
@@ -145,20 +145,20 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
 
           {canManage && currentData.status !== 'connected' && (
             <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+              <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">
                 Panduan Menautkan WhatsApp Biro
               </p>
               <ol className="mt-2.5 space-y-2 text-xs text-zinc-700">
                 <li className="flex items-start gap-2.5">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-zinc-950 font-display text-[10px] font-bold text-white">1</span>
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-zinc-950 font-display text-xs font-bold text-white">1</span>
                   <span>Buka aplikasi WhatsApp di ponsel biro Anda</span>
                 </li>
                 <li className="flex items-start gap-2.5">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-zinc-950 font-display text-[10px] font-bold text-white">2</span>
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-zinc-950 font-display text-xs font-bold text-white">2</span>
                   <span>Masuk ke <strong>Menu (⋮)</strong> di Android atau <strong>Pengaturan (⚙️)</strong> di iPhone, lalu pilih <strong>Perangkat Tertaut</strong></span>
                 </li>
                 <li className="flex items-start gap-2.5">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-zinc-950 font-display text-[10px] font-bold text-white">3</span>
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-zinc-950 font-display text-xs font-bold text-white">3</span>
                   <span>Ketuk <strong>Tautkan Perangkat</strong> dan arahkan kamera ponsel ke QR Code di samping</span>
                 </li>
               </ol>
@@ -167,8 +167,8 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
 
           {/* Banner Error Ramah Pengguna */}
           {actionError && (
-            <div role="alert" className="mt-3.5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
+            <div role="alert" className="mt-3.5 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-600" />
               <div className="flex-1">
                 <strong className="font-semibold">Operasi gateway gagal:</strong>
                 <p className="mt-0.5">{actionError.message}</p>
@@ -251,50 +251,15 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
         )}
       </section>
 
-      {/* Modal Dialog Konfirmasi Pemutusan Sesi (Destructive Guard) */}
-      <Dialog.Root open={confirmDisconnectOpen} onOpenChange={setConfirmDisconnectOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm animate-fade" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-white p-6 shadow-lift">
-            <div className="flex items-start gap-4">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-red-50 text-red-600">
-                <AlertTriangle size={24} />
-              </span>
-              <div className="flex-1">
-                <Dialog.Title className="font-display text-lg font-extrabold text-zinc-950">
-                  Putuskan Perangkat WhatsApp?
-                </Dialog.Title>
-                <Dialog.Description className="mt-2 text-xs leading-5 text-zinc-600">
-                  Sesi WhatsApp untuk biro <strong>{brandName}</strong> akan diputus secara permanen dari gateway.
-                  Seluruh percakapan jamaah yang sedang aktif tidak akan dapat menerima pesan baru hingga perangkat ditautkan kembali.
-                </Dialog.Description>
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setConfirmDisconnectOpen(false)}
-                disabled={disconnect.isPending}
-              >
-                Batal
-              </Button>
-              <Button
-                variant="danger"
-                disabled={disconnect.isPending}
-                onClick={() => {
-                  disconnect.mutate(undefined, {
-                    onSettled: () => setConfirmDisconnectOpen(false),
-                  });
-                }}
-              >
-                {disconnect.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Unplug size={14} />}
-                {disconnect.isPending ? 'Memutuskan…' : 'Ya, Putuskan Sesi'}
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <ConfirmDialog
+        open={confirmDisconnectOpen}
+        onClose={() => setConfirmDisconnectOpen(false)}
+        onConfirm={() => disconnect.mutate(undefined, { onSettled: () => setConfirmDisconnectOpen(false) })}
+        pending={disconnect.isPending}
+        title="Putuskan perangkat WhatsApp?"
+        description={<>Sesi WhatsApp <strong>{brandName}</strong> diputus dari gateway. Pesan jamaah tidak diterima sampai perangkat ditautkan kembali.</>}
+        confirmLabel="Putuskan sesi"
+      />
     </div>
   );
 }
@@ -302,9 +267,9 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
 function InfoCard({ icon: Icon, label, value }: { icon: typeof Smartphone; label: string; value: string }) {
   return (
     <article className="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4">
-      <div className="flex items-center gap-2 text-zinc-400">
+      <div className="flex items-center gap-2 text-zinc-500">
         <Icon size={15} />
-        <span className="text-[10px] font-bold uppercase tracking-[.1em]">{label}</span>
+        <span className="text-xs font-bold uppercase tracking-[.1em]">{label}</span>
       </div>
       <p className="mt-2.5 truncate font-display text-sm font-bold text-zinc-900" title={value}>
         {value}
