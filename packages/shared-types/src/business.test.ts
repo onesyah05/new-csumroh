@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PIC_TAKEOVER_AFTER_MINUTES,
+  firstUnansweredAt,
+  isTakeoverOpen,
+  takeoverOpensAt,
   businessDateKey,
   canonicalStatus,
   calculateDealValue,
@@ -78,5 +82,26 @@ describe('critical business rules', () => {
     expect(capiEventForStatus('deal')).toBe('Purchase');
     expect(capiEventForStatus('followup')).toBeNull();
     expect(capiEventForStatus('lose')).toBeNull();
+  });
+});
+
+describe('ambil alih PIC setelah 15 menit belum dibalas', () => {
+  it('menghitung dari pesan jamaah pertama setelah balasan CS terakhir', () => {
+    const messages = [
+      { timestamp: 100, isFromMe: false },
+      { timestamp: 200, isFromMe: true },
+      { timestamp: 300, isFromMe: false },
+      { timestamp: 900, isFromMe: false },
+    ];
+    expect(firstUnansweredAt(messages)).toBe(300);
+    expect(firstUnansweredAt([...messages, { timestamp: 1000, isFromMe: true }])).toBeNull();
+  });
+
+  it('terbuka tepat 15 menit setelah pesan pertama yang belum dibalas', () => {
+    const since = 1_700_000_000;
+    expect(isTakeoverOpen(since, (since + 14 * 60) * 1000)).toBe(false);
+    expect(isTakeoverOpen(since, (since + 15 * 60) * 1000)).toBe(true);
+    expect(isTakeoverOpen(null)).toBe(false);
+    expect(takeoverOpensAt(since)).toBe((since + PIC_TAKEOVER_AFTER_MINUTES * 60) * 1000);
   });
 });

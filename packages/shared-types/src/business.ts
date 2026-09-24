@@ -127,6 +127,34 @@ export function avatarNeedsRefresh(photoUrl: string | null | undefined, now = Da
   return now - Number(match[2]) > AVATAR_MAX_AGE_MS;
 }
 
+/**
+ * Aturan ambil alih PIC: CS lain boleh mengambil prospek bila jamaah sudah menunggu balasan lebih dari
+ * 15 menit. Waktu tunggu dihitung dari pesan jamaah pertama yang belum dibalas (detik Unix, seperti
+ * `ChatMessage.timestamp`), sehingga pesan beruntun dari jamaah tidak mengulang hitungan.
+ */
+export const PIC_TAKEOVER_AFTER_MINUTES = 15;
+
+/** Waktu (ms) prospek mulai boleh diambil alih; null bila jamaah tidak sedang menunggu balasan. */
+export function takeoverOpensAt(awaitingSince: number | null | undefined) {
+  return awaitingSince ? awaitingSince * 1000 + PIC_TAKEOVER_AFTER_MINUTES * 60_000 : null;
+}
+
+export function isTakeoverOpen(awaitingSince: number | null | undefined, now = Date.now()) {
+  const opensAt = takeoverOpensAt(awaitingSince);
+  return opensAt !== null && now >= opensAt;
+}
+
+/** Pesan jamaah pertama setelah balasan CS terakhir; `messages` boleh dalam urutan apa pun. */
+export function firstUnansweredAt(messages: Array<{ timestamp: number; isFromMe: boolean }>) {
+  let lastReply = 0;
+  for (const m of messages) if (m.isFromMe && m.timestamp > lastReply) lastReply = m.timestamp;
+  let first: number | null = null;
+  for (const m of messages) {
+    if (!m.isFromMe && m.timestamp > lastReply && (first === null || m.timestamp < first)) first = m.timestamp;
+  }
+  return first;
+}
+
 export const tgjpSteps = ['terima', 'gali', 'jawab', 'pastikan'] as const;
 export type TgjpStep = (typeof tgjpSteps)[number];
 
