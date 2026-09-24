@@ -8,7 +8,11 @@ export type StatusBadgeVariant =
   | 'warning'
   | 'danger'
   | 'info'
-  | 'neutral';
+  | 'neutral'
+  // Status prospek (AGENTS §3): Deal hijau solid, tahap berjalan bergaris hitam, Batal abu dicoret.
+  | 'deal'
+  | 'progress'
+  | 'lost';
 
 export interface StatusBadgeProps {
   status?: StatusBadgeVariant;
@@ -49,12 +53,24 @@ export function StatusBadge({
       dot: 'bg-rose-500',
     },
     info: {
-      wrapper: 'border-sky-200 bg-sky-50 text-sky-800',
-      dot: 'bg-sky-500',
+      wrapper: 'border-zinc-300 bg-white text-zinc-700',
+      dot: 'bg-zinc-500',
     },
     neutral: {
-      wrapper: 'border-zinc-200 bg-zinc-50 text-zinc-700',
+      wrapper: 'border-zinc-200 bg-zinc-100 text-zinc-700',
       dot: 'bg-zinc-400',
+    },
+    deal: {
+      wrapper: 'border-emerald-600 bg-emerald-600 text-white',
+      dot: 'bg-white',
+    },
+    progress: {
+      wrapper: 'border-zinc-800 bg-white text-zinc-900',
+      dot: 'bg-zinc-800',
+    },
+    lost: {
+      wrapper: 'border-zinc-200 bg-zinc-200 text-zinc-600 line-through',
+      dot: 'bg-zinc-500',
     },
   };
 
@@ -64,7 +80,8 @@ export function StatusBadge({
     <span
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border font-semibold select-none shadow-2xs',
-        size === 'sm' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-[11px]',
+        // Label status adalah teks yang dibaca: minimal 12 px di kedua ukuran.
+        size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-0.5 text-xs',
         style.wrapper,
         className
       )}

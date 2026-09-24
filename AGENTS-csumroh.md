@@ -44,6 +44,19 @@ Aturan visual **identik** dengan versi PHP — ini murni migrasi arsitektur, buk
 * **DILARANG** memakai elemen `<select>` native browser di mana pun.
 * Gunakan **Radix UI primitives** (`@radix-ui/react-select` untuk pengganti langsung `<select>`, `@radix-ui/react-dropdown-menu` untuk menu aksi, `@radix-ui/react-dialog` untuk modal) di-styling dengan Tailwind token di atas. Semua komponen dropdown/select wajib ditaruh di `apps/web/src/components/ui/` sebagai komponen reusable bergaya monokrom, bukan dipakai langsung sebagai raw Radix component di setiap fitur.
 * Pola lama Alpine.js `x-data="{ open: false }"` + `@click.outside` digantikan otomatis oleh state internal Radix (`onOpenChange`, `onPointerDownOutside`) — jangan re-implementasi manual dengan `useState` + `useEffect` document listener kecuali Radix tidak menyediakan primitive yang sesuai.
+* **Komponen bersama wajib** (`apps/web/src/components/ui/`), jangan menulis ulang per halaman:
+  * Dialog: `Modal` (judul, deskripsi, isi, footer) dan `ConfirmDialog` (hapus/putuskan; pengganti `window.confirm`). `ModalFrame` hanya untuk tata letak yang benar-benar khusus; `ImageLightbox` untuk pratinjau gambar. Radix `Dialog` langsung di fitur hanya untuk panel samping (drawer) seperti `ChatSidePanel`.
+  * Badge: `Badge` untuk status prospek, `StatusBadge` untuk status lain (aktif, arsip, peringatan, dsb.). Keduanya satu gaya dasar.
+  * Kartu: kelas `.surface` untuk wadah polos, `Card`/`CardHeader` untuk seksi berjudul.
+  * Toast: `showFeedback(pesan, { error })` dari `app/toast.tsx`, bukan state toast lokal.
+* **Pengecualian warna:** Inbox (dan panel Profil/Copilot di dalamnya) sengaja bergaya WhatsApp Web (hijau) atas keputusan user 24/09/2026. Halaman lain tetap monokrom.
+* **Warna semantik saja:** selain hitam/putih/abu, hanya `emerald` (sukses/Deal), `rose` (error/mendesak), dan `amber` (peringatan). Tidak ada biru, ungu, teal, hex, dan sejenisnya di luar Inbox.
+* **Keterbacaan:** teks minimal 12 px (`text-xs`); 11 px hanya untuk angka di lencana hitungan. Teks sekunder di latar terang minimal `zinc-500`; di latar gelap (sidebar, item aktif hitam) pakai `zinc-400`, jangan `zinc-500`. `zinc-300/400` di latar terang hanya untuk placeholder/ikon dekoratif.
+* **Keyboard:** elemen yang bisa diklik harus `<button>`/`<a>`. Bila isinya kompleks, pakai `role="button"`, `tabIndex={0}`, aktivasi Enter/Spasi, dan `focus-visible:ring`. Jangan menjadikan wadah yang berisi tombol lain sebagai tombol; beri tautan fokus pada judulnya.
+* **Tampilan kosong:** `EmptyState` dari `components/ui/page-feedback.tsx` (judul, alasan, jalan keluar). Nilai field kosong ("Belum ada rekening") cukup teks biasa.
+* **Tabel di split-screen:** lebar minimum besar hanya mulai `lg:`; kolom sekunder `hidden lg:table-cell`, dengan detailnya tersedia di halaman atau modal detail.
+* Aturan warna, ukuran teks, lebar tabel, `<select>`, dan `confirm()` dijaga otomatis oleh `apps/web/src/design-rules.test.ts`.
+* **Istilah baku UI:** Staf (bukan Staff), Pipeline, Deal (menang). Tahap `closing` berlabel "Tunggu Verifikasi". Label menu = breadcrumb = judul halaman.
 
 ### Layout Rule
 * Seluruh halaman wajib tetap nyaman di mode **Split-Screen (~50% lebar layar)** berdampingan dengan WhatsApp Web / aplikasi lain — test manual di viewport ~700px lebar sebelum menganggap fitur selesai.

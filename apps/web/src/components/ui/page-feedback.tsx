@@ -1,4 +1,6 @@
-import { AlertCircle, Inbox, RefreshCw } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { AlertCircle, Inbox, RefreshCw, type LucideIcon } from 'lucide-react';
+import { cn } from '../../lib/cn';
 import { Button } from './button';
 
 export function PageLoading({ label = 'Memuat halaman' }: { label?: string }) {
@@ -6,7 +8,7 @@ export function PageLoading({ label = 'Memuat halaman' }: { label?: string }) {
     <div className="grid min-h-[52vh] place-items-center" role="status" aria-live="polite">
       <div className="text-center">
         <span className="mx-auto block h-9 w-9 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-950" />
-        <p className="mt-4 text-xs font-bold uppercase tracking-[.14em] text-zinc-400">{label}</p>
+        <p className="mt-4 text-xs font-bold uppercase tracking-[.14em] text-zinc-500">{label}</p>
       </div>
     </div>
   );
@@ -25,12 +27,46 @@ export function PageError({ title = 'Data belum dapat dimuat', description, onRe
   );
 }
 
-export function SectionEmpty({ title, description }: { title: string; description: string }) {
+/**
+ * Tampilan kosong standar (satu komponen untuk seluruh aplikasi).
+ * - `plain`: di dalam tabel/kartu/daftar yang sudah punya bingkai.
+ * - `section`: berdiri sendiri, dengan bingkai garis putus-putus.
+ * Deskripsi menjelaskan kenapa kosong; `action` memberi jalan keluar (reset filter, tambah data).
+ */
+export function EmptyState({
+  icon: Icon = Inbox,
+  title,
+  description,
+  action,
+  variant = 'plain',
+  className,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+  variant?: 'plain' | 'section';
+  className?: string;
+}) {
   return (
-    <div className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed bg-zinc-50/60 p-7 text-center">
-      <span className="grid h-10 w-10 place-items-center rounded-xl border bg-white text-zinc-500"><Inbox size={18} /></span>
-      <h3 className="mt-3 font-display text-sm font-bold">{title}</h3>
-      <p className="mt-1 max-w-sm text-xs leading-5 text-zinc-500">{description}</p>
+    <div
+      className={cn(
+        'flex flex-col items-center justify-center text-center',
+        variant === 'section' ? 'min-h-48 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/60 p-7' : 'px-4 py-12',
+        className,
+      )}
+    >
+      <span className="grid h-10 w-10 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-500">
+        <Icon size={18} aria-hidden="true" />
+      </span>
+      <p className="mt-3 text-sm font-semibold text-zinc-900">{title}</p>
+      {description && <p className="mt-1 max-w-sm text-xs leading-5 text-zinc-600">{description}</p>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
+}
+
+/** Alias lama untuk `EmptyState variant="section"`. */
+export function SectionEmpty({ title, description }: { title: string; description: string }) {
+  return <EmptyState variant="section" title={title} description={description} />;
 }

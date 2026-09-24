@@ -51,7 +51,7 @@ export function ProspectAvatar({ photoUrl, size = 'md', className }: ProspectAva
 
   return (
     <span className={frame} aria-hidden="true" data-avatar="placeholder">
-      <svg viewBox="0 0 40 40" className="h-full w-full text-zinc-400" fill="currentColor">
+      <svg viewBox="0 0 40 40" className="h-full w-full text-zinc-500" fill="currentColor">
         <circle cx="20" cy="15.5" r="7.5" />
         <path d="M6 37c0-7.7 6.3-13 14-13s14 5.3 14 13v3H6z" />
       </svg>

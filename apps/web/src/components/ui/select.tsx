@@ -41,7 +41,7 @@ export function Select({
         )}
       >
         <SelectPrimitive.Value placeholder={placeholder} />
-        <SelectPrimitive.Icon className="text-zinc-400 shrink-0">
+        <SelectPrimitive.Icon className="text-zinc-500 shrink-0">
           <ChevronDown size={isCompact ? 13 : 15} />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>

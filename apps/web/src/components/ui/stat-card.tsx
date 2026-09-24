@@ -24,7 +24,7 @@ export function StatCard({
     <div className={cn('surface rounded-xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs', className)}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-zinc-500 block truncate">{label}</span>
-        {icon && <span className="text-zinc-400 shrink-0">{icon}</span>}
+        {icon && <span className="text-zinc-500 shrink-0">{icon}</span>}
       </div>
       <p
         className={cn(
@@ -35,7 +35,7 @@ export function StatCard({
       >
         {value}
       </p>
-      {note && <p className="mt-1.5 text-xs text-zinc-400 truncate">{note}</p>}
+      {note && <p className="mt-1.5 text-xs text-zinc-500 truncate">{note}</p>}
     </div>
   );
 }

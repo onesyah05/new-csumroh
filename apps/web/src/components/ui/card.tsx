@@ -11,7 +11,8 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          'surface rounded-xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs space-y-4',
+          // `.surface` (globals.css) adalah satu-satunya sumber gaya kartu: border, radius, latar, bayangan.
+          'surface p-4 sm:p-5 space-y-4',
           className
         )}
         {...props}
@@ -40,12 +41,12 @@ export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
       >
         <div className="space-y-0.5 min-w-0">
           {title && (
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700 flex items-center gap-1.5">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-950">
               {icon && <span className="text-zinc-500 shrink-0">{icon}</span>}
               <span>{title}</span>
             </h3>
           )}
-          {subtitle && <p className="text-[11px] text-zinc-400 leading-tight">{subtitle}</p>}
+          {subtitle && <p className="text-xs leading-snug text-zinc-600">{subtitle}</p>}
           {children}
         </div>
         {action && <div className="shrink-0">{action}</div>}
