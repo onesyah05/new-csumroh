@@ -37,6 +37,7 @@ import {
   dateOnlyKey,
   isLostStatus,
   isWonStatus,
+  objectionLabel,
   pipelineStatuses,
   type ProspectStatus,
 } from '@csumroh/shared-types';
@@ -51,6 +52,8 @@ import { Select } from '../../components/ui/select';
 import { PageError } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { cn } from '../../lib/cn';
+import { ProspectAvatar } from '../../components/ui/avatar';
+import { useWhatsAppAvatars } from '../../lib/avatars';
 import { OfficialOfferModal } from '../chat/OfficialOfferModal';
 import { ObjectionModal } from '../chat/ObjectionModal';
 import { OfficialInvoiceModal } from '../chat/OfficialInvoiceModal';
@@ -66,6 +69,8 @@ const money = (value: unknown) =>
   new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value ?? 0));
 const columns = pipelineStatuses.map((id, index) => ({ id, number: index + 1, label: statusLabels[id] ?? id }));
 const FINANCE_ROLES = ['finance', 'admin', 'superadmin'];
+const COLUMN_PAGE = 30;
+const TABLE_PAGE = 100;
 
 const FOLLOWUP_TYPES = [
   { value: 'call', label: 'Telepon' },
@@ -141,17 +146,23 @@ function dropAction(target: ProspectStatus, prospect: Prospect | undefined, role
   return { allowed: true, label: labels[target] ?? 'Lepaskan di sini' };
 }
 
+/** Info hilang sendiri setelah 5 detik; error tetap tampil sampai ditutup (tidak kritis vs kritis). */
 function useToast() {
-  const [message, setMessage] = useState('');
+  const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
-  const show = useCallback((text: string) => {
-    setMessage(text);
+  const show = useCallback((message: string, options?: { error?: boolean }) => {
+    const error = Boolean(options?.error);
+    setToast({ message, error });
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => setMessage(''), 5000);
+    if (!error) timer.current = setTimeout(() => setToast(null), 5000);
   }, []);
   useEffect(() => () => clearTimeout(timer.current), []);
-  return { message, show, dismiss: () => setMessage('') };
+  return { message: toast?.message ?? '', error: toast?.error ?? false, show, dismiss: () => setToast(null) };
 }
+
+/** Gulir halus kecuali pengguna meminta gerak minimal (opsi JS tidak ikut aturan CSS reduced-motion). */
+const scrollMotion = (): ScrollBehavior =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 
 function readCollapsed(): string[] {
   try {
@@ -166,7 +177,10 @@ export function PipelinePage() {
   const { brandId, query } = useBrandScope();
   const [params, setParams] = useSearchParams();
   // Filter & tampilan disimpan di URL: tetap sama saat reload dan bisa dibagikan.
-  const view = params.get('view') === 'table' ? 'table' : 'kanban';
+  // Split-screen ±700 px hanya memuat ±2 kolom Kanban: di bawah 900 px, Tabel jadi tampilan default.
+  const [narrowDefault] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 899px)').matches));
+  const viewParam = params.get('view');
+  const view = viewParam === 'table' || viewParam === 'kanban' ? viewParam : narrowDefault ? 'table' : 'kanban';
   const quick = params.get('quick') ?? 'all';
   const search = params.get('q') ?? '';
   const filterPaket = params.get('paket') ?? '';
@@ -174,7 +188,7 @@ export function PipelinePage() {
   const setParam = (key: string, value: string | null) => {
     setParams((current) => {
       const next = new URLSearchParams(current);
-      if (!value || value === 'all' || (key === 'view' && value === 'kanban')) next.delete(key);
+      if (!value || value === 'all') next.delete(key);
       else next.set(key, value);
       return next;
     }, { replace: true });
@@ -189,6 +203,9 @@ export function PipelinePage() {
   const [collapsed, setCollapsed] = useState<string[]>(readCollapsed);
   const [guided, setGuided] = useState<{ type: GuidedType; prospect: Prospect } | null>(null);
   const toast = useToast();
+  // Kolom/tabel panjang dirender bertahap agar board tetap ringan (virtualize-lists: 50+ item).
+  const [columnLimit, setColumnLimit] = useState<Record<string, number>>({});
+  const [tableLimit, setTableLimit] = useState(TABLE_PAGE);
 
   const isCs = user?.role === 'cs';
   const isManager = user?.role === 'admin' || user?.role === 'superadmin';
@@ -203,6 +220,8 @@ export function PipelinePage() {
     queryFn: () => api.get<any[]>(`/catalog/packages${query}`),
     enabled: !!brandId,
   });
+
+  const photoFor = useWhatsAppAvatars(prospects.data, brandId);
 
   const packageOptions = useMemo(
     () => (packages.data ?? []).map((p) => ({ value: String(p.id), label: p.name })),
@@ -250,7 +269,7 @@ export function PipelinePage() {
     onError: (error: Error, { id }, context) => {
       if (context?.previous) queryClient.setQueryData(context.queryKey, context.previous);
       const name = (prospects.data ?? []).find((p) => p.id === id)?.name ?? 'Prospek';
-      toast.show(`${name} tidak dipindahkan: ${error.message}`);
+      toast.show(`${name} tidak dipindahkan: ${error.message}`, { error: true });
     },
     onSuccess: (_data, { id, status }) => {
       const moved = (prospects.data ?? []).find((item) => item.id === id);
@@ -270,7 +289,7 @@ export function PipelinePage() {
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
       toast.show('Follow-up tercatat.');
     },
-    onError: (error: Error) => toast.show(`Follow-up gagal dicatat: ${error.message}`),
+    onError: (error: Error) => toast.show(`Follow-up gagal dicatat: ${error.message}`, { error: true }),
   });
 
   const claim = useMutation({
@@ -279,7 +298,7 @@ export function PipelinePage() {
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
       toast.show('Anda menjadi PIC prospek ini.');
     },
-    onError: (error: Error) => toast.show(`Klaim gagal: ${error.message}`),
+    onError: (error: Error) => toast.show(`Klaim gagal: ${error.message}`, { error: true }),
   });
 
   const handleStatusChange = useCallback(
@@ -376,11 +395,11 @@ export function PipelinePage() {
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [view, showFilters, prospects.isLoading]);
-  const scrollBoard = (direction: 1 | -1) => boardRef.current?.scrollBy({ left: direction * 600, behavior: 'smooth' });
+  const scrollBoard = (direction: 1 | -1) => boardRef.current?.scrollBy({ left: direction * 600, behavior: scrollMotion() });
   const jumpToColumn = (id: string) => {
     if (collapsed.includes(id)) toggleCollapsed(id);
     requestAnimationFrame(() =>
-      document.getElementById(`pipeline-col-${id}`)?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' }),
+      document.getElementById(`pipeline-col-${id}`)?.scrollIntoView({ behavior: scrollMotion(), inline: 'start', block: 'nearest' }),
     );
   };
 
@@ -388,9 +407,18 @@ export function PipelinePage() {
   if (prospects.isError) return <PageError description={prospects.error.message} onRetry={() => void prospects.refetch()} />;
 
   const activeFiltersCount = [filterPaket, filterLeadSource].filter(Boolean).length;
+  const hasAnyFilter = Boolean(search || quick !== 'all' || filterPaket || filterLeadSource);
+  const clearAllFilters = () => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      ['q', 'quick', 'paket', 'sumber'].forEach((key) => next.delete(key));
+      return next;
+    }, { replace: true });
+  };
   const columnItems = (id: string) => filtered.filter((p) => canonicalStatus(p.status) === id);
   const cardProps = (p: Prospect) => ({
     prospect: p,
+    photoUrl: photoFor(p),
     today,
     canClaim: isCs && !p.userId,
     canAssign: isManager,
@@ -439,7 +467,7 @@ export function PipelinePage() {
             placeholder="Cari nama, nomor, atau kota..."
           />
           {search && (
-            <button onClick={() => setParam('q', null)} aria-label="Hapus pencarian" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-zinc-500 hover:text-zinc-900">
+            <button onClick={() => setParam('q', null)} aria-label="Hapus pencarian" className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900">
               <X size={13} />
             </button>
           )}
@@ -481,7 +509,7 @@ export function PipelinePage() {
       {showFilters && (
         <section className="surface flex flex-wrap items-end gap-3 px-4 py-3">
           <div className="min-w-[200px] flex-1">
-            <p className="mb-1 text-[11px] font-semibold text-zinc-500">Paket</p>
+            <p className="mb-1 text-xs font-semibold text-zinc-500">Paket</p>
             <Select
               value={filterPaket || 'all'}
               onValueChange={(value) => setParam('paket', value === 'all' ? null : value)}
@@ -491,7 +519,7 @@ export function PipelinePage() {
             />
           </div>
           <div className="min-w-[180px] flex-1">
-            <p className="mb-1 text-[11px] font-semibold text-zinc-500">Sumber lead</p>
+            <p className="mb-1 text-xs font-semibold text-zinc-500">Sumber lead</p>
             <Select
               value={filterLeadSource || 'all'}
               onValueChange={(value) => setParam('sumber', value === 'all' ? null : value)}
@@ -501,7 +529,7 @@ export function PipelinePage() {
             />
           </div>
           {activeFiltersCount > 0 && (
-            <button onClick={() => { setParam('paket', null); setParam('sumber', null); }} className="text-xs font-semibold text-zinc-700 underline hover:text-zinc-950">
+            <button onClick={() => { setParam('paket', null); setParam('sumber', null); }} className="min-h-6 rounded px-1.5 py-1 text-xs font-semibold text-zinc-700 underline hover:text-zinc-950">
               Reset filter
             </button>
           )}
@@ -510,21 +538,32 @@ export function PipelinePage() {
 
       <p className="sr-only" aria-live="polite">{moveAnnouncement}</p>
 
+      {!prospects.isLoading && hasAnyFilter && filtered.length === 0 && (prospects.data ?? []).length > 0 && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700">
+          <span>Tidak ada prospek yang cocok dengan pencarian atau filter ini.</span>
+          <Button type="button" variant="secondary" size="sm" onClick={clearAllFilters}>Hapus semua filter</Button>
+        </div>
+      )}
+
       {prospects.isLoading ? (
         <PipelineSkeleton />
       ) : view === 'kanban' ? (
         <>
           {/* Satu baris ringkas: lompat ke tahap (berguna saat kolom di luar layar) + info/petunjuk. */}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
-            <nav aria-label="Lompat ke tahap" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-zinc-500">
-              <span className="font-medium text-zinc-400">Lompat ke</span>
+            <nav aria-label="Lompat ke tahap" className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-zinc-700">
+              <span className="mr-1 font-medium text-zinc-600">Lompat ke</span>
               {columns.map((column) => (
-                <button key={column.id} onClick={() => jumpToColumn(column.id)} className="hover:text-zinc-950 hover:underline">
-                  {column.label} <span className="tabular-nums text-zinc-400">{columnItems(column.id).length}</span>
+                <button
+                  key={column.id}
+                  onClick={() => jumpToColumn(column.id)}
+                  className="min-h-6 rounded px-1.5 py-1 hover:bg-zinc-100 hover:text-zinc-950"
+                >
+                  {column.label} <span className="tabular-nums text-zinc-600">{columnItems(column.id).length}</span>
                 </button>
               ))}
             </nav>
-            <p className="flex items-center gap-1.5 text-zinc-500">
+            <p className="flex items-center gap-1.5 text-zinc-600">
               {dragged ? (
                 <><GripVertical size={14} />{dropHint(dragOverStatus, dragged, user?.role)}</>
               ) : filtered.length !== (prospects.data ?? []).length ? (
@@ -596,32 +635,32 @@ export function PipelinePage() {
                         <>
                           <header className="shrink-0 space-y-1 px-3 pb-2 pt-3">
                             <div className="flex items-center gap-2">
-                              <span className="grid h-6 w-6 place-items-center rounded-lg bg-zinc-950 text-[11px] font-bold text-white">{column.number}</span>
+                              <span className="grid h-6 w-6 place-items-center rounded-lg border border-zinc-300 bg-white text-xs font-bold text-zinc-700">{column.number}</span>
                               <h3 className="flex-1 truncate text-xs font-bold text-zinc-900">{column.label}</h3>
                               <span className="rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-bold tabular-nums text-zinc-700">{items.length}</span>
                               <button
                                 onClick={() => toggleCollapsed(column.id)}
                                 aria-label={`Lipat kolom ${column.label}`}
                                 title="Lipat kolom"
-                                className="rounded p-0.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900"
+                                className="grid h-6 w-6 place-items-center rounded text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
                               >
                                 <FoldHorizontal size={13} />
                               </button>
                             </div>
-                            <p className="text-[11px] text-zinc-500">
+                            <p className="text-xs text-zinc-600">
                               {total > 0 ? <>Potensi <b className="text-zinc-800">Rp {money(total)}</b></> : 'Belum ada nilai penawaran'}
                             </p>
                           </header>
                           <div className={cn('thin-scrollbar flex-1 space-y-2 overflow-y-auto px-2.5 pb-2.5', isOver && 'rounded-xl bg-white/50')}>
                             {dragged && (
                               <p className={cn(
-                                'rounded-lg border border-dashed px-2 py-1.5 text-center text-[11px]',
+                                'rounded-lg border border-dashed px-2 py-1.5 text-center text-xs',
                                 action.allowed ? 'border-zinc-500 text-zinc-800' : 'border-zinc-300 text-zinc-500',
                               )}>
                                 {action.label}
                               </p>
                             )}
-                            {items.map((p) => (
+                            {items.slice(0, columnLimit[column.id] ?? COLUMN_PAGE).map((p) => (
                               <ProspectCard
                                 key={p.id}
                                 {...cardProps(p)}
@@ -631,8 +670,17 @@ export function PipelinePage() {
                                 onDragEnd={endDrag}
                               />
                             ))}
+                            {items.length > (columnLimit[column.id] ?? COLUMN_PAGE) && (
+                              <button
+                                type="button"
+                                onClick={() => setColumnLimit((current) => ({ ...current, [column.id]: (current[column.id] ?? COLUMN_PAGE) + COLUMN_PAGE }))}
+                                className="w-full rounded-lg border border-zinc-300 bg-white py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                              >
+                                Tampilkan {Math.min(COLUMN_PAGE, items.length - (columnLimit[column.id] ?? COLUMN_PAGE))} lainnya
+                              </button>
+                            )}
                             {!items.length && !dragged && (
-                              <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-center text-[11px] text-zinc-500">Belum ada prospek</div>
+                              <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-center text-xs text-zinc-600">Belum ada prospek</div>
                             )}
                           </div>
                         </>
@@ -648,7 +696,7 @@ export function PipelinePage() {
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
           <div className="thin-scrollbar overflow-x-auto">
             <table className="w-full min-w-[960px] text-left">
-              <thead className="border-b border-zinc-200 bg-zinc-50/75 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-600">
                 <tr>
                   <th className="px-5 py-3">Jamaah</th>
                   <th className="px-4 py-3">Status</th>
@@ -661,13 +709,18 @@ export function PipelinePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {filtered.map((p) => {
+                {filtered.slice(0, tableLimit).map((p) => {
                   const due = dateOnlyKey(p.nextFollowupDate);
                   return (
                     <tr key={p.id} className="text-sm hover:bg-zinc-50/60">
                       <td className="px-5 py-3">
-                        <Link to={`/prospects/${p.id}`} className="font-semibold hover:underline">{p.name}</Link>
-                        {subtitleOf(p) && <p className="mt-0.5 text-xs text-zinc-500">{subtitleOf(p)}</p>}
+                        <div className="flex items-center gap-2.5">
+                          <ProspectAvatar photoUrl={photoFor(p)} size="sm" className="shrink-0" />
+                          <div className="min-w-0">
+                            <Link to={`/prospects/${p.id}`} className="font-semibold hover:underline">{p.name}</Link>
+                            {subtitleOf(p) && <p className="mt-0.5 text-xs text-zinc-500">{subtitleOf(p)}</p>}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4"><Badge value={p.status} /></td>
                       <td className="px-4 text-xs text-zinc-600">{p.package?.name ?? '—'}</td>
@@ -703,12 +756,21 @@ export function PipelinePage() {
                 })}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-12 text-center text-sm text-zinc-500">Tidak ada prospek yang cocok dengan filter.</td>
+                    <td colSpan={8} className="px-5 py-12 text-center text-sm text-zinc-600">
+                      {hasAnyFilter ? 'Tidak ada prospek yang cocok dengan filter.' : 'Belum ada prospek.'}
+                    </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+          {filtered.length > tableLimit && (
+            <div className="border-t border-zinc-200 bg-zinc-50/50 px-4 py-3 text-center">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setTableLimit((n) => n + TABLE_PAGE)}>
+                Tampilkan {Math.min(TABLE_PAGE, filtered.length - tableLimit)} lainnya dari {filtered.length}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -744,9 +806,16 @@ export function PipelinePage() {
       )}
 
       {toast.message && (
-        <div role="status" className="fixed bottom-6 right-6 z-50 flex max-w-sm items-start gap-3 rounded-xl bg-zinc-950 px-4 py-3 text-xs font-semibold text-white shadow-lift animate-fade-up">
+        <div
+          role={toast.error ? 'alert' : 'status'}
+          className={cn(
+            'fixed bottom-6 right-6 z-50 flex max-w-sm items-start gap-3 rounded-xl px-4 py-3 text-xs font-semibold text-white shadow-lift animate-fade-up',
+            toast.error ? 'bg-rose-700' : 'bg-zinc-950',
+          )}
+        >
+          {toast.error && <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />}
           <span className="flex-1">{toast.message}</span>
-          <button onClick={toast.dismiss} aria-label="Tutup notifikasi" className="text-zinc-300 hover:text-white"><X size={14} /></button>
+          <button onClick={toast.dismiss} aria-label="Tutup notifikasi" className="-my-1 -mr-1.5 grid h-6 w-6 shrink-0 place-items-center rounded text-zinc-300 hover:bg-white/10 hover:text-white"><X size={14} /></button>
         </div>
       )}
     </div>
@@ -782,12 +851,13 @@ function PipelineSkeleton() {
 
 /** Lencana kartu: palet monokrom (AGENTS §3); hitam penuh = butuh tindakan segera. */
 function CardBadge({ urgent, icon: Icon, children, title }: { urgent?: boolean; icon: typeof Bell; children: string; title?: string }) {
+  // Satu baris, dibatasi lebar kartu: label tidak pernah patah di dalam pill (Compact Label Overflow).
   return (
     <span title={title} className={cn(
-      'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold',
+      'inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-semibold',
       urgent ? 'bg-zinc-950 text-white' : 'border border-zinc-300 bg-white text-zinc-700',
     )}>
-      <Icon size={11} />{children}
+      <Icon size={11} className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{children}</span>
     </span>
   );
 }
@@ -797,36 +867,37 @@ function PicControl({ prospect, canClaim, canAssign, onClaim, onAssign }: {
 }) {
   if (prospect.user?.name) {
     return canAssign ? (
-      <button onClick={onAssign} title="Ganti PIC" className="inline-flex max-w-[140px] items-center gap-1 truncate rounded-md px-1 text-xs text-zinc-700 hover:bg-zinc-100">
+      <button onClick={onAssign} title="Ganti PIC" className="inline-flex max-w-[180px] items-center gap-1 truncate rounded-md px-1 text-xs text-zinc-700 hover:bg-zinc-100">
         <UserRound size={12} className="shrink-0" /><span className="truncate">{prospect.user.name}</span>
       </button>
     ) : (
-      <span className="inline-flex max-w-[140px] items-center gap-1 truncate text-xs text-zinc-700" title="PIC">
+      <span className="inline-flex max-w-[180px] items-center gap-1 truncate text-xs text-zinc-700" title="PIC">
         <UserRound size={12} className="shrink-0" /><span className="truncate">{prospect.user.name}</span>
       </span>
     );
   }
   if (canClaim) {
     return (
-      <button onClick={onClaim} className="inline-flex items-center gap-1 rounded-md bg-zinc-950 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-zinc-800">
+      <button onClick={onClaim} className="inline-flex min-h-6 items-center gap-1 rounded-md border border-zinc-900 bg-white px-2 py-0.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-100">
         <UserPlus2 size={12} />Klaim
       </button>
     );
   }
   if (canAssign) {
     return (
-      <button onClick={onAssign} className="inline-flex items-center gap-1 rounded-md border border-dashed border-zinc-500 px-2 py-0.5 text-[11px] font-semibold text-zinc-800 hover:bg-zinc-100">
+      <button onClick={onAssign} className="inline-flex items-center gap-1 rounded-md border border-dashed border-zinc-500 px-2 py-0.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-100">
         <UserPlus2 size={12} />Tugaskan PIC
       </button>
     );
   }
-  return <span className="rounded-md border border-dashed border-zinc-400 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600">Belum ada PIC</span>;
+  return <span className="rounded-md border border-dashed border-zinc-400 px-1.5 py-0.5 text-xs font-semibold text-zinc-600">Belum ada PIC</span>;
 }
 
 function ProspectCard({
-  prospect, today, role, dragging, disabled, onDragStart, onDragEnd, onStatus, onClaim, onAssign, onLogFollowup, canClaim, canAssign,
+  prospect, photoUrl, today, role, dragging, disabled, onDragStart, onDragEnd, onStatus, onClaim, onAssign, onLogFollowup, canClaim, canAssign,
 }: {
   prospect: Prospect;
+  photoUrl: string | null;
   today: string;
   role?: string;
   dragging: boolean;
@@ -866,9 +937,10 @@ function ProspectCard({
       )}
     >
       <div className="flex items-start gap-2">
+        <ProspectAvatar photoUrl={photoUrl} size="sm" className="mt-0.5 shrink-0" />
         <Link to={`/prospects/${prospect.id}`} draggable={false} className="min-w-0 flex-1">
           <h4 className="truncate text-sm font-bold text-zinc-950 hover:underline">{prospect.name}</h4>
-          <p className="truncate text-[11px] text-zinc-500">
+          <p className="truncate text-xs text-zinc-500">
             {/* Waktu tunggu sudah tampil di lencana "Menunggu balasan"; jangan diulang di sini. */}
             {[subtitle, activity && !unanswered && `aktif ${activity} lalu`].filter(Boolean).join(' · ') || 'Kontak belum lengkap'}
           </p>
@@ -890,7 +962,7 @@ function ProspectCard({
               {moves.length > 0 && (
                 <>
                   <DropdownMenu.Separator className="my-1 border-t border-zinc-100" />
-                  <p className="px-2 py-1.5 text-[11px] font-semibold text-zinc-500">Langkah berikutnya</p>
+                  <p className="px-2 py-1.5 text-xs font-semibold text-zinc-500">Langkah berikutnya</p>
                   {moves.map((status) => (
                     <DropdownMenu.Item
                       key={status}
@@ -898,7 +970,7 @@ function ProspectCard({
                       className="cursor-pointer rounded-lg px-2 py-2 text-xs outline-none data-[highlighted]:bg-zinc-100"
                     >
                       <span className="font-semibold">{statusLabels[status]}</span>
-                      <span className="block text-[11px] text-zinc-500">{dropAction(status, prospect, role).label.replace(/^Lepas untuk /, '')}</span>
+                      <span className="block text-xs text-zinc-500">{dropAction(status, prospect, role).label.replace(/^Lepas untuk /, '')}</span>
                     </DropdownMenu.Item>
                   ))}
                 </>
@@ -912,10 +984,13 @@ function ProspectCard({
         {value > 0 ? (
           <span className="shrink-0 whitespace-nowrap text-sm font-extrabold tabular-nums text-zinc-900">Rp {money(value)}</span>
         ) : (
-          <span className="shrink-0 text-[11px] text-zinc-500">Belum ada penawaran</span>
+          <span className="shrink-0 text-xs text-zinc-500">Belum ada penawaran</span>
         )}
-        {prospect.package?.name && <span className="min-w-0 flex-1 truncate text-right text-[11px] text-zinc-500" title={prospect.package.name}>{prospect.package.name}</span>}
       </div>
+      {/* Nama paket dibungkus (maks. 2 baris), bukan dipotong dengan teks lengkap yang hanya ada di hover. */}
+      {prospect.package?.name && (
+        <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-zinc-600">{prospect.package.name}</p>
+      )}
 
       {(unanswered || invoiceOverdue || followupOverdue || followupToday || hasProof || prospect.status === 'closing' || prospect.status === 'objection') && (
         <div className="mt-2 flex flex-wrap gap-1">
@@ -927,7 +1002,7 @@ function ProspectCard({
           {invoiceOverdue && <CardBadge urgent icon={AlertTriangle}>Invoice lewat</CardBadge>}
           {!invoiceOverdue && prospect.status === 'closing' && <CardBadge icon={Receipt}>Invoice terkirim</CardBadge>}
           {hasProof && <CardBadge icon={FileCheck2}>Bukti ada</CardBadge>}
-          {prospect.status === 'objection' && <CardBadge icon={AlertTriangle}>{prospect.objectionCategory || 'Keberatan'}</CardBadge>}
+          {prospect.status === 'objection' && <CardBadge icon={AlertTriangle}>{objectionLabel(prospect.objectionCategory)}</CardBadge>}
           {followupOverdue && <CardBadge urgent icon={CalendarClock}>Follow-up lewat</CardBadge>}
           {followupToday && <CardBadge icon={Bell}>Follow-up hari ini</CardBadge>}
         </div>
@@ -937,7 +1012,7 @@ function ProspectCard({
         <PicControl prospect={prospect} canClaim={canClaim} canAssign={canAssign} onClaim={onClaim} onAssign={onAssign} />
         <div className="flex shrink-0 items-center gap-0.5">
           {due && !followupOverdue && !followupToday && open && (
-            <span className="mr-1 inline-flex items-center gap-1 text-[11px] text-zinc-500" title="Follow-up berikutnya">
+            <span className="mr-1 inline-flex items-center gap-1 text-xs text-zinc-500" title="Follow-up berikutnya">
               <CalendarDays size={11} />{formatDateKey(due)}
             </span>
           )}

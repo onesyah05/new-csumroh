@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,7 @@ const prospects = [
   { id: 1, brandId: 1, name: 'Deal Syawal', phone: '62811', status: 'deal', packageId: 10, package: { id: 10, name: 'Syawal' }, dealValue: 60_000_000, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
   { id: 2, brandId: 1, name: 'Deal Ramadhan', phone: '62812', status: 'closed_won', packageId: 11, package: { id: 11, name: 'Ramadhan' }, dealValue: 50_000_000, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
   { id: 3, brandId: 1, name: '62813', phone: '62813', status: 'new', packageId: null, dealValue: 0, userId: null, user: null, leadSource: 'whatsapp', messages: [{ timestamp: Math.floor(Date.now() / 1000) - 600, isFromMe: false }] },
+  { id: 4, brandId: 1, name: 'Keberatan Harga', phone: '62814', status: 'objection', objectionCategory: 'price', photoUrl: `/uploads/avatars/p4-${Date.now()}-ab12.jpg`, packageId: null, dealValue: 0, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
 ];
 
 function json(data: unknown) {
@@ -79,5 +80,28 @@ describe('Pipeline', () => {
     // Aksi utama selalu ada di DOM dan berlabel (tidak bergantung hover).
     expect(within(card).getByRole('link', { name: 'Buka chat 62813' })).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Catat follow-up 62813' })).toBeTruthy();
+  });
+
+  it('lencana keberatan menampilkan label, bukan kode internal', async () => {
+    renderAs('cs');
+    const card = await screen.findByRole('article', { name: 'Kartu prospek Keberatan Harga' });
+    expect(within(card).getByText('Harga')).toBeTruthy();
+    expect(within(card).queryByText('price')).toBeNull();
+  });
+
+  it('avatar memakai foto profil WhatsApp; tanpa foto tampil siluet, bukan inisial', async () => {
+    renderAs('cs');
+    const withPhoto = await screen.findByRole('article', { name: 'Kartu prospek Keberatan Harga' });
+    expect(withPhoto.querySelector('img')?.getAttribute('src')).toMatch(/\/uploads\/avatars\/p4-\d+-ab12\.jpg$/);
+    const noPhoto = screen.getByRole('article', { name: 'Kartu prospek Deal Syawal' });
+    expect(noPhoto.querySelector('[data-avatar="placeholder"]')).toBeTruthy();
+    expect(within(noPhoto).queryByText(/^DS$/)).toBeNull();
+  });
+
+  it('filter tanpa hasil menampilkan pesan dan tombol hapus semua filter', async () => {
+    renderAs('admin', '/pipeline?view=table&q=tidakada');
+    expect(await screen.findByText('Tidak ada prospek yang cocok dengan pencarian atau filter ini.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus semua filter' }));
+    expect(await screen.findByText('Deal Syawal')).toBeTruthy();
   });
 });
