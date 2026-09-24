@@ -182,9 +182,9 @@ export function BrandDetailPage() {
 
       {/* 4 Metric Stats */}
       <StatGrid cols={4}>
-        <StatCard label="Total Staff Tim" value={brand._count?.users ?? 0} note="Akses operasional" />
+        <StatCard label="Total Staff Tim" value={brand._count?.users ?? 0} note="Akses sales & CS" />
         <StatCard label="Total Paket Umroh" value={brand._count?.packages ?? 0} note="Katalog program" />
-        <StatCard label="Total Prospek" value={brand._count?.prospects ?? 0} note="Database jamaah" />
+        <StatCard label="Total Prospek" value={brand._count?.prospects ?? 0} note="Pipeline prospek" />
         <StatCard
           label="Sesi WhatsApp"
           value={waConnected ? 'Terhubung' : 'Terputus'}
@@ -204,7 +204,7 @@ export function BrandDetailPage() {
                 <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                   Legalitas & Kontak Resmi
                 </h3>
-                <p className="text-[11px] text-zinc-400">Identitas resmi Kemenag dan alamat operasional kantor biro.</p>
+                <p className="text-[11px] text-zinc-400">Identitas resmi biro dan alamat kantor.</p>
               </div>
             </div>
 
@@ -332,7 +332,7 @@ export function BrandDetailPage() {
             </Button>
           </Card>
 
-          {/* Tim Staff Operasional */}
+          {/* Tim Sales & Staff */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700 flex items-center gap-1.5">

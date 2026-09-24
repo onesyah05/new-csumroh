@@ -172,7 +172,7 @@ export function BrandPage() {
       {/* 4 Metric Stats */}
       <StatGrid cols={4}>
         <StatCard label="Total Brand" value={brands.length} note="Biro terdaftar" />
-        <StatCard label="Total Staff Tim" value={totalUsers} note="Staff operasional" />
+        <StatCard label="Total Staff Tim" value={totalUsers} note="Tim sales & CS" />
         <StatCard label="Total Paket Umroh" value={totalPackages} note="Katalog program" />
         <StatCard label="WhatsApp Terhubung" value={`${connectedCount}/${brands.length}`} note="Status gateway aktif" />
       </StatGrid>

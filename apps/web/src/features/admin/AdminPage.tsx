@@ -102,7 +102,7 @@ export function AdminPage() {
       <PageHeader
         kicker="Administration center"
         kickerIcon={<Settings2 size={14} />}
-        title="Kelola Operasional"
+        title="Pengaturan Sistem"
         subtitle={
           user?.role === 'superadmin'
             ? 'Kontrol seluruh brand, legalitas, paket, dan akun dari satu tempat.'
@@ -248,7 +248,7 @@ export function AdminPage() {
           })}
           {!brands.data?.length && (
             <div className="lg:col-span-2">
-              <SectionEmpty title="Belum ada brand" description="Tambahkan brand travel pertama untuk mulai mengelola operasional." />
+              <SectionEmpty title="Belum ada brand" description="Tambahkan brand travel pertama untuk mulai mengelola sales dan prospek." />
             </div>
           )}
         </div>
@@ -741,7 +741,7 @@ function AdminDialog({
                         className="field bg-white"
                         value={form.bankAccountHolder ?? ''}
                         onChange={(e) => setForm({ ...form, bankAccountHolder: e.target.value })}
-                        placeholder="PT Azhan Wisata"
+                        placeholder="PT Nama Legal Perusahaan"
                       />
                     </div>
                   </div>

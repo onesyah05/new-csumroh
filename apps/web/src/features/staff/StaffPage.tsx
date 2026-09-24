@@ -561,7 +561,7 @@ export function StaffPage() {
       {/* Header */}
       <PageHeader
         title="Manajemen Staff"
-        subtitle="Kelola akun dan hak akses staff operasional biro."
+        subtitle="Kelola akun dan hak akses tim sales, CS, dan admin."
         actions={
           (isSuperadmin || isAdmin) ? (
             <Button

@@ -73,7 +73,7 @@ export function LoginPage() {
         </div>
 
         <p className="relative text-xs text-zinc-600">
-          © {new Date().getFullYear()} CRM AZHAN. Sistem operasional travel internal.
+          © {new Date().getFullYear()} CRM AZHAN. Platform sales & customer acquisition.
         </p>
       </section>
 

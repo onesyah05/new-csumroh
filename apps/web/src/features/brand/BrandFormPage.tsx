@@ -338,7 +338,7 @@ export function BrandFormPage() {
                   className="field"
                   value={form.bankAccountHolder}
                   onChange={(e) => setForm({ ...form, bankAccountHolder: e.target.value })}
-                  placeholder="PT Azhan Wisata Mandiri"
+                  placeholder="PT Nama Legal Perusahaan"
                 />
               </div>
             </div>
@@ -352,7 +352,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
                   Alamat Kantor & Lokasi Google Maps
                 </h3>
-                <p className="text-[11px] text-zinc-400">Alamat operasional biro dan tautan peta lokasi.</p>
+                <p className="text-[11px] text-zinc-400">Alamat kantor biro dan tautan peta lokasi.</p>
               </div>
             </div>
 

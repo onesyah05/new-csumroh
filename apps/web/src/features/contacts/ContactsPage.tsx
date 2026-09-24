@@ -26,6 +26,8 @@ import { Button } from '../../components/ui/button';
 import { PageError, PageLoading, SectionEmpty } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { cn } from '../../lib/cn';
+import { ProspectAvatar } from '../../components/ui/avatar';
+import { useWhatsAppAvatars } from '../../lib/avatars';
 
 export type ContactDevice = {
   brandId: number;
@@ -119,6 +121,9 @@ export function ContactsPage() {
     },
     enabled: Boolean(brandId),
   });
+
+  // Foto profil WhatsApp untuk 80 kontak teratas; daftar mentah (bukan hasil filter) agar mengetik di pencarian tidak memicu permintaan baru.
+  const photoFor = useWhatsAppAvatars(contacts.data?.slice(0, 80), brandId);
 
   const filtered = useMemo(() => {
     let list = contacts.data ?? [];
@@ -295,23 +300,7 @@ export function ContactsPage() {
                       {/* Column 1: Contact Name & Identity */}
                       <td className="py-3.5 pl-6 pr-3 align-top">
                         <div className="flex items-start gap-3">
-                          {contact.photoUrl ? (
-                            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-black/5 bg-zinc-100 shadow-2xs mt-0.5">
-                              <img
-                                src={contact.photoUrl}
-                                alt={contact.name}
-                                className="h-full w-full object-cover"
-                                referrerPolicy="no-referrer"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = 'none';
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-100 text-xs font-extrabold text-zinc-600 shadow-2xs mt-0.5">
-                              {contact.name.slice(0, 2).toUpperCase()}
-                            </span>
-                          )}
+                          <ProspectAvatar photoUrl={photoFor(contact)} size="lg" className="mt-0.5" />
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-display font-bold text-sm text-zinc-900 leading-snug">
