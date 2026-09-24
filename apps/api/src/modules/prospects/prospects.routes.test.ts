@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 
 type Row = Record<string, any>;
 const mocks = vi.hoisted(() => ({
-  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[] },
+  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[] },
   capi: vi.fn(),
   send: vi.fn(),
   conversations: vi.fn(),
@@ -29,7 +29,11 @@ function matches(row: Row, where: Row = {}): boolean {
       if ('notIn' in cond) return !cond.notIn.includes(value);
       if ('gte' in cond) return value !== null && value >= cond.gte;
       if ('not' in cond) return value !== cond.not;
+      if ('OR' in cond) return true;
       return true;
+    }
+    if (key === 'OR') {
+      return (cond as Row[]).some((alt) => matches(row, alt));
     }
     return value === cond;
   });
@@ -53,6 +57,7 @@ const db = vi.hoisted(() => {
       findFirst: async ({ where }: any) => copy([...s().prospects.values()].find((p) => matches(p, where))),
       findUnique: async ({ where }: any) => copy(s().prospects.get(where.id)),
       findUniqueOrThrow: async ({ where }: any) => copy(s().prospects.get(where.id))!,
+      findMany: async ({ where }: any) => [...s().prospects.values()].filter((p) => matches(p, where)).map((p) => copy(p)),
       update: async ({ where, data }: any) => copy(apply(s().prospects.get(where.id)!, data)),
       updateMany: async ({ where, data }: any) => {
         const rows = [...s().prospects.values()].filter((p) => matches(p, where));
@@ -81,9 +86,15 @@ const db = vi.hoisted(() => {
       },
     },
     prospectLog: { create: async ({ data }: any) => { s().logs.push(data); return data; } },
+    user: {
+      findUnique: async ({ where }: any) => copy(s().users.find((u) => u.id === where.id)),
+      // Kelayakan PIC: CS aktif dengan brand utama yang sama (akses UserBrand tidak dimodelkan di sini).
+      findFirst: async ({ where }: any) => copy(s().users.find((u) => u.id === where.id && u.isActive && u.role === where.role && u.brandId === 1)),
+    },
     chatMessage: {
       count: async () => 1,
       findFirst: async ({ where }: any) => copy(s().messages.find((m) => matches(m, where))),
+      findMany: async ({ where }: any) => s().messages.filter((m) => matches(m, where)).map((m) => copy(m)),
     },
     // Serialized like conflicting InnoDB row locks; state is rolled back when the callback throws.
     $transaction: (callback: any) => {
@@ -118,13 +129,13 @@ vi.mock('../chat/outbound.js', async (importOriginal) => ({ ...(await importOrig
 
 import { prospectsRouter } from './prospects.routes.js';
 
-function invoke(method: string, route: string, opts: { id?: number; body?: any; role?: string; query?: any } = {}) {
+function invoke(method: string, route: string, opts: { id?: number; body?: any; role?: string; query?: any; userId?: number } = {}) {
   const layer = (prospectsRouter as any).stack.find((l: any) => l.route?.path === route && l.route.methods[method]);
   if (!layer) throw new Error(`Route missing: ${method} ${route}`);
   return new Promise<any>((resolve) => {
     let status = 200;
     const res = { status: (s: number) => { status = s; return res; }, json: (data: any) => resolve({ status, ...data }) };
-    const req = { params: { id: String(opts.id ?? 1) }, body: opts.body ?? {}, query: opts.query ?? {}, user: { id: 7, name: 'Test user', role: opts.role ?? 'cs', brandId: 1 } };
+    const req = { params: { id: String(opts.id ?? 1) }, body: opts.body ?? {}, query: opts.query ?? {}, user: { id: opts.userId ?? 7, name: 'Test user', role: opts.role ?? 'cs', brandId: 1 } };
     layer.route.stack.at(-1).handle(req, res, (error: any) => resolve({ status: error.status ?? (error.name === 'ZodError' ? 422 : 500), error: error.message }));
   });
 }
@@ -151,6 +162,11 @@ beforeEach(() => {
   mocks.state.payments = [];
   mocks.state.logs = [];
   mocks.state.messages = [];
+  mocks.state.users = [
+    { id: 7, name: 'CS Fitri', role: 'cs', isActive: true, brandId: 1 },
+    { id: 8, name: 'CS Rahma', role: 'cs', isActive: true, brandId: 1 },
+    { id: 9, name: 'CS Nonaktif', role: 'cs', isActive: false, brandId: 1 },
+  ];
   seedProspect(1);
   mocks.send.mockResolvedValue({ messageId: 'WA-MSG-1' });
   mocks.conversations.mockResolvedValue([]);
@@ -377,5 +393,110 @@ describe('Bukti transfer langsung dari chat WhatsApp', () => {
   it('refuses media paths outside uploads', async () => {
     mocks.state.messages = [message({ mediaUrl: '/uploads/../.env' })];
     expect((await invoke('post', '/:id/payment-proof-from-message', { body: { messageId: 50 } })).status).toBe(404);
+  });
+});
+
+describe('PIC: hanya PIC atau Admin yang mengubah prospek', () => {
+  it('CS lain ditolak untuk status, profil, keberatan, follow-up, dan bukti transfer', async () => {
+    const asOther = { userId: 8 };
+    expect((await invoke('patch', '/:id/status', { ...asOther, body: { status: 'lose', lostReason: 'Batal' } })).status).toBe(403);
+    expect((await invoke('patch', '/:id/profile', { ...asOther, body: { notes: 'x' } })).status).toBe(403);
+    expect((await invoke('post', '/:id/objection', { ...asOther, body: { category: 'price', notes: 'mahal' } })).status).toBe(403);
+    expect((await invoke('post', '/:id/activities', { ...asOther, body: { type: 'call', note: 'telepon' } })).status).toBe(403);
+    const proof = await invoke('post', '/:id/payment-proof-upload', { ...asOther, body: { image: Buffer.from('x').toString('base64') } });
+    expect(proof.status).toBe(403);
+    expect(proof.error).toContain('CS Fitri');
+    expect(prospect(1).status).toBe('qualified');
+    expect(prospect(1).notes).toBeNull();
+  });
+
+  it('PIC, Admin, dan CS pada prospek tanpa PIC tetap boleh', async () => {
+    expect((await invoke('patch', '/:id/profile', { body: { notes: 'PIC' } })).status).toBe(200);
+    expect((await invoke('patch', '/:id/profile', { userId: 99, role: 'admin', body: { notes: 'Admin' } })).status).toBe(200);
+    prospect(1).userId = null;
+    expect((await invoke('patch', '/:id/profile', { userId: 8, body: { notes: 'Antrean' } })).status).toBe(200);
+  });
+
+  it('Finance hanya pada tugas Finance: follow-up boleh, profil dan keberatan tidak', async () => {
+    expect((await invoke('post', '/:id/activities', { userId: 20, role: 'finance', body: { type: 'call', note: 'Pelunasan' } })).status).toBe(201);
+    expect((await invoke('patch', '/:id/profile', { userId: 20, role: 'finance', body: { notes: 'x' } })).status).toBe(403);
+    expect((await invoke('post', '/:id/objection', { userId: 20, role: 'finance', body: { category: 'price', notes: 'x' } })).status).toBe(403);
+  });
+});
+
+describe('PIC: klaim, tugaskan, dan serahkan', () => {
+  it('klaim pertama menang, klaim kedua 409; duplikat nomor yang sama ikut ke PIC baru', async () => {
+    prospect(1).userId = null;
+    seedProspect(2, { userId: null, remoteJid: '6281234@lid', phone: '081234' });
+    const first = await invoke('post', '/:id/claim', { userId: 8 });
+    expect(first.status).toBe(200);
+    expect(prospect(1).userId).toBe(8);
+    expect(prospect(2).userId).toBe(8);
+    expect((await invoke('post', '/:id/claim', { userId: 7 })).status).toBe(409);
+    expect(prospect(1).userId).toBe(8);
+  });
+
+  it('prospek Deal atau Batal tidak bisa diklaim', async () => {
+    prospect(1).userId = null;
+    prospect(1).status = 'lose';
+    expect((await invoke('post', '/:id/claim', { userId: 8 })).status).toBe(409);
+    expect(prospect(1).userId).toBeNull();
+  });
+
+  it('PIC menyerahkan ke CS lain dengan alasan; CS bukan PIC ditolak', async () => {
+    expect((await invoke('post', '/:id/handover', { userId: 8, body: { targetUserId: 8, reason: 'ambil alih' } })).status).toBe(403);
+    const result = await invoke('post', '/:id/handover', { body: { targetUserId: 8, reason: 'Cuti seminggu' } });
+    expect(result.status).toBe(200);
+    expect(prospect(1).userId).toBe(8);
+    expect(mocks.state.logs.at(-1)).toMatchObject({ actionType: 'pic_handover' });
+  });
+
+  it('serahkan ke diri sendiri atau CS nonaktif ditolak', async () => {
+    expect((await invoke('post', '/:id/handover', { body: { targetUserId: 7, reason: 'sama' } })).status).toBe(422);
+    expect((await invoke('post', '/:id/handover', { body: { targetUserId: 9, reason: 'nonaktif' } })).status).toBe(400);
+    expect(prospect(1).userId).toBe(7);
+  });
+
+  it('Admin menugaskan PIC; CS tidak bisa menugaskan', async () => {
+    expect((await invoke('post', '/:id/assign', { body: { userId: 8 } })).status).toBe(403);
+    expect((await invoke('post', '/:id/assign', { userId: 99, role: 'admin', body: { userId: 8 } })).status).toBe(200);
+    expect(prospect(1).userId).toBe(8);
+  });
+});
+
+describe('PIC: ambil alih setelah 15 menit belum dibalas', () => {
+  const minutesAgo = (m: number) => Math.floor(Date.now() / 1000) - m * 60;
+  const chat = (id: number, isFromMe: boolean, at: number) =>
+    ({ id, prospectId: 1, brandId: 1, isFromMe, timestamp: at, isDeleted: false, messageType: 'conversation' });
+
+  it('CS lain mengambil alih bila pesan jamaah pertama yang belum dibalas sudah lebih dari 15 menit', async () => {
+    mocks.state.messages = [chat(1, true, minutesAgo(40)), chat(2, false, minutesAgo(20)), chat(3, false, minutesAgo(2))];
+    const result = await invoke('post', '/:id/takeover', { userId: 8 });
+    expect(result.status).toBe(200);
+    expect(prospect(1).userId).toBe(8);
+    expect(mocks.state.logs.at(-1)).toMatchObject({ actionType: 'pic_taken_over', title: 'PIC diambil alih oleh CS Rahma dari CS Fitri' });
+    expect(mocks.emit).toHaveBeenCalledWith(1, 'prospect:claimed', expect.objectContaining({ userId: 8, takenOverFrom: 7 }));
+  });
+
+  it('belum 15 menit, atau pesan terakhir dari CS: prospek tetap milik PIC', async () => {
+    mocks.state.messages = [chat(1, false, minutesAgo(10))];
+    const early = await invoke('post', '/:id/takeover', { userId: 8 });
+    expect(early.status).toBe(409);
+    expect(early.error).toContain('15 menit');
+    mocks.state.messages = [chat(1, false, minutesAgo(60)), chat(2, true, minutesAgo(30))];
+    expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(409);
+    expect(prospect(1).userId).toBe(7);
+  });
+
+  it('hanya CS aktif; bukan untuk PIC sendiri, prospek tanpa PIC, atau Deal/Batal', async () => {
+    mocks.state.messages = [chat(1, false, minutesAgo(60))];
+    expect((await invoke('post', '/:id/takeover', { userId: 99, role: 'admin' })).status).toBe(403);
+    expect((await invoke('post', '/:id/takeover', { userId: 9 })).status).toBe(403);
+    expect((await invoke('post', '/:id/takeover', { userId: 7 })).status).toBe(409);
+    prospect(1).status = 'deal';
+    expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(409);
+    prospect(1).status = 'qualified';
+    prospect(1).userId = null;
+    expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(409);
   });
 });

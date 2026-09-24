@@ -13,8 +13,9 @@ import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from './outbound.js';
 import { resolveFlyerFile } from '../../utils/safe-path.js';
-import { avatarNeedsRefresh } from '@csumroh/shared-types';
+import { avatarNeedsRefresh, firstUnansweredAt } from '@csumroh/shared-types';
 import { refreshProspectAvatar, refreshProspectAvatars } from './avatar.service.js';
+import { pickAutoAssignee } from '../prospects/pic.js';
 
 export const chatRouter = Router();
 chatRouter.use(authGuard);
@@ -221,6 +222,8 @@ export async function getLivechatConversationsForBrand(
       if (m.isFromMe) break;
       if (m.status !== 'read') unreadCount++;
     }
+    // Sejak kapan jamaah menunggu balasan (dasar aturan ambil alih PIC); null bila pesan terakhir dari CS.
+    const awaitingSince = isGroup ? null : firstUnansweredAt(sortedMessages);
 
     let displayName = canonical.name;
     if (canonical.remoteJid === '0@s.whatsapp.net') {
@@ -250,6 +253,7 @@ export async function getLivechatConversationsForBrand(
       isGroup,
       isOwn,
       unreadCount,
+      awaitingSince,
       messageCount: totalMessageCount,
       messages: latest ? [latest] : [],
       duplicateIds: group.map((item) => item.id),
@@ -617,6 +621,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   const gatewayResult = await gatewayResponse.json() as { data?: { messageId?: string; mediaUrl?: string } };
 
   const isNewClaim = !prospect.userId && req.user!.role === 'cs';
+  let claimed = false;
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.chatMessage.create({
       data: {
@@ -638,11 +643,15 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
       },
     });
 
+    // Bersyarat seperti kirim teks: tidak menimpa PIC yang diklaim CS lain di antara pengecekan dan pengiriman.
     if (isNewClaim) {
-      await tx.prospect.update({ where: { id: prospect.id }, data: { userId: req.user!.id } });
-      await tx.prospectLog.create({
-        data: { prospectId: prospect.id, userId: req.user!.id, actionType: 'pic_claimed', title: `PIC diklaim oleh ${req.user!.name}` },
-      });
+      const result = await tx.prospect.updateMany({ where: { id: prospect.id, userId: null }, data: { userId: req.user!.id } });
+      claimed = result.count > 0;
+      if (claimed) {
+        await tx.prospectLog.create({
+          data: { prospectId: prospect.id, userId: req.user!.id, actionType: 'pic_claimed', title: `PIC diklaim oleh ${req.user!.name}` },
+        });
+      }
     }
 
     // Auto-promote: new -> contact upon first outbound media
@@ -666,8 +675,8 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
     return created;
   });
 
-  if (isNewClaim) {
-    emitToBrand(brandId, 'prospect:claimed', { prospectId: prospect.id, userId: req.user!.id, userName: req.user!.name });
+  if (claimed) {
+    emitToBrand(brandId, 'prospect:claimed', { prospectIds: [prospect.id], userId: req.user!.id, userName: req.user!.name });
   }
   if (prospect.status === 'new') {
     emitToBrand(brandId, 'prospect:updated', { id: prospect.id, status: 'contact' });
@@ -988,16 +997,14 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     ? (validSenderName || 'Grup WhatsApp')
     : (validSenderName || (phone ? `+${phone}` : 'Kontak WhatsApp'));
 
+  let autoAssigned: { id: number; name: string } | null = null;
   if (!prospect) {
-    const users = (isFromMe || isGroup) ? [] : await prisma.user.findMany({
-      where: { brandId, role: 'cs', isActive: true },
-      select: { id: true, _count: { select: { prospects: { where: { status: { notIn: ['closed_won', 'closed_lost'] } } } } } }
-    });
-    const assigned = users.sort((a, b) => a._count.prospects - b._count.prospects)[0];
+    // Lead baru dari jamaah langsung punya PIC: CS aktif brand ini (termasuk CS multi-brand) dengan prospek terbuka paling sedikit.
+    autoAssigned = (isFromMe || isGroup) ? null : await pickAutoAssignee(brandId);
     prospect = await prisma.prospect.create({
       data: {
         brandId,
-        userId: isGroup ? null : (assigned?.id ?? null),
+        userId: autoAssigned?.id ?? null,
         name: isGroup ? 'Grup WhatsApp' : fallbackName,
         phone: isGroup ? null : (phone || null),
         remoteJid: isGroup ? remoteJid : phone ? `${phone}@s.whatsapp.net` : remoteJid,
@@ -1010,6 +1017,18 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       }
     });
     referralCaptured = Boolean(referralMarker);
+    if (autoAssigned) {
+      await prisma.prospectLog.create({
+        data: {
+          prospectId: prospect.id,
+          userId: null,
+          actionType: 'pic_assigned',
+          title: `PIC ditetapkan otomatis ke ${autoAssigned.name}`,
+          description: 'Lead baru dibagi ke CS dengan prospek terbuka paling sedikit',
+        },
+      });
+      emitToBrand(brandId, 'prospect:claimed', { prospectIds: [prospect.id], userId: autoAssigned.id, userName: autoAssigned.name, auto: true });
+    }
   } else {
     referralCaptured = await attachReferralMarker(prospect.id, referralMarker);
     const targetJid = isGroup ? remoteJid : phone ? `${phone}@s.whatsapp.net` : remoteJid;

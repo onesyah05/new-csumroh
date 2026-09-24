@@ -8,6 +8,7 @@ import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { FLYER_URL_PATTERN } from '../../utils/safe-path.js';
+import { releaseProspectsOf } from '../prospects/pic.js';
 
 // Tautan yang dirender sebagai <a href>: hanya http(s), mencegah skema javascript:/data:.
 const httpsUrlSchema = z.union([
@@ -542,6 +543,13 @@ catalogRouter.put('/users/:id/brands', requireRole('superadmin', 'admin'), async
     ...uniqueBrandIds.map((brandId) => prisma.userBrand.create({ data: { userId: id, brandId } })),
   ]);
 
+  // Prospek terbuka di brand yang aksesnya dicabut kembali ke antrean brand tersebut.
+  const releasedProspects = await releaseProspectsOf(id, {
+    actor: req.user!,
+    reason: `akses brand ${target.name} dicabut`,
+    keepBrandIds: uniqueBrandIds,
+  });
+
   const updated = await prisma.user.findUnique({
     where: { id },
     select: {
@@ -552,7 +560,7 @@ catalogRouter.put('/users/:id/brands', requireRole('superadmin', 'admin'), async
       userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
     },
   });
-  res.json({ success: true, data: updated });
+  res.json({ success: true, data: { ...updated, releasedProspects } });
 }));
 
 catalogRouter.patch('/users/:id/toggle', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
@@ -566,7 +574,11 @@ catalogRouter.patch('/users/:id/toggle', requireRole('superadmin', 'admin'), asy
     data: { isActive: !target.isActive },
     select: { id: true, isActive: true },
   });
-  res.json({ success: true, data });
+  // CS nonaktif tidak bisa membalas: prospek terbukanya kembali ke antrean agar bisa diklaim CS lain.
+  const releasedProspects = data.isActive ? 0 : await releaseProspectsOf(target.id, {
+    actor: req.user!, reason: `${target.name} dinonaktifkan`,
+  });
+  res.json({ success: true, data: { ...data, releasedProspects } });
 }));
 
 catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
@@ -643,6 +655,19 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
     await prisma.user.update({ where: { id }, data: updateData });
   }
 
+  // PIC hanya untuk CS dengan akses brand prospeknya: ganti role atau cabut brand melepas prospek terbuka yang terdampak.
+  let releasedProspects = 0;
+  const finalRole = updateData.role ?? target.role;
+  if (finalRole !== 'cs' && target.role === 'cs') {
+    releasedProspects = await releaseProspectsOf(id, { actor: req.user!, reason: `${target.name} tidak lagi menjadi CS` });
+  } else if (finalRole === 'cs' && newBrandIds !== undefined) {
+    releasedProspects = await releaseProspectsOf(id, {
+      actor: req.user!,
+      reason: `akses brand ${target.name} dicabut`,
+      keepBrandIds: newBrandIds,
+    });
+  }
+
   const updated = await prisma.user.findUnique({
     where: { id },
     select: {
@@ -657,7 +682,7 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
       userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
     },
   });
-  res.json({ success: true, data: updated });
+  res.json({ success: true, data: { ...updated, releasedProspects } });
 }));
 
 catalogRouter.delete('/users/:id', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
@@ -677,7 +702,13 @@ catalogRouter.delete('/users/:id', requireRole('superadmin', 'admin'), asyncHand
     throw new HttpError(403, 'Admin hanya dapat menghapus akun CS pada brand sendiri.');
   }
 
+  // Dicatat sebelum hapus: relasi SetNull akan mengosongkan PIC tanpa jejak di riwayat prospek.
+  const releasedProspects = await releaseProspectsOf(id, { actor: req.user!, reason: `akun ${target.name} dihapus` });
   await prisma.user.delete({ where: { id } });
-  res.json({ success: true, message: `Staff "${target.name}" berhasil dihapus.` });
+  res.json({
+    success: true,
+    data: { releasedProspects },
+    message: `Staff "${target.name}" berhasil dihapus.${releasedProspects ? ` ${releasedProspects} prospek terbuka kembali ke antrean "Belum ada PIC".` : ''}`,
+  });
 }));
 

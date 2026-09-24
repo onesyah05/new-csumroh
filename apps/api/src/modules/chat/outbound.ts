@@ -26,6 +26,8 @@ export type OutboundTextInput = {
   quotedSender?: string;
   /** Judul log aktivitas; default "Pesan dikirim oleh …" */
   logTitle?: string;
+  /** Dokumen resmi (penawaran/invoice) juga boleh dikirim Finance; chat biasa tidak. */
+  allowFinance?: boolean;
 };
 
 /**
@@ -42,7 +44,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
   if (!prospect || prospect.brandId !== brandId) throw new HttpError(404, 'Percakapan / Prospek tidak ditemukan.');
   if (!prospect.phone) throw new HttpError(422, 'Nomor WhatsApp prospek belum tersedia.');
 
-  const isAdmin = user.role === 'superadmin' || user.role === 'admin';
+  const isAdmin = user.role === 'superadmin' || user.role === 'admin' || (Boolean(input.allowFinance) && user.role === 'finance');
   const isPic = Boolean(prospect.userId && prospect.userId === user.id);
   const isUnassigned = !prospect.userId;
 
@@ -101,6 +103,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
   const gatewayResult = await gatewayResponse.json() as { data?: { messageId?: string } };
 
   const isNewClaim = !prospect.userId && user.role === 'cs';
+  let claimed = false;
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.chatMessage.create({
       data: {
@@ -123,8 +126,9 @@ export async function sendTextToProspect(input: OutboundTextInput) {
 
     // If prospect is not assigned yet and sender is CS, claim as PIC (conditional: no double claim)
     if (isNewClaim) {
-      const claimed = await tx.prospect.updateMany({ where: { id: prospect.id, userId: null }, data: { userId: user.id } });
-      if (claimed.count > 0) {
+      const result = await tx.prospect.updateMany({ where: { id: prospect.id, userId: null }, data: { userId: user.id } });
+      claimed = result.count > 0;
+      if (claimed) {
         await tx.prospectLog.create({
           data: { prospectId: prospect.id, userId: user.id, actionType: 'pic_claimed', title: `PIC diklaim oleh ${user.name}` },
         });
@@ -156,8 +160,9 @@ export async function sendTextToProspect(input: OutboundTextInput) {
     return created;
   });
 
-  if (isNewClaim) {
-    emitToBrand(brandId, 'prospect:claimed', { prospectId: prospect.id, userId: user.id, userName: user.name });
+  // Hanya bila klaim benar-benar menang (CS lain bisa mengklaim lebih dulu di antara pengecekan dan pengiriman).
+  if (claimed) {
+    emitToBrand(brandId, 'prospect:claimed', { prospectIds: [prospect.id], userId: user.id, userName: user.name });
   }
   if (prospect.status === 'new') {
     emitToBrand(brandId, 'prospect:updated', { id: prospect.id, status: 'contact' });

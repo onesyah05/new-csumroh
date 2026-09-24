@@ -7,6 +7,9 @@ import { Prisma, ProspectStatus as DbProspectStatus, PaymentStatus } from '@pris
 import {
   businessDateKey,
   canTransitionStatus,
+  firstUnansweredAt,
+  PIC_TAKEOVER_AFTER_MINUTES,
+  takeoverOpensAt,
   dateOnlyKey,
   isLostStatus,
   isWonStatus,
@@ -33,6 +36,7 @@ import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
 import { env } from '../../config/env.js';
+import { assertCanActOnProspect, isClosedStatus, isManager, linkedProspectIds, picCandidates } from './pic.js';
 
 export const prospectsRouter = Router();
 prospectsRouter.use(authGuard);
@@ -230,6 +234,7 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
   if (isCancellingDeal && !FINANCE_ROLES.includes(req.user!.role)) {
     throw new HttpError(403, 'Pembatalan booking Deal hanya dapat dilakukan Finance atau Admin.');
   }
+  await assertCanActOnProspect(req.user!, existing, { finance: isCancellingDeal });
 
   // Action-driven pipeline validation: enforce criteria for each stage transition
   if (status === 'contact') {
@@ -309,19 +314,32 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
 
 prospectsRouter.post('/:id/claim', asyncHandler(async (req, res) => {
   if (req.user!.role !== 'cs') throw new HttpError(403, 'Hanya CS yang dapat menjadi PIC.');
-  const id = Number(req.params.id);
-  const brandId = await resolveProspectBrand(req, id);
-  const result = await prisma.prospect.updateMany({
-    where: { id, brandId, userId: null },
-    data: { userId: req.user!.id },
-  });
-  if (result.count === 0) throw new HttpError(409, 'Prospek sudah diklaim CS lain atau tidak ditemukan.');
-  await prisma.prospectLog.create({
-    data: { prospectId: id, userId: req.user!.id, actionType: 'pic_claimed', title: `PIC diklaim oleh ${req.user!.name}` },
+  const { id, brandId, existing } = await findScopedProspect(req);
+  if (isClosedStatus(existing.status)) {
+    throw new HttpError(409, 'Prospek sudah Deal atau Batal; PIC hanya dapat ditetapkan oleh Admin.');
+  }
+  const linked = await linkedProspectIds(prisma, existing);
+  await prisma.$transaction(async (tx) => {
+    // Bersyarat: hanya klaim pertama yang menang; record duplikat nomor yang sama ikut ke PIC ini.
+    const result = await tx.prospect.updateMany({ where: { id, brandId, userId: null }, data: { userId: req.user!.id } });
+    if (result.count === 0) throw new HttpError(409, 'Prospek sudah diklaim CS lain.');
+    await tx.prospect.updateMany({ where: { id: { in: linked }, brandId }, data: { userId: req.user!.id } });
+    await tx.prospectLog.create({
+      data: { prospectId: id, userId: req.user!.id, actionType: 'pic_claimed', title: `PIC diklaim oleh ${req.user!.name}` },
+    });
   });
   const prospect = await prisma.prospect.findUniqueOrThrow({ where: { id }, include });
-  emitToBrand(brandId, 'prospect:claimed', prospect);
+  emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: req.user!.id, userName: req.user!.name });
   res.json({ success: true, data: prospect });
+}));
+
+// Daftar CS yang dapat menjadi PIC beserta jumlah prospek terbukanya (untuk Tugaskan PIC dan Serahkan).
+prospectsRouter.get('/:id/pic-candidates', asyncHandler(async (req, res) => {
+  const { brandId, existing } = await findScopedProspect(req);
+  if (!isManager(req.user!.role) && existing.userId !== req.user!.id) {
+    throw new HttpError(403, 'Hanya PIC saat ini atau Admin yang dapat melihat daftar CS pengganti.');
+  }
+  res.json({ success: true, data: await picCandidates(brandId) });
 }));
 
 /** Target PIC harus aktif, CS, dan punya akses ke brand prospek (brand utama atau UserBrand). */
@@ -341,7 +359,7 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
   if (req.user!.role !== 'admin' && req.user!.role !== 'superadmin') {
     throw new HttpError(403, 'Hanya Admin atau Superadmin yang dapat menugaskan PIC prospek.');
   }
-  const { id, brandId } = await findScopedProspect(req);
+  const { id, brandId, existing } = await findScopedProspect(req);
 
   const targetUserId = req.body.userId ? Number(req.body.userId) : null;
   let targetUser = null;
@@ -350,12 +368,10 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
     if (!targetUser) throw new HttpError(400, 'User target bukan CS aktif yang memiliki akses ke brand ini.');
   }
 
+  const linked = await linkedProspectIds(prisma, existing);
   const updated = await prisma.$transaction(async (tx) => {
-    const p = await tx.prospect.update({
-      where: { id },
-      data: { userId: targetUserId },
-      include,
-    });
+    await tx.prospect.updateMany({ where: { id: { in: linked }, brandId }, data: { userId: targetUserId } });
+    const p = await tx.prospect.findUniqueOrThrow({ where: { id }, include });
 
     await tx.prospectLog.create({
       data: {
@@ -371,7 +387,7 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
     return p;
   });
 
-  emitToBrand(brandId, 'prospect:claimed', updated);
+  emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: targetUserId, userName: targetUser?.name ?? null });
   emitToBrand(brandId, 'prospect:updated', updated);
   res.json({ success: true, data: updated });
 }));
@@ -391,18 +407,20 @@ prospectsRouter.post('/:id/handover', asyncHandler(async (req, res) => {
     reason: z.string().trim().min(3, 'Alasan handover minimal 3 karakter').max(500),
   }).parse(req.body);
 
+  if (targetUserId && targetUserId === existing.userId) throw new HttpError(422, 'Pilih CS lain sebagai PIC pengganti.');
   let targetUser = null;
   if (targetUserId) {
     targetUser = await findEligiblePic(targetUserId, brandId);
     if (!targetUser) throw new HttpError(400, 'User target bukan CS aktif yang memiliki akses ke brand ini.');
   }
 
+  const linked = await linkedProspectIds(prisma, existing);
   const updated = await prisma.$transaction(async (tx) => {
-    const p = await tx.prospect.update({
-      where: { id },
-      data: { userId: targetUserId ?? null },
-      include,
-    });
+    // Bersyarat pada PIC saat permintaan dibuat: handover tidak menimpa penugasan yang baru saja berubah.
+    const moved = await tx.prospect.updateMany({ where: { id, brandId, userId: existing.userId }, data: { userId: targetUserId ?? null } });
+    if (moved.count === 0) throw new HttpError(409, 'PIC prospek ini baru saja berubah. Muat ulang lalu coba lagi.');
+    await tx.prospect.updateMany({ where: { id: { in: linked }, brandId }, data: { userId: targetUserId ?? null } });
+    const p = await tx.prospect.findUniqueOrThrow({ where: { id }, include });
 
     await tx.prospectLog.create({
       data: {
@@ -418,13 +436,69 @@ prospectsRouter.post('/:id/handover', asyncHandler(async (req, res) => {
     return p;
   });
 
-  emitToBrand(brandId, 'prospect:claimed', updated);
+  emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: targetUserId ?? null, userName: targetUser?.name ?? null });
+  emitToBrand(brandId, 'prospect:updated', updated);
+  res.json({ success: true, data: updated });
+}));
+
+// Ambil alih: CS lain boleh mengambil prospek bila jamaah sudah menunggu balasan lebih dari 15 menit
+// (dihitung dari pesan jamaah pertama yang belum dibalas). PIC lama tercatat di riwayat.
+prospectsRouter.post('/:id/takeover', asyncHandler(async (req, res) => {
+  if (req.user!.role !== 'cs') throw new HttpError(403, 'Hanya CS yang dapat mengambil alih prospek. Admin memakai Tugaskan PIC.');
+  const { id, brandId, existing } = await findScopedProspect(req);
+  if (!existing.userId) throw new HttpError(409, 'Prospek ini belum punya PIC. Gunakan Klaim.');
+  if (existing.userId === req.user!.id) throw new HttpError(409, 'Anda sudah menjadi PIC prospek ini.');
+  if (isClosedStatus(existing.status)) throw new HttpError(409, 'Prospek sudah Deal atau Batal; PIC hanya dapat diubah oleh Admin.');
+  const me = await findEligiblePic(req.user!.id, brandId);
+  if (!me) throw new HttpError(403, 'Akun Anda tidak aktif atau tidak memiliki akses ke brand ini.');
+
+  const linked = await linkedProspectIds(prisma, existing);
+  const chatFilter = { prospectId: { in: linked }, isDeleted: false, messageType: { notIn: ['protocolMessage', 'reactionMessage'] } };
+  const recent = await prisma.chatMessage.findMany({
+    where: chatFilter,
+    select: { timestamp: true, isFromMe: true },
+    orderBy: { timestamp: 'desc' },
+    take: 200,
+  });
+  const since = firstUnansweredAt(recent);
+  const opensAt = takeoverOpensAt(since);
+  if (since === null || opensAt === null) {
+    throw new HttpError(409, 'Jamaah tidak sedang menunggu balasan, jadi prospek tetap milik PIC saat ini.');
+  }
+  if (Date.now() < opensAt) {
+    const waited = Math.max(0, Math.floor((Date.now() / 1000 - since) / 60));
+    throw new HttpError(409, `Jamaah baru menunggu ${waited} menit. Prospek bisa diambil alih setelah ${PIC_TAKEOVER_AFTER_MINUTES} menit belum dibalas.`);
+  }
+  const previous = await prisma.user.findUnique({ where: { id: existing.userId }, select: { name: true } });
+  const waitedMinutes = Math.floor((Date.now() / 1000 - since) / 60);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // PIC lama bisa saja membalas di antara pengecekan dan penyimpanan: batalkan bila sudah ada balasan.
+    const replied = await tx.chatMessage.findFirst({ where: { ...chatFilter, isFromMe: true, timestamp: { gte: since } }, select: { id: true } });
+    if (replied) throw new HttpError(409, 'PIC saat ini baru saja membalas jamaah. Prospek tetap miliknya.');
+    const moved = await tx.prospect.updateMany({ where: { id, brandId, userId: existing.userId }, data: { userId: me.id } });
+    if (moved.count === 0) throw new HttpError(409, 'PIC prospek ini baru saja berubah. Muat ulang lalu coba lagi.');
+    await tx.prospect.updateMany({ where: { id: { in: linked }, brandId }, data: { userId: me.id } });
+    await tx.prospectLog.create({
+      data: {
+        prospectId: id,
+        userId: me.id,
+        actionType: 'pic_taken_over',
+        title: `PIC diambil alih oleh ${me.name} dari ${previous?.name ?? 'PIC sebelumnya'}`,
+        description: `Jamaah belum dibalas ${waitedMinutes} menit (batas ${PIC_TAKEOVER_AFTER_MINUTES} menit)`,
+      },
+    });
+    return tx.prospect.findUniqueOrThrow({ where: { id }, include });
+  });
+
+  emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: me.id, userName: me.name, takenOverFrom: existing.userId });
   emitToBrand(brandId, 'prospect:updated', updated);
   res.json({ success: true, data: updated });
 }));
 
 prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
+  await assertCanActOnProspect(req.user!, existing);
 
   // Settlement (nilai booking, kas, status bayar) tidak pernah diubah lewat profil.
   // Payload yang membawa nilai sama persis dengan data tersimpan dianggap tidak mengubah apa pun.
@@ -494,6 +568,7 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
 // Trigger 3: Send Official Offer -> offer
 prospectsRouter.post('/:id/offer', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
+  await assertCanActOnProspect(req.user!, existing, { finance: true });
   const input = offerInputSchema.parse(req.body);
 
   if (isWonStatus(existing.status)) {
@@ -518,6 +593,7 @@ prospectsRouter.post('/:id/offer', asyncHandler(async (req, res) => {
       brandId,
       prospectId: id,
       text: input.messageText,
+      allowFinance: true,
       logTitle: `Naskah penawaran ${pkg.name} dikirim oleh ${req.user!.name}`,
     });
     sentMessageId = message.messageId;
@@ -563,6 +639,7 @@ prospectsRouter.post('/:id/offer', asyncHandler(async (req, res) => {
 // Trigger 4: Record Objection -> objection
 prospectsRouter.post('/:id/objection', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
+  await assertCanActOnProspect(req.user!, existing);
   if (isWonStatus(existing.status)) {
     throw new HttpError(409, 'Booking sudah Deal; keberatan tidak dapat menurunkan tahap. Catat sebagai catatan/aktivitas.');
   }
@@ -614,6 +691,8 @@ prospectsRouter.post('/:id/activities', asyncHandler(async (req, res) => {
   });
   const { type, note, nextFollowupDate } = activitySchema.parse(req.body);
   const { brandId, existing: prospect } = await findScopedProspect(req);
+  // Finance ikut mencatat follow-up pelunasan.
+  await assertCanActOnProspect(req.user!, prospect, { finance: true });
   const typeLabel: Record<string, string> = { call: 'Telepon', whatsapp: 'WhatsApp', meeting: 'Pertemuan', email: 'Email', note: 'Catatan' };
   // Booking Deal/Lose tetap bisa dijadwalkan follow-up (mis. pelunasan) tanpa mengubah tahapnya.
   const keepStage = isWonStatus(prospect.status) || isLostStatus(prospect.status);
@@ -646,6 +725,7 @@ prospectsRouter.post('/:id/activities', asyncHandler(async (req, res) => {
 // Trigger 6: Send DP Invoice -> closing
 prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
+  await assertCanActOnProspect(req.user!, existing, { finance: true });
   // Klien lama mengirim nominal tagihan sebagai `dpAmount`; diterima sebagai alias tagihan, bukan kas.
   const input = invoiceInputSchema.parse({ invoiceAmount: req.body?.dpAmount, ...req.body });
   const isWon = isWonStatus(existing.status);
@@ -672,6 +752,7 @@ prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
       brandId,
       prospectId: id,
       text: input.messageText,
+      allowFinance: true,
       logTitle: `Naskah invoice ${invoiceNum} dikirim oleh ${req.user!.name}`,
     });
     sentMessageId = message.messageId;
@@ -770,6 +851,7 @@ async function recordPaymentProof(
 // Legacy: tautkan ulang berkas privat yang sudah diunggah. Data URL / URL bebas ditolak (A06).
 prospectsRouter.post('/:id/payment-proof', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
+  await assertCanActOnProspect(req.user!, existing, { finance: true });
   const { paymentProofUrl, notes } = paymentProofSchema.parse(req.body);
   const filename = paymentProofUrl.slice(PAYMENT_PROOF_PATH_PREFIX.length);
   if (!filename.startsWith(`proof-${id}-`) || !fs.existsSync(path.join(PROOFS_DIR(), filename))) {
@@ -782,6 +864,7 @@ prospectsRouter.post('/:id/payment-proof', asyncHandler(async (req, res) => {
 // Upload payment proof binary safely without bloating MySQL TEXT column (A06 & A20)
 prospectsRouter.post('/:id/payment-proof-upload', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
+  await assertCanActOnProspect(req.user!, existing, { finance: true });
 
   const uploadSchema = z.object({
     image: z.string().min(1, 'Data berkas bukti transfer wajib disertakan.').max(8_000_000, 'Ukuran berkas bukti transfer melebihi batas 5MB.'),
@@ -807,6 +890,7 @@ prospectsRouter.post('/:id/payment-proof-upload', asyncHandler(async (req, res) 
 // privat, tanpa CS mengunduh lalu mengunggah ulang.
 prospectsRouter.post('/:id/payment-proof-from-message', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
+  await assertCanActOnProspect(req.user!, existing, { finance: true });
   const { messageId, notes } = z.object({
     messageId: z.coerce.number().int().positive(),
     notes: z.string().max(1000).optional(),
