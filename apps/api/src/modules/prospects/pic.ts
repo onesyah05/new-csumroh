@@ -3,6 +3,7 @@ import { prisma } from '../../db/prisma.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { HttpError } from '../../utils/http.js';
 import { normalizePhoneIdentifier } from '../chat/outbound.js';
+import { dispatch, notifyProspectsReleased } from '../notifications/notification.events.js';
 
 type Db = Prisma.TransactionClient | typeof prisma;
 type Actor = { id: number; role: string; name?: string };
@@ -107,5 +108,6 @@ export async function releaseProspectsOf(
   for (const brandId of new Set(rows.map((r) => r.brandId))) {
     emitToBrand(brandId, 'prospect:claimed', { prospectIds: rows.filter((r) => r.brandId === brandId).map((r) => r.id), userId: null });
   }
+  dispatch(() => notifyProspectsReleased(rows, options.actor, options.reason));
   return rows.length;
 }

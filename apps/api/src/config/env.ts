@@ -14,6 +14,10 @@ const schema = z.object({
   WA_GATEWAY_URL: z.string().url().default('http://localhost:4001'),
   META_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v20.0'),
   META_TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
+  // Notifikasi in-app dapat dimatikan per lingkungan tanpa mengubah kode.
+  NOTIFICATIONS_ENABLED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
+  // Job berkala (SLA balasan, ringkasan harian, retensi). Matikan di tes atau bila menjalankan beberapa proses tanpa kebutuhan.
+  SCHEDULER_ENABLED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
 });
 
 export const env = schema.parse(process.env);

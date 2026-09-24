@@ -15,7 +15,9 @@ import { chatRouter, internalRouter } from './modules/chat/chat.routes.js';
 import { capiRouter } from './modules/capi/capi.routes.js';
 import { whatsappRouter } from './modules/whatsapp/whatsapp.routes.js';
 import { contactsRouter } from './modules/contacts/contacts.routes.js';
+import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 import { createSocketServer } from './realtime/socket.js';
+import { startScheduler } from './jobs/scheduler.js';
 
 import path from 'node:path';
 
@@ -39,10 +41,14 @@ app.use('/api/v1/chat', chatRouter);
 app.use('/api/v1/meta', capiRouter);
 app.use('/api/v1/whatsapp', whatsappRouter);
 app.use('/api/v1/contacts', contactsRouter);
+app.use('/api/v1/notifications', notificationsRouter);
 app.use('/internal', internalRouter);
 app.use((_req, res) => res.status(404).json({ success: false, error: 'Endpoint tidak ditemukan.' }));
 app.use(errorHandler);
 
 const server = createServer(app);
 createSocketServer(server);
-server.listen(env.API_PORT, () => console.log(`CS Umroh API ready on :${env.API_PORT}`));
+server.listen(env.API_PORT, () => {
+  console.log(`CS Umroh API ready on :${env.API_PORT}`);
+  startScheduler();
+});

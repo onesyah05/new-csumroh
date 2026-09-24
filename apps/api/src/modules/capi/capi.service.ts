@@ -3,6 +3,7 @@ import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { buildCapiEventId, buildCapiPayload, validateEventValue, validateMetaConfig, type CapiEventName } from './capi.payload.js';
 import { decryptMetaToken } from './meta-token.js';
+import { dispatch, notifyCapiFailed } from '../notifications/notification.events.js';
 
 /** Waktu kejadian bisnis yang immutable, bukan updatedAt yang berubah setiap edit profil. */
 function businessEventTime(
@@ -24,6 +25,7 @@ async function saveFailure(input: { brandId: number; prospectId: number; eventNa
     update: { status: 'failed', responseBody: input.reason, payload: input.payload },
     create: { brandId: input.brandId, prospectId: input.prospectId, eventName: input.eventName, eventId: input.eventId, payload: input.payload, responseBody: input.reason, status: 'failed' },
   });
+  dispatch(() => notifyCapiFailed(input.brandId, `${input.eventName}: ${input.reason}`));
   return { status: 'failed', reason: input.reason, eventId: input.eventId } as DispatchResult;
 }
 
@@ -89,6 +91,7 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
   }
 
   await prisma.metaCapiLog.update({ where: { brandId_eventId: { brandId: prospect.brandId, eventId } }, data: { responseStatus, responseBody, status } });
+  if (status === 'failed') dispatch(() => notifyCapiFailed(prospect.brandId, `${eventName}: ${responseStatus ?? 'jaringan'} ${responseBody.slice(0, 120)}`));
   return { status: status === 'success' ? 'sent' : 'failed', ...(status === 'failed' ? { reason: responseBody } : {}), eventId };
 }
 

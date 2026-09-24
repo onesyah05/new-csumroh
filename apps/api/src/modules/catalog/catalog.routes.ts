@@ -708,7 +708,7 @@ catalogRouter.delete('/users/:id', requireRole('superadmin', 'admin'), asyncHand
   res.json({
     success: true,
     data: { releasedProspects },
-    message: `Staff "${target.name}" berhasil dihapus.${releasedProspects ? ` ${releasedProspects} prospek terbuka kembali ke antrean "Belum ada PIC".` : ''}`,
+    message: `Staf "${target.name}" berhasil dihapus.${releasedProspects ? ` ${releasedProspects} prospek terbuka kembali ke antrean "Belum ada PIC".` : ''}`,
   });
 }));
 

@@ -36,6 +36,15 @@ import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
 import { env } from '../../config/env.js';
+import {
+  dispatch,
+  notifyBookingCancelled,
+  notifyPaymentVerified,
+  notifyPicChange,
+  notifyProofRejected,
+  notifyProofSubmitted,
+  notifyQuotaAfterBooking,
+} from '../notifications/notification.events.js';
 import { assertCanActOnProspect, isClosedStatus, isManager, linkedProspectIds, picCandidates } from './pic.js';
 
 export const prospectsRouter = Router();
@@ -308,6 +317,12 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
   if (seatsReleased > 0 && existing.packageId) {
     emitToBrand(brandId, 'package:quota_updated', { packageId: existing.packageId });
   }
+  if (isCancellingDeal) {
+    dispatch(() => notifyBookingCancelled({
+      prospect: { id: existing.id, brandId, name: existing.name, userId: existing.userId },
+      actor: req.user!, cash: Number(existing.dpAmount) || 0, reason: lostReason,
+    }));
+  }
   if (existing.status !== status) queueCapiForStatus(prospect.id, status);
   res.json({ success: true, data: prospect });
 }));
@@ -330,6 +345,9 @@ prospectsRouter.post('/:id/claim', asyncHandler(async (req, res) => {
   });
   const prospect = await prisma.prospect.findUniqueOrThrow({ where: { id }, include });
   emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: req.user!.id, userName: req.user!.name });
+  dispatch(() => notifyPicChange({
+    prospect: { id, brandId, name: existing.name }, kind: 'claimed', fromUserId: null, toUserId: req.user!.id, actor: req.user!,
+  }));
   res.json({ success: true, data: prospect });
 }));
 
@@ -388,6 +406,10 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
   });
 
   emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: targetUserId, userName: targetUser?.name ?? null });
+  dispatch(() => notifyPicChange({
+    prospect: { id, brandId, name: existing.name }, kind: 'assigned', fromUserId: existing.userId, toUserId: targetUserId,
+    toName: targetUser?.name, actor: req.user!, reason: req.body.notes,
+  }));
   emitToBrand(brandId, 'prospect:updated', updated);
   res.json({ success: true, data: updated });
 }));
@@ -437,6 +459,10 @@ prospectsRouter.post('/:id/handover', asyncHandler(async (req, res) => {
   });
 
   emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: targetUserId ?? null, userName: targetUser?.name ?? null });
+  dispatch(() => notifyPicChange({
+    prospect: { id, brandId, name: existing.name }, kind: 'handover', fromUserId: existing.userId, toUserId: targetUserId ?? null,
+    toName: targetUser?.name, actor: req.user!, reason,
+  }));
   emitToBrand(brandId, 'prospect:updated', updated);
   res.json({ success: true, data: updated });
 }));
@@ -492,6 +518,10 @@ prospectsRouter.post('/:id/takeover', asyncHandler(async (req, res) => {
   });
 
   emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: me.id, userName: me.name, takenOverFrom: existing.userId });
+  dispatch(() => notifyPicChange({
+    prospect: { id, brandId, name: existing.name }, kind: 'taken_over', fromUserId: existing.userId, toUserId: me.id,
+    actor: { id: me.id, name: me.name }, waitedMinutes,
+  }));
   emitToBrand(brandId, 'prospect:updated', updated);
   res.json({ success: true, data: updated });
 }));
@@ -845,6 +875,7 @@ async function recordPaymentProof(
 
   emitToBrand(brandId, 'prospect:updated', updated);
   emitToBrand(brandId, 'finance:payment_proof_new', { prospectId: id, name });
+  dispatch(() => notifyProofSubmitted({ id, brandId, name }, req.user!, Boolean(source)));
   return updated;
 }
 
@@ -967,6 +998,44 @@ prospectsRouter.get('/payment-proof-file/:filename', asyncHandler(async (req, re
 // Setiap verifikasi = satu baris ledger. Kas kumulatif (dpAmount) = jumlah seluruh mutasi.
 // Kemenangan (Deal) & pemotongan seat hanya dilakukan oleh request yang benar-benar
 // mengubah status menjadi deal (conditional update), sehingga approval paralel aman.
+// Finance menolak bukti yang tidak valid (nominal/rekening tidak cocok, bukan bukti transfer, dsb.).
+// Bukti dilepas dari antrean agar CS meminta bukti yang benar; berkasnya tetap tersimpan untuk audit.
+prospectsRouter.post('/:id/reject-proof', asyncHandler(async (req, res) => {
+  if (!FINANCE_ROLES.includes(req.user!.role)) {
+    throw new HttpError(403, 'Hanya tim Finance atau Admin yang dapat menolak bukti transfer.');
+  }
+  const { id, brandId, existing } = await findScopedProspect(req);
+  const { reason } = z.object({
+    reason: z.string().trim().min(3, 'Alasan penolakan minimal 3 karakter').max(500),
+  }).parse(req.body);
+  if (!existing.paymentProofUrl) throw new HttpError(409, 'Tidak ada bukti transfer yang menunggu verifikasi.');
+  const used = await prisma.payment.findFirst({ where: { prospectId: id, proofUrl: existing.paymentProofUrl }, select: { id: true } });
+  if (used) throw new HttpError(409, 'Bukti ini sudah dipakai untuk pembayaran terverifikasi dan tidak dapat ditolak.');
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // Bersyarat pada bukti yang dilihat Finance: bukti baru yang masuk bersamaan tidak ikut terhapus.
+    const cleared = await tx.prospect.updateMany({
+      where: { id, brandId, paymentProofUrl: existing.paymentProofUrl },
+      data: { paymentProofUrl: null, paymentProofMessageId: null, paymentProofSubmittedAt: null },
+    });
+    if (cleared.count === 0) throw new HttpError(409, 'Bukti transfer baru saja berubah. Muat ulang antrean lalu coba lagi.');
+    await tx.prospectLog.create({
+      data: {
+        prospectId: id,
+        userId: req.user!.id,
+        actionType: 'payment_proof_rejected',
+        title: 'Bukti transfer ditolak Finance',
+        description: `Alasan: ${reason} · Berkas: ${existing.paymentProofUrl} · Oleh: ${req.user!.name}`,
+      },
+    });
+    return tx.prospect.findUniqueOrThrow({ where: { id }, include });
+  });
+
+  emitToBrand(brandId, 'prospect:updated', updated);
+  dispatch(() => notifyProofRejected({ prospect: { id, brandId, name: existing.name, userId: existing.userId }, actor: req.user!, reason }));
+  res.json({ success: true, data: updated });
+}));
+
 prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
   if (!FINANCE_ROLES.includes(req.user!.role)) {
     throw new HttpError(403, 'Hanya tim Finance atau Admin yang dapat memvalidasi pembayaran.');
@@ -1100,5 +1169,13 @@ prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
   }
   // Purchase hanya untuk kemenangan baru; pelunasan tidak menjadi transaksi revenue kedua.
   if (outcome.isNewWin) queueCapiForStatus(id, 'deal');
+  dispatch(async () => {
+    await notifyPaymentVerified({
+      prospect: { id, brandId, name: existing.name, userId: existing.userId },
+      actor: req.user!, amount, total: outcome.total, dealValue: Number(outcome.prospect.dealValue) || 0,
+      isNewWin: outcome.isNewWin, isPaidFull: outcome.isPaidFull,
+    });
+    if (outcome.seatsTaken > 0 && existing.packageId) await notifyQuotaAfterBooking(existing.packageId, req.user!);
+  });
   res.json({ success: true, data: outcome.prospect });
 }));

@@ -19,6 +19,14 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   conversations: vi.fn(),
   emit: vi.fn(),
+  notify: {
+    bookingCancelled: vi.fn(async () => 0),
+    paymentVerified: vi.fn(async () => 0),
+    picChange: vi.fn(async () => 0),
+    proofSubmitted: vi.fn(async () => 0),
+    proofRejected: vi.fn(async () => 0),
+    quota: vi.fn(async () => 0),
+  },
 }));
 
 function matches(row: Row, where: Row = {}): boolean {
@@ -125,6 +133,16 @@ vi.mock('../../middleware/auth.js', () => ({
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: mocks.emit }));
 vi.mock('../capi/capi.service.js', () => ({ queueCapiForStatus: mocks.capi }));
 vi.mock('../chat/chat.routes.js', () => ({ getLivechatConversationsForBrand: mocks.conversations }));
+vi.mock('../notifications/notification.events.js', () => ({
+  dispatch: (task: () => Promise<unknown>) => { void task(); },
+  notifyBookingCancelled: mocks.notify.bookingCancelled,
+  notifyPaymentVerified: mocks.notify.paymentVerified,
+  notifyPicChange: mocks.notify.picChange,
+  notifyProofSubmitted: mocks.notify.proofSubmitted,
+  notifyProofRejected: mocks.notify.proofRejected,
+  notifyQuotaAfterBooking: mocks.notify.quota,
+  notifyProspectsReleased: vi.fn(),
+}));
 vi.mock('../chat/outbound.js', async (importOriginal) => ({ ...(await importOriginal<any>()), sendTextToProspect: mocks.send }));
 
 import { prospectsRouter } from './prospects.routes.js';
@@ -498,5 +516,68 @@ describe('PIC: ambil alih setelah 15 menit belum dibalas', () => {
     prospect(1).status = 'qualified';
     prospect(1).userId = null;
     expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(409);
+  });
+});
+
+describe('Notifikasi dari tindakan prospek', () => {
+  const minutesAgo = (m: number) => Math.floor(Date.now() / 1000) - m * 60;
+
+  it('ambil alih memberi tahu PIC lama', async () => {
+    mocks.state.messages = [{ id: 1, prospectId: 1, brandId: 1, isFromMe: false, timestamp: minutesAgo(20), isDeleted: false, messageType: 'conversation' }];
+    expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(200);
+    expect(mocks.notify.picChange).toHaveBeenCalledWith(expect.objectContaining({ kind: 'taken_over', fromUserId: 7, toUserId: 8 }));
+  });
+
+  it('verifikasi pembayaran memberi tahu PIC dan memeriksa kuota bila seat terpakai', async () => {
+    const result = await invoke('post', '/:id/verify-payment', { role: 'finance', userId: 20, body: { approvedAmount: 10_000_000, bankName: 'BCA', referenceNo: 'N-1' } });
+    expect(result.status).toBe(200);
+    expect(mocks.notify.paymentVerified).toHaveBeenCalledWith(expect.objectContaining({ isNewWin: true, amount: 10_000_000 }));
+    expect(mocks.notify.quota).toHaveBeenCalledWith(1, expect.objectContaining({ id: 20 }));
+  });
+
+  it('pembatalan booking Deal menyertakan kas yang perlu direfund', async () => {
+    Object.assign(prospect(1), { status: 'deal', dpAmount: 5_000_000, seatsReserved: 2 });
+    const result = await invoke('patch', '/:id/status', { role: 'finance', userId: 20, body: { status: 'lose', lostReason: 'Batal berangkat' } });
+    expect(result.status).toBe(200);
+    expect(mocks.notify.bookingCancelled).toHaveBeenCalledWith(expect.objectContaining({ cash: 5_000_000, reason: 'Batal berangkat' }));
+  });
+
+  it('klaim menutup antrean tanpa PIC', async () => {
+    prospect(1).userId = null;
+    expect((await invoke('post', '/:id/claim', { userId: 8 })).status).toBe(200);
+    expect(mocks.notify.picChange).toHaveBeenCalledWith(expect.objectContaining({ kind: 'claimed', toUserId: 8 }));
+  });
+});
+
+describe('Tolak bukti transfer', () => {
+  const proofUrl = '/private/proofs/proof-1-abc.jpg';
+
+  it('hanya Finance/Admin; CS ditolak', async () => {
+    prospect(1).paymentProofUrl = proofUrl;
+    expect((await invoke('post', '/:id/reject-proof', { body: { reason: 'Nominal tidak cocok' } })).status).toBe(403);
+    expect(prospect(1).paymentProofUrl).toBe(proofUrl);
+  });
+
+  it('Finance menolak dengan alasan: bukti lepas dari antrean, tercatat, dan PIC diberi tahu', async () => {
+    Object.assign(prospect(1), { paymentProofUrl: proofUrl, paymentProofMessageId: 'WA-9', paymentProofSubmittedAt: new Date() });
+    const result = await invoke('post', '/:id/reject-proof', { role: 'finance', userId: 20, body: { reason: 'Rekening tujuan salah' } });
+    expect(result.status).toBe(200);
+    expect(prospect(1)).toMatchObject({ paymentProofUrl: null, paymentProofMessageId: null, paymentProofSubmittedAt: null });
+    expect(mocks.state.logs.at(-1)).toMatchObject({ actionType: 'payment_proof_rejected' });
+    expect(mocks.state.logs.at(-1).description).toContain('Rekening tujuan salah');
+    expect(mocks.notify.proofRejected).toHaveBeenCalledWith(expect.objectContaining({ reason: 'Rekening tujuan salah' }));
+  });
+
+  it('bukti yang sudah dipakai pembayaran terverifikasi, atau tanpa bukti, tidak bisa ditolak', async () => {
+    expect((await invoke('post', '/:id/reject-proof', { role: 'finance', userId: 20, body: { reason: 'Tidak ada' } })).status).toBe(409);
+    prospect(1).paymentProofUrl = proofUrl;
+    mocks.state.payments = [{ prospectId: 1, proofUrl }];
+    expect((await invoke('post', '/:id/reject-proof', { role: 'finance', userId: 20, body: { reason: 'Terlambat' } })).status).toBe(409);
+    expect(prospect(1).paymentProofUrl).toBe(proofUrl);
+  });
+
+  it('alasan wajib', async () => {
+    prospect(1).paymentProofUrl = proofUrl;
+    expect((await invoke('post', '/:id/reject-proof', { role: 'finance', userId: 20, body: { reason: '' } })).status).toBe(422);
   });
 });

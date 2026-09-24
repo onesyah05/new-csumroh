@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { effectiveNotificationPreference, notificationCatalog, notificationTypesForRole } from './notifications.js';
 import {
   PIC_TAKEOVER_AFTER_MINUTES,
   firstUnansweredAt,
@@ -103,5 +104,17 @@ describe('ambil alih PIC setelah 15 menit belum dibalas', () => {
     expect(isTakeoverOpen(since, (since + 15 * 60) * 1000)).toBe(true);
     expect(isTakeoverOpen(null)).toBe(false);
     expect(takeoverOpensAt(since)).toBe((since + PIC_TAKEOVER_AFTER_MINUTES * 60) * 1000);
+  });
+});
+
+describe('katalog notifikasi', () => {
+  it('tipe unik; preferensi default: toast untuk tindakan, tidak untuk info; mendesak terkunci', () => {
+    const types = notificationCatalog.map((entry) => entry.type);
+    expect(new Set(types).size).toBe(types.length);
+    expect(effectiveNotificationPreference('message.inbound')).toEqual({ toast: false, sound: false, locked: false });
+    expect(effectiveNotificationPreference('lead.assigned')).toEqual({ toast: true, sound: false, locked: false });
+    expect(effectiveNotificationPreference('pic.taken_over', { toast: false, sound: true })).toEqual({ toast: true, sound: true, locked: true });
+    expect(notificationTypesForRole('finance').map((e) => e.type)).toContain('payment.proof_new');
+    expect(notificationTypesForRole('cs').map((e) => e.type)).not.toContain('wa.disconnected');
   });
 });

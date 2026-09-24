@@ -25,6 +25,8 @@ export function createSocketServer(server: HttpServer) {
     if (user.brandId) brandIds.add(user.brandId);
     for (const ub of user.userBrands ?? []) if (ub.brand?.id) brandIds.add(ub.brand.id);
     for (const brandId of brandIds) socket.join(`brand:${brandId}`);
+    // Room pribadi untuk notifikasi in-app: semua tab/perangkat user yang sama.
+    socket.join(userRoom(user.id));
   });
   return io;
 }
@@ -32,4 +34,10 @@ export function createSocketServer(server: HttpServer) {
 export function emitToBrand(brandId: number, event: string, payload: unknown) {
   // Satu emit ke gabungan room: socket yang ada di keduanya tetap menerima event sekali.
   io?.to([`brand:${brandId}`, HOLDING_ROOM]).emit(event, payload);
+}
+
+const userRoom = (userId: number) => `user:${userId}`;
+
+export function emitToUser(userId: number, event: string, payload: unknown) {
+  io?.to(userRoom(userId)).emit(event, payload);
 }

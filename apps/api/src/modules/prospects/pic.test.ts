@@ -17,6 +17,7 @@ vi.mock('../../db/prisma.js', () => {
   client.$transaction = (cb: any) => cb(client);
   return { prisma: client };
 });
+vi.mock('../notifications/notification.events.js', () => ({ dispatch: vi.fn(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn() }));
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: mocks.emit }));
 
 import { canActOnProspect, pickAutoAssignee, releaseProspectsOf } from './pic.js';

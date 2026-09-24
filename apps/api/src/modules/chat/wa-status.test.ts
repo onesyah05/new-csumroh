@@ -6,6 +6,7 @@ vi.mock('../../middleware/auth.js', () => ({
   authGuard: (_req: any, _res: any, next: any) => next(),
   scopedBrandId: (_req: any, requested?: number) => requested ?? 1,
 }));
+vi.mock('../notifications/notification.events.js', () => ({ dispatch: vi.fn(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn() }));
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: vi.fn() }));
 
 import { chatRouter } from './chat.routes.js';

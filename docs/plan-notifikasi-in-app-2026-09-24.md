@@ -1,6 +1,6 @@
 # Rencana Implementasi Notifikasi In-App — 24 September 2026
 
-Status: **rencana**, belum ada kode. Keputusan yang perlu dikonfirmasi ada di bagian 11.
+Status: **F0–F3 selesai (24/09)**; F4 (Web Push, opsional) belum. Lihat bagian 12. Keputusan yang perlu dikonfirmasi ada di bagian 11.
 
 ## 1. Tujuan dan batasan
 
@@ -329,3 +329,105 @@ Total F0–F3: sekitar **12–14 hari kerja**.
 5. **Admin:** apakah Admin lingkup holding (semua brand) atau per brand? Ini menentukan penerima notifikasi Admin.
 6. **Alur tolak bukti transfer:** setuju dimasukkan ke F2? (Dibutuhkan agar CS tahu bukti ditolak.)
 7. **Web Push (F4):** perlu atau cukup in-app?
+
+## 12. Status implementasi
+
+### F0 — Fondasi (selesai)
+
+- **Model dan migrasi:** `notifications`, `notification_preferences`, `notification_dedupes`, di `prisma/migrations/20260924100000_in_app_notifications`. Migrasi **belum dijalankan** ke DB lokal.
+- **Layanan:**
+  - `modules/notifications/notify.service.ts`: `notify`, `resolveNotifications`, `safeLink`. Tidak pernah melempar error, dan ringkasan `activeKey` aman dari balapan (P2002).
+  - `recipients.ts`: `picOf`, `csOfBrand`, `financeUsers`, `adminsOf`.
+  - `notification.events.ts`: satu fungsi per kejadian, dijalankan lewat `dispatch()` di latar belakang.
+- **Socket:** room `user:<id>` dan `emitToUser`. Event `notification:new`, `notification:updated`, `notification:read`.
+- **REST `/api/v1/notifications`:** `GET /` (filter `all|unread|action`, cursor), `GET /unread-count`, `POST /:id/read`, `POST /read-all`. Semuanya dibatasi pada milik sendiri.
+- **Flag:** `NOTIFICATIONS_ENABLED` (default `true`).
+- **Web:**
+  - `NotificationBell` dipasang di rail sidebar (desktop, termasuk Inbox) dan di header (layar kecil); panel "Perlu tindakan" / "Semua".
+  - Toast global (`app/toast.tsx`): mendesak tetap tampil sampai ditutup, lainnya hilang dalam 6 detik, maksimal 3.
+  - Toast ditekan bila halaman tujuannya sedang dibuka.
+
+### F1 — Event transaksional (selesai)
+
+| Kejadian | Notifikasi |
+| --- | --- |
+| Lead baru dari WA (realtime saja, bukan impor riwayat) | `lead.assigned` ke PIC otomatis, atau `lead.unassigned` ke Admin bila tidak ada CS |
+| Pesan jamaah (bukan kiriman ulang gateway) | `message.inbound` ke PIC, diringkas per prospek |
+| Balasan dari aplikasi / HP / media | Menutup `message.inbound` dan `lead.assigned`; chat dibuka menutup `message.inbound` milik pembaca |
+| Klaim (tombol / balas pertama) | Menutup `lead.unassigned` |
+| Tugaskan / Serahkan / Ambil alih | `pic.assigned`, `pic.handover_received`, `pic.taken_over` (mendesak), `pic.released` |
+| Staf dinonaktifkan / dicabut aksesnya / dihapus | `staff.prospects_released` ke Admin lain |
+| Bukti transfer diajukan | `payment.proof_new` ke Finance, **per prospek** (bukan satu ringkasan global) agar bisa selesai sendiri saat prospek itu diverifikasi |
+| Verifikasi pembayaran | `payment.verified` ke PIC, `payment.overpaid` ke Finance dan Admin, `package.quota_low` / `quota_empty` |
+| Pembatalan booking Deal | `booking.cancelled` ke PIC, `refund.needed` ke Finance bila ada kas |
+| Perangkat WA | `wa.disconnected` setelah 2 menit tidak tersambung (timer di proses API) dan `wa.reconnected` |
+| Meta CAPI gagal | `capi.failed` ke Admin, diringkas per brand |
+
+**Tes:**
+- API: 90/90 (21 tes baru: layanan inti, events, routes, dan pemicu dari route prospek).
+- Web: 35/35 (4 tes baru: lonceng, panel, Escape/fokus, toast).
+
+**Catatan:**
+- Di layar kecil pada halaman Inbox (tanpa header), lonceng belum tampil. Toast tetap muncul.
+- Timer `wa.disconnected` hidup di memori proses: bila API restart dalam 2 menit itu, notifikasi terputus baru muncul saat status dilaporkan lagi. Scheduler di F2 akan menutup celah ini.
+
+### F2 — Terjadwal, SLA, dan penolakan bukti (selesai)
+
+**Scheduler** (`src/jobs/scheduler.ts`), dimulai dari `server.ts`:
+- berjalan tiap 60 detik;
+- satu putaran per menit lintas proses, lewat kunci `scheduler:tick:<menit>` di `notification_dedupes`, sehingga tidak perlu `GET_LOCK`;
+- job harian jalan sekali per tanggal WIB setelah jamnya tiba, dan tetap menyusul bila API baru dinyalakan;
+- dimatikan dengan `SCHEDULER_ENABLED=false`.
+
+| Job (`modules/notifications/jobs.ts`) | Jadwal | Notifikasi |
+| --- | --- | --- |
+| SLA balasan (dari daftar percakapan Inbox, duplikat nomor digabung) | tiap menit | `reply.sla_warning` ke PIC (10–15 menit), `reply.takeover_open` ke CS lain diringkas per brand (≥ 15 menit, ditutup otomatis saat tidak ada lagi), `reply.escalation` ke Admin (≥ 30 menit). Episode lebih dari 3 jam diabaikan agar chat lama tidak membanjiri notifikasi saat pertama aktif. |
+| Lead tanpa PIC | tiap menit | `lead.unassigned` ke Admin setelah 30 menit (hingga 24 jam) |
+| Perangkat WA | tiap menit | Cadangan timer: `wa.disconnected` bila lebih dari 2 menit, dengan dedupe per kejadian (waktu perubahan status) sehingga timer dan job tidak mengirim dua kali |
+| Gateway | tiap menit | `system.gateway_down` ke Superadmin setelah 2 kegagalan `/health` berturut-turut; `system.gateway_up` saat pulih |
+| Bukti menunggu | tiap menit | `payment.proof_stale` ke Finance (≥ 2 jam), lalu Finance dan Admin (≥ 1 hari) |
+| Ringkasan pagi | 08.00 WIB | `followup.due_today`, `followup.overdue` per CS; `invoice.overdue` per prospek ke PIC; `invoice.overdue_digest` per brand ke Finance; `brand.no_active_cs` |
+| Ringkasan sore | 17.00 WIB | `pic.taken_over_digest` per brand ke Admin (jumlah per PIC lama) |
+| Retensi | 03.00 WIB | Hapus notifikasi dibaca lebih dari 60 hari, belum dibaca lebih dari 180 hari, dedupe lebih dari 14 hari, kunci tick lebih dari 1 hari |
+
+**Tolak bukti transfer:**
+- Endpoint `POST /prospects/:id/reject-proof` (Finance/Admin, alasan wajib).
+  - Bersyarat pada bukti yang sedang dilihat.
+  - Menolak bukti yang sudah dipakai pembayaran terverifikasi.
+  - Berkas tetap disimpan untuk audit.
+  - Riwayat mencatat `payment_proof_rejected`.
+- Notifikasi `payment.rejected` (mendesak) ke PIC; notifikasi ini ditutup saat bukti baru diajukan.
+- Di halaman Verifikasi: tombol **Tolak** dengan dialog alasan dan pilihan alasan cepat.
+
+**Penutupan otomatis tambahan:**
+- balasan terkirim menutup `reply.sla_warning` dan `reply.escalation`;
+- verifikasi atau penolakan menutup `payment.proof_stale`.
+
+**Tes:**
+- API: 105/105 (+15: job SLA, bukti menunggu, ringkasan pagi, gateway, retensi, scheduler, tolak bukti).
+- Web: 36/36 (+1: dialog tolak bukti).
+
+**Catatan:**
+- Ambang dihitung 24 jam; jam operasional (pertanyaan 11.2) belum diterapkan. Semua ambang ada di `SLA` pada `jobs.ts`.
+- Job SLA membangun daftar percakapan per brand tiap menit. Bila data sudah besar, pertimbangkan query khusus atau interval yang lebih jarang.
+
+### F3 — Preferensi dan kerapian (selesai)
+
+- **Katalog notifikasi** (`packages/shared-types/src/notifications.ts`): 31 tipe dengan kelompok, label, deskripsi, prioritas default, dan role penerima. `NotificationType` di API sekarang diturunkan dari katalog ini.
+- **Preferensi** (`GET/PUT /api/v1/notifications/preferences`): toast dan suara per tipe, hanya untuk tipe yang relevan dengan role.
+  - Default: toast untuk Tindakan dan Mendesak, tidak untuk Info; suara mati.
+  - Notifikasi Mendesak selalu tampil sebagai toast.
+- **Server menghitung preferensi** setiap penerima dan mengirim `toast`/`sound` bersama event `notification:new`, sehingga semua tab dan perangkat user konsisten tanpa cache di klien.
+- **Halaman `/pengaturan/notifikasi`:**
+  - dikelompokkan per kategori, dengan toggle (`role="switch"`) yang langsung tersimpan;
+  - tombol **Uji suara**;
+  - bisa dibuka dari menu akun di sidebar dan ikon gerigi di panel lonceng.
+- **Suara:** nada pendek WebAudio (dua nada untuk Mendesak). Hanya tab yang terakhir difokuskan yang berbunyi.
+- **Judul tab:** menampilkan jumlah belum dibaca, mis. `(3) CRM AZHAN`.
+- **Lonceng di Inbox layar kecil:** di header daftar percakapan (`lg:hidden`).
+- **Toast global untuk umpan balik halaman:** `showFeedback(pesan, { error })` menggantikan toast lokal di Pipeline, Verifikasi, Staff, Brand, Detail Brand, Paket, Detail Paket, Meta CAPI, Admin, dan Inbox. Semua toast kini berada di satu tumpukan dan tidak saling menimpa. Error tetap tampil sampai ditutup.
+
+**Tes:**
+- shared-types: 14/14.
+- API: 108/108 (+3: preferensi pada event realtime, GET/PUT preferensi).
+- Web: 39/39 (+3: halaman preferensi, judul tab).

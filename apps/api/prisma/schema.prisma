@@ -100,6 +100,8 @@ model User {
   prospectLogs  ProspectLog[]
   refreshTokens RefreshToken[]
   userBrands    UserBrand[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   @@index([brandId, isActive])
   @@map("users")
@@ -344,4 +346,58 @@ model RefreshToken {
 
   @@index([userId, revokedAt])
   @@map("refresh_tokens")
+}
+
+enum NotificationPriority {
+  info
+  action
+  urgent
+}
+
+/// Notifikasi in-app per penerima. Satu baris AKTIF per (userId, activeKey) untuk meringkas kejadian
+/// sejenis; activeKey dikosongkan saat dibaca/selesai sehingga kejadian berikutnya membuat baris baru.
+model Notification {
+  id         Int                  @id @default(autoincrement())
+  userId     Int                  @map("user_id")
+  brandId    Int?                 @map("brand_id")
+  type       String               @db.VarChar(50)
+  priority   NotificationPriority @default(info)
+  title      String               @db.VarChar(200)
+  body       String?              @db.VarChar(500)
+  link       String?              @db.VarChar(300)
+  entityType String?              @map("entity_type") @db.VarChar(30)
+  entityId   Int?                 @map("entity_id")
+  actorId    Int?                 @map("actor_id")
+  count      Int                  @default(1)
+  activeKey  String?              @map("active_key") @db.VarChar(150)
+  readAt     DateTime?            @map("read_at")
+  resolvedAt DateTime?            @map("resolved_at")
+  createdAt  DateTime             @default(now()) @map("created_at")
+  updatedAt  DateTime             @updatedAt @map("updated_at")
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, activeKey])
+  @@index([userId, readAt, createdAt])
+  @@index([entityType, entityId, resolvedAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  userId Int     @map("user_id")
+  type   String  @db.VarChar(50)
+  toast  Boolean @default(true)
+  sound  Boolean @default(false)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, type])
+  @@map("notification_preferences")
+}
+
+/// Kunci sekali-kirim (notifikasi terjadwal dan pesan masuk yang dikirim ulang gateway).
+model NotificationDedupe {
+  key       String   @id @db.VarChar(191)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("notification_dedupes")
 }

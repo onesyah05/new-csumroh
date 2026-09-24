@@ -5,6 +5,7 @@ import { env } from '../../config/env.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { HttpError } from '../../utils/http.js';
 import { queueCapiForStatus } from '../capi/capi.service.js';
+import { dispatch, notifyPicChange, onWhatsappStatus, resolveReplyNotifications } from '../notifications/notification.events.js';
 
 export function normalizePhoneIdentifier(value?: string | null) {
   if (!value || value.endsWith('@lid') || value.endsWith('@g.us')) return '';
@@ -98,6 +99,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
       data: { status: 'disconnected', qrCode: null },
     });
     emitToBrand(brandId, 'whatsapp:status', { brandId, status: 'disconnected' });
+    void onWhatsappStatus(brandId, 'disconnected');
     throw new HttpError(502, 'WhatsApp belum terhubung atau gateway tidak tersedia.');
   }
   const gatewayResult = await gatewayResponse.json() as { data?: { messageId?: string } };
@@ -163,7 +165,12 @@ export async function sendTextToProspect(input: OutboundTextInput) {
   // Hanya bila klaim benar-benar menang (CS lain bisa mengklaim lebih dulu di antara pengecekan dan pengiriman).
   if (claimed) {
     emitToBrand(brandId, 'prospect:claimed', { prospectIds: [prospect.id], userId: user.id, userName: user.name });
+    dispatch(() => notifyPicChange({
+      prospect: { id: prospect.id, brandId, name: prospect.name }, kind: 'claimed', fromUserId: null, toUserId: user.id, actor: user,
+    }));
   }
+  // Jamaah sudah dibalas: pengingat "pesan baru"/"lead baru" untuk prospek ini selesai.
+  dispatch(() => resolveReplyNotifications(prospect.id));
   if (prospect.status === 'new') {
     emitToBrand(brandId, 'prospect:updated', { id: prospect.id, status: 'contact' });
     queueCapiForStatus(prospect.id, 'contact');

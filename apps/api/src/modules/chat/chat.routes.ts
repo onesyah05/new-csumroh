@@ -16,6 +16,16 @@ import { resolveFlyerFile } from '../../utils/safe-path.js';
 import { avatarNeedsRefresh, firstUnansweredAt } from '@csumroh/shared-types';
 import { refreshProspectAvatar, refreshProspectAvatars } from './avatar.service.js';
 import { pickAutoAssignee } from '../prospects/pic.js';
+import { resolveNotifications } from '../notifications/notify.service.js';
+import {
+  dispatch,
+  notifyInboundMessage,
+  notifyLeadAssigned,
+  notifyLeadUnassigned,
+  notifyPicChange,
+  onWhatsappStatus,
+  resolveReplyNotifications,
+} from '../notifications/notification.events.js';
 
 export const chatRouter = Router();
 chatRouter.use(authGuard);
@@ -396,6 +406,10 @@ chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
     select: { id: true },
   });
   const prospectIds = relatedProspects.map((p) => p.id);
+  // Chat dibuka pembaca: notifikasi "pesan baru" miliknya untuk percakapan ini selesai.
+  for (const prospectId of prospectIds) {
+    dispatch(() => resolveNotifications({ entity: { type: 'prospect', id: prospectId }, types: ['message.inbound'], userIds: [req.user!.id] }));
+  }
 
   const unreadMessages = await prisma.chatMessage.findMany({
     where: {
@@ -616,6 +630,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
       data: { status: 'disconnected', qrCode: null },
     });
     emitToBrand(brandId, 'whatsapp:status', { brandId, status: 'disconnected' });
+    void onWhatsappStatus(brandId, 'disconnected');
     throw new HttpError(502, 'Gagal mengirim media ke WhatsApp. Coba lagi.');
   }
   const gatewayResult = await gatewayResponse.json() as { data?: { messageId?: string; mediaUrl?: string } };
@@ -677,7 +692,11 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
 
   if (claimed) {
     emitToBrand(brandId, 'prospect:claimed', { prospectIds: [prospect.id], userId: req.user!.id, userName: req.user!.name });
+    dispatch(() => notifyPicChange({
+      prospect: { id: prospect.id, brandId, name: prospect.name }, kind: 'claimed', fromUserId: null, toUserId: req.user!.id, actor: req.user!,
+    }));
   }
+  dispatch(() => resolveReplyNotifications(prospect.id));
   if (prospect.status === 'new') {
     emitToBrand(brandId, 'prospect:updated', { id: prospect.id, status: 'contact' });
     queueCapiForStatus(prospect.id, 'contact');
@@ -857,6 +876,7 @@ chatRouter.post('/messages/:id/star', asyncHandler(async (req, res) => {
 chatRouter.get('/wa/status', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
   let data = await prisma.whatsappSession.findUnique({ where: { brandId } });
+  const statusBefore = data?.status;
 
   // Probe live gateway status
   try {
@@ -897,6 +917,8 @@ chatRouter.get('/wa/status', asyncHandler(async (req, res) => {
       });
     }
   }
+
+  if (data && data.status !== statusBefore) void onWhatsappStatus(brandId, data.status);
 
   // Dipakai Inbox semua role: QR pairing hanya untuk pengelola perangkat.
   const canPairDevice = req.user!.role === 'superadmin' || req.user!.role === 'admin';
@@ -998,6 +1020,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     : (validSenderName || (phone ? `+${phone}` : 'Kontak WhatsApp'));
 
   let autoAssigned: { id: number; name: string } | null = null;
+  const isNewProspect = !prospect;
   if (!prospect) {
     // Lead baru dari jamaah langsung punya PIC: CS aktif brand ini (termasuk CS multi-brand) dengan prospek terbuka paling sedikit.
     autoAssigned = (isFromMe || isGroup) ? null : await pickAutoAssignee(brandId);
@@ -1046,6 +1069,11 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     });
   }
 
+  // Gateway bisa mengirim ulang pesan yang sama: notifikasi pesan masuk hanya untuk pesan yang baru tersimpan.
+  const alreadyStored = options.realtime && !isFromMe
+    ? await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true } })
+    : null;
+
   const message = await prisma.chatMessage.upsert({
     where: { brandId_messageId: { brandId, messageId } },
     update: {
@@ -1079,6 +1107,18 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   });
 
   if (options.realtime) emitToBrand(brandId, 'message:new', message);
+  if (options.realtime) {
+    const ref = { id: prospect.id, brandId, name: prospect.name, userId: prospect.userId };
+    const assignee = autoAssigned;
+    if (isFromMe) {
+      // Dibalas langsung dari HP perangkat: pengingat balasan selesai seperti balasan dari aplikasi.
+      dispatch(() => resolveReplyNotifications(ref.id));
+    } else if (isNewProspect) {
+      dispatch(() => (assignee ? notifyLeadAssigned(ref, assignee.id) : notifyLeadUnassigned(ref)));
+    } else if (!alreadyStored) {
+      dispatch(() => notifyInboundMessage(ref, { text, messageType }));
+    }
+  }
   if (options.realtime && referralCaptured) void dispatchCapiEvent(prospect.id, 'Contact').catch((error) => console.error('CAPI Contact dispatch failed', error));
   return message;
 }
@@ -1260,5 +1300,6 @@ internalRouter.post('/wa/status', asyncHandler(async (req, res) => {
     create: { brandId: input.brandId, sessionName: `brand_${input.brandId}`, status: input.status, qrCode, phoneNumber: phoneNumber ?? null },
   });
   emitToBrand(input.brandId, input.status === 'qr_ready' ? 'wa:qr' : 'wa:status', session);
+  void onWhatsappStatus(input.brandId, input.status);
   res.json({ success: true, data: session });
 }));
