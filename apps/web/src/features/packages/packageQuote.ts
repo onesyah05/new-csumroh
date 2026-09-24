@@ -2,9 +2,9 @@ export function formatWaPackageSummary(pkg: any, brandName?: string): string {
   if (!pkg) return '';
   const departureStr = pkg.departureDate
     ? new Date(pkg.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-    : (pkg.departureInfo || 'Sesuai Jadwal Musim');
-  const durationStr = pkg.duration ? `${pkg.duration}` : '9 Hari';
-  const airlineStr = pkg.airline ? `${pkg.airline}${pkg.flightType === 'direct' ? ' (Direct Flight)' : ''}` : 'Penerbangan Reguler';
+    : (pkg.departureInfo || 'Jadwal belum dikonfirmasi');
+  const durationStr = pkg.duration ? `${pkg.duration}` : 'Durasi belum dikonfirmasi';
+  const airlineStr = pkg.airline ? `${pkg.airline}${pkg.flightType === 'direct' ? ' (Direct Flight)' : ''}` : 'Maskapai belum dikonfirmasi';
   const travelName = brandName || pkg.brand?.name || 'Layanan Resmi Umroh';
 
   const incItems = (pkg.facilitiesIncluded || '')
@@ -49,8 +49,8 @@ export function formatWaPackageItinerary(pkg: any, brandName?: string): string {
   if (!pkg) return '';
   const departureStr = pkg.departureDate
     ? new Date(pkg.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-    : (pkg.departureInfo || 'Sesuai Jadwal Musim');
-  const durationStr = pkg.duration ? `${pkg.duration}` : '9 Hari';
+    : (pkg.departureInfo || 'Jadwal belum dikonfirmasi');
+  const durationStr = pkg.duration ? `${pkg.duration}` : 'Durasi belum dikonfirmasi';
   const travelName = brandName || pkg.brand?.name || 'Layanan Resmi Umroh';
 
   const itinLines = (pkg.itinerary || '')
@@ -88,7 +88,7 @@ export function formatWaFlyerCaption(pkg: any, brandName?: string): string {
 
   let text = `*${cleanTitle.toUpperCase()}*\n`;
   text += `Travel: ${travelName}\n\n`;
-  text += `📅 Jadwal: ${pkg.departureDate ? new Date(pkg.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : (pkg.departureInfo || '-')} (${pkg.duration || '9 Hari'})\n`;
+  text += `📅 Jadwal: ${pkg.departureDate ? new Date(pkg.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : (pkg.departureInfo || '-')} (${pkg.duration || 'Durasi belum dikonfirmasi'})\n`;
   text += `✈️ Maskapai: ${pkg.airline || '-'}\n`;
   if (pkg.hotelMakkah) text += `🏨 Hotel Makkah: ${pkg.hotelMakkah}\n`;
   if (pkg.hotelMadinah) text += `🏨 Hotel Madinah: ${pkg.hotelMadinah}\n`;

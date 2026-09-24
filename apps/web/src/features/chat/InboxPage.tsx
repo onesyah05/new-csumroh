@@ -1,5 +1,7 @@
+import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { businessDateKey } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle,
@@ -41,6 +43,8 @@ import {
 } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
+import { useWhatsAppAvatars } from '../../lib/avatars';
+import { ProspectAvatar } from '../../components/ui/avatar';
 import { cn } from '../../lib/cn';
 import { ChatSidePanel, type ChatSidePanelTab } from './ChatSidePanel';
 import { canAccessBrand, useBrandScope } from '../../lib/scope';
@@ -49,17 +53,17 @@ import { useUiStore } from '../../app/store';
 import { queryClient } from '../../app/query';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
+import { getInboxQueue, inboxWorkFilters, type InboxWorkFilter } from './inboxFilters';
 
 const MAX_UPLOAD_MB = 30;
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 const QUICK_REACTIONS =['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
-
-type ChatFilter = 'all' | 'unread' | 'personal' | 'group';
 
 function formatDateSeparator(timestampSeconds: number): string {
   const date = new Date(timestampSeconds * 1000);
@@ -121,61 +125,36 @@ function normalizePhone(value?: string | null) {
   return digits;
 }
 
+/**
+ * Avatar kontak = foto profil WhatsApp (lihat ProspectAvatar: tanpa foto tampil siluet, bukan inisial).
+ * Grup dan akun resmi WhatsApp tetap memakai ikon.
+ */
 function ContactAvatar({
   photoUrl,
-  name,
   isGroup,
   isWhatsAppOfficial,
   size = 'md',
 }: {
   photoUrl?: string | null;
-  name?: string | null;
   isGroup?: boolean;
   isWhatsAppOfficial?: boolean;
   size?: 'sm' | 'md' | 'lg';
 }) {
-  const [hasError, setHasError] = useState(false);
+  const avatarSize = size === 'sm' ? 'sm' : size === 'lg' ? 'xl' : 'lg';
+  if (!isGroup && !isWhatsAppOfficial) return <ProspectAvatar photoUrl={photoUrl} size={avatarSize} />;
 
-  useEffect(() => {
-    setHasError(false);
-  }, [photoUrl]);
-
-  const sizeClass = size === 'sm' ? 'h-8 w-8 text-[11px]' : size === 'lg' ? 'h-12 w-12 text-xs' : 'h-10 w-10 text-xs';
+  const sizeClass = size === 'sm' ? 'h-8 w-8' : size === 'lg' ? 'h-12 w-12' : 'h-10 w-10';
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 22 : 18;
-
-  if (photoUrl && !hasError) {
-    return (
-      <div className={cn('relative shrink-0 rounded-full overflow-hidden bg-[#dfe5e7] shadow-2xs border border-black/5', sizeClass)}>
-        <img
-          src={photoUrl}
-          alt={name ?? 'Kontak'}
-          className="h-full w-full object-cover"
-          referrerPolicy="no-referrer"
-          onError={() => setHasError(true)}
-        />
-      </div>
-    );
-  }
-
   return (
     <span
+      aria-hidden="true"
       className={cn(
-        'grid shrink-0 place-items-center rounded-full font-bold shadow-2xs select-none',
+        'grid shrink-0 place-items-center rounded-full shadow-2xs select-none text-white',
         sizeClass,
-        isWhatsAppOfficial
-          ? 'bg-[#25d366] text-white'
-          : isGroup
-          ? 'bg-[#00a884] text-white'
-          : 'bg-[#dfe5e7] text-[#54656f]'
+        isWhatsAppOfficial ? 'bg-[#25d366]' : 'bg-[#00a884]'
       )}
     >
-      {isWhatsAppOfficial ? (
-        <MessageSquareText size={iconSize} />
-      ) : isGroup ? (
-        <Users size={iconSize} />
-      ) : (
-        String(name ?? '?').slice(0, 2).toUpperCase()
-      )}
+      {isWhatsAppOfficial ? <MessageSquareText size={iconSize} /> : <Users size={iconSize} />}
     </span>
   );
 }
@@ -205,8 +184,25 @@ export function InboxPage() {
     setSelectedId(null);
   }, [brandId]);
   const [search, setSearch] = useState('');
-  const [chatFilter, setChatFilter] = useState<ChatFilter>('all');
-  const [message, setMessage] = useState('');
+  const [chatFilter, setChatFilter] = useState<InboxWorkFilter>('all');
+  const [ownerFilter, setOwnerFilter] = useState('all');
+  const [today, setToday] = useState(() => businessDateKey());
+
+  useEffect(() => {
+    // Keep the due queue correct for CS sessions that stay open across midnight WIB.
+    const updateDay = () => setToday(businessDateKey());
+    const timer = window.setInterval(updateDay, 60_000);
+    window.addEventListener('focus', updateDay);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', updateDay);
+    };
+  }, []);
+
+  useEffect(() => {
+    setOwnerFilter('all');
+  }, [brandId]);
+  const [message, setMessage] = useConversationDraft(`${user?.id}:${brandId}:${selectedId}`);
   const [actionToast, setActionToast] = useState<string | null>(null);
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
@@ -221,7 +217,10 @@ export function InboxPage() {
   const [showPackagePickerModal, setShowPackagePickerModal] = useState(false);
   const [packageSearch, setPackageSearch] = useState('');
   const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
-  const [sidePanelTab, setSidePanelTab] = useState<ChatSidePanelTab | null>('profile');
+  // Di bawah 1280 px panel tampil sebagai dialog modal; jangan dibuka otomatis agar tidak menutupi chat dan navigasi.
+  const [sidePanelTab, setSidePanelTab] = useState<ChatSidePanelTab | null>(() =>
+    window.matchMedia?.('(max-width: 1279px)').matches ? null : 'profile'
+  );
   const [mediaPreview, setMediaPreview] = useState<{
     file: File;
     url: string;
@@ -265,6 +264,9 @@ export function InboxPage() {
     queryFn: () => api.get<any[]>(`/chat/conversations${query}`),
     enabled: !!brandId,
   });
+
+  // Foto profil WhatsApp untuk percakapan teratas (sisanya disalin API di latar belakang saat daftar dimuat).
+  const photoFor = useWhatsAppAvatars(conversations.data?.slice(0, 80), brandId);
 
   const packages = useQuery({
     queryKey: ['packages', brandId],
@@ -396,7 +398,8 @@ export function InboxPage() {
   }
 
   function handleInsertDirectText(text: string) {
-    setMessage(text);
+    setMessage(previous => appendDraft(previous, text));
+    showToast('Teks ditambahkan ke draft; belum dikirim.');
     requestAnimationFrame(() => {
       if (composerRef.current) {
         adjustTextareaHeight(composerRef.current);
@@ -429,9 +432,22 @@ export function InboxPage() {
 
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 180;
     if (isNewConversation || isNearBottom) {
-      container.scrollTop = container.scrollHeight;
+      // rAF ensures DOM is fully painted before we measure/scroll
+      requestAnimationFrame(() => {
+        if (timelineRef.current) {
+          timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
+        }
+      });
     }
   }, [messages.data, selectedId]);
+
+  // Instantly jump to bottom whenever the user switches conversation
+  // (before new messages arrive, so there's no flash at the top)
+  useEffect(() => {
+    if (timelineRef.current) {
+      timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
+    }
+  }, [selectedId]);
 
   function scrollToMessage(messageId?: string | null) {
     if (!messageId) return;
@@ -547,37 +563,27 @@ export function InboxPage() {
 
 
 
-  const filterCounts = useMemo(() => {
-    const list = conversations.data ?? [];
-    return {
-      all: list.length,
-      unread: list.filter((i) => (i.unreadCount ?? 0) > 0).length,
-      personal: list.filter((i) => !i.isGroup).length,
-      group: list.filter((i) => Boolean(i.isGroup)).length,
-    };
-  }, [conversations.data]);
+  const { conversations: filtered, counts: filterCounts } = useMemo(() =>
+    getInboxQueue(conversations.data ?? [], {
+      work: chatFilter, owner: ownerFilter, userId: user?.id, search, today,
+    }), [conversations.data, chatFilter, ownerFilter, user?.id, search, today]);
 
-  const filtered = useMemo(() => {
-    const list = conversations.data ?? [];
-    return list.filter((item) => {
-      const q = search.trim().toLowerCase();
-      if (q) {
-        const matchText = `${item.name ?? ''} ${item.phone ?? ''} ${item.messages?.[0]?.messageText ?? ''}`.toLowerCase();
-        if (!matchText.includes(q)) return false;
+  const ownerOptions = useMemo(() => {
+    const team = new Map<number, string>();
+    for (const item of conversations.data ?? []) {
+      if (item.userId && item.user?.name && !(user?.role === 'cs' && item.userId === user.id)) {
+        team.set(item.userId, item.user.name);
       }
+    }
+    return [
+      { value: 'all', label: 'Semua PIC' },
+      ...(user?.role === 'cs' ? [{ value: 'mine', label: 'PIC saya' }] : []),
+      { value: 'unassigned', label: 'Belum ada PIC' },
+      ...Array.from(team).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => ({ value: `user:${id}`, label: name })),
+    ];
+  }, [conversations.data, user?.id, user?.role]);
 
-      if (chatFilter === 'unread') {
-        return (item.unreadCount ?? 0) > 0;
-      }
-      if (chatFilter === 'personal') {
-        return !item.isGroup;
-      }
-      if (chatFilter === 'group') {
-        return Boolean(item.isGroup);
-      }
-      return true;
-    });
-  }, [conversations.data, search, chatFilter]);
+  const activeFilter = inboxWorkFilters.find((filter) => filter.id === chatFilter) ?? inboxWorkFilters[0];
 
   function handleSelectConversation(id: number) {
     setSelectedId(id);
@@ -642,9 +648,12 @@ export function InboxPage() {
     }
   }
 
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
   function showToast(msg: string) {
+    clearTimeout(toastTimer.current);
     setActionToast(msg);
-    setTimeout(() => setActionToast(null), 2500);
+    toastTimer.current = setTimeout(() => setActionToast(null), 5000);
   }
 
   function openSendFlyerModal(targetPkg?: any) {
@@ -667,7 +676,7 @@ export function InboxPage() {
 
     if (!pkg.flyerImage) {
       pendingFlyerPackageRef.current = pkg;
-      setMessage(captionText);
+      setMessage(previous => appendFlyerCaption(previous, captionText));
       requestAnimationFrame(() => {
         if (composerRef.current) {
           adjustTextareaHeight(composerRef.current);
@@ -710,7 +719,7 @@ export function InboxPage() {
         packageId: pkg.id,
       });
 
-      setMessage(captionText);
+      setMessage(previous => appendFlyerCaption(previous, captionText));
       requestAnimationFrame(() => {
         if (composerRef.current) {
           adjustTextareaHeight(composerRef.current);
@@ -721,7 +730,7 @@ export function InboxPage() {
     } catch (err: any) {
       console.warn('Fallback loading flyer:', err);
       pendingFlyerPackageRef.current = pkg;
-      setMessage(captionText);
+      setMessage(previous => appendFlyerCaption(previous, captionText));
       requestAnimationFrame(() => {
         if (composerRef.current) {
           adjustTextareaHeight(composerRef.current);
@@ -765,7 +774,7 @@ export function InboxPage() {
       });
 
       if (captionText) {
-        setMessage(captionText);
+        setMessage(previous => appendFlyerCaption(previous, captionText));
         requestAnimationFrame(() => {
           if (composerRef.current) adjustTextareaHeight(composerRef.current);
         });
@@ -893,7 +902,7 @@ export function InboxPage() {
     <div className="relative h-screen w-full overflow-hidden bg-white">
       {/* Toast Feedback */}
       {actionToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-zinc-950 px-4 py-2.5 text-xs font-semibold text-white shadow-lift animate-fade-up">
+        <div role="status" aria-live="polite" className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-zinc-950 px-4 py-2.5 text-xs font-semibold text-white shadow-lift animate-fade-up">
           <Check size={14} className="text-emerald-400" />
           <span>{actionToast}</span>
         </div>
@@ -1014,7 +1023,7 @@ export function InboxPage() {
             )}
           </div>
 
-          {isConnected && (
+          {(
             <div className="p-2 border-b border-[#e9edef] bg-white shrink-0 space-y-2">
               {/* WhatsApp Web Search Bar */}
               <div className="relative flex items-center">
@@ -1038,57 +1047,35 @@ export function InboxPage() {
                 )}
               </div>
 
-              {/* WhatsApp Web Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto thin-scrollbar pb-0.5 text-xs font-medium">
-                <button
-                  type="button"
-                  onClick={() => setChatFilter('all')}
-                  className={cn(
-                    'rounded-full px-3 py-1 transition-colors whitespace-nowrap',
-                    chatFilter === 'all'
-                      ? 'bg-[#d9fdd3] text-[#008069] font-bold'
-                      : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
-                  )}
-                >
-                  Semua ({filterCounts.all})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChatFilter('unread')}
-                  className={cn(
-                    'rounded-full px-3 py-1 transition-colors whitespace-nowrap',
-                    chatFilter === 'unread'
-                      ? 'bg-[#d9fdd3] text-[#008069] font-bold'
-                      : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
-                  )}
-                >
-                  Belum dibaca {filterCounts.unread > 0 ? `(${filterCounts.unread})` : ''}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChatFilter('personal')}
-                  className={cn(
-                    'rounded-full px-3 py-1 transition-colors whitespace-nowrap',
-                    chatFilter === 'personal'
-                      ? 'bg-[#d9fdd3] text-[#008069] font-bold'
-                      : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
-                  )}
-                >
-                  Pribadi ({filterCounts.personal})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChatFilter('group')}
-                  className={cn(
-                    'rounded-full px-3 py-1 transition-colors whitespace-nowrap',
-                    chatFilter === 'group'
-                      ? 'bg-[#d9fdd3] text-[#008069] font-bold'
-                      : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
-                  )}
-                >
-                  Grup ({filterCounts.group})
-                </button>
+              <Select
+                value={ownerFilter}
+                onValueChange={setOwnerFilter}
+                options={ownerOptions}
+                aria-label="Filter penanggung jawab percakapan"
+                size="sm"
+                className="w-full"
+              />
+              <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium" role="group" aria-label="Filter pekerjaan CS">
+                {inboxWorkFilters.map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    onClick={() => setChatFilter(filter.id)}
+                    aria-pressed={chatFilter === filter.id}
+                    title={filter.description}
+                    className={cn(
+                      'rounded-full px-2.5 py-1.5 transition-colors whitespace-nowrap',
+                      chatFilter === filter.id
+                        ? 'bg-[#d9fdd3] text-[#008069] font-bold'
+                        : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                    )}
+                  >
+                    {filter.label} ({filterCounts[filter.id]})
+                  </button>
+                ))}
               </div>
+              {chatFilter !== 'all' && <p className="px-1 text-[11px] leading-relaxed text-[#667781]">{activeFilter.description}</p>}
+
             </div>
           )}
 
@@ -1110,8 +1097,11 @@ export function InboxPage() {
             <div className="thin-scrollbar flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#8696a0]">
-                <p className="font-semibold text-[#54656f]">Tidak ada chat</p>
-                <p className="mt-1">Coba ubah kata kunci atau ganti filter di atas.</p>
+                <p className="font-semibold text-[#54656f]">
+                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : 'Tidak ada percakapan pada pilihan PIC ini'}
+                </p>
+                <p className="mt-1">Hasil mengikuti pencarian dan PIC yang dipilih.</p>
+                <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua percakapan</button>
               </div>
             ) : (
               filtered.map((item) => {
@@ -1134,8 +1124,7 @@ export function InboxPage() {
                     {/* Avatar */}
                     <ContactAvatar
                       size="lg"
-                      photoUrl={item.photoUrl}
-                      name={item.name}
+                      photoUrl={photoFor(item)}
                       isGroup={isGroup}
                       isWhatsAppOfficial={item.remoteJid === '0@s.whatsapp.net' || item.name === 'WhatsApp'}
                     />
@@ -1274,8 +1263,7 @@ export function InboxPage() {
                   {/* Avatar */}
                   <ContactAvatar
                     size="md"
-                    photoUrl={selected.photoUrl}
-                    name={selected.name}
+                    photoUrl={photoFor(selected)}
                     isGroup={selected.isGroup}
                     isWhatsAppOfficial={selected.remoteJid === '0@s.whatsapp.net' || selected.name === 'WhatsApp'}
                   />
@@ -2312,18 +2300,11 @@ export function InboxPage() {
           )}
         </section>
 
-        {/* Right Panel Backdrop (mobile/tablet) */}
-        {selected && sidePanelTab && isConnected && (
-          <div
-            className="inbox-copilot-backdrop"
-            onClick={() => setSidePanelTab(null)}
-            aria-label="Tutup Panel Kanan"
-          />
-        )}
-
         {/* Right Panel: Profil Prospek & Copilot Script */}
-        {selected && sidePanelTab && isConnected && (
+        {selected && sidePanelTab && (
           <ChatSidePanel
+            key={`${user?.id}:${brandId}:${selected.id}`}
+            connected={isConnected}
             isOpen={Boolean(sidePanelTab)}
             activeTab={sidePanelTab}
             onChangeTab={(tab) => setSidePanelTab(tab)}
@@ -2645,12 +2626,7 @@ export function InboxPage() {
         </div>
       )}
 
-      {/* Action Toast Notification */}
-      {actionToast && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-[#111b21] text-white px-4 py-2.5 text-xs font-medium shadow-xl border border-white/10 animate-in fade-in slide-in-from-bottom-2 pointer-events-none">
-          {actionToast}
-        </div>
-      )}
+
     </div>
   );
 }

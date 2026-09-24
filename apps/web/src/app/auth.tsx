@@ -1,3 +1,4 @@
+import { clearProfileDrafts } from '../features/chat/profileDraft';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { SessionUser } from '@csumroh/shared-types';
 import { api, onSessionChange, refreshSession, setAccessToken, type SessionPayload } from '../lib/api';
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(null);
       setUser(null);
       queryClient.clear();
+      clearProfileDrafts();
     },
   }), [user, loading]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

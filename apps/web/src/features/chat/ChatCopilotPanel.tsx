@@ -1,402 +1,73 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Clipboard,
-  CornerDownLeft,
-  Filter,
-  Layers,
-  MessageCircle,
-  MessageSquareQuote,
-  Search,
-  Send,
-  ShieldAlert,
-  Sparkles,
-  User,
-  Wand2,
-  X,
-} from 'lucide-react';
+import { Copy, CornerDownLeft, Search, Sparkles, X } from 'lucide-react';
 import { api } from '../../lib/api';
-import { cn } from '../../lib/cn';
 import { Button } from '../../components/ui/button';
+import { Select } from '../../components/ui/select';
+import { ModalFrame } from '../../components/ui/modal';
 
 const categories = [
-  { id: 'greeting', label: 'Sapaan', icon: Sparkles },
-  { id: 'identification', label: 'Kualifikasi', icon: User },
-  { id: 'offer', label: 'Paket & Solusi', icon: Layers },
-  { id: 'objection', label: 'Keberatan (TGJP)', icon: ShieldAlert },
-  { id: 'followups', label: 'Follow-up', icon: MessageSquareQuote },
-  { id: 'closing', label: 'Closing & DP', icon: Wand2 },
-] as const;
-
-const npgdTabs = [
-  { id: 'all', label: 'Semua NPGD' },
-  { id: 'need', label: 'Need' },
-  { id: 'pain', label: 'Pain' },
-  { id: 'gain', label: 'Gain' },
-  { id: 'dream', label: 'Dream' },
-  { id: 'qualification', label: 'Kualifikasi' },
-  { id: 'combination', label: 'Kombinasi' },
-  { id: 'transition', label: 'Transisi' },
+  { id: 'greeting', label: 'Sapaan' }, { id: 'identification', label: 'Kualifikasi' },
+  { id: 'offer', label: 'Paket & solusi' }, { id: 'objection', label: 'Keberatan' },
+  { id: 'followups', label: 'Follow-up' }, { id: 'closing', label: 'Pembayaran' },
 ];
-
-function getNpgdBadgeClass(code?: string) {
-  switch ((code || '').toLowerCase()) {
-    case 'need':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
-    case 'pain':
-      return 'bg-rose-50 text-rose-700 border-rose-200';
-    case 'gain':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    case 'dream':
-      return 'bg-purple-50 text-purple-700 border-purple-200';
-    case 'qualification':
-      return 'bg-amber-50 text-amber-700 border-amber-200';
-    case 'combination':
-      return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-    case 'transition':
-      return 'bg-teal-50 text-teal-700 border-teal-200';
-    default:
-      return 'bg-zinc-100 text-zinc-700 border-zinc-200';
-  }
+export function recommendedCategory(stage?: string) {
+  if (stage === 'objection') return 'objection';
+  if (['qualified'].includes(stage || '')) return 'offer';
+  if (['offer', 'offered', 'followup', 'nurture', 'lose', 'closed_lost'].includes(stage || '')) return 'followups';
+  if (['closing', 'deal', 'closed_won'].includes(stage || '')) return 'closing';
+  if (['contact', 'identifying'].includes(stage || '')) return 'identification';
+  return 'greeting';
 }
-
-function getStepBadgeClass(label: string) {
-  switch (label.toUpperCase()) {
-    case 'T':
-      return 'bg-amber-500 text-white';
-    case 'G':
-      return 'bg-sky-600 text-white';
-    case 'J':
-      return 'bg-emerald-600 text-white';
-    case 'P':
-      return 'bg-indigo-600 text-white';
-    default:
-      return 'bg-zinc-800 text-white';
-  }
+export function unresolvedScript(text: string) { return /\{\{[^}]+\}\}|\[konfirmasi[^\]]*\]/i.test(text); }
+interface Props {
+  prospectName?: string; packageId?: number | null; packageName?: string; brandId?: number;
+  brandName?: string; query?: string; stage?: string; objection?: string;
+  onInsertText(text: string): void; onShowToast(message: string): void;
 }
-
-interface ChatCopilotPanelProps {
-  prospectName?: string;
-  packageId?: number | null;
-  packageName?: string;
-  brandId?: number;
-  query?: string;
-  onInsertText: (text: string) => void;
-  onShowToast: (msg: string) => void;
-}
-
-export function ChatCopilotPanel({
-  prospectName = 'Bapak/Ibu',
-  packageId,
-  packageName,
-  brandId,
-  query = '',
-  onInsertText,
-  onShowToast,
-}: ChatCopilotPanelProps) {
-  const [activeCategory, setActiveCategory] = useState<string>('greeting');
-  const [npgdFilter, setNpgdFilter] = useState('all');
+export function ChatCopilotPanel({ prospectName = 'Bapak/Ibu', packageId, packageName, brandId, brandName, query = '', stage, objection, onInsertText, onShowToast }: Props) {
+  const [category, setCategory] = useState('recommended');
   const [search, setSearch] = useState('');
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
-
-  const separator = query ? '&' : '?';
-  const scriptsQuery = useQuery({
-    queryKey: ['scripts', brandId, prospectName, packageId],
-    queryFn: () =>
-      api.get<any>(
-        `/scripts${query}${separator}nama=${encodeURIComponent(prospectName)}${
-          packageId ? `&packageId=${packageId}` : ''
-        }`
-      ),
-    enabled: !!brandId,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const categoriesData = scriptsQuery.data?.categories ?? {};
-  const currentCategoryObj = categoriesData[activeCategory] ?? {};
-  const rawScripts = (currentCategoryObj.scripts ?? []) as any[];
-
-  // Filter scripts based on category, NPGD, and search query
-  const filteredScripts = useMemo(() => {
-    return rawScripts.filter((item) => {
-      if (activeCategory === 'identification' && npgdFilter !== 'all') {
-        const itemCat = String(item.category ?? '').toLowerCase();
-        const npgdCode = String(item.npgd?.code ?? '').toLowerCase();
-        if (itemCat !== npgdFilter && npgdCode !== npgdFilter) return false;
-      }
-      if (!search.trim()) return true;
-      const haystack = `${item.title} ${item.use_when} ${item.script} ${item.npgd?.label ?? ''} ${
-        item.steps?.map((s: any) => s.text).join(' ') ?? ''
-      }`.toLowerCase();
-      return haystack.includes(search.toLowerCase());
+  const [framework, setFramework] = useState('all');
+  const [review, setReview] = useState<{ title: string; text: string; step?: string } | null>(null);
+  const [copyError, setCopyError] = useState('');
+  const scripts = useQuery({ queryKey: ['scripts', brandId, prospectName, packageId], queryFn: () => api.get<any>(`/scripts${query}${query ? '&' : '?'}nama=${encodeURIComponent(prospectName)}${packageId ? `&packageId=${packageId}` : ''}`), enabled: !!brandId, staleTime: 60_000 });
+  const recommended = recommendedCategory(stage);
+  const items = useMemo(() => categories.flatMap(cat => (scripts.data?.categories?.[cat.id]?.scripts ?? []).map((item: any, index: number) => ({ ...item, categoryId: cat.id, categoryLabel: cat.label, key: `${cat.id}:${item.id || index}` }))), [scripts.data]);
+  const filtered = useMemo(() => {
+    const found = items.filter(item => {
+      if (search.trim()) return `${item.title} ${item.script} ${item.use_when} ${item.steps?.map((step: any) => step.text).join(' ') || ''}`.toLocaleLowerCase('id-ID').includes(search.trim().toLocaleLowerCase('id-ID'));
+      if (category !== 'all' && item.categoryId !== (category === 'recommended' ? recommended : category)) return false;
+      return category !== 'identification' || framework === 'all' || (item.npgd?.code || item.category) === framework;
     });
-  }, [rawScripts, activeCategory, npgdFilter, search]);
-
-  function toggleCardExpanded(key: string) {
-    setExpandedCards((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
-  function handleCopy(text: string, key: string) {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    onShowToast('Script disalin ke clipboard');
-    setTimeout(() => setCopiedKey(null), 2000);
-  }
-
-  function handleInsert(text: string) {
-    if (!text) return;
-    onInsertText(text);
-    onShowToast('Script disisipkan ke percakapan');
-  }
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden bg-white text-zinc-800">
-      {/* Top Search & Filter Bar */}
-      <div className="shrink-0 border-b border-zinc-200 bg-[#f0f2f5] p-3 space-y-2.5">
-        {/* Search Bar */}
-        <div className="relative flex items-center">
-          <Search size={14} className="absolute left-3 text-zinc-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari skrip kata kunci, keberatan, sapaan..."
-            className="h-8.5 w-full rounded-xl border border-zinc-200 bg-white pl-8.5 pr-8 text-xs text-zinc-800 placeholder:text-zinc-400 outline-none focus:border-[#00a884] focus:ring-1 focus:ring-[#00a884]"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="absolute right-2.5 text-zinc-400 hover:text-zinc-700"
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
-
-        {/* Dynamic Personalization Indicator */}
-        <div className="flex items-center gap-1.5 overflow-x-auto thin-scrollbar text-[11px] text-zinc-500">
-          <span className="font-semibold text-zinc-400 shrink-0">Variabel:</span>
-          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-800 border border-emerald-200/60 shrink-0">
-            👤 {prospectName}
-          </span>
-          {packageName && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 font-semibold text-blue-800 border border-blue-200/60 shrink-0 truncate max-w-[150px]">
-              🕋 {packageName}
-            </span>
-          )}
-        </div>
-
-        {/* Categories Tab Selector */}
-        <div className="flex items-center gap-1 overflow-x-auto thin-scrollbar pb-0.5">
-          {categories.map((cat) => {
-            const count = (categoriesData[cat.id]?.scripts ?? []).length;
-            const isActive = activeCategory === cat.id;
-            const Icon = cat.icon;
-
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => {
-                  setActiveCategory(cat.id);
-                  setNpgdFilter('all');
-                }}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap transition cursor-pointer',
-                  isActive
-                    ? 'bg-[#00a884] text-white shadow-2xs'
-                    : 'bg-white text-zinc-600 border border-zinc-200/80 hover:bg-zinc-100'
-                )}
-              >
-                <Icon size={12} className={isActive ? 'text-white' : 'text-zinc-500'} />
-                <span>{cat.label}</span>
-                {count > 0 && (
-                  <span
-                    className={cn(
-                      'ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-bold',
-                      isActive ? 'bg-white/20 text-white' : 'bg-zinc-100 text-zinc-500'
-                    )}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Sub-filter for NPGD (Identification only) */}
-        {activeCategory === 'identification' && (
-          <div className="flex items-center gap-1 overflow-x-auto thin-scrollbar pt-1">
-            <span className="text-[10px] font-bold uppercase text-zinc-400 shrink-0 mr-1">
-              Framework:
-            </span>
-            {npgdTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setNpgdFilter(tab.id)}
-                className={cn(
-                  'rounded-lg px-2 py-0.5 text-[11px] font-bold whitespace-nowrap transition',
-                  npgdFilter === tab.id
-                    ? 'bg-zinc-900 text-white'
-                    : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100'
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Script List Body */}
-      <div className="thin-scrollbar flex-1 overflow-y-auto px-3.5 py-3 space-y-3">
-        {scriptsQuery.isLoading ? (
-          <div className="flex flex-col items-center justify-center p-8 text-center text-xs text-zinc-400">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#00a884] border-t-transparent mb-3" />
-            <span>Menyiapkan skrip copilot cerdas...</span>
-          </div>
-        ) : filteredScripts.length === 0 ? (
-          <div className="py-12 text-center text-xs text-zinc-400">
-            <MessageSquareQuote size={28} className="mx-auto text-zinc-300 mb-2" />
-            <p className="font-bold text-zinc-600">Tidak ada skrip yang cocok</p>
-            <p className="mt-1 text-zinc-400">
-              {search ? 'Coba ubah kata kunci pencarian' : 'Belum ada data skrip untuk kategori ini'}
-            </p>
-          </div>
-        ) : (
-          filteredScripts.map((item, idx) => {
-            const cardKey = `${activeCategory}-${idx}-${item.title}`;
-            const isCopied = copiedKey === cardKey;
-            const hasSteps = Array.isArray(item.steps) && item.steps.length > 0;
-            const isExpanded = expandedCards.has(cardKey);
-
-            return (
-              <div
-                key={cardKey}
-                className="group rounded-2xl border border-zinc-200 bg-white p-3 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition duration-150 space-y-2.5"
-              >
-                {/* Header: Title & Badges */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <h5 className="font-bold text-xs text-zinc-900 leading-tight">
-                      {item.title}
-                    </h5>
-                    {item.use_when && (
-                      <p className="mt-1 text-[11px] text-zinc-500 leading-relaxed">
-                        <span className="font-semibold text-zinc-600">Saat:</span> {item.use_when}
-                      </p>
-                    )}
-                  </div>
-
-                  {item.npgd && (
-                    <span
-                      className={cn(
-                        'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-extrabold',
-                        getNpgdBadgeClass(item.npgd.code)
-                      )}
-                    >
-                      {item.npgd.label}
-                    </span>
-                  )}
-                </div>
-
-                {/* Objection TGJP Steps Preview (if available) */}
-                {hasSteps && (
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center gap-1">
-                      {item.steps.map((step: any, sIdx: number) => (
-                        <span
-                          key={sIdx}
-                          className={cn(
-                            'grid h-5 w-5 place-items-center rounded-md text-[10px] font-black shadow-2xs',
-                            getStepBadgeClass(step.label)
-                          )}
-                          title={`${step.name}: ${step.text}`}
-                        >
-                          {step.label}
-                        </span>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => toggleCardExpanded(cardKey)}
-                        className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-zinc-400 hover:text-zinc-700"
-                      >
-                        <span>{isExpanded ? 'Sederhanakan' : 'Lihat 4 Langkah'}</span>
-                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                      </button>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="rounded-xl bg-zinc-50 p-2 space-y-2 text-xs border border-zinc-200/80 animate-fade-in">
-                        {item.steps.map((step: any, sIdx: number) => (
-                          <div key={sIdx} className="space-y-0.5">
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className={cn(
-                                  'grid h-4 w-4 place-items-center rounded text-[9px] font-bold',
-                                  getStepBadgeClass(step.label)
-                                )}
-                              >
-                                {step.label}
-                              </span>
-                              <strong className="text-[11px] text-zinc-800">{step.name}</strong>
-                            </div>
-                            <p className="text-[11px] text-zinc-600 pl-5.5 leading-relaxed whitespace-pre-line">
-                              {step.text}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Script Message Bubble Preview */}
-                <div className="rounded-xl border border-emerald-200/60 bg-[#d9fdd3]/25 p-2.5 text-xs text-zinc-800 leading-relaxed whitespace-pre-line select-text font-sans">
-                  {item.script}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-zinc-100">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleCopy(item.script, cardKey)}
-                    className="h-7 px-2.5 text-[11px] font-semibold text-zinc-600 hover:text-zinc-900 gap-1"
-                    title="Salin ke clipboard"
-                  >
-                    {isCopied ? <Check size={12} className="text-[#00a884]" /> : <Clipboard size={12} />}
-                    <span>{isCopied ? 'Tersalin' : 'Salin'}</span>
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    onClick={() => handleInsert(item.script)}
-                    className="h-7 px-3 text-[11px] font-bold bg-[#00a884] hover:bg-[#008f6f] text-white shadow-2xs gap-1.5"
-                    title="Sisipkan langsung ke kotak obrolan live chat"
-                  >
-                    <CornerDownLeft size={12} />
-                    <span>Sisipkan ke Chat</span>
-                  </Button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+    return category === 'recommended' && !search.trim() ? found.slice(0, 3) : found;
+  }, [items, category, framework, search, recommended]);
+  async function copy(text: string) { try { await navigator.clipboard.writeText(text); setCopyError(''); onShowToast('Skrip tersalin. Belum dikirim ke jamaah.'); } catch { setCopyError('Clipboard tidak tersedia. Pilih teks lalu salin secara manual.'); } }
+  const contextCategory = categories.find(item => item.id === recommended)?.label;
+  return <div className="sales-panel flex h-full min-h-0 flex-col bg-white">
+    <header className="shrink-0 space-y-3 border-b border-zinc-200 p-4">
+      <div><h2 className="text-sm font-semibold">Bantuan percakapan</h2><p className="mt-1 break-words text-xs text-zinc-600">{prospectName} · {brandName || 'Brand aktif'}</p>{packageName && <p className="mt-1 line-clamp-2 text-xs text-zinc-600" title={packageName}>{packageName}</p>}</div>
+      <label className="relative block"><span className="sr-only">Cari di semua skrip</span><Search size={15} className="absolute left-3 top-3 text-zinc-500" /><input className="field w-full pl-9 pr-10" value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari di semua skrip…" />{search && <Button size="icon" variant="ghost" className="absolute right-0 top-0" aria-label="Hapus pencarian" onClick={() => setSearch('')}><X size={14} /></Button>}</label>
+      <Select aria-label="Kategori skrip" className="w-full" value={category} onValueChange={value => { setCategory(value); setFramework('all'); }} options={[{ value: 'recommended', label: `Disarankan · ${contextCategory}` }, { value: 'all', label: 'Semua skrip' }, ...categories.map(item => ({ value: item.id, label: item.label }))]} />
+      {category === 'identification' && !search && <Select aria-label="Jenis pertanyaan kualifikasi" className="w-full" value={framework} onValueChange={setFramework} options={[{ value: 'all', label: 'Semua pertanyaan' }, { value: 'need', label: 'Kebutuhan' }, { value: 'pain', label: 'Hambatan' }, { value: 'gain', label: 'Manfaat yang dicari' }, { value: 'dream', label: 'Harapan' }, { value: 'qualification', label: 'Informasi praktis' }]} />}
+    </header>
+    <div className="thin-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
+      {category === 'recommended' && !search && <div className="space-y-1 text-xs leading-relaxed text-zinc-600"><p className="flex items-center gap-1 font-semibold text-zinc-800"><Sparkles size={14} />Pilihan berdasarkan tahap prospek</p><p>Template pendamping CS. Sesuaikan dengan pertanyaan jamaah; percakapan tidak dianalisis otomatis.</p>{objection && <p>Keberatan tercatat: {objection}</p>}</div>}
+      {scripts.isLoading ? <p role="status" className="text-sm text-zinc-600">Memuat pustaka skrip…</p> : scripts.isError ? <div role="alert" className="space-y-2 text-sm"><p>Skrip tidak dapat dimuat. Silakan coba lagi.</p><Button variant="secondary" onClick={() => void scripts.refetch()}>Coba lagi</Button></div> : <>
+        <p role="status" className="text-xs text-zinc-600">{filtered.length} skrip{search ? ' dari semua kategori' : ''}</p>
+        {filtered.length === 0 && <div className="space-y-2 text-sm text-zinc-600"><p>Tidak ada skrip yang sesuai.</p><Button variant="secondary" onClick={() => { setSearch(''); setCategory('all'); setFramework('all'); }}>Lihat semua skrip</Button></div>}
+        {filtered.map(item => <article key={item.key} className="space-y-3 border-b border-zinc-200 pb-4">
+          <div><p className="mb-1 text-xs text-zinc-600">{item.categoryLabel}</p><h3 className="text-sm font-semibold leading-snug">{item.title}</h3>{item.use_when && <p className="mt-1 text-xs leading-relaxed text-zinc-600">{item.use_when}</p>}</div>
+          {item.steps?.length ? <div className="space-y-3"><p className="text-xs text-zinc-600">Gunakan satu langkah, lalu tunggu respons jamaah.</p>{item.steps.map((step: any, index: number) => <div key={`${item.key}:${index}`} className="space-y-2 border-l-2 border-zinc-200 pl-3"><h4 className="text-xs font-semibold">{index + 1}. {step.name}</h4><p className="whitespace-pre-line text-sm leading-relaxed">{step.text}</p><Button size="sm" variant="secondary" onClick={() => { setCopyError(''); setReview({ title: item.title, text: step.text, step: step.name }); }}>Tinjau langkah {step.name.toLowerCase()}</Button></div>)}</div> : <><p className="whitespace-pre-line text-sm leading-relaxed text-zinc-700">{item.script}</p><Button variant="secondary" className="w-full" onClick={() => { setCopyError(''); setReview({ title: item.title, text: item.script || '' }); }}>Tinjau & gunakan</Button></>}
+        </article>)}
+        {category === 'recommended' && !search && <Button variant="ghost" className="w-full" onClick={() => setCategory(recommended)}>Lihat semua skrip {contextCategory?.toLowerCase()}</Button>}
+      </>}
     </div>
-  );
+    <footer className="shrink-0 border-t border-zinc-200 px-4 py-3 text-xs text-zinc-600">Skrip ditambahkan ke draft. Pengiriman tetap melalui tombol WhatsApp.</footer>
+    {review && <ModalFrame open onClose={() => setReview(null)} title={`Tinjau skrip: ${review.title}`}><div className="flex max-h-[85dvh] w-full max-w-lg flex-col rounded-xl border border-zinc-200 bg-white shadow-xl">
+      <header className="flex items-start justify-between gap-3 border-b border-zinc-200 p-4"><div><h3 className="text-sm font-semibold">{review.title}</h3><p className="mt-1 text-xs text-zinc-600">{prospectName}{review.step ? ` · Langkah ${review.step}` : ''}</p></div><Button variant="ghost" size="icon" aria-label="Tutup tinjauan skrip" onClick={() => setReview(null)}><X size={16} /></Button></header>
+      <div className="space-y-3 overflow-y-auto p-4"><p className="text-xs leading-relaxed text-zinc-600">Periksa nama, kebutuhan, dan fakta paket sebelum digunakan. Ubah bagian yang belum sesuai.</p><label className="panel-field"><span>Draft balasan untuk jamaah</span><textarea className="field min-h-52 w-full py-3 text-sm" rows={10} value={review.text} onChange={event => setReview({ ...review, text: event.target.value })} /></label>{unresolvedScript(review.text) && <p role="alert" className="text-xs text-amber-800">Lengkapi semua penanda informasi yang belum dikonfirmasi sebelum memakai skrip.</p>}{copyError && <p role="alert" className="text-xs text-rose-700">{copyError}</p>}</div>
+      <footer className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 p-4"><Button variant="secondary" disabled={!review.text.trim() || unresolvedScript(review.text)} icon={<Copy size={14} />} onClick={() => void copy(review.text)}>Salin</Button><Button disabled={!review.text.trim() || unresolvedScript(review.text)} icon={<CornerDownLeft size={14} />} onClick={() => { onInsertText(review.text.trim()); setReview(null); }}>Tambahkan ke draft</Button></footer>
+    </div></ModalFrame>}
+  </div>;
 }
