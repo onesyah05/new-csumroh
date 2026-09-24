@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CheckCircle2, FileText, Inbox, MessageCircle, ShieldCheck, Sparkles, Wallet } from 'lucide-react';
+import { CheckCircle2, FileText, Inbox, MessageCircle, ShieldCheck, Sparkles, Wallet, XCircle } from 'lucide-react';
 import { isWonStatus } from '@csumroh/shared-types';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { queryClient } from '../../app/query';
@@ -8,9 +8,11 @@ import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageHeader } from '../../components/ui/page-header';
 import { StatCard, StatGrid } from '../../components/ui/stat-card';
-import { PageError, PageLoading } from '../../components/ui/page-feedback';
+import { PageError, PageLoading, EmptyState } from '../../components/ui/page-feedback';
 import { FinanceVerifyModal } from '../chat/FinanceVerifyModal';
 import { PrivateProofThumb } from '../chat/PrivateProof';
+import { RejectProofDialog } from './RejectProofDialog';
+import { showFeedback } from '../../app/toast';
 
 type CandidateMessage = {
   id: number;
@@ -89,15 +91,11 @@ function ProspectIdentity({ p }: { p: QueueProspect }) {
 export function VerificationPage() {
   const [brandScope, setBrandScope] = useState('all');
   const [verifying, setVerifying] = useState<QueueProspect | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [rejecting, setRejecting] = useState<QueueProspect | null>(null);
 
   const showToast = (message: string) => {
-    setToast(message);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 4000);
+    showFeedback(message);
   };
-  useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   const brands = useQuery({ queryKey: ['brands'], queryFn: () => api.get<any[]>('/catalog/brands') });
   const queue = useQuery({
@@ -156,10 +154,10 @@ export function VerificationPage() {
         <>
           <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <header className="border-b border-zinc-200 bg-zinc-50/75 px-4 py-3">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Bukti diajukan</h2>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Bukti diajukan</h2>
             </header>
             {submitted.length === 0 ? (
-              <p className="px-4 py-8 text-center text-xs text-zinc-500">Tidak ada bukti transfer yang menunggu verifikasi.</p>
+              <EmptyState icon={CheckCircle2} title="Antrean kosong" description="Tidak ada bukti transfer yang menunggu verifikasi." />
             ) : (
               <ul className="divide-y divide-zinc-100">
                 {submitted.map((p) => (
@@ -170,11 +168,14 @@ export function VerificationPage() {
                       <BillSummary p={p} />
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <span className="hidden text-[11px] text-zinc-400 md:inline" title={p.paymentProofMessageId ? 'Diambil dari chat WhatsApp' : 'Diunggah CS'}>
+                      <span className="hidden text-xs text-zinc-500 md:inline" title={p.paymentProofMessageId ? 'Diambil dari chat WhatsApp' : 'Diunggah CS'}>
                         {p.paymentProofMessageId ? 'Dari chat' : 'Upload'} · {timeAgo(p.paymentProofSubmittedAt)}
                       </span>
                       <Button size="sm" variant="secondary" to={chatLink(p)} icon={<MessageCircle size={13} />}>
                         Chat
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setRejecting(p)} icon={<XCircle size={13} />} aria-label={`Tolak bukti ${p.name}`}>
+                        Tolak
                       </Button>
                       <Button size="sm" onClick={() => setVerifying(p)} icon={<CheckCircle2 size={13} />}>
                         Verifikasi
@@ -188,13 +189,13 @@ export function VerificationPage() {
 
           <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <header className="border-b border-zinc-200 bg-zinc-50/75 px-4 py-3">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Kandidat bukti dari chat</h2>
-              <p className="mt-0.5 text-[11px] text-zinc-400">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Kandidat bukti dari chat</h2>
+              <p className="mt-0.5 text-xs text-zinc-500">
                 Gambar/PDF dari jamaah setelah invoice terkirim. Pilih yang merupakan bukti transfer; foto lain (KTP, paspor) abaikan saja.
               </p>
             </header>
             {candidates.length === 0 ? (
-              <p className="px-4 py-8 text-center text-xs text-zinc-500">Belum ada kiriman gambar/PDF baru dari jamaah yang sudah ditagih.</p>
+              <EmptyState icon={Sparkles} title="Belum ada kandidat bukti" description="Belum ada kiriman gambar/PDF baru dari jamaah yang sudah ditagih." />
             ) : (
               <ul className="divide-y divide-zinc-100">
                 {candidates.map((p) => (
@@ -218,14 +219,14 @@ export function VerificationPage() {
                               {isImage ? (
                                 <img src={resolveMediaUrl(m.mediaUrl)} alt={`Kiriman ${p.name}`} className="h-full w-full object-cover" />
                               ) : (
-                                <span className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-[10px] text-zinc-600">
+                                <span className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-xs text-zinc-600">
                                   <FileText size={18} className="text-zinc-500" />
                                   <span className="line-clamp-2">{m.messageText || 'Dokumen'}</span>
                                 </span>
                               )}
                             </a>
                             <div className="space-y-1 p-1.5">
-                              <p className="text-[10px] text-zinc-400">{timeAgo(m.timestamp)}</p>
+                              <p className="text-xs text-zinc-500">{timeAgo(m.timestamp)}</p>
                               <Button
                                 size="sm"
                                 className="w-full"
@@ -257,11 +258,14 @@ export function VerificationPage() {
         />
       )}
 
-      {toast && (
-        <div role="status" className="fixed bottom-6 right-6 z-50 rounded-xl bg-zinc-950 px-4 py-2.5 text-xs font-semibold text-white shadow-lift animate-fade-up">
-          {toast}
-        </div>
+      {rejecting && (
+        <RejectProofDialog
+          prospect={rejecting}
+          onDone={(message) => { showToast(message); setRejecting(null); }}
+          onClose={() => setRejecting(null)}
+        />
       )}
+
     </div>
   );
 }

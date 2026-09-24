@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryClient } from '../../app/query';
 import { VerificationPage } from './VerificationPage';
+import { Toaster } from '../../app/toast';
 
 const brand = { id: 2, name: 'Hana Tours', code: 'HANA' };
 const base = {
@@ -66,5 +67,22 @@ describe('Menu Verifikasi Pembayaran', () => {
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/prospects/2/payment-proof-from-message'))).toBe(true));
     const post = calls.find((c) => c.url.endsWith('/prospects/2/payment-proof-from-message'))!;
     expect(JSON.parse(String(post.init?.body))).toEqual({ messageId: 99, brandId: 2 });
+  });
+
+  it('Finance menolak bukti dengan alasan; tombol aktif setelah alasan diisi', async () => {
+    // Umpan balik tampil lewat toast global aplikasi (Toaster dipasang di App).
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><VerificationPage /><Toaster /></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Tolak bukti Ibu Siti' }));
+    expect(await screen.findByRole('dialog', { name: 'Tolak bukti transfer' })).toBeTruthy();
+    const submit = screen.getByRole('button', { name: 'Tolak bukti' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Rekening tujuan salah' }));
+    expect(submit.disabled).toBe(false);
+    fireEvent.click(submit);
+    await waitFor(() => {
+      const call = calls.find((c) => c.url.includes('/prospects/1/reject-proof'));
+      expect(call && JSON.parse(String(call.init?.body))).toEqual({ reason: 'Rekening tujuan salah', brandId: 2 });
+    });
+    expect(await screen.findByText('Bukti transfer Ibu Siti ditolak. PIC sudah diberi tahu.')).toBeTruthy();
   });
 });
