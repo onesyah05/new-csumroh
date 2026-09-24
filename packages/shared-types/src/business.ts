@@ -96,6 +96,37 @@ export function calculateDealValue(prices: RoomPrices, pax: PaxCounts) {
   }, 0);
 }
 
+/** Label singkat kategori keberatan untuk tampilan (lencana, tabel). Kode tersimpan tetap enum `objectionInputSchema`. */
+export const objectionCategoryLabels: Record<string, string> = {
+  price: 'Harga',
+  competitor: 'Bandingkan travel lain',
+  schedule_leave: 'Jadwal / cuti',
+  passport: 'Paspor',
+  family_decision: 'Keputusan keluarga',
+  facility_distance: 'Fasilitas / jarak hotel',
+  other: 'Keberatan lain',
+};
+
+/** Label keberatan yang aman ditampilkan: kode dikenal → label; teks bebas lama → apa adanya; kosong → "Keberatan". */
+export function objectionLabel(category?: string | null) {
+  if (!category) return 'Keberatan';
+  return objectionCategoryLabels[category] ?? category;
+}
+
+/**
+ * Foto profil WhatsApp disalin ke server sebagai `/uploads/avatars/p<prospectId>-<epochMs>-<acak>.<ext>`.
+ * URL CDN WhatsApp bertanda tangan dan kedaluwarsa, jadi tidak disimpan/ditampilkan langsung.
+ */
+export const AVATAR_URL_PATTERN = /^\/uploads\/avatars\/p(\d+)-(\d+)-[a-f0-9]+\.(?:jpg|png|webp)$/;
+export const AVATAR_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** True bila foto belum disalin ke server, berasal dari URL eksternal lama, atau sudah lebih dari 7 hari. */
+export function avatarNeedsRefresh(photoUrl: string | null | undefined, now = Date.now()) {
+  const match = photoUrl ? AVATAR_URL_PATTERN.exec(photoUrl) : null;
+  if (!match) return true;
+  return now - Number(match[2]) > AVATAR_MAX_AGE_MS;
+}
+
 export const tgjpSteps = ['terima', 'gali', 'jawab', 'pastikan'] as const;
 export type TgjpStep = (typeof tgjpSteps)[number];
 

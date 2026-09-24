@@ -7,6 +7,7 @@ import {
   capiEventForStatus,
   dateOnlyKey,
   nextTgjpStep,
+  objectionLabel,
   packageBookingValue,
   seatCountFor,
 } from './business.js';
@@ -24,6 +25,13 @@ describe('critical business rules', () => {
     expect(canTransitionStatus('deal', 'closing')).toBe(false);
     expect(canTransitionStatus('deal', 'lose')).toBe(true);
     expect(canTransitionStatus('deal', 'deal')).toBe(true);
+  });
+
+  it('shows objection categories as labels, never raw codes', () => {
+    expect(objectionLabel('price')).toBe('Harga');
+    expect(objectionLabel('facility_distance')).toBe('Fasilitas / jarak hotel');
+    expect(objectionLabel(null)).toBe('Keberatan');
+    expect(objectionLabel('catatan lama')).toBe('catatan lama');
   });
 
   it('maps legacy statuses onto canonical Kanban columns', () => {

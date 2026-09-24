@@ -244,7 +244,7 @@
             "title": "Prospek Menanyakan Keberangkatan dari Kota Tertentu",
             "use_when": "Prospek langsung menanyakan keberangkatan dari kota tertentu.",
             "prospect_example": "Ada keberangkatan dari Medan?",
-            "script": "Ada Kak, saya bantu cek jadwal keberangkatan dari Medan ya 😊\n\nSudah ada target bulan keberangkatannya?",
+            "script": "Saya bantu cek jadwal keberangkatan dari {{kota}} ya 😊\n\nSudah ada target bulan keberangkatannya?",
             "next_stage": "identification",
             "tags": [
                 "departure_city",
@@ -257,7 +257,7 @@
             "title": "Prospek dari Referral Jamaah",
             "use_when": "Prospek mengatakan mendapat kontak CS dari jamaah atau kenalan.",
             "prospect_example": "Saya dapat nomor Kakak dari Bu Rina.",
-            "script": "MasyaAllah, salam hangat untuk keluarga ya Kak 😊 Terima kasih sudah menghubungi {{travel}}.\n\nSaya {{cs_name}}, betul sekali alhamdulillah Bu Rina adalah jamaah kami yang telah mempercayakan perjalanan ibadahnya bersama {{travel}}. Untuk rencana ibadah Kakak sendiri, apakah ada rencana berangkat di periode yang sama dengan beliau?",
+            "script": "MasyaAllah, salam hangat untuk keluarga ya Kak 😊 Terima kasih sudah menghubungi {{travel}}.\n\nSaya {{cs_name}}, terima kasih atas rekomendasinya. Boleh tahu siapa yang merekomendasikan layanan kami dan informasi apa yang ingin Kakak tanyakan?",
             "next_stage": "identification",
             "tags": [
                 "referral",
