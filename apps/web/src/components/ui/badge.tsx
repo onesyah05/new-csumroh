@@ -9,7 +9,7 @@ export const statusLabels: Record<string, string> = {
   offered: 'Ditawarkan',
   objection: 'Keberatan',
   followup: 'Follow-up',
-  closing: 'Tunggu DP',
+  closing: 'Tunggu Verifikasi',
   deal: 'Deal',
   closed_won: 'Deal',
   lose: 'Batal',

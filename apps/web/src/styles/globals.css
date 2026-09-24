@@ -126,3 +126,11 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Shared workspace primitives for Profile and Copilot; colour semantics follow UI_GUIDELINES. */
+.panel-field { display: grid; gap: 0.5rem; font-size: 0.75rem; font-weight: 500; color: #3f3f46; }
+.sales-panel button:disabled { cursor: not-allowed; opacity: 0.5; }
+.sales-panel .thin-scrollbar { scroll-padding-block: 1rem; }
+.sales-panel textarea { line-height: 1.6; }
+@media (pointer: coarse) { .sales-panel button { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .sales-panel *, .sales-panel *::before, .sales-panel *::after { animation: none !important; transition: none !important; } }
