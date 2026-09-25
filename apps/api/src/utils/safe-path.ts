@@ -13,6 +13,9 @@ export function isPathInside(root: string, candidate: string, pathImpl: typeof p
 /** Satu-satunya bentuk flyer yang sah: hasil endpoint upload-flyer. */
 export const FLYER_URL_PATTERN = /^\/uploads\/packages\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)$/;
 
+/** Satu-satunya bentuk logo brand yang sah: hasil endpoint upload-logo (selalu .webp). */
+export const LOGO_URL_PATTERN = /^\/uploads\/brands\/[A-Za-z0-9_-]+\.webp$/;
+
 /**
  * Resolve flyer paket menjadi path file nyata di `uploads/packages`. Mengembalikan null bila
  * metadata tidak berbentuk URL flyer resmi, file tidak ada, atau realpath keluar dari direktori

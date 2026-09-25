@@ -1,3 +1,4 @@
+import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -8,8 +9,11 @@ import {
   ArrowLeft,
   ArrowUp,
   Ban,
+  Building2,
+  CalendarDays,
   Check,
   CheckCheck,
+  CheckCircle2,
   ChevronDown,
   Clock,
   Copy,
@@ -21,11 +25,13 @@ import {
   HandCoins,
   ImageIcon,
   Lock,
+  Luggage,
   Menu,
   MessageSquareText,
   Megaphone,
   Mic,
   Paperclip,
+  Plane,
   RefreshCw,
   Search,
   Send,
@@ -34,6 +40,8 @@ import {
   Sparkles,
   Star,
   Trash2,
+  TrendingDown,
+  Upload,
   User,
   UserPlus2,
   Users,
@@ -58,6 +66,8 @@ import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
+import { unresolvedScript } from './scriptLibrary';
+import { customBadge } from '../custom/customApi';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxWorkFilters, type InboxWorkFilter } from './inboxFilters';
@@ -177,7 +187,7 @@ export function InboxPage() {
   const setActiveBrandId = useUiStore((state) => state.setActiveBrandId);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // Sync ?brandId= parameter if provided in URL
@@ -246,8 +256,6 @@ export function InboxPage() {
     packageId?: number;
   } | null>(null);
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
-  const endRef = useRef<HTMLDivElement>(null);
-  const timelineRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -358,32 +366,33 @@ export function InboxPage() {
   }, [packages.data, packageSearch]);
 
   const quickReplyChips = [
-    { id: 'greeting', label: 'Sapaan Hangat', icon: Sparkles },
-    { id: 'package', label: 'Tawarkan Paket', icon: FileText },
-    { id: 'flyer', label: 'Kirim Flyer Brosur', icon: ImageIcon },
-    { id: 'bank', label: 'Rekening Resmi', icon: CreditCard },
-    { id: 'closing', label: 'Dorong Closing', icon: HandCoins },
+    { id: 'greeting', label: 'Sapaan', icon: Sparkles },
+    { id: 'package', label: 'Ringkasan paket', icon: FileText },
+    { id: 'flyer', label: 'Kirim brosur', icon: ImageIcon },
+    { id: 'bank', label: 'Rekening resmi', icon: CreditCard },
+    { id: 'closing', label: 'Ajak mendaftar', icon: HandCoins },
     { id: 'ppiu', label: 'Legalitas PPIU', icon: ShieldCheck },
   ] as const;
+  // Prospek yang sudah Deal atau batal tidak lagi diajak mendaftar/transfer (audit C08).
+  const prospectClosed = Boolean(selected && (isWonStatus(selected.status) || isLostStatus(selected.status)));
+  const visibleQuickReplies = quickReplyChips.filter((chip) => !prospectClosed || (chip.id !== 'bank' && chip.id !== 'closing'));
 
   function handleInsertTemplate(type: string) {
     if (type === 'flyer') {
       openSendFlyerModal();
       return;
     }
-    const customerName = selected?.name && !/^\d+$/.test(selected.name) ? selected.name : 'Bapak/Ibu';
     const travelName = activeBrand?.name || 'Layanan Resmi Umroh';
     const csName = user?.name || 'Customer Service';
 
+    // Naskah cepat mengikuti aturan pustaka script: sapaan netral, satu pertanyaan, tanpa janji di luar data (audit C01, C06–C09).
     let text = '';
     if (type === 'greeting') {
-      text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${customerName} 🙏\n\nSaya ${csName} dari tim layanan resmi ${travelName}.\n\nSenang sekali bisa membantu rencana ibadah umroh ${customerName} sekeluarga.\n\nApakah ada perkiraan bulan atau musim keberangkatan yang sedang direncanakan?`;
+      text = `Assalamu'alaikum, Bapak/Ibu. Saya ${csName} dari ${travelName}. 😊\n\nRencananya ingin berangkat bulan apa?`;
     } else if (type === 'package') {
-      if (currentPackage) {
-        text = formatWaPackageSummary(currentPackage, travelName);
-      } else {
-        text = `Bismillah ${customerName}, ${travelName} memiliki beberapa pilihan paket umroh.\n\nBoleh kami tahu rencana bulan keberangkatan, jumlah jamaah, dan preferensi kamar (quad/triple/double)? Kami kirimkan rincian paket yang paling sesuai. 🙏`;
-      }
+      text = currentPackage
+        ? formatWaPackageSummary(currentPackage, travelName)
+        : `Ada beberapa pilihan paket di ${travelName}.\n\nAgar saya kirimkan yang sesuai, rencananya ingin berangkat bulan apa?`;
     } else if (type === 'bank') {
       // Data rekening hanya dari data resmi brand; tanpa data lengkap tidak ada teks yang dibuat.
       const bank = activeBrand?.bankName?.trim();
@@ -393,21 +402,21 @@ export function InboxPage() {
         showToast('Rekening resmi brand belum lengkap. Minta Admin melengkapi data bank di menu Brand.');
         return;
       }
-      text = `Bismillah, untuk keamanan transaksi di ${travelName}, pembayaran resmi hanya melalui rekening perusahaan berikut:\n\n🏛️ Bank: ${bank}\n💳 No. Rekening: ${accNumber}\n👤 Atas Nama: ${accHolder}\n\nSetelah transfer, mohon kirimkan foto bukti transfernya agar dapat diverifikasi tim Finance kami. Terima kasih! 🙏`;
+      text = `Pembayaran ${travelName} hanya melalui rekening resmi berikut:\n\n${bank} a/n ${accHolder}\n*${accNumber}*\n\nSetelah transfer, kirim foto bukti transfernya di chat ini untuk diverifikasi tim Finance.`;
     } else if (type === 'closing') {
-      // Klaim kuota hanya dari data kuota paket yang nyata.
+      // Kuota hanya disebut bila datanya ada dan masih tersisa.
       const quota = currentPackage?.quotaRemaining;
-      const quotaLine = currentPackage && typeof quota === 'number'
-        ? `Untuk paket ${currentPackage.name}, saat ini tersisa ${quota} seat.\n\n`
+      const quotaLine = currentPackage && typeof quota === 'number' && quota > 0
+        ? `Sisa kuota *${currentPackage.name}* saat ini ${quota} orang.\n\n`
         : '';
-      text = `Bismillah ${customerName}, ${quotaLine}Jika ${customerName} sudah mantap, seat dapat kami amankan dengan pembayaran DP sesuai invoice resmi.\n\nApakah ada hal lain yang masih perlu kami jelaskan sebelum pendaftaran? 🙏`;
+      text = `${quotaLine}Kalau paketnya sudah cocok, langkah berikutnya pembayaran awal (DP atau lunas) sesuai invoice resmi.\n\nMasih ada yang ingin ditanyakan sebelum mendaftar?`;
     } else if (type === 'ppiu') {
       const ppiu = activeBrand?.ppiuNumber?.trim();
       if (!ppiu) {
         showToast('Nomor izin PPIU brand belum diisi. Minta Admin melengkapinya di menu Brand.');
         return;
       }
-      text = `Alhamdulillah ${travelName} adalah Penyelenggara Perjalanan Ibadah Umrah (PPIU) dengan nomor izin: ${ppiu}.\n\nNomor izin tersebut dapat dicek di sistem resmi Kementerian Agama RI.`;
+      text = `${travelName} adalah penyelenggara umroh berizin Kemenag (PPIU) dengan nomor izin *${ppiu}*.\n\nNomor ini bisa dicek di situs resmi Kementerian Agama.`;
     }
 
     if (text) {
@@ -440,32 +449,7 @@ export function InboxPage() {
     retry: false,
   });
 
-  const lastSelectedIdRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!timelineRef.current) return;
-    const container = timelineRef.current;
-    const isNewConversation = lastSelectedIdRef.current !== selectedId;
-    lastSelectedIdRef.current = selectedId;
-
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 180;
-    if (isNewConversation || isNearBottom) {
-      // rAF ensures DOM is fully painted before we measure/scroll
-      requestAnimationFrame(() => {
-        if (timelineRef.current) {
-          timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
-        }
-      });
-    }
-  }, [messages.data, selectedId]);
-
-  // Instantly jump to bottom whenever the user switches conversation
-  // (before new messages arrive, so there's no flash at the top)
-  useEffect(() => {
-    if (timelineRef.current) {
-      timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
-    }
-  }, [selectedId]);
+  const { timelineRef, contentRef } = useChatAutoScroll(`${brandId}:${selected?.id ?? ''}`, messages.data);
 
   function scrollToMessage(messageId?: string | null) {
     if (!messageId) return;
@@ -502,7 +486,7 @@ export function InboxPage() {
     mutationFn: (messageId: number) => api.post<{ isStarred?: boolean }>(`/chat/messages/${messageId}/star${query}`),
     onSuccess: (data: any) => {
       void queryClient.invalidateQueries({ queryKey: ['messages', selectedId, brandId] });
-      showToast(data?.isStarred ? 'Pesan diberi bintang ⭐' : 'Bintang pesan dihapus');
+      showToast(data?.isStarred ? 'Pesan diberi bintang' : 'Bintang pesan dihapus');
     },
     onError: () => {
       showToast('Gagal mengubah status bintang pesan');
@@ -614,6 +598,16 @@ export function InboxPage() {
   const activeFilter = inboxWorkFilters.find((filter) => filter.id === chatFilter) ?? inboxWorkFilters[0];
 
   function handleSelectConversation(id: number) {
+    // Keep the deep link aligned with the user's choice; otherwise the selection
+    // effect immediately restores the prospect/phone/jid from the previous URL.
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.set('prospectId', String(id));
+      if (brandId) next.set('brandId', String(brandId));
+      next.delete('phone');
+      next.delete('jid');
+      return next;
+    });
     setSelectedId(id);
     setMobileView('chat');
     void api.post(`/chat/prospects/${id}/read${query}`).catch(() => null);
@@ -672,8 +666,19 @@ export function InboxPage() {
     if (mediaPreview) {
       void handleSendMedia();
     } else if (message.trim() && !send.isPending) {
-      send.mutate(message.trim());
+      sendDraft();
     }
+  }
+
+  /** Titik kirim terakhir: draft yang masih memuat {{token}} tidak boleh sampai ke jamaah (audit S15). */
+  function sendDraft() {
+    const text = message.trim();
+    if (!text) return;
+    if (unresolvedScript(text)) {
+      showToast('Draft masih memuat data yang belum terisi (tanda {{…}}). Lengkapi dulu sebelum mengirim.');
+      return;
+    }
+    send.mutate(text);
   }
 
   function showToast(msg: string) {
@@ -949,12 +954,22 @@ export function InboxPage() {
                       className="flex items-center gap-3 min-w-0 hover:bg-black/5 p-1 -ml-1 rounded-lg transition text-left cursor-pointer group outline-none"
                       title="Klik untuk ganti sesi WhatsApp Brand"
                     >
-                      <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#00a884] font-bold text-xs text-white shadow-2xs">
-                        {activeBrand?.name ? String(activeBrand.name).slice(0, 2).toUpperCase() : 'WA'}
+                      <div className="relative shrink-0">
+                        {activeBrand?.logoUrl ? (
+                          <img
+                            src={resolveMediaUrl(activeBrand.logoUrl)}
+                            alt={activeBrand.name}
+                            className="h-10 w-10 rounded-full object-cover shadow-2xs border border-zinc-200 bg-white"
+                          />
+                        ) : (
+                          <span className="grid h-10 w-10 place-items-center rounded-full bg-[#00a884] font-bold text-xs text-white shadow-2xs">
+                            {activeBrand?.name ? String(activeBrand.name).slice(0, 2).toUpperCase() : 'WA'}
+                          </span>
+                        )}
                         {isConnected && (
                           <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]" />
                         )}
-                      </span>
+                      </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <h2 className="font-semibold text-sm text-[#111b21] truncate leading-tight group-hover:text-emerald-700">
@@ -962,8 +977,8 @@ export function InboxPage() {
                           </h2>
                           <ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-700 shrink-0" />
                         </div>
-                        <p className="text-[11px] text-[#667781] truncate">
-                          {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : 'Terputus'} • <span className="text-emerald-600 font-semibold">Ganti Brand</span>
+                        <p className="text-xs text-[#667781] truncate">
+                          {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : 'Terputus'}
                         </p>
                       </div>
                     </button>
@@ -975,7 +990,7 @@ export function InboxPage() {
                       sideOffset={8}
                       className="z-50 w-64 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl animate-fade-up"
                     >
-                      <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 mb-1">
+                      <div className="px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 mb-1">
                         Pilih Sesi WhatsApp Brand
                       </div>
                       {brandsQuery.data.map((b: any) => {
@@ -984,6 +999,14 @@ export function InboxPage() {
                           <DropdownMenu.Item
                             key={b.id}
                             onSelect={() => {
+                              setSearchParams(previous => {
+                                const next = new URLSearchParams(previous);
+                                next.set('brandId', String(b.id));
+                                next.delete('prospectId');
+                                next.delete('phone');
+                                next.delete('jid');
+                                return next;
+                              });
                               setActiveBrandId(b.id);
                               setSelectedId(null);
                             }}
@@ -993,12 +1016,20 @@ export function InboxPage() {
                             )}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-zinc-200 text-[10px] font-bold text-zinc-700">
-                                {b.name ? String(b.name).slice(0, 2).toUpperCase() : 'B'}
-                              </span>
+                              {b.logoUrl ? (
+                                <img
+                                  src={resolveMediaUrl(b.logoUrl)}
+                                  alt={b.name}
+                                  className="h-7 w-7 shrink-0 rounded-full object-cover border border-zinc-200 bg-white"
+                                />
+                              ) : (
+                                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-zinc-200 text-xs font-bold text-zinc-700">
+                                  {b.name ? String(b.name).slice(0, 2).toUpperCase() : 'B'}
+                                </span>
+                              )}
                               <div className="min-w-0">
                                 <p className="truncate text-xs">{b.name}</p>
-                                {b.phone && <p className="text-[10px] text-zinc-400 truncate">+{b.phone}</p>}
+                                {b.phone && <p className="text-xs text-zinc-400 truncate">+{b.phone}</p>}
                               </div>
                             </div>
                             {isActive && <Check size={14} className="text-emerald-600 shrink-0" />}
@@ -1010,17 +1041,27 @@ export function InboxPage() {
                 </DropdownMenu.Root>
               ) : (
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#00a884] font-bold text-xs text-white shadow-2xs">
-                    {activeBrand?.name ? String(activeBrand.name).slice(0, 2).toUpperCase() : 'WA'}
+                  <div className="relative shrink-0">
+                    {activeBrand?.logoUrl ? (
+                      <img
+                        src={resolveMediaUrl(activeBrand.logoUrl)}
+                        alt={activeBrand.name}
+                        className="h-10 w-10 rounded-full object-cover shadow-2xs border border-zinc-200 bg-white"
+                      />
+                    ) : (
+                      <span className="grid h-10 w-10 place-items-center rounded-full bg-[#00a884] font-bold text-xs text-white shadow-2xs">
+                        {activeBrand?.name ? String(activeBrand.name).slice(0, 2).toUpperCase() : 'WA'}
+                      </span>
+                    )}
                     {isConnected && (
                       <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]" />
                     )}
-                  </span>
+                  </div>
                   <div className="min-w-0">
                     <h2 className="font-semibold text-sm text-[#111b21] truncate leading-tight">
                       {activeBrand?.name ?? 'WhatsApp Live Chat'}
                     </h2>
-                    <p className="text-[11px] text-[#667781] truncate">
+                    <p className="text-xs text-[#667781] truncate">
                       {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : 'Terputus'}
                     </p>
                   </div>
@@ -1091,13 +1132,13 @@ export function InboxPage() {
                   </button>
                 ))}
               </div>
-              {chatFilter !== 'all' && <p className="px-1 text-[11px] leading-relaxed text-[#667781]">{activeFilter.description}</p>}
+              {chatFilter !== 'all' && <p className="px-1 text-xs leading-relaxed text-[#667781]">{activeFilter.description}</p>}
 
             </div>
           )}
 
           {!isConnected && (
-            <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] text-amber-900" role="status">
+            <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900" role="status">
               <WifiOff size={14} className="mt-0.5 shrink-0 text-amber-600" />
               <div className="min-w-0">
                 <p className="font-semibold">WhatsApp terputus — mode baca</p>
@@ -1194,8 +1235,12 @@ export function InboxPage() {
                           )}
                         </span>
 
+                        {(() => {
+                          const tag = customBadge(item.customRequests?.[0]);
+                          return tag && <span title={tag.text} className={cn('shrink-0 rounded px-1 text-[11px] font-semibold', tag.urgent ? 'bg-amber-100 text-amber-900' : 'border border-zinc-300 text-zinc-600')}>Custom</span>;
+                        })()}
                         {hasUnread && (
-                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[#25d366] px-1.5 text-[11px] font-bold text-white shadow-2xs animate-fade-in">
+                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[#25d366] px-1.5 text-xs font-bold text-white shadow-2xs animate-fade-in">
                             {item.unreadCount}
                           </span>
                         )}
@@ -1304,7 +1349,7 @@ export function InboxPage() {
                       )}
                     </span>
 
-                    <span className="block truncate text-[11px] text-[#667781]">
+                    <span className="block truncate text-xs text-[#667781]">
                       {selected.remoteJid === '0@s.whatsapp.net' || selected.name === 'WhatsApp'
                         ? 'Akun Resmi WhatsApp'
                         : selected.name?.includes('(Anda)')
@@ -1340,7 +1385,7 @@ export function InboxPage() {
                       type="button"
                       onClick={() => setSidePanelTab('profile')}
                       className={cn(
-                        'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:opacity-85 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]',
+                        'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold cursor-pointer hover:opacity-85 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]',
                         isPic
                           ? 'bg-emerald-100 text-emerald-800'
                           : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
@@ -1353,7 +1398,7 @@ export function InboxPage() {
                     <button
                       type="button"
                       onClick={() => setSidePanelTab('profile')}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:opacity-85 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-xs font-bold cursor-pointer hover:opacity-85 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
                       title="Percakapan belum memiliki PIC (Klik untuk membuka profil)"
                     >
                       Belum ada PIC
@@ -1405,10 +1450,10 @@ export function InboxPage() {
 
               {/* Chat Message Timeline with WhatsApp Web Wallpaper */}
               <div ref={timelineRef} className="thin-scrollbar flex-1 overflow-y-auto wa-chat-bg px-3 py-4 sm:px-6">
-                <div className="mx-auto max-w-3xl space-y-1.5">
+                <div ref={contentRef} className="mx-auto max-w-3xl space-y-1.5">
                   {/* Encrypted Notice Banner */}
                   <div className="mb-4 text-center">
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffeecd] px-3 py-1 text-[11px] text-[#54656f] shadow-2xs">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffeecd] px-3 py-1 text-xs text-[#54656f] shadow-2xs">
                       <ShieldCheck size={12} className="text-[#008069]" />
                       Pesan terenkripsi secara end-to-end oleh WhatsApp
                     </span>
@@ -1457,7 +1502,7 @@ export function InboxPage() {
                       <div key={item.id} id={`msg-${item.messageId}`} className="transition-colors duration-500 rounded-lg">
                         {isNewDate && (
                           <div className="my-3 flex items-center justify-center">
-                            <span className="rounded-lg bg-white/95 px-3 py-1 text-[11px] font-medium text-[#54656f] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] uppercase">
+                            <span className="rounded-lg bg-white/95 px-3 py-1 text-xs font-medium text-[#54656f] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] uppercase">
                               {formatDateSeparator(item.timestamp)}
                             </span>
                           </div>
@@ -1631,7 +1676,7 @@ export function InboxPage() {
                                         </DropdownMenu.Item>
 
                                         {/* Bukti transfer langsung dari chat: server menyalin berkas, tanpa unduh-unggah ulang */}
-                                        {!isMessageDeleted && !item.isFromMe && item.mediaUrl && (item.messageType === 'imageMessage' || item.messageType === 'documentMessage') && (
+                                        {!['deal', 'closed_won'].includes(selected?.status || '') && !isMessageDeleted && !item.isFromMe && item.mediaUrl && (item.messageType === 'imageMessage' || item.messageType === 'documentMessage') && (
                                           selected?.paymentProofMessageId === item.messageId ? (
                                             <DropdownMenu.Item
                                               disabled
@@ -1684,7 +1729,7 @@ export function InboxPage() {
                                             return next;
                                           });
                                         }}
-                                        className="ml-2 inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 hover:bg-amber-500/25 not-italic cursor-pointer"
+                                        className="ml-2 inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-bold text-amber-800 hover:bg-amber-500/25 not-italic cursor-pointer"
                                         title="Lihat pesan yang dihapus (Mode Admin)"
                                       >
                                         <Eye size={11} /> Lihat
@@ -1696,7 +1741,7 @@ export function InboxPage() {
                                   <>
                                     {/* Admin Revealed Banner */}
                                     {isMessageDeleted && isRevealedByAdmin && (
-                                      <div className="mb-1.5 flex items-center justify-between gap-2 border-b border-amber-500/30 pb-1 text-[10.5px] font-bold text-amber-800">
+                                      <div className="mb-1.5 flex items-center justify-between gap-2 border-b border-amber-500/30 pb-1 text-xs font-bold text-amber-800">
                                         <span className="flex items-center gap-1">
                                           <Eye size={12} className="text-amber-600" />
                                           Pesan Dihapus {item.deletedAt ? `(${new Date(item.deletedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})` : ''}
@@ -1721,12 +1766,12 @@ export function InboxPage() {
 
                                     {/* Sender Name (CS name on outgoing, contact name on incoming) - always shown */}
                                     {item.isFromMe && item.senderName && (
-                                      <p className="text-[10.5px] font-bold text-[#008069] mb-0.5 leading-tight">
+                                      <p className="text-xs font-bold text-[#008069] mb-0.5 leading-tight">
                                         {item.senderName}
                                       </p>
                                     )}
                                     {!item.isFromMe && (
-                                      <p className="text-[10.5px] font-bold text-[#53bdeb] mb-0.5 leading-tight">
+                                      <p className="text-xs font-bold text-[#53bdeb] mb-0.5 leading-tight">
                                         {item.senderName || selected.name || 'Jamaah'}
                                       </p>
                                     )}
@@ -1747,7 +1792,7 @@ export function InboxPage() {
                                         )}
                                         title="Klik untuk menuju ke pesan yang dikutip"
                                       >
-                                        <div className="font-bold text-[11px] text-[#008069]">
+                                        <div className="font-bold text-xs text-[#008069]">
                                           {item.quotedSender || (item.isFromMe ? 'Anda' : selected.name)}
                                         </div>
                                         <div className="truncate text-[12px] text-[#54656f]">
@@ -1775,7 +1820,7 @@ export function InboxPage() {
                                                loading="lazy"
                                              />
                                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                               <span className="bg-black/70 text-white text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md">
+                                               <span className="bg-black/70 text-white text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md">
                                                  <Eye size={13} /> Perbesar
                                                </span>
                                              </div>
@@ -1855,7 +1900,7 @@ export function InboxPage() {
                                                  <p className="font-bold text-zinc-900 truncate max-w-[160px]">
                                                    {item.messageText || 'Dokumen'}
                                                  </p>
-                                                 <p className="text-[10px] text-zinc-500">Klik untuk mengunduh</p>
+                                                 <p className="text-xs text-zinc-500">Klik untuk mengunduh</p>
                                                </div>
                                              </div>
                                              <div className="grid h-7 w-7 place-items-center rounded-full bg-white text-zinc-600 shadow-2xs group-hover:text-[#00a884] shrink-0">
@@ -1881,7 +1926,7 @@ export function InboxPage() {
                                  )}
 
                                 {/* Timestamp & Read Receipts inside bubble */}
-                                <span className="float-right ml-3 mt-1 inline-flex items-center gap-1 text-[11px] text-[#667781] select-none leading-none">
+                                <span className="float-right ml-3 mt-1 inline-flex items-center gap-1 text-xs text-[#667781] select-none leading-none">
                                   {item.isStarred && (
                                     <span title="Pesan berbintang">
                                       <Star size={11} className="fill-amber-400 text-amber-500" />
@@ -1949,7 +1994,6 @@ export function InboxPage() {
                       </div>
                     );
                   })}
-                  <div ref={endRef} />
                 </div>
               </div>
 
@@ -1957,17 +2001,17 @@ export function InboxPage() {
               {selected && canSend && (
                 <div className="border-t border-[#e9edef] bg-[#f0f2f5] px-3 py-1.5 shrink-0">
                   <div className="thin-scrollbar mx-auto flex max-w-3xl items-center gap-1.5 overflow-x-auto pb-0.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#667781] shrink-0 mr-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#667781] shrink-0 mr-1">
                       Template:
                     </span>
-                    {quickReplyChips.map((chip) => {
+                    {visibleQuickReplies.map((chip) => {
                       const Icon = chip.icon;
                       return (
                         <button
                           key={chip.id}
                           type="button"
                           onClick={() => handleInsertTemplate(chip.id)}
-                          className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#e9edef] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#111b21] shadow-2xs transition hover:bg-[#f0f2f5] active:scale-95 cursor-pointer"
+                          className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#e9edef] bg-white px-2.5 py-1 text-xs font-semibold text-[#111b21] shadow-2xs transition hover:bg-[#f0f2f5] active:scale-95 cursor-pointer"
                         >
                           <Icon size={12} className="text-[#008069]" />
                           <span>{chip.label}</span>
@@ -2039,16 +2083,16 @@ export function InboxPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-bold text-zinc-800">Pratinjau Media</span>
                             {mediaPreview.isPackageFlyer && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-800 border border-emerald-300/60">
-                                🕋 {mediaPreview.packageName}
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300/60">
+                                <Luggage size={12} className="shrink-0" aria-hidden="true" />{mediaPreview.packageName}
                               </span>
                             )}
                             {mediaPreview.isCompressed ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200">
-                                📉 Dicompress: {formatFileSize(mediaPreview.originalSize)} ➔ {formatFileSize(mediaPreview.compressedSize)} (Hemat {mediaPreview.savingsPercent}%)
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
+                                <TrendingDown size={12} className="shrink-0" aria-hidden="true" />Dikompres: {formatFileSize(mediaPreview.originalSize)} ➔ {formatFileSize(mediaPreview.compressedSize)} (Hemat {mediaPreview.savingsPercent}%)
                               </span>
                             ) : (
-                              <span className="text-[10.5px] text-zinc-500 font-medium">
+                              <span className="text-xs text-zinc-500 font-medium">
                                 Ukuran: {formatFileSize(mediaPreview.compressedSize)}
                               </span>
                             )}
@@ -2083,15 +2127,15 @@ export function InboxPage() {
 
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-bold text-zinc-900 truncate">{mediaPreview.name}</p>
-                            <p className="text-[11px] text-zinc-500 mt-0.5">{mediaPreview.type || 'Dokumen'}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">{mediaPreview.type || 'Dokumen'}</p>
                             {mediaPreview.isPackageFlyer && (
-                              <p className="text-[11px] text-emerald-800 mt-1 font-medium">
-                                📄 Flyer resmi umroh siap dikirim dengan rincian jadwal, maskapai, hotel, dan rincian harga.
+                              <p className="flex items-start gap-1 text-xs text-emerald-800 mt-1 font-medium">
+                                <FileText size={12} className="mt-0.5 shrink-0" aria-hidden="true" />Flyer resmi umroh siap dikirim dengan rincian jadwal, maskapai, hotel, dan rincian harga.
                               </p>
                             )}
                             {mediaPreview.isCompressed && (
-                              <p className="text-[11px] text-emerald-700 mt-0.5">
-                                ✅ Resolusi dan ukuran telah dioptimalkan otomatis agar server tetap cepat dan hemat penyimpanan.
+                              <p className="flex items-start gap-1 text-xs text-emerald-700 mt-0.5">
+                                <CheckCircle2 size={12} className="mt-0.5 shrink-0" aria-hidden="true" />Resolusi dan ukuran telah dioptimalkan otomatis agar server tetap cepat dan hemat penyimpanan.
                               </p>
                             )}
 
@@ -2135,7 +2179,7 @@ export function InboxPage() {
                   {replyingTo && (
                     <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border-l-4 border-[#00a884] bg-white p-2.5 shadow-2xs animate-fade-in">
                       <div className="min-w-0 flex-1 pr-2">
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#00a884]">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-[#00a884]">
                           <CornerUpLeft size={13} />
                           <span>Membalas {replyingTo.senderName}</span>
                         </div>
@@ -2214,7 +2258,7 @@ export function InboxPage() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[10px] font-normal text-zinc-500 truncate">
+                              <p className="text-xs font-normal text-zinc-500 truncate">
                                 {currentPackage ? currentPackage.name : 'Brosur & jadwal resmi'}
                               </p>
                             </div>
@@ -2223,9 +2267,9 @@ export function InboxPage() {
                           {currentPackage && (
                             <DropdownMenu.Item
                               onClick={() => setShowPackagePickerModal(true)}
-                              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 outline-none cursor-pointer transition border-b border-zinc-100"
+                              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 outline-none cursor-pointer transition border-b border-zinc-100"
                             >
-                              <span className="text-[10px]">🔄</span>
+                              <RefreshCw size={12} className="shrink-0" aria-hidden="true" />
                               <span>Pilih brosur paket lain...</span>
                             </DropdownMenu.Item>
                           )}
@@ -2240,7 +2284,7 @@ export function InboxPage() {
                             </div>
                             <div>
                               <p className="font-semibold text-zinc-900">Foto & Video</p>
-                              <p className="text-[10px] font-normal text-zinc-500">Gambar (Autocompress), Video</p>
+                              <p className="text-xs font-normal text-zinc-500">Gambar (Autocompress), Video</p>
                             </div>
                           </DropdownMenu.Item>
 
@@ -2254,7 +2298,7 @@ export function InboxPage() {
                             </div>
                             <div>
                               <p className="font-semibold text-zinc-900">Dokumen</p>
-                              <p className="text-[10px] font-normal text-zinc-500">PDF, Word, Excel, ZIP</p>
+                              <p className="text-xs font-normal text-zinc-500">PDF, Word, Excel, ZIP</p>
                             </div>
                           </DropdownMenu.Item>
                         </DropdownMenu.Content>
@@ -2301,7 +2345,7 @@ export function InboxPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => void send.mutate(message.trim())}
+                        onClick={sendDraft}
                         className="font-bold underline hover:no-underline ml-3 shrink-0"
                       >
                         Coba kirim lagi
@@ -2321,7 +2365,7 @@ export function InboxPage() {
                         <p className="font-bold text-zinc-950">
                           Hanya Admin dan PIC yang dapat membalas chat
                         </p>
-                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                        <p className="text-xs text-zinc-500 mt-0.5">
                           Percakapan ini ditugaskan kepada PIC <strong>{selected.user?.name || 'CS lain'}</strong>.{' '}
                           {canTakeOver
                             ? 'Jamaah belum dibalas lebih dari 15 menit, jadi Anda boleh mengambil alih.'
@@ -2446,7 +2490,7 @@ export function InboxPage() {
                   value={packageSearch}
                   onChange={(e) => setPackageSearch(e.target.value)}
                   placeholder="Cari nama paket, maskapai, tanggal, atau hotel..."
-                  className="w-full rounded-xl border border-zinc-200 bg-white pl-10 pr-4 py-2 text-xs text-zinc-800 placeholder:text-zinc-400 focus:border-[#00a884] focus:ring-1 focus:ring-[#00a884] outline-none"
+                  className="w-full rounded-xl border border-zinc-200 bg-white pl-10 pr-4 py-2 text-xs text-zinc-800 placeholder:text-zinc-500 focus:border-[#00a884] focus:ring-1 focus:ring-[#00a884] outline-none"
                 />
               </div>
               <label className="inline-flex items-center gap-2 text-xs text-zinc-600 font-medium cursor-pointer select-none">
@@ -2511,26 +2555,26 @@ export function InboxPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-bold text-sm text-zinc-900 truncate">{pkg.name}</h4>
                             {isCurrent && (
-                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
                                 Paket Terhubung
                               </span>
                             )}
                             {hasFlyer ? (
-                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
-                                🖼️ Flyer Siap
+                              <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-bold text-zinc-700 border border-zinc-200">
+                                <ImageIcon size={12} className="shrink-0" aria-hidden="true" />Flyer siap
                               </span>
                             ) : (
-                              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
-                                📁 Upload Saat Kirim
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800 border border-amber-200">
+                                <Upload size={12} className="shrink-0" aria-hidden="true" />Unggah saat kirim
                               </span>
                             )}
                           </div>
 
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                            <span>📅 {departureStr} ({pkg.duration || '9 Hari'})</span>
-                            {pkg.airline && <span>✈️ {pkg.airline}</span>}
+                            <span className="inline-flex items-center gap-1"><CalendarDays size={12} className="shrink-0" aria-hidden="true" />{departureStr}{pkg.duration ? ` (${pkg.duration})` : ''}</span>
+                            {pkg.airline && <span className="inline-flex items-center gap-1"><Plane size={12} className="shrink-0" aria-hidden="true" />{pkg.airline}</span>}
                             {(pkg.hotelMakkah || pkg.hotelMadinah) && (
-                              <span>🏨 {pkg.hotelMakkah || pkg.hotelMadinah}</span>
+                              <span className="inline-flex items-center gap-1"><Building2 size={12} className="shrink-0" aria-hidden="true" />{pkg.hotelMakkah || pkg.hotelMadinah}</span>
                             )}
                           </div>
 
@@ -2549,7 +2593,7 @@ export function InboxPage() {
                             if (selectedId) {
                               void api.patch(`/prospects/${selectedId}/profile`, {
                                 packageId: pkg.id,
-                                ...(user?.role === 'superadmin' ? { brandId } : {}),
+                                brandId,
                               })
                                 .then(() => {
                                   void queryClient.invalidateQueries({ queryKey: ['prospect', selectedId] });
@@ -2576,14 +2620,14 @@ export function InboxPage() {
                             if (linkPackageToProspect && selectedId) {
                               void api.patch(`/prospects/${selectedId}/profile`, {
                                 packageId: pkg.id,
-                                ...(user?.role === 'superadmin' ? { brandId } : {}),
+                                brandId,
                               })
                                 .then(() => {
                                   void queryClient.invalidateQueries({ queryKey: ['prospect', selectedId] });
                                   void queryClient.invalidateQueries({ queryKey: ['conversations', brandId] });
                                   void queryClient.invalidateQueries({ queryKey: ['prospects'] });
                                 })
-                                .catch(() => null);
+                                .catch((err: any) => showToast(err?.message || 'Paket gagal dihubungkan ke prospek.'));
                             }
                             setShowPackagePickerModal(false);
                             void loadFlyerAsMediaPreview(pkg);

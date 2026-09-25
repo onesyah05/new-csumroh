@@ -21,7 +21,7 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, resolveMediaUrl } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { PageHeader } from '../../components/ui/page-header';
 import { Button } from '../../components/ui/button';
@@ -35,6 +35,7 @@ interface BrandItem {
   id: number;
   name: string;
   code: string;
+  logoUrl?: string | null;
   ppiuNumber?: string | null;
   phone?: string | null;
   bankName?: string | null;
@@ -181,7 +182,7 @@ export function BrandPage() {
         <div className="relative flex-1">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-400 shadow-xs"
+            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
             placeholder="Cari nama atau kode brand…"
             value={search}
             onChange={(e) => {
@@ -256,7 +257,7 @@ export function BrandPage() {
             <div className="overflow-x-auto">
               {/* Di bawah lg (split-screen ±700 px) kolom legalitas & rekening disembunyikan; lengkap di Detail Brand. */}
               <table className="w-full text-left text-xs lg:min-w-[820px]">
-                <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">Brand Travel</th>
                     <th className="hidden px-4 py-3 lg:table-cell">Legalitas & Kontak</th>
@@ -275,9 +276,17 @@ export function BrandPage() {
                         {/* Brand Info */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-3">
-                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zinc-950 font-display text-xs font-extrabold text-white shadow-2xs">
-                              {String(brand.code ?? 'BRD').slice(0, 3)}
-                            </span>
+                            {brand.logoUrl ? (
+                              <img
+                                src={resolveMediaUrl(brand.logoUrl)}
+                                alt={brand.name}
+                                className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-2xs border border-zinc-200"
+                              />
+                            ) : (
+                              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zinc-950 font-display text-xs font-extrabold text-white shadow-2xs">
+                                {String(brand.code ?? 'BRD').slice(0, 3)}
+                              </span>
+                            )}
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <Link

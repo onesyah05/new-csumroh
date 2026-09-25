@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { parseRupiahStrict } from '@csumroh/shared-types';
 import bcrypt from 'bcryptjs';
 import path from 'node:path';
 import fs from 'node:fs';
+import sharp from 'sharp';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
-import { FLYER_URL_PATTERN } from '../../utils/safe-path.js';
+import { FLYER_URL_PATTERN, LOGO_URL_PATTERN } from '../../utils/safe-path.js';
 import { releaseProspectsOf } from '../prospects/pic.js';
 
 // Tautan yang dirender sebagai <a href>: hanya http(s), mencegah skema javascript:/data:.
@@ -93,10 +95,68 @@ catalogRouter.get('/brands/:id', asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 }));
 
+// ── Upload Logo Brand (compress → WebP, max 512×512) ──────────────────────────
+catalogRouter.post('/brands/upload-logo', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
+  const { image } = req.body;
+  if (!image || typeof image !== 'string') {
+    throw new HttpError(400, 'Data gambar logo wajib disertakan.');
+  }
+
+  // Parse data URL
+  let base64Data = image;
+  if (image.startsWith('data:')) {
+    const match = image.match(/^data:image\/[a-zA-Z0-9+]+;base64,(.+)$/);
+    if (match && match[1]) {
+      base64Data = match[1];
+    } else {
+      const commaIdx = image.indexOf(',');
+      if (commaIdx !== -1) base64Data = image.slice(commaIdx + 1);
+    }
+  }
+
+  const rawBuffer = Buffer.from(base64Data, 'base64');
+  if (rawBuffer.length > 10 * 1024 * 1024) {
+    throw new HttpError(400, 'Ukuran gambar melebihi batas maksimal 10 MB.');
+  }
+
+  // Validate magic bytes
+  const isJpeg = rawBuffer.length > 3 && rawBuffer[0] === 0xFF && rawBuffer[1] === 0xD8 && rawBuffer[2] === 0xFF;
+  const isPng = rawBuffer.length > 4 && rawBuffer[0] === 0x89 && rawBuffer[1] === 0x50 && rawBuffer[2] === 0x4E && rawBuffer[3] === 0x47;
+  const isWebp = rawBuffer.length > 12 && rawBuffer.toString('utf8', 0, 4) === 'RIFF' && rawBuffer.toString('utf8', 8, 12) === 'WEBP';
+  if (!isJpeg && !isPng && !isWebp) {
+    throw new HttpError(400, 'Format file tidak didukung. Harap gunakan gambar JPG, PNG, atau WEBP.');
+  }
+
+  // Compress & convert to WebP via sharp (max 512×512, quality 80)
+  const webpBuffer = await sharp(rawBuffer)
+    .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toBuffer();
+
+  const uploadsDir = path.resolve(process.cwd(), 'uploads', 'brands');
+  await fs.promises.mkdir(uploadsDir, { recursive: true });
+
+  const safeName = `logo-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.webp`;
+  const filePath = path.join(uploadsDir, safeName);
+  await fs.promises.writeFile(filePath, webpBuffer);
+
+  const fileUrl = `/uploads/brands/${safeName}`;
+  res.json({
+    success: true,
+    data: {
+      url: fileUrl,
+      originalSize: rawBuffer.length,
+      compressedSize: webpBuffer.length,
+      filename: safeName,
+    },
+  });
+}));
+
 catalogRouter.post('/brands', requireRole('superadmin'), asyncHandler(async (req, res) => {
   const input = z.object({
     name: z.string().min(2, 'Nama brand minimal 2 karakter').max(100),
     code: z.string().min(2, 'Kode brand minimal 2 karakter').max(30).regex(/^[A-Z0-9_-]+$/, 'Kode brand hanya boleh berisi huruf kapital, angka, tanda strip (-), dan garis bawah (_)'),
+    logoUrl: z.string().regex(LOGO_URL_PATTERN, 'Logo harus diunggah melalui fitur upload logo.').optional().nullable().or(z.literal('').transform(() => null)),
     ppiuNumber: z.string().max(100).optional().nullable(),
     bankName: z.string().max(50).optional().nullable(),
     bankAccountNumber: z.string().max(50).optional().nullable(),
@@ -114,6 +174,7 @@ catalogRouter.patch('/brands/:id', requireRole('superadmin'), asyncHandler(async
   const schema = z.object({
     name: z.string().min(2, 'Nama brand minimal 2 karakter').max(100).optional(),
     code: z.string().min(2, 'Kode brand minimal 2 karakter').max(30).regex(/^[A-Z0-9_-]+$/, 'Kode brand hanya boleh berisi huruf kapital, angka, tanda strip (-), dan garis bawah (_)').optional(),
+    logoUrl: z.string().regex(LOGO_URL_PATTERN, 'Logo harus diunggah melalui fitur upload logo.').optional().nullable().or(z.literal('').transform(() => null)),
     ppiuNumber: z.string().max(100).optional().nullable(),
     bankName: z.string().max(50).optional().nullable(),
     bankAccountNumber: z.string().max(50).optional().nullable(),
@@ -125,6 +186,13 @@ catalogRouter.patch('/brands/:id', requireRole('superadmin'), asyncHandler(async
   const input = schema.parse(req.body);
   const existing = await prisma.brand.findUnique({ where: { id } });
   if (!existing) throw new HttpError(404, 'Brand tidak ditemukan.');
+
+  // Hapus file logo lama jika diganti
+  if (input.logoUrl !== undefined && existing.logoUrl && input.logoUrl !== existing.logoUrl) {
+    const oldFile = path.resolve(process.cwd(), 'uploads', 'brands', path.basename(existing.logoUrl));
+    fs.promises.unlink(oldFile).catch(() => {});
+  }
+
   const data = await prisma.brand.update({ where: { id }, data: input as any });
   res.json({ success: true, data });
 }));
@@ -156,15 +224,22 @@ catalogRouter.delete('/brands/:id', requireRole('superadmin'), asyncHandler(asyn
   res.json({ success: true, message: `Brand "${existing.name}" berhasil dihapus.` });
 }));
 
+const AMBIGUOUS_RUPIAH = 'Nominal tidak terbaca. Tulis seperti "Rp 36.500.000" atau "36,5 juta".';
+const rupiahText = (required: string) => z.string().min(1, required).max(50)
+  .refine((value) => (parseRupiahStrict(value) ?? 0) > 0, AMBIGUOUS_RUPIAH);
+const optionalRupiahText = z.string().max(50).optional().nullable()
+  .refine((value) => !value?.trim() || parseRupiahStrict(value) !== null, AMBIGUOUS_RUPIAH);
+
 const packageInputSchema = z.object({
   brandId: z.number().int().positive().optional(),
   name: z.string().min(2, 'Nama paket minimal 2 karakter').max(150),
-  price: z.string().min(1, 'Harga acuan (Quad) wajib diisi').max(50),
-  dp: z.string().min(1, 'DP wajib diisi').max(50),
-  priceQuad: z.string().max(50).optional().nullable(),
-  priceTriple: z.string().max(50).optional().nullable(),
-  priceDouble: z.string().max(50).optional().nullable(),
-  priceInfant: z.string().max(50).optional().nullable(),
+  // Nominal harus terbaca jelas (mis. "Rp 36.500.000" atau "36,5 juta"); format ambigu ditolak, bukan ditebak.
+  price: rupiahText('Harga acuan (Quad) wajib diisi'),
+  dp: rupiahText('DP wajib diisi'),
+  priceQuad: optionalRupiahText,
+  priceTriple: optionalRupiahText,
+  priceDouble: optionalRupiahText,
+  priceInfant: optionalRupiahText,
   quotaRemaining: z.number().int().nonnegative().optional().nullable(),
   departureDate: z.string().optional().nullable(),
   departureInfo: z.string().max(100).optional().nullable(),
@@ -467,7 +542,7 @@ catalogRouter.post('/users', requireRole('superadmin', 'admin'), asyncHandler(as
     name: z.string().min(2).max(100),
     email: z.string().email(),
     password: z.string().min(8).max(128),
-    role: z.enum(['admin', 'cs', 'finance']).default('cs'),
+    role: z.enum(['admin', 'cs', 'finance', 'product']).default('cs'),
   }).parse(req.body);
 
   if (req.user!.role === 'admin' && input.role !== 'cs') {
@@ -487,7 +562,9 @@ catalogRouter.post('/users', requireRole('superadmin', 'admin'), asyncHandler(as
     allBrandIds = effectiveBrandId ? [effectiveBrandId] : [];
   } else {
     allBrandIds = [...new Set([...(input.brandIds || []), ...(input.brandId ? [input.brandId] : [])])].filter(Boolean);
-    if (allBrandIds.length === 0) throw new HttpError(422, 'Pilih minimal satu brand.');
+    // Tim LA melayani semua brand holding: tidak terikat brand.
+    if (input.role === 'product') allBrandIds = [];
+    else if (allBrandIds.length === 0) throw new HttpError(422, 'Pilih minimal satu brand.');
     effectiveBrandId = allBrandIds[0] ?? null;
   }
 
@@ -587,7 +664,7 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
     name: z.string().min(2).max(100).optional(),
     email: z.string().email().optional(),
     password: z.string().min(8).max(128).optional(),
-    role: z.enum(['admin', 'cs', 'finance']).optional(),
+    role: z.enum(['admin', 'cs', 'finance', 'product']).optional(),
     brandId: z.number().int().positive().nullable().optional(),
     brandIds: z.array(z.number().int().positive()).optional(),
   }).parse(req.body);

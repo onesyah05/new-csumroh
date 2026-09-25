@@ -19,7 +19,7 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, resolveMediaUrl } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
@@ -34,6 +34,7 @@ interface BrandDetail {
   id: number;
   name: string;
   code: string;
+  logoUrl?: string | null;
   ppiuNumber?: string | null;
   phone?: string | null;
   bankName?: string | null;
@@ -126,7 +127,18 @@ export function BrandDetailPage() {
       {/* Header */}
       <PageHeader
         backUrl="/brands"
-        title={brand.name}
+        title={
+          <span className="flex items-center gap-3">
+            {brand.logoUrl ? (
+              <img
+                src={resolveMediaUrl(brand.logoUrl)}
+                alt={brand.name}
+                className="h-9 w-9 rounded-lg object-cover border border-zinc-200 shadow-xs"
+              />
+            ) : null}
+            {brand.name}
+          </span>
+        }
         badges={
           <>
             <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-700">
@@ -198,7 +210,7 @@ export function BrandDetailPage() {
             <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
               <ShieldCheck size={17} className="text-zinc-600" />
               <div>
-                <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Legalitas & Kontak Resmi
                 </h3>
                 <p className="text-xs text-zinc-500">Identitas resmi biro dan alamat kantor.</p>
@@ -249,10 +261,10 @@ export function BrandDetailPage() {
               <div className="flex items-center gap-2">
                 <CreditCard size={17} className="text-zinc-600" />
                 <div>
-                  <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                  <h3 className="font-display text-xs font-extrabold text-zinc-700">
                     Rekening Resmi Bank
                   </h3>
-                  <p className="text-xs text-zinc-500">Rekening tujuan transfer DP dan pelunasan paket jamaah.</p>
+                  <p className="text-xs text-zinc-500">Rekening tujuan pembayaran awal jamaah (DP atau lunas).</p>
                 </div>
               </div>
 
@@ -271,7 +283,7 @@ export function BrandDetailPage() {
             {brand.bankName ? (
               <div className="space-y-1 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-extrabold uppercase text-zinc-900 tracking-wider">
+                  <span className="text-xs font-extrabold text-zinc-900">
                     {brand.bankName}
                   </span>
                   <span className="font-mono text-sm font-bold text-zinc-950 tracking-tight">
@@ -293,7 +305,7 @@ export function BrandDetailPage() {
           {/* Status WhatsApp Gateway */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700 flex items-center gap-1.5">
+              <h3 className="text-xs font-extrabold text-zinc-700 flex items-center gap-1.5">
                 <Smartphone size={14} className="text-zinc-500" />
                 WhatsApp Gateway
               </h3>
@@ -332,7 +344,7 @@ export function BrandDetailPage() {
           {/* Tim Sales & Staf */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700 flex items-center gap-1.5">
+              <h3 className="text-xs font-extrabold text-zinc-700 flex items-center gap-1.5">
                 <Users size={14} className="text-zinc-500" />
                 Staf Tim ({brand.users?.length ?? 0})
               </h3>

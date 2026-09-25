@@ -1,30 +1,36 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Building2,
+  Camera,
   CreditCard,
   ExternalLink,
   FileText,
+  ImagePlus,
   Loader2,
   MapPin,
   Phone,
   Save,
   ShieldCheck,
   Trash2,
+  X,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { resolveMediaUrl } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { ConfirmDialog } from '../../components/ui/modal';
+import { showFeedback } from '../../app/toast';
 
 interface BrandFormData {
   name: string;
   code: string;
+  logoUrl: string;
   ppiuNumber: string;
   phone: string;
   bankName: string;
@@ -34,6 +40,13 @@ interface BrandFormData {
   gmapsUrl: string;
 }
 
+interface UploadResponse {
+  url: string;
+  originalSize: number;
+  compressedSize: number;
+  filename: string;
+}
+
 export function BrandFormPage() {
   const { brandId } = useParams<{ brandId: string }>();
   const isEditing = Boolean(brandId);
@@ -41,12 +54,17 @@ export function BrandFormPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [uploadInfo, setUploadInfo] = useState<{ original: number; compressed: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const backUrl = isEditing ? `/brands/${brandId}` : '/brands';
 
   const [form, setForm] = useState<BrandFormData>({
     name: '',
     code: '',
+    logoUrl: '',
     ppiuNumber: '',
     phone: '',
     bankName: '',
@@ -69,6 +87,7 @@ export function BrandFormPage() {
       setForm({
         name: currentBrand.name ?? '',
         code: currentBrand.code ?? '',
+        logoUrl: currentBrand.logoUrl ?? '',
         ppiuNumber: currentBrand.ppiuNumber ?? '',
         phone: currentBrand.phone ?? '',
         bankName: currentBrand.bankName ?? '',
@@ -77,14 +96,84 @@ export function BrandFormPage() {
         address: currentBrand.address ?? '',
         gmapsUrl: currentBrand.gmapsUrl ?? '',
       });
+      if (currentBrand.logoUrl) {
+        setLogoPreview(resolveMediaUrl(currentBrand.logoUrl));
+      }
     }
   }, [isEditing, currentBrand]);
+
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      return new Promise<UploadResponse>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const result = await api.post<UploadResponse>('/catalog/brands/upload-logo', {
+              image: reader.result as string,
+            });
+            resolve(result);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        reader.onerror = () => reject(new Error('Gagal membaca file.'));
+        reader.readAsDataURL(file);
+      });
+    },
+    onSuccess: (data) => {
+      setForm((prev) => ({ ...prev, logoUrl: data.url }));
+      setLogoPreview(resolveMediaUrl(data.url));
+      setUploadInfo({ original: data.originalSize, compressed: data.compressedSize });
+      showFeedback('Logo berhasil diupload dan dikompresi ke WebP.');
+    },
+    onError: (err: Error) => {
+      showFeedback(err.message || 'Gagal mengupload logo.');
+    },
+  });
+
+  function handleFileSelect(file: File) {
+    if (!file.type.startsWith('image/')) {
+      showFeedback('File harus berupa gambar (JPG, PNG, atau WebP).');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showFeedback('Ukuran file maksimal 10 MB.');
+      return;
+    }
+    uploadLogoMutation.mutate(file);
+  }
+
+  function handleFileInputChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) handleFileSelect(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  }
+
+  function removeLogo() {
+    setForm((prev) => ({ ...prev, logoUrl: '' }));
+    setLogoPreview(null);
+    setUploadInfo(null);
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
         name: form.name.trim(),
         code: form.code.trim().toUpperCase(),
+        logoUrl: form.logoUrl.trim() || null,
         ppiuNumber: form.ppiuNumber.trim() || null,
         phone: form.phone.trim() || null,
         bankName: form.bankName.trim() || null,
@@ -192,7 +281,7 @@ export function BrandFormPage() {
             <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
               <Building2 size={17} className="text-zinc-600" />
               <div>
-                <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Identitas Brand
                 </h3>
                 <p className="text-xs text-zinc-500">Nama resmi biro dan kode identifikasi sistem.</p>
@@ -200,12 +289,66 @@ export function BrandFormPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-5 items-start">
-              {/* Avatar Preview */}
-              <div className="flex flex-col items-center gap-1.5 shrink-0 self-center sm:self-start">
-                <span className="grid h-14 w-14 place-items-center rounded-xl bg-zinc-950 font-display text-base font-extrabold text-white shadow-xs">
-                  {avatarPreview}
-                </span>
-                <span className="text-xs font-mono uppercase text-zinc-500">Avatar</span>
+              {/* Logo Upload / Avatar Preview */}
+              <div className="flex flex-col items-center gap-2 shrink-0 self-center sm:self-start">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleFileInputChange}
+                />
+                <div
+                  className={`relative group cursor-pointer ${isDragging ? 'ring-2 ring-emerald-500 ring-offset-2' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadLogoMutation.isPending ? (
+                    <span className="grid h-20 w-20 place-items-center rounded-xl bg-zinc-100 border-2 border-dashed border-zinc-300 shadow-xs">
+                      <Loader2 size={20} className="animate-spin text-zinc-400" />
+                    </span>
+                  ) : logoPreview ? (
+                    <div className="relative">
+                      <img
+                        src={logoPreview}
+                        alt="Logo brand"
+                        className="h-20 w-20 rounded-xl object-cover border border-zinc-200 shadow-xs"
+                      />
+                      <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <Camera size={18} className="text-white" />
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="grid h-20 w-20 place-items-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 hover:border-zinc-400 hover:bg-zinc-100 transition-all shadow-xs group">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <ImagePlus size={20} className="text-zinc-400 group-hover:text-zinc-600 transition" />
+                        <span className="text-xs text-zinc-400 group-hover:text-zinc-600 font-medium transition">Logo</span>
+                      </div>
+                    </span>
+                  )}
+                </div>
+
+                {logoPreview && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); removeLogo(); }}
+                    className="inline-flex items-center gap-1 text-xs text-rose-600 hover:text-rose-800 font-medium cursor-pointer transition"
+                  >
+                    <X size={11} />
+                    Hapus
+                  </button>
+                )}
+
+                {!logoPreview && !uploadLogoMutation.isPending && (
+                  <span className="text-xs text-zinc-400 text-center leading-tight">
+                    JPG, PNG, WebP
+                    <br />
+                    Maks. 10 MB
+                  </span>
+                )}
+
               </div>
 
               <div className="grid gap-4 flex-1 w-full sm:grid-cols-2">
@@ -247,7 +390,7 @@ export function BrandFormPage() {
             <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
               <ShieldCheck size={17} className="text-zinc-600" />
               <div>
-                <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Legalitas & Kontak Resmi
                 </h3>
                 <p className="text-xs text-zinc-500">Izin Kemenag dan kontak layanan jamaah.</p>
@@ -294,10 +437,10 @@ export function BrandFormPage() {
             <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
               <CreditCard size={17} className="text-zinc-600" />
               <div>
-                <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Rekening Resmi Bank
                 </h3>
-                <p className="text-xs text-zinc-500">Rekening tujuan transfer DP dan pelunasan paket umroh.</p>
+                <p className="text-xs text-zinc-500">Rekening tujuan pembayaran awal jamaah (DP atau lunas).</p>
               </div>
             </div>
 
@@ -348,7 +491,7 @@ export function BrandFormPage() {
             <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
               <MapPin size={17} className="text-zinc-600" />
               <div>
-                <h3 className="font-display text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Alamat Kantor & Lokasi Google Maps
                 </h3>
                 <p className="text-xs text-zinc-500">Alamat kantor biro dan tautan peta lokasi.</p>
@@ -363,7 +506,7 @@ export function BrandFormPage() {
                 <textarea
                   id="brand-address"
                   rows={3}
-                  className="w-full rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-900 outline-none transition focus:border-black focus:ring-1 focus:ring-black placeholder:text-zinc-400 shadow-xs"
+                  className="w-full rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-900 outline-none transition focus:border-black focus:ring-1 focus:ring-black placeholder:text-zinc-500 shadow-xs"
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
                   placeholder="Jl. Sudirman No. 123, Lantai 4, Jakarta..."

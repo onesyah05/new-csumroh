@@ -44,6 +44,9 @@ importers:
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3
+      sharp:
+        specifier: ^0.35.4
+        version: 0.35.4(@types/node@24.13.4)
       socket.io:
         specifier: ^4.8.1
         version: 4.8.3
@@ -66,6 +69,9 @@ importers:
       '@types/node':
         specifier: ^24.3.1
         version: 24.13.4
+      '@types/sharp':
+        specifier: ^0.32.0
+        version: 0.32.0(@types/node@24.13.4)
       prisma:
         specifier: ^6.16.1
         version: 6.19.3(typescript@5.9.3)
@@ -1368,6 +1374,10 @@ packages:
 
   '@types/serve-static@2.2.0':
     resolution: {integrity: sha512-8mam4H1NHLtu7nmtalF7eyBH14QyOASmcxHhSfEoRyr0nP/YdoesEtU+uSRvMe96TW/HPTtkoKqQLl53N7UXMQ==}
+
+  '@types/sharp@0.32.0':
+    resolution: {integrity: sha512-OOi3kL+FZDnPhVzsfD37J88FNeZh6gQsGcLc95NbeURRGvmSjeXiDcyWzF2o3yh/gQAUn2uhh/e+CPCa5nwAxw==}
+    deprecated: This is a stub types definition. sharp provides its own type definitions, so you do not need this installed.
 
   '@types/whatwg-mimetype@3.0.2':
     resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
@@ -3867,6 +3877,12 @@ snapshots:
     dependencies:
       '@types/http-errors': 2.0.5
       '@types/node': 24.13.4
+
+  '@types/sharp@0.32.0(@types/node@24.13.4)':
+    dependencies:
+      sharp: 0.35.4(@types/node@24.13.4)
+    transitivePeerDependencies:
+      - '@types/node'
 
   '@types/whatwg-mimetype@3.0.2': {}
 
