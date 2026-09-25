@@ -3,6 +3,7 @@ import { env } from '../config/env.js';
 import {
   businessHour,
   claimOnce,
+  customExpiringJob,
   eveningDigestJob,
   gatewayHealthJob,
   morningDigestJob,
@@ -23,6 +24,7 @@ const minuteJobs: Job[] = [
   { name: 'wa-disconnected', run: whatsappDisconnectedJob },
   { name: 'gateway-health', run: (now) => gatewayHealthJob(now) },
   { name: 'proof-stale', run: proofStaleJob },
+  { name: 'custom-expiring', run: customExpiringJob },
 ];
 
 /** Job harian: jalan sekali per tanggal WIB setelah jamnya tiba (juga menyusul bila API baru hidup). */

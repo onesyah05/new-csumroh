@@ -60,24 +60,20 @@ describe('Ringkasan CS', () => {
 });
 
 describe('Ringkasan Finance', () => {
-  it('bukti menunggu (lebih dari 2 jam = mendesak), refund, kelebihan bayar, invoice lewat', async () => {
+  it('Finance hanya mendapat tugas bukti pembayaran awal dan daftar terlama', async () => {
     const at = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000);
     mocks.prospectFindMany
       .mockResolvedValueOnce([
         { id: 1, brandId: 1, name: 'A', paymentProofUrl: 'p1', paymentProofSubmittedAt: at(3), payments: [] },
         { id: 2, brandId: 1, name: 'B', paymentProofUrl: 'p2', paymentProofSubmittedAt: at(1), payments: [] },
         { id: 3, brandId: 1, name: 'C', paymentProofUrl: 'p3', paymentProofSubmittedAt: at(5), payments: [{ proofUrl: 'p3' }] },
-      ])
-      .mockResolvedValueOnce([{ dpAmount: 5_000_000 }])
-      .mockResolvedValueOnce([{ dpAmount: 70, dealValue: 60 }, { dpAmount: 10, dealValue: 60 }]);
-    mocks.prospectCount.mockResolvedValueOnce(2);
+      ]);
     mocks.brandFindMany.mockResolvedValue([{ id: 1, name: 'Hana' }]);
     const result = await tasksForFinance([1], NOW);
     const t = byKey(result.tasks);
     expect(t.proofs).toMatchObject({ count: 2, tone: 'urgent', hint: '1 lebih dari 2 jam · terlama 3 jam' });
-    expect(t.refund).toMatchObject({ count: 1, tone: 'urgent' });
-    expect(t.overpaid.count).toBe(1);
-    expect(t.invoice_late.count).toBe(2);
+    expect(Object.keys(t)).toEqual(['proofs']);
+    expect(mocks.prospectFindMany.mock.calls[0][0].where.status.notIn).toEqual(expect.arrayContaining(['deal', 'closed_won']));
     expect(result.waiting?.items.map((i) => i.name)).toEqual(['A', 'B']);
   });
 });
@@ -99,10 +95,73 @@ describe('Ringkasan Admin', () => {
     ]);
     const result = await tasksForManager([1, 2], NOW);
     const t = byKey(result.tasks);
-    expect(t.reply_sla).toMatchObject({ count: 2, tone: 'urgent', hint: '1 lebih dari 30 menit' });
-    expect(t.unassigned).toMatchObject({ count: 1, tone: 'urgent' });
-    expect(t.wa_disconnected).toMatchObject({ count: 1, hint: 'Azhan' });
-    expect(t.no_cs).toMatchObject({ count: 1, hint: 'Azhan' });
+    expect(t.reply_sla).toMatchObject({ count: 2, tone: 'urgent', hint: '1 di antaranya lebih dari 30 menit', action: 'Lihat' });
+    expect(t.unassigned).toMatchObject({ count: 1, tone: 'urgent', action: 'Bagikan' });
+    expect(t.wa_disconnected).toMatchObject({ count: 1, hint: 'Azhan: chat jamaah tidak masuk', action: 'Hubungkan' });
+    // Brand tanpa CS tanpa lead tertahan: tetap tampil, tetapi belum mendesak.
+    expect(t.no_cs).toMatchObject({ count: 1, tone: 'action', action: 'Tambah CS' });
     expect(result.waiting?.items[0]).toMatchObject({ id: 1, brandName: 'Hana', picName: 'Fitri' });
+  });
+});
+
+describe('Angka yang bisa dipercaya (audit Ringkasan R1–R4, R13)', () => {
+  it('percakapan lebih dari 24 jam bukan "belum dibalas" mendesak, melainkan terbengkalai', async () => {
+    mocks.conversations.mockResolvedValue([
+      conv({ id: 1, awaitingSince: minutesAgo(48 * 24 * 60) }),
+      conv({ id: 2, awaitingSince: minutesAgo(20) }),
+    ]);
+    mocks.prospectFindMany.mockResolvedValue([]);
+    mocks.sessionFindMany.mockResolvedValue([{ brandId: 1, status: 'connected' }]);
+    mocks.brandFindMany.mockResolvedValue([{ id: 1, name: 'Hana', _count: { users: 2 }, userBrands: [] }]);
+    const result = await tasksForManager([1], NOW);
+    const t = byKey(result.tasks);
+    expect(t.reply_sla.count).toBe(1);
+    expect(t.stale).toMatchObject({ count: 1, tone: 'action' });
+    expect(result.waiting?.items.map((i) => i.id)).toEqual([2]);
+  });
+
+  it('lead tanpa PIC dipisah menurut penyebab: brand tanpa CS (Tambah CS) vs perlu dibagikan', async () => {
+    mocks.conversations.mockImplementation(async (brandId: number) => (brandId === 2
+      ? [conv({ id: 7, brandId: 2, userId: null, user: null }), conv({ id: 8, brandId: 2, userId: null, user: null })]
+      : [conv({ id: 9, brandId: 1, userId: null, user: null })]));
+    mocks.prospectFindMany.mockResolvedValue([]);
+    mocks.sessionFindMany.mockResolvedValue([{ brandId: 1, status: 'connected' }, { brandId: 2, status: 'connected' }]);
+    mocks.brandFindMany.mockResolvedValue([
+      { id: 1, name: 'Hana', _count: { users: 2 }, userBrands: [] },
+      { id: 2, name: 'Nava', _count: { users: 0 }, userBrands: [] },
+    ]);
+    const t = byKey((await tasksForManager([1, 2], NOW)).tasks);
+    // Satu masalah = satu baris: lead Nava tidak dihitung dua kali.
+    expect(t.no_cs).toMatchObject({ count: 2, link: '/staff', tone: 'urgent', hint: 'Nava. Tambahkan CS agar lead bisa dibalas dan dibagikan' });
+    expect(t.unassigned).toMatchObject({ count: 1, link: '/pipeline?pic=none&brandId=1' });
+  });
+
+  it('tanpa masalah CS: tautan Pipeline membawa brand dengan antrean terbanyak', async () => {
+    mocks.conversations.mockImplementation(async (brandId: number) => (brandId === 2
+      ? [conv({ id: 7, brandId: 2, userId: null, user: null }), conv({ id: 8, brandId: 2, userId: null, user: null })]
+      : []));
+    mocks.prospectFindMany.mockResolvedValue([]);
+    mocks.sessionFindMany.mockResolvedValue([]);
+    mocks.brandFindMany.mockResolvedValue([
+      { id: 1, name: 'Hana', _count: { users: 1 }, userBrands: [] },
+      { id: 2, name: 'Nava', _count: { users: 1 }, userBrands: [] },
+    ]);
+    const t = byKey((await tasksForManager([1, 2], NOW)).tasks);
+    expect(t.unassigned.link).toBe('/pipeline?pic=none&brandId=2');
+  });
+
+  it('PIC bukan CS aktif dan Deal tanpa nilai booking dilaporkan', async () => {
+    mocks.conversations.mockResolvedValue([]);
+    mocks.prospectFindMany.mockResolvedValue([]);
+    mocks.sessionFindMany.mockResolvedValue([{ brandId: 1, status: 'connected' }]);
+    mocks.brandFindMany.mockResolvedValue([{ id: 1, name: 'Hana', _count: { users: 1 }, userBrands: [] }]);
+    mocks.prospectCount.mockImplementation(async ({ where }: any) => (where.user ? 4 : where.dealValue ? 1 : 0));
+    const t = byKey((await tasksForManager([1], NOW)).tasks);
+    expect(t.invalid_pic.count).toBe(4);
+    expect(t.deal_incomplete.count).toBe(1);
+    const invalidWhere = mocks.prospectCount.mock.calls.find(([arg]: any) => arg.where.user)![0].where;
+    expect(invalidWhere.user).toEqual({ is: { OR: [{ role: { not: 'cs' } }, { isActive: false }] } });
+    mocks.prospectCount.mockReset();
+    mocks.prospectCount.mockResolvedValue(0);
   });
 });

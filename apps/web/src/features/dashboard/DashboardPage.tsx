@@ -1,551 +1,346 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  ArrowRight,
-  Building2,
-  CalendarDays,
-  CircleDollarSign,
-  Compass,
-  Inbox,
-  MessageCircleMore,
-  Plane,
-  ShieldAlert,
-  Smartphone,
-  Trophy,
-  Users2,
-  Wallet,
-} from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { isWonStatus } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
+import { cn } from '../../lib/cn';
 import { isHoldingRole, useBrandScope } from '../../lib/scope';
 import { Select } from '../../components/ui/select';
-import { Badge } from '../../components/ui/badge';
-import { Button } from '../../components/ui/button';
 import { useAuth } from '../../app/auth';
 import { TodayTasks } from './TodayTasks';
-import { PageError, PageLoading, SectionEmpty } from '../../components/ui/page-feedback';
+import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
-import { ProspectAvatar } from '../../components/ui/avatar';
-import { useWhatsAppAvatars } from '../../lib/avatars';
 
-const rupiah = (value: unknown) =>
-  new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0,
-  }).format(Number(value ?? 0));
+type Trend = { value: number; previous: number };
+type Summary = {
+  scope: { isHoldingView: boolean; currentBrandId: number | null; role: string; brands: { id: number; name: string }[] };
+  period: { key: string; from: string; to: string; prevFrom: string; prevTo: string; comparison: string };
+  kpis: {
+    leads: Trend;
+    deals: Trend & { jamaah: number };
+    bookingValue: Trend;
+  };
+  funnel: { stages: { label: string; count: number }[]; lost: number; conversion: number; sources: { source: string; leads: number; deals: number }[] };
+  brands: Array<{ id: number; name: string; leads: number; deals: number; jamaah: number; bookingValue: number; conversion: number; activeCs: number; unassignedOpen: number }>;
+  team: Array<{ id: number; name: string; isActive: boolean; brands: string[]; leads: number; deals: number; jamaah: number; bookingValue: number; conversion: number; openNow: number }> | null;
+  departures: Array<{ id: number; name: string; brandName: string; departureDate: string; sold: number; remaining: number | null; capacity: number | null; daysLeft: number }>;
+};
 
-const moneyCompact = (value: unknown) =>
-  new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(Number(value ?? 0));
+const PERIODS = [
+  { value: 'this_month', label: 'Bulan ini' },
+  { value: 'last_month', label: 'Bulan lalu' },
+  { value: 'last_30', label: '30 hari terakhir' },
+  { value: 'this_year', label: 'Tahun ini' },
+];
+const SOURCE_LABELS: Record<string, string> = { whatsapp: 'WhatsApp langsung', meta_ads: 'Iklan Meta', manual: 'Input manual' };
+const TZ = 'Asia/Jakarta';
 
-function formatRelativeTime(dateStr?: string | null) {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60000);
-  if (diffMinutes < 1) return 'Baru saja';
-  if (diffMinutes < 60) return `${diffMinutes} mnt lalu`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours} jam lalu`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays} hari lalu`;
-  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+const money = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', notation: 'compact', maximumFractionDigits: 1 }).format(value);
+const moneyFull = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
+
+/** "1–24 Sep 2026" atau "25 Agu – 24 Sep 2026" (akhir rentang eksklusif). */
+export function formatRange(fromIso: string, toIso: string) {
+  const from = new Date(fromIso);
+  const to = new Date(new Date(toIso).getTime() - 1);
+  const part = (d: Date, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('id-ID', { timeZone: TZ, ...o }).format(d);
+  const sameYear = part(from, { year: 'numeric' }) === part(to, { year: 'numeric' });
+  const sameMonth = sameYear && part(from, { month: 'short' }) === part(to, { month: 'short' });
+  const end = part(to, { day: 'numeric', month: 'short', year: 'numeric' });
+  if (sameMonth) return `${part(from, { day: 'numeric' })}–${end}`;
+  return `${part(from, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })} – ${end}`;
 }
+
+function Delta({ value, previous }: Trend) {
+  if (value === previous) {
+    return <span className="inline-flex items-center gap-0.5 text-xs font-medium text-zinc-500"><Minus size={12} aria-hidden="true" />Sama</span>;
+  }
+  const up = value > previous;
+  const label = previous === 0 ? 'Baru' : `${up ? '+' : '−'}${Math.round((Math.abs(value - previous) / previous) * 100)}%`;
+  const Icon = up ? ArrowUpRight : ArrowDownRight;
+  return (
+    <span className={cn('inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums', up ? 'text-emerald-700' : 'text-rose-700')}>
+      <Icon size={13} aria-hidden="true" />{label}
+    </span>
+  );
+}
+
+function Kpi({ label, value, note, trend, previousLabel }: { label: string; value: string; note?: ReactNode; trend?: Trend; previousLabel?: string }) {
+  return (
+    <div className="min-w-0 px-5 py-4">
+      <p className="text-xs font-medium text-zinc-600">{label}</p>
+      <p className="mt-1.5 truncate text-2xl font-bold leading-none tracking-tight text-zinc-950 tabular-nums">{value}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-600">
+        {trend && <Delta {...trend} />}
+        {trend && previousLabel && <span className="tabular-nums">sebelumnya {previousLabel}</span>}
+        {note}
+      </div>
+    </div>
+  );
+}
+
+function Panel({ title, subtitle, aside, children, className }: { title: string; subtitle?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <section className={cn('surface overflow-hidden', className)} aria-label={title}>
+      <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-5 py-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-zinc-950">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs text-zinc-600">{subtitle}</p>}
+        </div>
+        {aside && <div className="shrink-0 text-xs">{aside}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const th = 'whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-zinc-600';
+const td = 'whitespace-nowrap px-3 py-3 tabular-nums text-zinc-800';
 
 export function DashboardPage() {
   const { user } = useAuth();
   const { brandId, query } = useBrandScope();
-  const isSuperOrFinance = isHoldingRole(user?.role);
-  const [holdingScope, setHoldingScope] = useState<string>('all');
-  const [activityFilter, setActivityFilter] = useState<'all' | 'new' | 'won' | 'unassigned'>('all');
+  const isHolding = isHoldingRole(user?.role);
+  const isCs = user?.role === 'cs';
+  const [holdingScope, setHoldingScope] = useState('all');
+  const [period, setPeriod] = useState('this_month');
 
-  const scopeParam = isSuperOrFinance ? `?brandId=${holdingScope}` : query;
-
+  const scopeParam = isHolding ? `?brandId=${holdingScope}` : query;
   const dashboard = useQuery({
-    queryKey: ['dashboard', isSuperOrFinance ? holdingScope : brandId],
-    queryFn: () => api.get<any>(`/dashboard${scopeParam}`),
-    enabled: !!brandId || isSuperOrFinance,
+    queryKey: ['dashboard', 'summary', isHolding ? holdingScope : brandId, period],
+    queryFn: () => api.get<Summary>(`/dashboard${scopeParam}${scopeParam ? '&' : '?'}period=${period}`),
+    enabled: user?.role !== 'finance' && (!!brandId || isHolding),
   });
+
+  if (user?.role === 'finance') return <div className="app-page space-y-5"><PageHeader title="Verifikasi pembayaran awal" subtitle="Verifikasi DP atau pembayaran lunas pertama untuk menetapkan Deal." /><TodayTasks scope="?brandId=all" /></div>;
+
+  if (!brandId && !isHolding) {
+    return <PageError title="Belum ada brand aktif" description="Akun Anda belum dikaitkan dengan brand. Hubungi Administrator untuk penugasan brand." />;
+  }
+  if (dashboard.isLoading) return <PageLoading label="Memuat ringkasan..." />;
+  if (dashboard.isError || !dashboard.data?.kpis) {
+    return <PageError description={dashboard.error?.message ?? 'Data ringkasan tidak lengkap.'} onRetry={() => void dashboard.refetch()} />;
+  }
 
   const data = dashboard.data;
-  // Foto profil WhatsApp aktivitas terbaru (disalin API; siluet bila kontak tidak memasang foto).
-  const photoFor = useWhatsAppAvatars(data?.recent, data?.currentBrandId ?? brandId);
-  const brandCount = data?.brands?.length ?? 0;
-  const currentBrandName =
-    data?.brands?.find((b: any) => b.id === data?.currentBrandId)?.name ?? user?.brand?.name ?? 'Brand Terpilih';
-
-  if (!brandId && !isSuperOrFinance) {
-    return (
-      <PageError
-        title="Belum ada brand aktif"
-        description="Akun Anda belum dikaitkan dengan brand tertentu. Hubungi Administrator untuk penugasan brand."
-      />
-    );
-  }
-
-  if (dashboard.isLoading) return <PageLoading label="Memuat ringkasan dashboard..." />;
-  if (dashboard.isError) {
-    return <PageError description={dashboard.error.message} onRetry={() => void dashboard.refetch()} />;
-  }
-
-  const isHolding = data?.isHoldingView;
-  const wonCount = Number(data?.won ?? 0);
-  const totalCount = Number(data?.total ?? 0);
-  const unassignedCount = Number(data?.unassigned ?? 0);
-  const dealValue = Number(data?.totalDealValue ?? 0);
-  const verifiedCash = Number(data?.totalVerifiedCash ?? 0);
-  const outstanding = Number(data?.totalOutstanding ?? 0);
-
-  const recentProspects = (data?.recent ?? []).filter((item: any) => {
-    if (activityFilter === 'all') return true;
-    if (activityFilter === 'new') return item.status === 'new';
-    if (activityFilter === 'won') return isWonStatus(item.status);
-    if (activityFilter === 'unassigned') return !item.user;
-    return true;
-  });
+  const { kpis, funnel } = data;
+  const brandName = data.scope.brands.find((b) => b.id === data.scope.currentBrandId)?.name ?? user?.brand?.name ?? 'Brand';
+  const scopeLabel = data.scope.isHoldingView ? `Semua brand (${data.scope.brands.length})` : brandName;
+  const rangeLabel = formatRange(data.period.from, data.period.to);
+  const prevRange = formatRange(data.period.prevFrom, data.period.prevTo);
+  const leadsTotal = funnel.stages[0]?.count ?? 0;
 
   return (
-    <div className="app-page space-y-6">
-      {/* 1. CLEAN PAGE HEADER */}
+    <div className="app-page space-y-5">
       <PageHeader
-        kicker={isHolding ? undefined : currentBrandName}
         title="Ringkasan"
-        subtitle={
-          isHolding
-            ? `Performa akuisisi prospek, aktivitas CS WhatsApp, dan konversi deal seluruh brand.`
-            : `Performa akuisisi prospek, aktivitas CS WhatsApp, dan konversi deal.`
-        }
+        subtitle={isCs ? `Jamaah yang Anda tangani di ${brandName} · ${rangeLabel}` : `${scopeLabel} · ${rangeLabel}`}
         actions={
-          <div className="flex flex-wrap items-center gap-2.5">
-            {isSuperOrFinance && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={period} onValueChange={setPeriod} size="sm" aria-label="Periode" className="w-auto text-xs" options={PERIODS} />
+            {isHolding && (
               <Select
                 value={holdingScope}
                 onValueChange={setHoldingScope}
                 size="sm"
-                aria-label="Filter cakupan brand"
+                aria-label="Cakupan brand"
                 className="w-auto text-xs"
-                options={[
-                  { value: 'all', label: 'Semua Brand' },
-                  ...(data?.brands ?? []).map((b: any) => ({
-                    value: String(b.id),
-                    label: b.name,
-                  })),
-                ]}
+                options={[{ value: 'all', label: 'Semua brand' }, ...data.scope.brands.map((b) => ({ value: String(b.id), label: b.name }))]}
               />
             )}
-            <Button
-              to="/inbox"
-              variant="primary"
-              size="sm"
-              icon={<MessageCircleMore size={15} />}
-            >
-              Buka Kotak Masuk
-            </Button>
-            <Button
-              to="/pipeline"
-              variant="secondary"
-              size="sm"
-              icon={<Compass size={14} />}
-            >
-              Pipeline
-            </Button>
           </div>
         }
       />
 
-      {/* Daftar kerja per role, di atas metrik: apa yang perlu ditindaklanjuti sekarang. */}
       <TodayTasks scope={scopeParam} />
 
-      {/* Rekonsiliasi keuangan: urusan Finance/Admin, bukan CS. */}
-      {isSuperOrFinance && (Number(data?.totalOverpayment) > 0 || Number(data?.cashOnCancelled) > 0) && (
-        <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-          <div className="flex items-center gap-2">
-            <ShieldAlert size={16} className="text-amber-600 shrink-0" />
-            <span>
-              <b>Perlu Tindakan Keuangan:</b>{' '}
-              {Number(data?.totalOverpayment) > 0 && (
-                <span>Lebih bayar <b>{rupiah(data.totalOverpayment)}</b>. </span>
-              )}
-              {Number(data?.cashOnCancelled) > 0 && (
-                <span>Dana booking batal <b>{rupiah(data.cashOnCancelled)}</b> menunggu refund / pindah seat.</span>
-              )}
-            </span>
-          </div>
-          <Link to="/verifikasi" className="font-semibold text-amber-900 hover:underline shrink-0 ml-3">
-            Buka Verifikasi &rarr;
-          </Link>
+      {/* Angka bisnis periode ini, dibandingkan dengan rentang yang sama sebelumnya. */}
+      <section aria-label="Kinerja periode" className="surface overflow-hidden">
+        {/* gap-px di atas latar abu = garis pembatas; di 2 kolom KPI terakhir melebar agar tidak ada sel kosong. */}
+        <div className="grid grid-cols-2 gap-px bg-zinc-100 md:grid-cols-3 [&>*]:bg-white [&>*:last-child]:col-span-2 md:[&>*:last-child]:col-span-1">
+          <Kpi label={isCs ? 'Lead baru saya' : 'Lead masuk'} value={kpis.leads.value.toLocaleString('id-ID')} trend={kpis.leads} previousLabel={String(kpis.leads.previous)} />
+          <Kpi
+            label="Deal"
+            value={`${kpis.deals.value} booking`}
+            trend={kpis.deals}
+            previousLabel={String(kpis.deals.previous)}
+            note={<span className="font-medium text-zinc-700">{kpis.deals.jamaah} jamaah</span>}
+          />
+          <Kpi label="Nilai deal" value={money(kpis.bookingValue.value)} trend={kpis.bookingValue} previousLabel={money(kpis.bookingValue.previous)} />
         </div>
-      )}
-
-      {/* 2. CORE METRICS STRIP (CLEAN, SINGLE-LAYER CARDS) */}
-      <section className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Total Prospek */}
-        <div className="surface p-5">
-          <div className="flex items-center justify-between text-zinc-500">
-            <span className="text-xs font-medium text-zinc-500">
-              Total Prospek
-            </span>
-            <Inbox size={16} className="text-zinc-500" />
-          </div>
-          <p className="mt-2 font-sans text-3xl font-bold tracking-tight text-zinc-950">
-            {totalCount}
-          </p>
-          <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-            <span>Akuisisi prospek</span>
-            {unassignedCount > 0 ? (
-              <Link
-                to="/pipeline"
-                className="font-medium text-amber-700 hover:underline"
-              >
-                {unassignedCount} belum ada CS
-              </Link>
-            ) : (
-              <span className="text-emerald-700 font-medium">Semua ditangani CS</span>
-            )}
-          </div>
-        </div>
-
-        {/* Card 2: Total Deal */}
-        <div className="surface p-5">
-          <div className="flex items-center justify-between text-zinc-500">
-            <span className="text-xs font-medium text-zinc-500">Total Deal</span>
-            <Users2 size={16} className="text-zinc-500" />
-          </div>
-          <p className="mt-2 font-sans text-3xl font-bold tracking-tight text-zinc-950">
-            {wonCount}
-          </p>
-          <p className="mt-2 text-xs text-zinc-500">
-            {data?.totalPax ?? 0} Pax seat terjual
-          </p>
-        </div>
-
-        {/* Card 3: Nilai Deal */}
-        <div className="surface p-5">
-          <div className="flex items-center justify-between text-zinc-500">
-            <span className="text-xs font-medium text-zinc-500">Nilai Deal</span>
-            <CircleDollarSign size={16} className="text-zinc-500" />
-          </div>
-          <p className="mt-2 font-sans text-3xl font-bold tracking-tight text-zinc-950 truncate">
-            {moneyCompact(dealValue)}
-          </p>
-          <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-            <span>Terverifikasi: <b className="text-zinc-700 font-medium">{moneyCompact(verifiedCash)}</b></span>
-          </div>
-        </div>
-
-        {/* Card 4: Konversi Deal */}
-        <div className="surface p-5">
-          <div className="flex items-center justify-between text-zinc-500">
-            <span className="text-xs font-medium text-zinc-500">Konversi Deal</span>
-            <Trophy size={16} className="text-zinc-500" />
-          </div>
-          <p className="mt-2 font-sans text-3xl font-bold tracking-tight text-zinc-950">
-            {data?.conversionRate ?? 0}%
-          </p>
-          <p className="mt-2 text-xs text-zinc-500">
-            {wonCount} deal dari {totalCount} prospek
-          </p>
-        </div>
+        <p className="border-t border-zinc-100 bg-white px-5 py-2 text-xs text-zinc-500">
+          Perbandingan dengan {data.period.comparison} ({prevRange}).
+        </p>
       </section>
 
-      {/* 3. MAIN CONTENT: LEFT (2/3) + RIGHT (1/3) */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* LEFT COLUMN: BRAND TABLE (IF HOLDING) + RECENT PROSPECTS */}
-        <div className="space-y-6 lg:col-span-2">
-          {/* Performa Brand Table (Holding View Only) */}
-          {isHolding && (data?.brandBreakdown?.length ?? 0) > 0 && (
-            <section className="surface overflow-hidden">
-              <div className="border-b border-zinc-200/90 px-5 py-3.5 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-950">Performa Sales per Brand</h3>
-                  <p className="text-xs text-zinc-500">Akuisisi prospek, deal, dan konversi per brand</p>
-                </div>
-                <span className="text-xs font-medium text-zinc-500 bg-zinc-100 rounded-md px-2 py-0.5">
-                  {brandCount} Brand
-                </span>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50/80 border-b border-zinc-200/70 text-zinc-500 font-semibold uppercase text-xs tracking-wider">
-                    <tr>
-                      <th className="py-2.5 px-4">Brand</th>
-                      <th className="py-2.5 px-3 text-center">Prospek</th>
-                      <th className="py-2.5 px-3 text-center">Deal</th>
-                      <th className="py-2.5 px-3 text-center">Pax</th>
-                      <th className="py-2.5 px-3 text-right">Nilai Paket</th>
-                      <th className="py-2.5 px-3 text-right">Terverifikasi</th>
-                      <th className="py-2.5 px-4 text-center">Konversi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {data.brandBreakdown.map((b: any) => (
-                      <tr key={b.id} className="hover:bg-zinc-50/70 transition">
-                        <td className="py-3 px-4">
-                          <button
-                            type="button"
-                            onClick={() => setHoldingScope(String(b.id))}
-                            className="text-left group"
-                          >
-                            <span className="font-semibold text-zinc-900 group-hover:text-zinc-600 transition">
-                              {b.name}
-                            </span>
-                          </button>
-                        </td>
-                        <td className="py-3 px-3 text-center font-medium text-zinc-700">
-                          {b.totalLeads}
-                        </td>
-                        <td className="py-3 px-3 text-center font-medium text-emerald-700">
-                          {b.won}
-                        </td>
-                        <td className="py-3 px-3 text-center font-mono font-medium text-zinc-800">
-                          {b.totalPax}
-                        </td>
-                        <td className="py-3 px-3 text-right font-medium text-zinc-900 tabular-nums">
-                          {moneyCompact(b.dealValue)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-medium text-emerald-700 tabular-nums">
-                          {moneyCompact(b.verifiedCash)}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="inline-block rounded px-1.5 py-0.5 text-xs font-semibold text-zinc-700 bg-zinc-100">
-                            {b.conversionRate}%
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {/* Aktivitas Prospek Terbaru */}
-          <section className="surface overflow-hidden">
-            <div className="border-b border-zinc-200/90 px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-zinc-950">Aktivitas Prospek Terbaru</h3>
-                <p className="text-xs text-zinc-500">Follow-up CS dan status prospek terkini</p>
-              </div>
-
-              {/* Filter Tabs */}
-              <div className="flex items-center gap-1 text-xs">
-                {[
-                  { key: 'all', label: 'Semua' },
-                  { key: 'new', label: 'Baru' },
-                  { key: 'won', label: 'Deal' },
-                  { key: 'unassigned', label: 'Belum Ada CS' },
-                ].map((f) => (
-                  <button
-                    key={f.key}
-                    type="button"
-                    onClick={() => setActivityFilter(f.key as any)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${
-                      activityFilter === f.key
-                        ? 'bg-zinc-900 text-white'
-                        : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Prospects List */}
-            <div className="divide-y divide-zinc-100">
-              {recentProspects.map((item: any) => {
+      <div className="grid gap-5 lg:grid-cols-5">
+        <Panel
+          className="lg:col-span-3"
+          title="Perjalanan lead"
+          subtitle={`${leadsTotal} lead yang masuk ${rangeLabel} dan tahap terjauhnya sekarang`}
+          aside={<span className="font-semibold text-zinc-900">Konversi {funnel.conversion}%</span>}
+        >
+          {leadsTotal === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-zinc-600">Belum ada lead masuk pada periode ini.</p>
+          ) : (
+            <div className="space-y-4 px-5 py-5">
+              {funnel.stages.map((stage, index) => {
+                const share = Math.round((stage.count / leadsTotal) * 100);
+                const isDeal = index === funnel.stages.length - 1;
                 return (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-zinc-50/70 transition"
-                  >
-                    <Link
-                      to={`/prospects/${item.id}`}
-                      className="flex items-center gap-3 min-w-0 flex-1 group"
-                    >
-                      <ProspectAvatar photoUrl={photoFor(item)} size="md" />
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-xs sm:text-sm text-zinc-950 group-hover:text-zinc-600 transition truncate">
-                            {item.name}
-                          </span>
-                          {item.brand?.name && isHolding && (
-                            <span className="text-xs text-zinc-500 bg-zinc-100 rounded px-1.5 py-0.2 shrink-0">
-                              {item.brand.name}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 mt-0.5">
-                          <span>{item.phone}</span>
-                          {item.city && <span>· {item.city}</span>}
-                          <span>·</span>
-                          {item.user ? (
-                            <span className="text-zinc-600 font-medium">CS: {item.user.name}</span>
-                          ) : (
-                            <span className="text-amber-700 font-medium">Belum ada CS</span>
-                          )}
-                          {item.package?.name && (
-                            <span className="text-zinc-500 truncate max-w-[140px]">
-                              · {item.package.name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-zinc-500 hidden sm:inline">
-                        {formatRelativeTime(item.updatedAt || item.createdAt)}
-                      </span>
-                      <Badge value={item.status} />
-                    </div>
+                  <div key={stage.label} className="grid grid-cols-[112px_minmax(0,1fr)_76px] items-center gap-3 text-xs">
+                    <span className="font-medium text-zinc-700">{stage.label}</span>
+                    <span className="h-3 overflow-hidden rounded-full bg-zinc-100" aria-hidden="true">
+                      <span className={cn('block h-full rounded-full', isDeal ? 'bg-emerald-600' : 'bg-zinc-800')} style={{ width: `${Math.max(share, stage.count ? 2 : 0)}%` }} />
+                    </span>
+                    <span className="text-right tabular-nums">
+                      <b className="text-zinc-950">{stage.count}</b> <span className="text-zinc-500">· {share}%</span>
+                    </span>
                   </div>
                 );
               })}
-
-              {!recentProspects.length && (
-                <div className="p-8">
-                  <SectionEmpty
-                    title="Belum ada aktivitas"
-                    description="Tidak ada data prospek pada filter ini."
-                  />
-                </div>
-              )}
             </div>
-
-            <div className="border-t border-zinc-100 px-5 py-3 bg-zinc-50/40 flex items-center justify-between text-xs">
-              <span className="text-zinc-500">
-                Menampilkan {recentProspects.length} dari {totalCount} prospek
-              </span>
-              <Link
-                to="/pipeline"
-                className="font-medium text-zinc-700 hover:text-black inline-flex items-center gap-1 transition"
-              >
-                <span>Buka Pipeline &rarr;</span>
-              </Link>
-            </div>
-          </section>
-        </div>
-
-        {/* RIGHT COLUMN: WHATSAPP STATUS + PACKAGES QUOTA */}
-        <div className="space-y-6">
-          {/* WhatsApp Gateway Card */}
-          <section className="surface p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Smartphone size={16} className="text-zinc-500" />
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-700">
-                  WhatsApp Gateway
-                </h4>
-              </div>
-
-              <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border ${
-                  data?.wa?.status === 'connected'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : data?.wa?.status === 'connecting'
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    data?.wa?.status === 'connected'
-                      ? 'bg-emerald-600'
-                      : data?.wa?.status === 'connecting'
-                      ? 'bg-amber-600'
-                      : 'bg-zinc-400'
-                  }`}
-                />
-                {data?.wa?.status === 'connected'
-                  ? 'Terhubung'
-                  : data?.wa?.status === 'connecting'
-                  ? 'Menghubungkan'
-                  : 'Terputus'}
-              </span>
-            </div>
-
-            <p className="text-xs text-zinc-600 font-mono bg-zinc-50 rounded-lg p-2.5 border border-zinc-100">
-              {data?.wa?.phoneNumber ?? 'Belum ada nomor yang dikonfigurasi.'}
-            </p>
-
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-zinc-500">
-                {isHolding
-                  ? `${data?.wa?.connectedChannels ?? 0} dari ${data?.wa?.totalChannels ?? 0} channel CS aktif`
-                  : 'Channel WhatsApp CS aktif'}
-              </span>
-              <Link to="/device" className="font-medium text-zinc-700 hover:text-black hover:underline">
-                Kelola &rarr;
-              </Link>
-            </div>
-          </section>
-
-          {/* Kuota Paket Umroh Aktif */}
-          {(data?.activePackages?.length ?? 0) > 0 && (
-            <section className="surface p-5 space-y-3">
-              <div className="flex items-center justify-between border-b border-zinc-100 pb-2.5">
-                <div className="flex items-center gap-2 text-zinc-800 font-semibold text-xs">
-                  <Plane size={14} className="text-zinc-500" />
-                  <span>Sisa Kuota Paket</span>
-                </div>
-                <Link to="/packages" className="text-xs font-medium text-zinc-500 hover:text-black hover:underline">
-                  Lihat Semua &rarr;
-                </Link>
-              </div>
-
-              <div className="space-y-2">
-                {data.activePackages.map((pkg: any) => {
-                  const remaining = pkg.quotaRemaining;
-                  const isLow = remaining !== null && remaining !== undefined && remaining <= 5;
-
-                  return (
-                    <div
-                      key={pkg.id}
-                      className="flex items-center justify-between p-2 rounded-lg hover:bg-zinc-50 transition text-xs"
-                    >
-                      <div className="min-w-0 pr-2">
-                        <p className="font-medium text-zinc-900 truncate">{pkg.name}</p>
-                        <p className="text-xs text-zinc-500">
-                          {pkg.departureInfo ||
-                            (pkg.departureDate
-                              ? new Date(pkg.departureDate).toLocaleDateString('id-ID', {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric',
-                                })
-                              : 'Jadwal Reguler')}
-                          {isHolding && pkg.brand?.name ? ` · ${pkg.brand.name}` : ''}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`text-xs font-mono font-semibold px-2 py-0.5 rounded border shrink-0 ${
-                          isLow
-                            ? 'bg-rose-50 text-rose-700 border-rose-200'
-                            : 'bg-zinc-100 text-zinc-700 border-zinc-200'
-                        }`}
-                      >
-                        {remaining !== null && remaining !== undefined ? `Sisa ${remaining} seat` : 'Tersedia'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
           )}
+          {leadsTotal > 0 && (
+            <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-zinc-100 px-5 py-2.5 text-xs text-zinc-600">
+              {funnel.sources.map((s) => (
+                <span key={s.source}>
+                  <b className="font-semibold text-zinc-800">{SOURCE_LABELS[s.source] ?? s.source}</b> {s.leads} lead · {s.deals} deal
+                </span>
+              ))}
+              {funnel.lost > 0 && <span>{funnel.lost} batal</span>}
+            </div>
+          )}
+        </Panel>
 
-        </div>
+        <Panel
+          className="lg:col-span-2"
+          title="Keberangkatan terdekat"
+          subtitle="Seat terjual dari kuota paket"
+          aside={<Link to="/packages" className="font-medium text-zinc-700 hover:text-zinc-950 hover:underline">Semua paket</Link>}
+        >
+          {data.departures.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-zinc-600">Belum ada keberangkatan terjadwal.</p>
+          ) : (
+            <ul className="divide-y divide-zinc-100">
+              {data.departures.map((d) => {
+                const fill = d.capacity ? Math.round((d.sold / d.capacity) * 100) : 0;
+                const date = new Intl.DateTimeFormat('id-ID', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(d.departureDate));
+                return (
+                  <li key={d.id} className="px-5 py-3">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="min-w-0 truncate text-sm font-semibold text-zinc-900" title={d.name}>{d.name}</p>
+                      <p className="shrink-0 text-xs tabular-nums text-zinc-700">
+                        {d.capacity === null ? 'Kuota belum diatur' : <><b className="text-zinc-950">{d.sold}</b>/{d.capacity} seat</>}
+                      </p>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-3 text-xs text-zinc-600">
+                      <span className="truncate">
+                        {date} · {d.daysLeft === 0 ? 'hari ini' : `${d.daysLeft} hari lagi`}{data.scope.isHoldingView ? ` · ${d.brandName}` : ''}
+                      </span>
+                      {d.remaining === 0 ? (
+                        <span className="shrink-0 font-semibold text-zinc-900">Penuh</span>
+                      ) : d.remaining !== null && d.remaining <= 5 ? (
+                        <span className="shrink-0 font-semibold text-amber-800">Sisa {d.remaining}</span>
+                      ) : null}
+                    </div>
+                    {d.capacity !== null && (
+                      <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-zinc-100" aria-hidden="true">
+                        <span className="block h-full rounded-full bg-zinc-800" style={{ width: `${Math.max(fill, d.sold ? 2 : 0)}%` }} />
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
       </div>
+
+      {data.scope.isHoldingView && data.brands.length > 1 && (
+        <Panel title="Per brand" subtitle={`Kinerja ${rangeLabel}. Klik nama brand untuk melihat rinciannya.`}>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-zinc-200 bg-zinc-50">
+                <tr>
+                  <th className={cn(th, 'pl-5')}>Brand</th>
+                  <th className={cn(th, 'text-right')}>Lead</th>
+                  <th className={cn(th, 'text-right')}>Deal</th>
+                  <th className={cn(th, 'text-right')}>Nilai deal</th>
+                  <th className={cn(th, 'text-right')}>Konversi</th>
+                  <th className={cn(th, 'pr-5 text-right')}>CS aktif</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {data.brands.map((b) => (
+                  <tr key={b.id} className="hover:bg-zinc-50">
+                    <td className="whitespace-nowrap py-3 pl-5 pr-3">
+                      <button type="button" onClick={() => setHoldingScope(String(b.id))} className="font-semibold text-zinc-900 hover:underline">
+                        {b.name}
+                      </button>
+                    </td>
+                    <td className={cn(td, 'text-right')}>{b.leads}</td>
+                    <td className={cn(td, 'text-right')}>{b.deals} <span className="text-xs text-zinc-500">({b.jamaah} jamaah)</span></td>
+                    <td className={cn(td, 'text-right')} title={moneyFull(b.bookingValue)}>{money(b.bookingValue)}</td>
+                    <td className={cn(td, 'text-right')}>{b.conversion}%</td>
+                    <td className={cn(td, 'pr-5 text-right')}>
+                      {b.activeCs > 0 ? b.activeCs : <Link to="/staff" className="font-semibold text-amber-800 hover:underline">Belum ada</Link>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+
+      {data.team && (
+        <Panel
+          title="Performa CS"
+          subtitle={`Diurutkan menurut nilai deal ${rangeLabel}. Prospek aktif = beban saat ini.`}
+          aside={<Link to="/staff" className="font-medium text-zinc-700 hover:text-zinc-950 hover:underline">Kelola staf</Link>}
+        >
+          {data.team.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-zinc-600">
+              Belum ada CS aktif pada cakupan ini. <Link to="/staff" className="font-semibold text-zinc-900 underline">Tambah CS</Link>
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="border-b border-zinc-200 bg-zinc-50">
+                  <tr>
+                    <th className={cn(th, 'pl-5')}>CS</th>
+                    <th className={cn(th, 'text-right')}>Lead baru</th>
+                    <th className={cn(th, 'text-right')}>Deal</th>
+                    <th className={cn(th, 'text-right')}>Nilai deal</th>
+                    <th className={cn(th, 'text-right')}>Konversi</th>
+                    <th className={cn(th, 'pr-5 text-right')}>Prospek aktif</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {data.team.map((cs) => (
+                    <tr key={cs.id} className="hover:bg-zinc-50">
+                      <td className="whitespace-nowrap py-3 pl-5 pr-3">
+                        <p className="font-semibold text-zinc-900">
+                          {cs.name}
+                          {!cs.isActive && <span className="ml-1.5 text-xs font-medium text-zinc-500">nonaktif</span>}
+                        </p>
+                        {data.scope.isHoldingView && cs.brands.length > 0 && <p className="text-xs text-zinc-500">{cs.brands.join(', ')}</p>}
+                      </td>
+                      <td className={cn(td, 'text-right')}>{cs.leads}</td>
+                      <td className={cn(td, 'text-right')}>{cs.deals} <span className="text-xs text-zinc-500">({cs.jamaah} jamaah)</span></td>
+                      <td className={cn(td, 'text-right')} title={moneyFull(cs.bookingValue)}>{money(cs.bookingValue)}</td>
+                      <td className={cn(td, 'text-right')}>{cs.conversion}%</td>
+                      <td className={cn(td, 'pr-5 text-right')}>{cs.openNow}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      )}
     </div>
   );
 }

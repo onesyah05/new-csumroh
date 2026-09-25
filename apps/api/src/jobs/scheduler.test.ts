@@ -16,6 +16,7 @@ vi.mock('../modules/notifications/jobs.js', async () => {
     whatsappDisconnectedJob: job('wa-disconnected'),
     gatewayHealthJob: job('gateway-health'),
     proofStaleJob: job('proof-stale'),
+    customExpiringJob: job('custom-expiring'),
     morningDigestJob: job('morning-digest'),
     eveningDigestJob: job('evening-digest'),
     retentionJob: job('retention'),

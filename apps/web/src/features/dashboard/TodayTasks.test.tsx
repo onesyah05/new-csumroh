@@ -25,28 +25,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('Perlu dikerjakan sekarang', () => {
-  it('mendesak tampil lebih dulu, dengan tautan ke tampilan terfilter; daftar jamaah menunggu', async () => {
+describe('Perlu ditindaklanjuti', () => {
+  it('satu baris per masalah: mendesak lebih dulu, dengan tombol aksi; yang beres tidak tampil', async () => {
     renderWith({
       role: 'cs',
       tasks: [
-        { key: 'followup_today', label: 'Follow-up hari ini', count: 0, hint: null, link: '/pipeline?quick=today&pic=mine', tone: 'clear' },
-        { key: 'reply', label: 'Jamaah menunggu balasan', count: 2, hint: 'Terlama 12 menit', link: '/pipeline?quick=reply&pic=mine', tone: 'urgent' },
+        { key: 'followup_today', label: 'Follow-up hari ini', count: 0, hint: null, link: '/pipeline?quick=today&pic=mine', action: 'Follow-up', tone: 'clear' },
+        { key: 'stale', label: 'Percakapan terbengkalai', count: 1, hint: null, link: '/pipeline?quick=reply&pic=mine', action: 'Rapikan', tone: 'action' },
+        { key: 'reply', label: 'Menunggu balasan', count: 2, hint: 'Terlama 12 menit', link: '/pipeline?quick=reply&pic=mine', action: 'Balas', tone: 'urgent' },
       ],
       waiting: { title: 'Jamaah saya yang menunggu balasan', items: [{ id: 5, brandId: 1, brandName: null, name: 'Ibu Aisyah', waitedMinutes: 75, picName: null, link: '/inbox?prospectId=5&brandId=1' }] },
     });
-    const [first, second] = await screen.findAllByRole('link') as [HTMLElement, HTMLElement];
-    expect(first.textContent).toContain('Jamaah menunggu balasan');
-    expect(first.getAttribute('href')).toBe('/pipeline?quick=reply&pic=mine');
-    expect(within(first).getByLabelText('Mendesak')).toBeTruthy();
-    expect(second.textContent).toContain('Tidak ada');
+    const list = (await screen.findByRole('heading', { name: 'Perlu ditindaklanjuti' })).closest('div')!.parentElement!;
+    const [first, second] = within(list).getAllByRole('link');
+    expect(first!.textContent).toContain('Menunggu balasan');
+    expect(first!.textContent).toContain('Mendesak');
+    expect(first!.textContent).toContain('Balas');
+    expect(first!.getAttribute('href')).toBe('/pipeline?quick=reply&pic=mine');
+    expect(second!.textContent).toContain('Rapikan');
+    expect(screen.getByText('2 hal')).toBeTruthy();
+    expect(screen.queryByText(/Follow-up hari ini/)).toBeNull();
     const waiting = screen.getByRole('complementary', { name: 'Jamaah saya yang menunggu balasan' });
     expect(within(waiting).getByText('Ibu Aisyah')).toBeTruthy();
     expect(within(waiting).getByText('1 jam')).toBeTruthy();
   });
 
-  it('semua beres', async () => {
+  it('semua beres: satu baris ringkas', async () => {
     renderWith({ role: 'finance', tasks: [{ key: 'proofs', label: 'Bukti transfer menunggu', count: 0, hint: null, link: '/verifikasi', tone: 'clear' }], waiting: null });
-    expect(await screen.findByText('Semua beres')).toBeTruthy();
+    expect(await screen.findByText('Tidak ada yang perlu ditindaklanjuti.')).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
   });
 });

@@ -1,192 +1,85 @@
 import { Router } from 'express';
-import { avatarNeedsRefresh, isWonStatus } from '@csumroh/shared-types';
+import { businessDateKey, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/http.js';
-import { refreshProspectAvatars } from '../chat/avatar.service.js';
+import { buildSummary, departures, parsePeriod, periodRange } from './summary.service.js';
 import { tasksForCs, tasksForFinance, tasksForManager } from './tasks.service.js';
 
 export const dashboardRouter = Router();
 dashboardRouter.use(authGuard);
 
+/**
+ * Ringkasan bisnis per periode (lihat summary.service.ts untuk definisi angka). Pengawas holding
+ * (superadmin/admin/finance) melihat semua brand bila brandId kosong atau 'all'; CS hanya melihat
+ * prospek miliknya pada brand aktif.
+ */
 dashboardRouter.get('/', asyncHandler(async (req, res) => {
-  // Pengawas holding (superadmin/admin/finance) melihat semua brand bila brandId kosong atau 'all'.
-  const isHoldingRole = req.user?.role === 'superadmin' || req.user?.role === 'admin' || req.user?.role === 'finance';
-  const requestedBrandRaw = req.query.brandId;
-  const isHoldingView = isHoldingRole && (requestedBrandRaw === 'all' || !requestedBrandRaw);
+  const role = req.user!.role;
+  const isHoldingRole = role === 'superadmin' || role === 'admin' || role === 'finance';
+  const raw = req.query.brandId;
+  const isHoldingView = isHoldingRole && (raw === 'all' || !raw);
+  const currentBrandId = isHoldingView ? null : scopedBrandId(req, raw && raw !== 'all' ? Number(raw) : undefined);
+  const isCs = role === 'cs';
+  const range = periodRange(parsePeriod(req.query.period));
 
-  let brandWhere: { brandId?: number } = {};
-  let currentBrandId: number | undefined;
+  const allBrands = await prisma.brand.findMany({ select: { id: true, name: true }, orderBy: { id: 'asc' } });
+  const brands = currentBrandId ? allBrands.filter((b) => b.id === currentBrandId) : allBrands;
+  const brandIds = brands.map((b) => b.id);
+  const ownerFilter = isCs ? { userId: req.user!.id } : {};
+  const today = new Date(`${businessDateKey()}T00:00:00.000Z`);
 
-  if (!isHoldingView) {
-    currentBrandId = scopedBrandId(
-      req,
-      requestedBrandRaw && requestedBrandRaw !== 'all' ? Number(requestedBrandRaw) : undefined
-    );
-    brandWhere = { brandId: currentBrandId };
-  }
+  const [prospects, csUsers, packages] = await Promise.all([
+    prisma.prospect.findMany({
+      where: { brandId: { in: brandIds }, ...ownerFilter },
+      select: {
+        id: true, brandId: true, userId: true, status: true, leadSource: true, dealValue: true,
+        dpPaidAt: true, createdAt: true, offerSentAt: true, invoiceSentAt: true,
+        paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true,
+      },
+    }),
+    prisma.user.findMany({
+      where: { role: 'cs', OR: [{ brandId: { in: brandIds } }, { userBrands: { some: { brandId: { in: brandIds } } } }] },
+      select: { id: true, name: true, isActive: true, brandId: true, userBrands: { select: { brandId: true } } },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.package.findMany({
+      where: { brandId: { in: brandIds }, isActive: true, departureDate: { gte: today } },
+      select: { id: true, name: true, quotaRemaining: true, departureDate: true, brand: { select: { name: true } } },
+      orderBy: { departureDate: 'asc' },
+      take: 5,
+    }),
+  ]);
 
-  // 1. Fetch all brands for multi-brand breakdown
-  const allBrands = await prisma.brand.findMany({
-    select: { id: true, name: true, code: true },
-    orderBy: { id: 'asc' },
+  const sold = packages.length
+    ? await prisma.prospect.groupBy({
+      by: ['packageId'],
+      where: { packageId: { in: packages.map((p) => p.id) }, status: { in: [...wonStatuses] } },
+      _sum: { seatsReserved: true },
+    })
+    : [];
+  const soldBy = new Map(sold.map((row) => [row.packageId, row._sum.seatsReserved ?? 0]));
+
+  const summary = buildSummary({
+    range,
+    prospects,
+    brands,
+    users: csUsers.map((u) => ({
+      id: u.id, name: u.name, isActive: u.isActive,
+      brandIds: [...new Set([u.brandId, ...u.userBrands.map((ub) => ub.brandId)].filter((id): id is number => id !== null))],
+    })),
+    includeTeam: !isCs,
   });
-
-  // 2. Fetch prospects from database (directly, not in-memory livechat cache - A14)
-  const prospects = await prisma.prospect.findMany({
-    where: brandWhere,
-    select: {
-      id: true,
-      name: true,
-      phone: true,
-      city: true,
-      status: true,
-      photoUrl: true,
-      remoteJid: true,
-      paymentStatus: true,
-      dealValue: true,
-      dpAmount: true,
-      paxQuad: true,
-      paxTriple: true,
-      paxDouble: true,
-      paxInfant: true,
-      brandId: true,
-      userId: true,
-      createdAt: true,
-      updatedAt: true,
-      user: { select: { id: true, name: true } },
-      package: { select: { id: true, name: true } },
-      brand: { select: { id: true, name: true, code: true } },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  // 3. Compute core metrics
-  const total = prospects.length;
-  // Menang = booking Deal yang disahkan Finance. paymentStatus saja tidak cukup (booking bisa dibatalkan).
-  const isWon = (p: typeof prospects[0]) => isWonStatus(p.status);
-
-  const wonProspects = prospects.filter(isWon);
-  const won = wonProspects.length;
-  const unassigned = prospects.filter((p) => !p.userId).length;
-
-  const totalPax = wonProspects.reduce(
-    (sum, p) => sum + (p.paxQuad || 0) + (p.paxTriple || 0) + (p.paxDouble || 0) + (p.paxInfant || 0),
-    0
-  );
-
-  const finance = summarizeFinance(prospects);
-  const { dealValue: totalDealValue, verifiedCash: totalVerifiedCash, outstanding: totalOutstanding } = finance;
-
-  // 4. Pipeline stages count & value
-  const pipelineMap = new Map<string, { count: number; sum: number }>();
-  for (const p of prospects) {
-    const st = p.status;
-    const cur = pipelineMap.get(st) || { count: 0, sum: 0 };
-    cur.count++;
-    cur.sum += Number(p.dealValue) || 0;
-    pipelineMap.set(st, cur);
-  }
-
-  const pipeline = Array.from(pipelineMap.entries()).map(([status, val]) => ({
-    status,
-    _count: val.count,
-    _sum: { dealValue: val.sum },
-  }));
-
-  // 5. Holding breakdown per brand
-  const brandBreakdown = allBrands.map((b) => {
-    const bProspects = prospects.filter((p) => p.brandId === b.id);
-    const bWon = bProspects.filter(isWon);
-    const bPax = bWon.reduce(
-      (sum, p) => sum + (p.paxQuad || 0) + (p.paxTriple || 0) + (p.paxDouble || 0) + (p.paxInfant || 0),
-      0
-    );
-    const bFinance = summarizeFinance(bProspects);
-
-    return {
-      id: b.id,
-      name: b.name,
-      code: b.code,
-      totalLeads: bProspects.length,
-      won: bWon.length,
-      totalPax: bPax,
-      dealValue: bFinance.dealValue,
-      verifiedCash: bFinance.verifiedCash,
-      outstanding: bFinance.outstanding,
-      overpayment: bFinance.overpayment,
-      cashOnCancelled: bFinance.cashOnCancelled,
-      conversionRate: bProspects.length ? Math.round((bWon.length / bProspects.length) * 100) : 0,
-    };
-  });
-
-  // 6. Active packages quota status
-  const activePackages = await prisma.package.findMany({
-    where: { ...brandWhere, isActive: true },
-    select: {
-      id: true,
-      name: true,
-      brandId: true,
-      quotaRemaining: true,
-      departureDate: true,
-      departureInfo: true,
-      price: true,
-      brand: { select: { id: true, name: true, code: true } },
-    },
-    orderBy: { departureDate: 'asc' },
-    take: 8,
-  });
-
-  // 7. WhatsApp status
-  let waStatus: any = null;
-  if (!isHoldingView && currentBrandId) {
-    waStatus = await prisma.whatsappSession.findUnique({ where: { brandId: currentBrandId } });
-  } else {
-    const allWa = await prisma.whatsappSession.findMany({ select: { brandId: true, status: true, phoneNumber: true } });
-    const connectedCount = allWa.filter((w) => w.status === 'connected').length;
-    waStatus = {
-      isHolding: true,
-      totalChannels: allBrands.length,
-      connectedChannels: connectedCount,
-      status: connectedCount === allBrands.length ? 'connected' : connectedCount > 0 ? 'connecting' : 'disconnected',
-      phoneNumber: `${connectedCount} dari ${allBrands.length} channel brand terhubung`,
-    };
-  }
-
-  // 8. Recent 10 prospects
-  const recent = prospects.slice(0, 10);
-
-  // Foto profil WhatsApp disalin ke server di latar belakang (URL CDN WA kedaluwarsa, jadi tidak disimpan).
-  const missingRecent = recent.filter((p) => avatarNeedsRefresh(p.photoUrl) && p.remoteJid && !p.remoteJid.endsWith('@g.us') && p.remoteJid !== '0@s.whatsapp.net');
-  if (missingRecent.length > 0) {
-    setImmediate(() => {
-      void refreshProspectAvatars(missingRecent.map((p) => ({
-        id: p.id, brandId: p.brandId, remoteJid: p.remoteJid, phone: p.phone, photoUrl: p.photoUrl,
-      })));
-    });
-  }
 
   res.json({
     success: true,
     data: {
-      isHoldingView,
-      currentBrandId: currentBrandId ?? null,
-      total,
-      won,
-      unassigned,
-      totalPax,
-      totalDealValue,
-      totalVerifiedCash,
-      totalOutstanding,
-      totalOverpayment: finance.overpayment,
-      cashOnCancelled: finance.cashOnCancelled,
-      conversionRate: total ? Math.round((won / total) * 100) : 0,
-      pipeline,
-      brandBreakdown,
-      activePackages,
-      recent,
-      wa: waStatus,
-      brands: allBrands,
+      scope: { isHoldingView, currentBrandId, role, brands: allBrands },
+      ...summary,
+      departures: departures(packages.map((p) => ({
+        id: p.id, name: p.name, brandName: p.brand.name, departureDate: p.departureDate!,
+        sold: soldBy.get(p.id) ?? 0, remaining: p.quotaRemaining,
+      }))),
     },
   });
 }));
@@ -207,31 +100,3 @@ dashboardRouter.get('/tasks', asyncHandler(async (req, res) => {
       : await tasksForManager(brandIds);
   res.json({ success: true, data });
 }));
-
-type FinanceRow = { status: string; dealValue: unknown; dpAmount: unknown };
-
-/**
- * Rekap keuangan per booking. Piutang dan kelebihan bayar dihitung per jamaah lalu dijumlah,
- * sehingga kelebihan bayar A tidak mengurangi piutang B. Kas pada booking yang dibatalkan
- * dilaporkan terpisah sebagai dana yang menunggu refund/pemindahan.
- */
-export function summarizeFinance(rows: FinanceRow[]) {
-  let dealValue = 0;
-  let verifiedCash = 0;
-  let outstanding = 0;
-  let overpayment = 0;
-  let cashOnCancelled = 0;
-  for (const row of rows) {
-    const value = Number(row.dealValue) || 0;
-    const cash = Number(row.dpAmount) || 0;
-    if (!isWonStatus(row.status)) {
-      cashOnCancelled += cash;
-      continue;
-    }
-    dealValue += value;
-    verifiedCash += cash;
-    outstanding += Math.max(0, value - cash);
-    if (value > 0) overpayment += Math.max(0, cash - value);
-  }
-  return { dealValue, verifiedCash, outstanding, overpayment, cashOnCancelled };
-}
