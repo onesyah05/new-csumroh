@@ -30,7 +30,7 @@ const detailInclude = {
       user: { select: { name: true } },
     },
   },
-  brand: { select: { id: true, name: true, code: true } },
+  brand: { select: { id: true, name: true, code: true, logoUrl: true } },
   basePackage: {
     select: {
       id: true, name: true, departureDate: true, departureInfo: true, duration: true, airline: true, flightType: true,

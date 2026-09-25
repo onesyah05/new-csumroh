@@ -582,9 +582,11 @@ export function StaffPage() {
               ...brands.data.map((b) => ({
                 value: String(b.id),
                 label: b.name,
+                iconUrl: b.logoUrl,
+                iconInitials: b.name.substring(0, 2).toUpperCase(),
               })),
             ]}
-            className="h-9 min-w-[170px] text-xs font-medium rounded-lg border-zinc-200 shadow-xs focus:ring-1 focus:ring-zinc-950 py-0"
+            className="h-9 min-w-[200px] text-xs font-medium rounded-lg border-zinc-200 shadow-xs focus:ring-1 focus:ring-zinc-950 py-0"
           />
         )}
 

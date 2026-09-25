@@ -127,7 +127,7 @@ export function VerificationPage() {
             className="w-48"
             options={[
               { value: 'all', label: 'Semua brand' },
-              ...(brands.data ?? []).map((b) => ({ value: String(b.id), label: b.name })),
+              ...(brands.data ?? []).map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() })),
             ]}
           />
         }

@@ -1,8 +1,9 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { resolveMediaUrl } from '../../lib/api';
 
-export type SelectOption = { value: string; label: string };
+export type SelectOption = { value: string; label: string; iconUrl?: string | null; iconInitials?: string | null };
 export type SelectSize = 'sm' | 'md' | 'lg';
 
 export function Select({
@@ -25,6 +26,7 @@ export function Select({
   'aria-label'?: string;
 }) {
   const isCompact = size === 'sm' || size === 'md' || className?.includes('text-xs') || className?.includes('h-9') || className?.includes('h-8');
+  const selectedOption = options.find(o => o.value === value);
 
   return (
     <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
@@ -40,7 +42,20 @@ export function Select({
           className
         )}
       >
-        <SelectPrimitive.Value placeholder={placeholder} />
+        <SelectPrimitive.Value placeholder={placeholder}>
+          {selectedOption && (selectedOption.iconUrl || selectedOption.iconInitials) ? (
+            <div className="flex items-center gap-2">
+              {selectedOption.iconUrl ? (
+                <img src={resolveMediaUrl(selectedOption.iconUrl)} alt="" className={cn("shrink-0 rounded-md object-cover border border-zinc-200", isCompact ? "h-5 w-5" : "h-6 w-6")} />
+              ) : selectedOption.iconInitials ? (
+                <span className={cn("grid shrink-0 place-items-center rounded-md bg-zinc-200 font-bold text-zinc-700", isCompact ? "h-5 w-5 text-[9px]" : "h-6 w-6 text-[10px]")}>
+                  {selectedOption.iconInitials}
+                </span>
+              ) : null}
+              <span className="truncate">{selectedOption.label}</span>
+            </div>
+          ) : undefined}
+        </SelectPrimitive.Value>
         <SelectPrimitive.Icon className="text-zinc-500 shrink-0">
           <ChevronDown size={isCompact ? 13 : 15} />
         </SelectPrimitive.Icon>
@@ -64,7 +79,22 @@ export function Select({
                 <SelectPrimitive.ItemIndicator className={cn('absolute flex items-center justify-center text-zinc-900', isCompact ? 'left-1.5' : 'left-2')}>
                   <Check size={isCompact ? 12 : 14} strokeWidth={2.5} />
                 </SelectPrimitive.ItemIndicator>
-                <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                <SelectPrimitive.ItemText>
+                  {option.iconUrl || option.iconInitials ? (
+                    <div className="flex items-center gap-2">
+                      {option.iconUrl ? (
+                        <img src={resolveMediaUrl(option.iconUrl)} alt="" className={cn("shrink-0 rounded-md object-cover border border-zinc-200 bg-white", isCompact ? "h-5 w-5" : "h-6 w-6")} />
+                      ) : option.iconInitials ? (
+                        <span className={cn("grid shrink-0 place-items-center rounded-md bg-zinc-200 font-bold text-zinc-700", isCompact ? "h-5 w-5 text-[9px]" : "h-6 w-6 text-[10px]")}>
+                          {option.iconInitials}
+                        </span>
+                      ) : null}
+                      <span className="truncate">{option.label}</span>
+                    </div>
+                  ) : (
+                    option.label
+                  )}
+                </SelectPrimitive.ItemText>
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>

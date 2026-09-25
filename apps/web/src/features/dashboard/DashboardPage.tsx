@@ -146,7 +146,7 @@ export function DashboardPage() {
                 size="sm"
                 aria-label="Cakupan brand"
                 className="w-auto text-xs"
-                options={[{ value: 'all', label: 'Semua brand' }, ...data.scope.brands.map((b) => ({ value: String(b.id), label: b.name }))]}
+                options={[{ value: 'all', label: 'Semua brand' }, ...data.scope.brands.map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() }))]}
               />
             )}
           </div>

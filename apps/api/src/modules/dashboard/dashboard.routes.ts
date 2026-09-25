@@ -23,7 +23,7 @@ dashboardRouter.get('/', asyncHandler(async (req, res) => {
   const isCs = role === 'cs';
   const range = periodRange(parsePeriod(req.query.period));
 
-  const allBrands = await prisma.brand.findMany({ select: { id: true, name: true }, orderBy: { id: 'asc' } });
+  const allBrands = await prisma.brand.findMany({ select: { id: true, name: true, logoUrl: true }, orderBy: { id: 'asc' } });
   const brands = currentBrandId ? allBrands.filter((b) => b.id === currentBrandId) : allBrands;
   const brandIds = brands.map((b) => b.id);
   const ownerFilter = isCs ? { userId: req.user!.id } : {};

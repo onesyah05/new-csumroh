@@ -89,7 +89,13 @@ export function CustomRequestsPage() {
   const counts = list.data?.counts ?? {};
   const countFor = (id: Group) => id === 'pending' ? (counts.submitted ?? 0) + (counts.revision_requested ?? 0)
     : id === 'returned' ? counts.needs_info : id === 'all' ? undefined : counts[id];
-  const brands = useMemo(() => [...new Map((list.data?.rows ?? []).filter((row) => row.brand).map((row) => [row.brand!.id, row.brand!.name])).entries()], [list.data]);
+  const brands = useMemo(() => {
+    const map = new Map<number, { name: string, logoUrl?: string | null }>();
+    (list.data?.rows ?? []).forEach((row) => {
+      if (row.brand) map.set(row.brand.id, { name: row.brand.name, logoUrl: row.brand.logoUrl });
+    });
+    return [...map.entries()];
+  }, [list.data]);
   const rows = (list.data?.rows ?? []).filter((row) => {
     if (brand !== 'all' && String(row.brandId) !== brand) return false;
     const term = search.trim().toLowerCase();
@@ -113,8 +119,8 @@ export function CustomRequestsPage() {
             <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input className="field pl-8" placeholder="Cari jamaah, CS, atau paket…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </label>
-          {brands.length > 1 && <Select aria-label="Filter brand" className="w-36" value={brand} onValueChange={setBrand}
-            options={[{ value: 'all', label: 'Semua brand' }, ...brands.map(([id, name]) => ({ value: String(id), label: name }))]} />}
+          {brands.length > 1 && <Select aria-label="Filter brand" className="w-48" value={brand} onValueChange={setBrand}
+            options={[{ value: 'all', label: 'Semua brand' }, ...brands.map(([id, b]) => ({ value: String(id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() }))]} />}
         </div>
         <div id="custom-queue" role="tabpanel" aria-labelledby={`custom-tab-${group}`}>
         {list.isLoading ? <PageLoading label="Memuat permintaan" /> : list.isError ? <PageError description={list.error.message} onRetry={() => void list.refetch()} />
