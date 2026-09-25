@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 
 type Row = Record<string, any>;
 const mocks = vi.hoisted(() => ({
-  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[] },
+  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[] },
   capi: vi.fn(),
   send: vi.fn(),
   conversations: vi.fn(),
@@ -76,6 +76,7 @@ const db = vi.hoisted(() => {
     package: {
       findFirst: async ({ where }: any) => copy([...s().packages.values()].find((p) => matches(p, where))),
       findUnique: async ({ where }: any) => copy(s().packages.get(where.id)),
+      findMany: async ({ where }: any) => [...s().packages.values()].filter((p) => where.id.in.includes(p.id)).map(copy),
       updateMany: async ({ where, data }: any) => {
         const rows = [...s().packages.values()].filter((p) => matches(p, where));
         rows.forEach((r) => apply(r, data));
@@ -93,7 +94,18 @@ const db = vi.hoisted(() => {
         return data;
       },
     },
-    prospectLog: { create: async ({ data }: any) => { s().logs.push(data); return data; } },
+    customRequest: {
+      findFirst: async ({ where }: any) => copy([...s().customRequests].reverse().find((r) => matches(r, where))),
+      updateMany: async ({ where, data }: any) => {
+        const rows = s().customRequests.filter((r) => matches(r, where));
+        rows.forEach((r) => Object.assign(r, data));
+        return { count: rows.length };
+      },
+    },
+    prospectLog: {
+      create: async ({ data }: any) => { s().logs.push(data); return { ...data, user: { name: 'CS Fitri' } }; },
+      findMany: async ({ where }: any) => s().logs.filter((log) => log.prospectId === where.prospectId).reverse(),
+    },
     user: {
       findUnique: async ({ where }: any) => copy(s().users.find((u) => u.id === where.id)),
       // Kelayakan PIC: CS aktif dengan brand utama yang sama (akses UserBrand tidak dimodelkan di sini).
@@ -141,6 +153,8 @@ vi.mock('../notifications/notification.events.js', () => ({
   notifyProofSubmitted: mocks.notify.proofSubmitted,
   notifyProofRejected: mocks.notify.proofRejected,
   notifyQuotaAfterBooking: mocks.notify.quota,
+  notifyCustomDeal: vi.fn(async () => 0),
+  closeCustomNotifications: vi.fn(async () => 0),
   notifyProspectsReleased: vi.fn(),
 }));
 vi.mock('../chat/outbound.js', async (importOriginal) => ({ ...(await importOriginal<any>()), sendTextToProspect: mocks.send }));
@@ -179,6 +193,7 @@ beforeEach(() => {
   mocks.state.packages = new Map([[1, { id: 1, brandId: 1, name: 'Paket Uji', price: 'Rp 30.000.000', priceQuad: '', priceTriple: '', priceDouble: '', priceInfant: '', dp: '5000000', quotaRemaining: 10 }]]);
   mocks.state.payments = [];
   mocks.state.logs = [];
+  mocks.state.customRequests = [];
   mocks.state.messages = [];
   mocks.state.users = [
     { id: 7, name: 'CS Fitri', role: 'cs', isActive: true, brandId: 1 },
@@ -191,11 +206,37 @@ beforeEach(() => {
 });
 
 describe('R04 profile save', () => {
-  it('CS saves notes from the detail page even when the payload echoes unchanged settlement fields', async () => {
-    const result = await invoke('patch', '/:id/profile', { body: { notes: 'Follow up besok', dealValue: 60_000_000, dpAmount: 0, paymentStatus: 'unpaid' } });
+  it('CS saves the profile even when the payload echoes unchanged settlement fields', async () => {
+    const result = await invoke('patch', '/:id/profile', { body: { city: 'Bandung', dealValue: 60_000_000, dpAmount: 0, paymentStatus: 'unpaid' } });
     expect(result.status).toBe(200);
-    expect(prospect(1).notes).toBe('Follow up besok');
+    expect(prospect(1).city).toBe('Bandung');
     expect(prospect(1).dpAmount).toBe(0);
+  });
+
+  it('catatan tidak bisa ditimpa lewat profil; catatan baru ditambahkan ke riwayat', async () => {
+    prospect(1).notes = 'Catatan lama';
+    expect((await invoke('patch', '/:id/profile', { body: { notes: 'Diganti' } })).status).toBe(409);
+    expect((await invoke('patch', '/:id/profile', { body: { notes: 'Catatan lama', city: 'Solo' } })).status).toBe(200);
+    expect(prospect(1).notes).toBe('Catatan lama');
+    const added = await invoke('post', '/:id/notes', { body: { note: 'Minta kamar dekat lift' } });
+    expect(added.status).toBe(201);
+    const history = await invoke('get', '/:id/logs');
+    expect(history.data.legacyNote).toBe('Catatan lama');
+    expect(history.data.logs[0]).toMatchObject({ actionType: 'note_added', description: 'Minta kamar dekat lift' });
+    expect((await invoke('post', '/:id/notes', { userId: 8, body: { note: 'x' } })).status).toBe(403);
+  });
+
+  it('riwayat mencatat nilai lama dan baru, dan tidak mencatat simpan tanpa perubahan', async () => {
+    mocks.state.packages.set(2, { ...mocks.state.packages.get(1)!, id: 2, name: 'Paket Baru' });
+    await invoke('patch', '/:id/profile', { body: { city: 'Solo', nextFollowupDate: '2026-09-30', packageId: 2 } });
+    const log = mocks.state.logs.at(-1)!;
+    expect(log.title).toBe('Data prospek diubah');
+    expect(log.description).toContain('Kota: – → Solo');
+    expect(log.description).toContain('Follow-up berikutnya: – → 30 Sep 2026');
+    expect(log.description).toContain('Paket: Paket Uji → Paket Baru');
+    const count = mocks.state.logs.length;
+    await invoke('patch', '/:id/profile', { body: { city: 'Solo' } });
+    expect(mocks.state.logs.length).toBe(count);
   });
 
   it('rejects any attempt to change settlement through the profile, for every role', async () => {
@@ -215,12 +256,12 @@ describe('R04 profile save', () => {
 });
 
 describe('R01 invoice and offer never touch verified cash', () => {
-  it('draft invoice after a 5M verified DP keeps cash at 5M and records the bill separately', async () => {
+  it('menolak invoice setelah Deal tanpa mengirim WhatsApp atau mengubah tagihan', async () => {
     Object.assign(prospect(1), { status: 'deal', dpAmount: 5_000_000, paymentStatus: 'partial_dp', verifiedByUserId: 9 });
     const result = await invoke('post', '/:id/invoice', { body: { invoiceAmount: 10_000_000, sendViaWhatsApp: false } });
-    expect(result.status).toBe(200);
+    expect(result.status).toBe(409);
     expect(prospect(1).dpAmount).toBe(5_000_000);
-    expect(prospect(1).invoiceAmount).toBe(10_000_000);
+    expect(mocks.send).not.toHaveBeenCalled();
     expect(prospect(1).status).toBe('deal');
     expect(prospect(1).invoiceSentAt).toBeNull();
   });
@@ -302,16 +343,45 @@ describe('R02 payment verification', () => {
     expect(mocks.state.payments).toHaveLength(1);
   });
 
-  it('DP then settlement accumulates cash, marks paid_full, and fires Purchase once', async () => {
+  it('menolak pembayaran lanjutan setelah DP pertama menjadi Deal', async () => {
     await invoke('post', '/:id/verify-payment', { body: { ...body, idempotencyKey: 'form-open-1' }, role: 'finance' });
     const second = await invoke('post', '/:id/verify-payment', { body: { ...body, approvedAmount: 55_000_000, idempotencyKey: 'form-open-2' }, role: 'finance' });
-    expect(second.status).toBe(200);
-    expect(prospect(1).dpAmount).toBe(60_000_000);
-    expect(prospect(1).paymentStatus).toBe('paid_full');
+    expect(second.status).toBe(409);
+    expect(prospect(1).dpAmount).toBe(5_000_000);
+    expect(prospect(1).paymentStatus).toBe('partial_dp');
     expect(prospect(1).closedWonCount).toBe(1);
     expect(quota()).toBe(8);
-    expect(mocks.state.payments.map((p) => p.amount)).toEqual([5_000_000, 55_000_000]);
+    expect(mocks.state.payments.map((p) => p.amount)).toEqual([5_000_000]);
     expect(mocks.capi).toHaveBeenCalledTimes(1);
+  });
+
+  it('pembayaran awal lunas tetap satu Deal dengan label informasi', async () => {
+    const result = await invoke('post', '/:id/verify-payment', { body: { ...body, approvedAmount: 60_000_000, paymentType: 'full' }, role: 'finance' });
+    expect(result.status).toBe(200);
+    expect(prospect(1).paymentStatus).toBe('paid_full');
+    expect(mocks.state.payments).toHaveLength(1);
+    expect(quota()).toBe(8);
+    expect(mocks.capi).toHaveBeenCalledTimes(1);
+  });
+
+  it('dua verifikasi dengan key berbeda hanya boleh membuat satu pembayaran awal', async () => {
+    const results = await Promise.all([
+      invoke('post', '/:id/verify-payment', { body: { ...body, idempotencyKey: 'approval-first' }, role: 'finance' }),
+      invoke('post', '/:id/verify-payment', { body: { ...body, idempotencyKey: 'approval-second' }, role: 'finance' }),
+    ]);
+    expect(results.map(r => r.status).sort()).toEqual([200, 409]);
+    expect(mocks.state.payments).toHaveLength(1);
+    expect(quota()).toBe(8);
+    expect(mocks.capi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['deal', 'closed_won'])('menolak semua pengajuan bukti setelah %s sebelum membaca berkas', async (status) => {
+    prospect(1).status = status;
+    for (const path of ['payment-proof', 'payment-proof-upload', 'payment-proof-from-message', 'reject-proof']) {
+      const result = await invoke('post', `/:id/${path}`, { body: {}, role: 'finance' });
+      expect(result.status).toBe(409);
+    }
+    expect(mocks.notify.proofSubmitted).not.toHaveBeenCalled();
   });
 
   it('CS cannot verify and insufficient quota blocks verification without side effects', async () => {
@@ -327,7 +397,7 @@ describe('R02 payment verification', () => {
     await invoke('post', '/:id/verify-payment', { body, role: 'finance' });
     expect((await invoke('patch', '/:id/status', { body: { status: 'offer' } })).status).toBe(422);
     expect((await invoke('patch', '/:id/status', { body: { status: 'lose', lostReason: 'Batal' } })).status).toBe(403);
-    const cancel = await invoke('patch', '/:id/status', { body: { status: 'lose', lostReason: 'Batal berangkat' }, role: 'finance' });
+    const cancel = await invoke('patch', '/:id/status', { body: { status: 'lose', lostReason: 'Batal berangkat' }, role: 'admin' });
     expect(cancel.status).toBe(200);
     expect(quota()).toBe(10);
     expect(prospect(1).seatsReserved).toBe(0);
@@ -418,27 +488,33 @@ describe('PIC: hanya PIC atau Admin yang mengubah prospek', () => {
   it('CS lain ditolak untuk status, profil, keberatan, follow-up, dan bukti transfer', async () => {
     const asOther = { userId: 8 };
     expect((await invoke('patch', '/:id/status', { ...asOther, body: { status: 'lose', lostReason: 'Batal' } })).status).toBe(403);
-    expect((await invoke('patch', '/:id/profile', { ...asOther, body: { notes: 'x' } })).status).toBe(403);
+    expect((await invoke('patch', '/:id/profile', { ...asOther, body: { city: 'x' } })).status).toBe(403);
     expect((await invoke('post', '/:id/objection', { ...asOther, body: { category: 'price', notes: 'mahal' } })).status).toBe(403);
     expect((await invoke('post', '/:id/activities', { ...asOther, body: { type: 'call', note: 'telepon' } })).status).toBe(403);
     const proof = await invoke('post', '/:id/payment-proof-upload', { ...asOther, body: { image: Buffer.from('x').toString('base64') } });
     expect(proof.status).toBe(403);
     expect(proof.error).toContain('CS Fitri');
     expect(prospect(1).status).toBe('qualified');
-    expect(prospect(1).notes).toBeNull();
+    expect(prospect(1).city ?? null).toBeNull();
   });
 
   it('PIC, Admin, dan CS pada prospek tanpa PIC tetap boleh', async () => {
-    expect((await invoke('patch', '/:id/profile', { body: { notes: 'PIC' } })).status).toBe(200);
-    expect((await invoke('patch', '/:id/profile', { userId: 99, role: 'admin', body: { notes: 'Admin' } })).status).toBe(200);
+    expect((await invoke('patch', '/:id/profile', { body: { city: 'PIC' } })).status).toBe(200);
+    expect((await invoke('patch', '/:id/profile', { userId: 99, role: 'admin', body: { city: 'Admin' } })).status).toBe(200);
     prospect(1).userId = null;
-    expect((await invoke('patch', '/:id/profile', { userId: 8, body: { notes: 'Antrean' } })).status).toBe(200);
+    expect((await invoke('patch', '/:id/profile', { userId: 8, body: { city: 'Antrean' } })).status).toBe(200);
   });
 
-  it('Finance hanya pada tugas Finance: follow-up boleh, profil dan keberatan tidak', async () => {
-    expect((await invoke('post', '/:id/activities', { userId: 20, role: 'finance', body: { type: 'call', note: 'Pelunasan' } })).status).toBe(201);
+  it('Finance tidak dapat melakukan follow-up, penawaran, invoice, atau pembatalan Deal', async () => {
+    expect((await invoke('post', '/:id/activities', { userId: 20, role: 'finance', body: { type: 'call', note: 'Pelunasan' } })).status).toBe(403);
     expect((await invoke('patch', '/:id/profile', { userId: 20, role: 'finance', body: { notes: 'x' } })).status).toBe(403);
     expect((await invoke('post', '/:id/objection', { userId: 20, role: 'finance', body: { category: 'price', notes: 'x' } })).status).toBe(403);
+    for (const route of ['offer', 'invoice']) {
+      expect((await invoke('post', `/:id/${route}`, { role: 'finance', body: { invoiceAmount: 10_000_000 } })).status).toBe(403);
+    }
+    prospect(1).status = 'deal';
+    expect((await invoke('patch', '/:id/status', { role: 'finance', body: { status: 'lose', lostReason: 'Batal' } })).status).toBe(403);
+
   });
 });
 
@@ -531,15 +607,15 @@ describe('Notifikasi dari tindakan prospek', () => {
   it('verifikasi pembayaran memberi tahu PIC dan memeriksa kuota bila seat terpakai', async () => {
     const result = await invoke('post', '/:id/verify-payment', { role: 'finance', userId: 20, body: { approvedAmount: 10_000_000, bankName: 'BCA', referenceNo: 'N-1' } });
     expect(result.status).toBe(200);
-    expect(mocks.notify.paymentVerified).toHaveBeenCalledWith(expect.objectContaining({ isNewWin: true, amount: 10_000_000 }));
+    expect(mocks.notify.paymentVerified).toHaveBeenCalledWith(expect.objectContaining({ paymentType: 'dp', amount: 10_000_000 }));
     expect(mocks.notify.quota).toHaveBeenCalledWith(1, expect.objectContaining({ id: 20 }));
   });
 
-  it('pembatalan booking Deal menyertakan kas yang perlu direfund', async () => {
+  it('pembatalan Deal hanya memberi tahu PIC tanpa tugas refund', async () => {
     Object.assign(prospect(1), { status: 'deal', dpAmount: 5_000_000, seatsReserved: 2 });
-    const result = await invoke('patch', '/:id/status', { role: 'finance', userId: 20, body: { status: 'lose', lostReason: 'Batal berangkat' } });
+    const result = await invoke('patch', '/:id/status', { role: 'admin', userId: 20, body: { status: 'lose', lostReason: 'Batal berangkat' } });
     expect(result.status).toBe(200);
-    expect(mocks.notify.bookingCancelled).toHaveBeenCalledWith(expect.objectContaining({ cash: 5_000_000, reason: 'Batal berangkat' }));
+    expect(mocks.notify.bookingCancelled).toHaveBeenCalledWith(expect.objectContaining({ reason: 'Batal berangkat' }));
   });
 
   it('klaim menutup antrean tanpa PIC', async () => {
@@ -579,5 +655,110 @@ describe('Tolak bukti transfer', () => {
   it('alasan wajib', async () => {
     prospect(1).paymentProofUrl = proofUrl;
     expect((await invoke('post', '/:id/reject-proof', { role: 'finance', userId: 20, body: { reason: '' } })).status).toBe(422);
+  });
+});
+
+describe('Kualifikasi: syarat, penjaga, dan pilihan baku', () => {
+  it('diisi bertahap; naik hanya bila semua lengkap (bulan, 1 dewasa, budget, paspor); bayi saja tidak cukup', async () => {
+    seedProspect(2, { status: 'contact', targetMonth: null, roomPreference: null, paxQuad: 0, budgetRange: null, passportStatus: null });
+    await invoke('patch', '/:id/profile', { id: 2, body: { targetMonth: '2026-12', paxInfant: 1, budgetRange: '25–30 Juta', passportStatus: 'sudah_ada' } });
+    expect(prospect(2).status).toBe('contact');
+    await invoke('patch', '/:id/profile', { id: 2, body: { paxDouble: 2, passportStatus: '' } });
+    expect(prospect(2).status).toBe('contact');
+    const ok = await invoke('patch', '/:id/profile', { id: 2, body: { passportStatus: 'belum_ada' } });
+    expect(ok.status).toBe(200);
+    expect(prospect(2)).toMatchObject({ status: 'qualified', roomPreference: 'Double' });
+  });
+
+  it('syarat tidak boleh dikosongkan setelah Terkualifikasi; profil lama yang belum lengkap tetap bisa disimpan', async () => {
+    seedProspect(3, { targetMonth: '2026-12', budgetRange: '25–30 Juta', passportStatus: 'sudah_ada' });
+    const cleared = await invoke('patch', '/:id/profile', { id: 3, body: { targetMonth: '' } });
+    expect(cleared.status).toBe(422);
+    expect(cleared.error).toContain('Bulan keberangkatan');
+    expect((await invoke('patch', '/:id/profile', { id: 3, body: { paxQuad: 0 } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { id: 3, body: { passportStatus: '' } })).status).toBe(422);
+    seedProspect(4, { targetMonth: '' });
+    expect((await invoke('patch', '/:id/profile', { id: 4, body: { city: 'Depok' } })).status).toBe(200);
+  });
+
+  it('tahap Terkualifikasi manual memakai syarat yang sama', async () => {
+    seedProspect(5, { status: 'contact', targetMonth: '2026-12', paxQuad: 0, paxInfant: 2 });
+    const result = await invoke('patch', '/:id/status', { id: 5, body: { status: 'qualified' } });
+    expect(result.status).toBe(422);
+    expect(result.error).toContain('Minimal 1 jamaah dewasa');
+  });
+
+  it('pilihan baku divalidasi; nilai lama yang dikirim ulang tanpa perubahan tetap diterima', async () => {
+    expect((await invoke('patch', '/:id/profile', { body: { budgetRange: '30 juta' } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { body: { targetMonth: 'Januari' } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { body: { decisionMaker: 'suami' } })).status).toBe(422);
+    // targetMonth "Desember" adalah data lama pada seed.
+    expect((await invoke('patch', '/:id/profile', { body: { targetMonth: 'Desember', budgetRange: '30–35 Juta', decisionMaker: 'pasangan', passportStatus: 'sudah_ada' } })).status).toBe(200);
+  });
+
+  it('jamaah berubah setelah penawaran terkirim: dicatat perlu kirim ulang', async () => {
+    seedProspect(6, { status: 'offer', offerSentAt: new Date(), targetMonth: '2026-12' });
+    expect((await invoke('patch', '/:id/profile', { id: 6, body: { paxQuad: 3 } })).status).toBe(200);
+    expect(mocks.state.logs.some((l: any) => l.prospectId === 6 && l.actionType === 'offer_outdated')).toBe(true);
+  });
+});
+
+describe('Layanan custom pada penawaran, invoice, dan verifikasi', () => {
+  const agreed = (overrides: Row = {}) => mocks.state.customRequests.push({
+    id: 1, prospectId: 1, brandId: 1, status: 'agreed', basePackageId: null, agreedPrice: 70_000_000, floorPrice: 65_000_000,
+    offeredPrice: 75_000_000, minDpPerPax: 10_000_000, paxQuad: 2, paxTriple: 0, paxDouble: 0, paxInfant: 0, ...overrides,
+  });
+
+  it('penawaran memakai nilai deal akhir, tanpa paket katalog, dan ditolak sebelum disepakati', async () => {
+    agreed({ status: 'quoted', agreedPrice: null });
+    expect((await invoke('post', '/:id/offer', { body: {} })).status).toBe(409);
+    mocks.state.customRequests = [];
+    agreed();
+    const offer = await invoke('post', '/:id/offer', { body: {} });
+    expect(offer.status).toBe(200);
+    expect(prospect(1).dealValue).toBe(70_000_000);
+    expect(prospect(1).packageId).toBeNull();
+  });
+
+  it('jumlah jamaah yang berubah setelah dihitung memblokir penawaran', async () => {
+    agreed({ paxQuad: 3 });
+    expect((await invoke('post', '/:id/offer', { body: {} })).error).toContain('hitung ulang');
+  });
+
+  it('invoice harus di antara DP minimal (per jamaah) dan nilai deal', async () => {
+    agreed();
+    expect((await invoke('post', '/:id/invoice', { body: { invoiceAmount: 15_000_000 } })).status).toBe(422);
+    expect((await invoke('post', '/:id/invoice', { body: { invoiceAmount: 80_000_000 } })).status).toBe(422);
+    expect((await invoke('post', '/:id/invoice', { body: { invoiceAmount: 20_000_000, packageId: 1 } })).status).toBe(200);
+    expect(prospect(1).invoiceAmount).toBe(20_000_000);
+  });
+
+  it('Finance menolak pembayaran di bawah DP minimal; tanpa paket dasar kuota tidak dipotong', async () => {
+    agreed();
+    prospect(1).packageId = null;
+    const body = { approvedAmount: 15_000_000, bankName: 'BSI', mutationDate: '2026-09-23' };
+    expect((await invoke('post', '/:id/verify-payment', { body, role: 'finance' })).status).toBe(422);
+    expect(prospect(1).status).toBe('qualified');
+    const ok = await invoke('post', '/:id/verify-payment', { body: { ...body, approvedAmount: 20_000_000 }, role: 'finance' });
+    expect(ok.status).toBe(200);
+    expect(prospect(1).status).toBe('deal');
+    expect(quota()).toBe(10);
+  });
+
+  it('profil tidak bisa mengubah jamaah atau paket selama layanan custom berjalan', async () => {
+    agreed();
+    expect((await invoke('patch', '/:id/profile', { body: { paxQuad: 3 } })).status).toBe(409);
+    expect((await invoke('patch', '/:id/profile', { body: { packageId: null } })).status).toBe(409);
+    expect((await invoke('patch', '/:id/profile', { body: { city: 'Solo' } })).status).toBe(200);
+  });
+});
+
+describe('Prospek batal membatalkan layanan custom', () => {
+  it('permintaan custom yang berjalan ikut dibatalkan dan tercatat', async () => {
+    mocks.state.customRequests.push({ id: 7, prospectId: 1, brandId: 1, status: 'submitted' });
+    const result = await invoke('patch', '/:id/status', { body: { status: 'lose', lostReason: 'Pakai travel lain' } });
+    expect(result.status).toBe(200);
+    expect(mocks.state.customRequests[0]!.status).toBe('cancelled');
+    expect(mocks.state.logs.at(-1)!.description).toContain('Layanan custom ikut dibatalkan');
   });
 });

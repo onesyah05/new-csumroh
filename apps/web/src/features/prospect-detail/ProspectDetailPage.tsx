@@ -17,7 +17,10 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { calculateDealValue, isLostStatus, isWonStatus, type ProspectStatus } from '@csumroh/shared-types';
+import { ProspectNotes, ProspectTimeline } from '../prospects/ProspectHistory';
+import { customBadge } from '../custom/customApi';
+import { cn } from '../../lib/cn';
+import { adultPaxOf, calculateDealValue, isLostStatus, isWonStatus, offerOutdated, type ProspectStatus } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
 import { useBrandScope } from '../../lib/scope';
 import { useAuth } from '../../app/auth';
@@ -29,6 +32,7 @@ import { PageError, PageLoading, EmptyState } from '../../components/ui/page-fee
 import { PageHeader } from '../../components/ui/page-header';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { isLockedForCs } from '../prospects/PicDialog';
+import { QualificationFields } from '../prospects/QualificationFields';
 
 const n = (value: unknown) => Number(String(value ?? 0).replace(/\D/g, '')) || 0;
 const rupiah = (value: unknown) =>
@@ -78,7 +82,6 @@ export function ProspectDetailPage() {
         paxTriple: prospect.data.paxTriple ?? 0,
         paxDouble: prospect.data.paxDouble ?? 0,
         paxInfant: prospect.data.paxInfant ?? 0,
-        notes: prospect.data.notes ?? '',
         nextFollowupDate: prospect.data.nextFollowupDate?.slice(0, 10) ?? '',
         packageId: prospect.data.packageId ? String(prospect.data.packageId) : '',
       });
@@ -146,13 +149,17 @@ export function ProspectDetailPage() {
     );
 
   const locked = isLockedForCs(user, p);
+  const customTag = isWonStatus(p.status) ? null : customBadge(p.customRequests?.[0]);
+  const won = isWonStatus(p.status);
+  const adults = adultPaxOf(form);
+  const isOfferOutdated = offerOutdated(p, packages.data?.find((pkg) => pkg.id === p.packageId));
 
   return (
     <div className="app-page space-y-6">
       <PageHeader
         backUrl="/pipeline"
         title={p.name}
-        badges={<Badge value={p.status} />}
+        badges={<><Badge value={p.status} />{customTag && <span className={cn('rounded-md px-2 py-0.5 text-xs font-semibold', customTag.urgent ? 'bg-amber-100 text-amber-900' : 'border border-zinc-300 text-zinc-700')}>{customTag.text}</span>}</>}
         subtitle={`${p.phone || 'Nomor belum ada'} · ${p.city || 'Kota belum diisi'} · Sumber: ${p.leadSource}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -177,16 +184,8 @@ export function ProspectDetailPage() {
 
       {/* 4 Stat Overview Bars */}
       <StatGrid cols={4}>
-        <StatCard label="Estimasi Deal" value={rupiah(dealValue)} />
-        <StatCard
-          label="Jumlah Jamaah"
-          value={`${
-            Number(form.paxQuad) +
-            Number(form.paxTriple) +
-            Number(form.paxDouble) +
-            Number(form.paxInfant)
-          } pax`}
-        />
+        <StatCard label="Estimasi nilai deal" value={selectedPackage ? rupiah(dealValue) : 'Pilih paket'} />
+        <StatCard label="Jumlah jamaah" value={`${adults} dewasa`} note={Number(form.paxInfant) > 0 ? `+ ${form.paxInfant} bayi` : undefined} />
         <StatCard label="CS PIC" value={p.user?.name ?? 'Belum ada'} />
         <StatCard
           label="Follow-up"
@@ -198,7 +197,7 @@ export function ProspectDetailPage() {
       <div className="flex gap-2 border-b border-zinc-200">
         {[
           ['profile', 'Profil 360°'],
-          ['activity', 'Aktivitas'],
+          ['activity', 'Catatan & riwayat'],
           ['tgjp', 'Wizard TGJP'],
         ].map(([value, label]) => (
           <button
@@ -219,51 +218,30 @@ export function ProspectDetailPage() {
       {tab === 'profile' && (
         <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
           <div className="space-y-6">
-            <FormSection icon={NotebookPen} title="Kualifikasi NPGD" subtitle="Need, Priority, Group, Decision maker">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Target keberangkatan">
-                  <input
-                    className="field"
-                    value={form.targetMonth}
-                    onChange={(e) => editForm({ ...form, targetMonth: e.target.value })}
-                    placeholder="Contoh: Ramadan 1448H"
-                  />
-                </Field>
-                <Field label="Kisaran budget">
-                  <input
-                    className="field"
-                    value={form.budgetRange}
-                    onChange={(e) => editForm({ ...form, budgetRange: e.target.value })}
-                    placeholder="Contoh: 30–35 juta"
-                  />
-                </Field>
-                <Field label="Pengambil keputusan">
-                  <input
-                    className="field"
-                    value={form.decisionMaker}
-                    onChange={(e) => editForm({ ...form, decisionMaker: e.target.value })}
-                    placeholder="Diri sendiri / pasangan"
-                  />
-                </Field>
-                <Field label="Kebutuhan khusus">
-                  <input
-                    className="field"
-                    value={form.specialNeeds}
-                    onChange={(e) => editForm({ ...form, specialNeeds: e.target.value })}
-                    placeholder="Kursi roda, lansia…"
-                  />
-                </Field>
-              </div>
+            <FormSection icon={NotebookPen} title="Kualifikasi" subtitle="Boleh diisi bertahap; Terkualifikasi setelah bulan, jamaah, budget, dan paspor lengkap">
+              <QualificationFields
+                layout="page"
+                value={form}
+                onChange={(patch) => editForm({ ...form, ...patch })}
+                disabled={save.isPending}
+                bookingLocked={won}
+                packages={packages.data ?? []}
+                selectedPackageId={form.packageId}
+                onSelectPackage={(packageId) => editForm({ ...form, packageId })}
+                departure={selectedPackage?.departureDate ? new Date(selectedPackage.departureDate) : null}
+              />
             </FormSection>
 
-            <FormSection
-              icon={UsersRound}
-              title="Kamar & jumlah jamaah"
-              subtitle="Nilai deal dihitung otomatis dari harga paket"
-            >
+            <FormSection icon={UsersRound} title="Paket & estimasi" subtitle="Nilai deal dihitung otomatis dari harga paket × jamaah">
+              {isOfferOutdated && (
+                <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  Jamaah atau paket berubah sejak penawaran ({rupiah(p.dealValue)}). Kirim ulang dari Kotak Masuk.
+                </p>
+              )}
               <Field label="Paket pilihan">
                 <Select
                   value={form.packageId}
+                  disabled={won}
                   onValueChange={(packageId) => editForm({ ...form, packageId })}
                   options={(packages.data ?? []).map((item) => ({
                     value: String(item.id),
@@ -273,54 +251,26 @@ export function ProspectDetailPage() {
                   className="w-full"
                 />
               </Field>
-              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {(
-                  [
-                    ['paxQuad', 'Quad'],
-                    ['paxTriple', 'Triple'],
-                    ['paxDouble', 'Double'],
-                    ['paxInfant', 'Infant'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <Field key={key} label={label}>
-                    <input
-                      type="number"
-                      min="0"
-                      className="field font-mono"
-                      value={form[key]}
-                      onChange={(e) => editForm({ ...form, [key]: Number(e.target.value) })}
-                    />
-                  </Field>
-                ))}
-              </div>
-              <div className="mt-4 rounded-xl border border-zinc-900 bg-zinc-950 p-4 text-white shadow-xs">
-                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  Estimasi nilai transaksi
-                </p>
-                <p className="mt-1 font-mono text-xl font-bold tracking-tight">{rupiah(dealValue)}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                  <p className="text-xs font-semibold text-zinc-600">Estimasi dari isian saat ini</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-zinc-950">{selectedPackage ? rupiah(dealValue) : 'Pilih paket dulu'}</p>
+                </div>
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                  <p className="text-xs font-semibold text-zinc-600">{won ? 'Nilai deal' : 'Nilai penawaran terkirim'}</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-zinc-950">{Number(p.dealValue) > 0 ? rupiah(p.dealValue) : 'Belum ada'}</p>
+                </div>
               </div>
             </FormSection>
 
-            <FormSection
-              icon={FileCheck2}
-              title="Dokumen & finansial"
-              subtitle="Pantau kesiapan jamaah sebelum keberangkatan"
-            >
+            <FormSection icon={FileCheck2} title="Kebutuhan & dokumen lain" subtitle="Informasi pendukung, tidak memengaruhi tahap">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Status paspor">
-                  <Select
-                    value={form.passportStatus}
-                    onValueChange={(passportStatus) => editForm({ ...form, passportStatus })}
-                    options={(
-                      [
-                        ['sudah_ada', 'Sudah ada'],
-                        ['proses_buat', 'Proses buat'],
-                        ['perpanjang', 'Perpanjang'],
-                        ['belum_ada', 'Belum ada'],
-                      ] as const
-                    ).map(([value, label]) => ({ value, label }))}
-                    className="w-full"
-                    placeholder="Pilih status"
+                <Field label="Kebutuhan khusus">
+                  <input
+                    className="field"
+                    value={form.specialNeeds}
+                    onChange={(e) => editForm({ ...form, specialNeeds: e.target.value })}
+                    placeholder="Kursi roda, lansia…"
                   />
                 </Field>
                 <Field label="Status vaksin">
@@ -338,30 +288,6 @@ export function ProspectDetailPage() {
                     placeholder="Pilih status"
                   />
                 </Field>
-                <div className="sm:col-span-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs">
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Nilai booking</p>
-                      <p className="font-mono font-bold text-zinc-900">{rupiah(p.dealValue)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Kas terverifikasi</p>
-                      <p className="font-mono font-bold text-emerald-700">{rupiah(p.dpAmount)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Sisa tagihan</p>
-                      <p className="font-mono font-bold text-zinc-900">
-                        {rupiah(Math.max(0, Number(p.dealValue ?? 0) - Number(p.dpAmount ?? 0)))}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-zinc-200 pt-2">
-                    <Badge value={p.paymentStatus} />
-                    <span className="text-xs text-zinc-500">
-                      Nilai & pembayaran hanya berubah lewat penawaran resmi dan verifikasi Finance.
-                    </span>
-                  </div>
-                </div>
               </div>
             </FormSection>
           </div>
@@ -377,7 +303,7 @@ export function ProspectDetailPage() {
                     <Badge value={p.status} />
                   </div>
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    Perpindahan status berjalan otomatis berdasarkan aksi (kirim chat, kualifikasi, penawaran resmi, invoice DP, dan verifikasi keuangan).
+                    Perpindahan status berjalan otomatis berdasarkan aksi (kirim chat, kualifikasi, penawaran resmi, invoice pembayaran awal, dan verifikasi Finance).
                   </p>
                 </div>
                 <Field label="Follow-up berikutnya">
@@ -386,15 +312,6 @@ export function ProspectDetailPage() {
                     className="field"
                     value={form.nextFollowupDate}
                     onChange={(e) => editForm({ ...form, nextFollowupDate: e.target.value })}
-                  />
-                </Field>
-                <Field label="Catatan internal">
-                  <textarea
-                    rows={5}
-                    className="w-full resize-none rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black placeholder:text-zinc-400 shadow-xs"
-                    value={form.notes}
-                    onChange={(e) => editForm({ ...form, notes: e.target.value })}
-                    placeholder="Tuliskan poin penting preferensi jamaah…"
                   />
                 </Field>
                 <Button className="w-full" onClick={() => save.mutate()} disabled={save.isPending || locked}>
@@ -426,33 +343,10 @@ export function ProspectDetailPage() {
       )}
 
       {tab === 'activity' && (
-        <div className="surface p-6 sm:p-8">
-          <div className="max-w-3xl space-y-0">
-            {(p.logs ?? []).map((log: any, index: number) => (
-              <div key={log.id} className="relative flex gap-4 pb-7">
-                <div className="relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full border border-zinc-200 bg-white shadow-2xs">
-                  <Clock3 size={14} className="text-zinc-500" />
-                </div>
-                {index < (p.logs ?? []).length - 1 && (
-                  <div className="absolute left-[15px] top-8 h-full border-l border-zinc-200" />
-                )}
-                <div className="pt-0.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <b className="text-xs sm:text-sm font-semibold text-zinc-900">{log.title}</b>
-                    <span className="text-xs text-zinc-500 font-mono">
-                      {new Date(log.createdAt).toLocaleString('id-ID')}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-                    {log.description || `Oleh ${log.user?.name ?? 'sistem'}`}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {!(p.logs ?? []).length && (
-              <EmptyState title="Belum ada aktivitas" description="Riwayat chat, follow-up, dan perubahan status prospek ini akan tampil di sini." />
-            )}
-          </div>
+        <div className="surface grid gap-8 p-6 sm:p-8 lg:grid-cols-2">
+          <ProspectNotes prospectId={p.id} brandId={p.brandId}
+            disabledReason={isWonStatus(p.status) ? 'Penanganan CS selesai pada Deal.' : locked ? 'Hanya PIC atau Admin yang dapat menambah catatan.' : null} />
+          <ProspectTimeline prospectId={p.id} brandId={p.brandId} />
         </div>
       )}
 
@@ -509,7 +403,7 @@ function TgjpWizard({ name }: { name: string }) {
   return (
     <div className="surface p-6 sm:p-8">
       <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
           <Sparkles size={13} className="text-zinc-500" />
           <span>Framework Keberatan</span>
         </div>
@@ -546,12 +440,12 @@ function TgjpWizard({ name }: { name: string }) {
       </div>
 
       <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5 shadow-2xs">
-        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <p className="text-xs font-semibold text-zinc-500">
           Langkah {active + 1} dari 4
         </p>
         <h4 className="mt-1 font-sans text-base font-bold text-zinc-950">{steps[active]?.title}</h4>
         <textarea
-          className="mt-3 min-h-28 w-full resize-none rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black placeholder:text-zinc-400 shadow-xs"
+          className="mt-3 min-h-28 w-full resize-none rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black placeholder:text-zinc-500 shadow-xs"
           placeholder={`Tulis respons tahap ${steps[active]?.title.toLowerCase()} di sini…`}
         />
         <div className="mt-3 flex justify-end">

@@ -37,13 +37,16 @@ import {
   isLostStatus,
   isWonStatus,
   isTakeoverOpen,
+  isQualificationComplete,
   objectionLabel,
+  offerOutdated,
   pipelineStatuses,
   type ProspectStatus,
 } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
 import { toCsv } from '../../lib/csv';
-import { useBrandScope } from '../../lib/scope';
+import { canAccessBrand, useBrandScope } from '../../lib/scope';
+import { useUiStore } from '../../app/store';
 import { queryClient } from '../../app/query';
 import { useAuth } from '../../app/auth';
 import { Badge, statusLabels } from '../../components/ui/badge';
@@ -52,6 +55,7 @@ import { Select } from '../../components/ui/select';
 import { PageError, EmptyState } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { cn } from '../../lib/cn';
+import { customBadge } from '../custom/customApi';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { useWhatsAppAvatars } from '../../lib/avatars';
 import { PicDialog, isLockedForCs } from './PicDialog';
@@ -171,6 +175,12 @@ export function PipelinePage() {
   const { user } = useAuth();
   const { brandId, query } = useBrandScope();
   const [params, setParams] = useSearchParams();
+  // Tautan dari Ringkasan/notifikasi bisa membawa ?brandId=: buka brand itu (bila boleh diakses).
+  const setActiveBrandId = useUiStore((state) => state.setActiveBrandId);
+  const brandParam = Number(params.get('brandId')) || null;
+  useEffect(() => {
+    if (brandParam && brandParam !== brandId && canAccessBrand(user, brandParam)) setActiveBrandId(brandParam);
+  }, [brandParam, brandId, setActiveBrandId, user]);
   // Filter & tampilan disimpan di URL: tetap sama saat reload dan bisa dibagikan.
   // Split-screen ±700 px hanya memuat ±2 kolom Kanban: di bawah 900 px, Tabel jadi tampilan default.
   const [narrowDefault] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 899px)').matches));
@@ -330,12 +340,10 @@ export function PipelinePage() {
         toast.show(`${statusLabels[status] ?? status}: ${action.label.toLowerCase()}.`);
         return;
       }
-      if (status === 'qualified') {
-        const totalPax = (prospect.paxQuad ?? 0) + (prospect.paxTriple ?? 0) + (prospect.paxDouble ?? 0) + (prospect.paxInfant ?? 0);
-        if (!(prospect.targetMonth && prospect.roomPreference && totalPax > 0)) {
-          setGuided({ type: 'qualify', prospect });
-          return;
-        }
+      // Syarat sama dengan API: bulan keberangkatan + minimal 1 jamaah dewasa.
+      if (status === 'qualified' && !isQualificationComplete(prospect)) {
+        setGuided({ type: 'qualify', prospect });
+        return;
       }
       if (status === 'offer') return setGuided({ type: 'offer', prospect });
       if (status === 'objection') return setGuided({ type: 'objection', prospect });
@@ -732,7 +740,7 @@ export function PipelinePage() {
           <div className="thin-scrollbar overflow-x-auto">
             {/* Split-screen (±700 px) membuka Tabel secara bawaan: Paket & Nilai baru tampil mulai lg (ada di Kanban/Detail). */}
             <table className="w-full text-left lg:min-w-[960px]">
-              <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-600">
+              <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-600">
                 <tr>
                   <th className="px-5 py-3">Jamaah</th>
                   <th className="px-4 py-3">Status</th>
@@ -839,7 +847,7 @@ export function PipelinePage() {
 
       {guided && (
         <>
-          <QualificationModal open={guided.type === 'qualify'} onClose={() => setGuided(null)} prospect={guided.prospect} brandId={brandId} onShowToast={toast.show} />
+          <QualificationModal open={guided.type === 'qualify'} onClose={() => setGuided(null)} prospect={guided.prospect} brandId={brandId} packages={packages.data ?? []} onShowToast={toast.show} />
           <OfficialOfferModal open={guided.type === 'offer'} onClose={() => setGuided(null)} prospect={guided.prospect} packages={packages.data ?? []} brandId={brandId} onShowToast={toast.show} />
           <ObjectionModal open={guided.type === 'objection'} onClose={() => setGuided(null)} prospect={guided.prospect} brandId={brandId} onShowToast={toast.show} />
           <OfficialInvoiceModal open={guided.type === 'invoice'} onClose={() => setGuided(null)} prospect={guided.prospect} packages={packages.data ?? []} brandId={brandId} onShowToast={toast.show} />
@@ -975,7 +983,9 @@ function ProspectCard({
   const followupOverdue = open && due !== null && due < today;
   const followupToday = open && due === today;
   const invoiceOverdue = prospect.status === 'closing' && prospect.invoiceDueAt && new Date(prospect.invoiceDueAt) < new Date();
+  const offerStale = offerOutdated(prospect as { status: string }, prospect.package);
   const hasProof = Boolean(prospect.paymentProofUrl) && !isWonStatus(prospect.status);
+  const custom = isWonStatus(prospect.status) ? null : customBadge((prospect as { customRequests?: { status: string; quoteValidUntil?: string | null }[] }).customRequests?.[0]);
   const unanswered = awaitingReply(prospect);
   const subtitle = subtitleOf(prospect);
   const activity = timeAgo(lastActivity(prospect));
@@ -1071,7 +1081,7 @@ function ProspectCard({
         <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-zinc-600">{prospect.package.name}</p>
       )}
 
-      {(unanswered || invoiceOverdue || followupOverdue || followupToday || hasProof || prospect.status === 'closing' || prospect.status === 'objection') && (
+      {(unanswered || invoiceOverdue || offerStale || followupOverdue || followupToday || hasProof || custom || prospect.status === 'closing' || prospect.status === 'objection') && (
         <div className="mt-2 flex flex-wrap gap-1">
           {unanswered && (
             <CardBadge urgent icon={MessageCircleWarning} title="Pesan terakhir dari jamaah dan belum dijawab CS">
@@ -1079,8 +1089,10 @@ function ProspectCard({
             </CardBadge>
           )}
           {invoiceOverdue && <CardBadge urgent icon={AlertTriangle}>Invoice lewat</CardBadge>}
+          {offerStale && <CardBadge icon={AlertTriangle} title="Jumlah jamaah atau paket berubah sejak penawaran terkirim">Kirim ulang penawaran</CardBadge>}
           {!invoiceOverdue && prospect.status === 'closing' && <CardBadge icon={Receipt}>Invoice terkirim</CardBadge>}
           {hasProof && <CardBadge icon={FileCheck2}>Bukti ada</CardBadge>}
+          {custom && <CardBadge urgent={custom.urgent} icon={SlidersHorizontal}>{custom.text}</CardBadge>}
           {prospect.status === 'objection' && <CardBadge icon={AlertTriangle}>{objectionLabel(prospect.objectionCategory)}</CardBadge>}
           {followupOverdue && <CardBadge urgent icon={CalendarClock}>Follow-up lewat</CardBadge>}
           {followupToday && <CardBadge icon={Bell}>Follow-up hari ini</CardBadge>}

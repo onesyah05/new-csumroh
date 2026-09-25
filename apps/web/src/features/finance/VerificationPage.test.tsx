@@ -16,7 +16,7 @@ const base = {
 const queue = {
   submitted: [{ ...base, id: 1, name: 'Ibu Siti', status: 'closing', paymentProofUrl: '/api/v1/prospects/payment-proof-file/proof-1-1-ab.jpg', paymentProofMessageId: 'M1', paymentProofSubmittedAt: '2026-09-23T01:00:00.000Z' }],
   candidates: [{
-    ...base, id: 2, name: 'Pak Ahmad', status: 'deal', dpAmount: 10_000_000, paymentStatus: 'partial_dp',
+    ...base, id: 2, name: 'Pak Ahmad', status: 'closing', dpAmount: 10_000_000, paymentStatus: 'partial_dp',
     candidateMessages: [{ id: 99, messageId: 'M99', messageType: 'imageMessage', mediaUrl: '/uploads/media/tf.jpg', timestamp: 1_790_000_000 }],
   }],
 };
@@ -45,7 +45,7 @@ describe('Menu Verifikasi Pembayaran', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows submitted proofs and chat candidates across brands, including settlement bills', async () => {
+  it('shows submitted proofs and chat candidates across brands, for initial payments only', async () => {
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter><VerificationPage /></MemoryRouter>
@@ -53,7 +53,9 @@ describe('Menu Verifikasi Pembayaran', () => {
     );
     expect(await screen.findByText('Ibu Siti')).toBeTruthy();
     expect(screen.getByText('Pak Ahmad')).toBeTruthy();
-    expect(screen.getByText(/Pelunasan ·/)).toBeTruthy();
+    expect(screen.getAllByText(/Pembayaran awal ·/).length).toBe(2);
+    expect(screen.queryByText(/Sisa .* dari /)).toBeNull();
+    expect(screen.queryByText(/Pelunasan ·/)).toBeNull();
     expect(calls.some((c) => c.url.includes('/verification/queue?brandId=all'))).toBe(true);
   });
 

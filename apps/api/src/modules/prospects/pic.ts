@@ -33,7 +33,7 @@ export async function assertCanActOnProspect(
 ) {
   if (canActOnProspect(user, prospect, options)) return;
   if (user.role === 'finance') {
-    throw new HttpError(403, 'Finance hanya dapat memverifikasi pembayaran, mengirim penawaran/invoice resmi, dan membatalkan booking Deal.');
+    throw new HttpError(403, 'Finance hanya menangani bukti dan verifikasi pembayaran awal.');
   }
   const pic = prospect.userId
     ? await prisma.user.findUnique({ where: { id: prospect.userId }, select: { name: true } })

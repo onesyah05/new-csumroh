@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CheckCircle2, FileText, Inbox, MessageCircle, ShieldCheck, Sparkles, Wallet, XCircle } from 'lucide-react';
-import { isWonStatus } from '@csumroh/shared-types';
+import { CheckCircle2, FileText, Inbox, MessageCircle, ShieldCheck, Sparkles, XCircle } from 'lucide-react';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
@@ -29,9 +28,6 @@ type QueueProspect = {
   name: string;
   phone?: string | null;
   status: string;
-  paymentStatus: string;
-  dealValue: string | number;
-  dpAmount: string | number;
   invoiceAmount: string | number;
   invoiceNumber?: string | null;
   invoiceSentAt?: string | null;
@@ -63,15 +59,13 @@ const timeAgo = (value?: string | number | null) => {
 const chatLink = (p: QueueProspect) => `/inbox?brandId=${p.brandId}&prospectId=${p.id}`;
 
 function BillSummary({ p }: { p: QueueProspect }) {
-  const settlement = isWonStatus(p.status);
-  const remaining = Math.max(0, Number(p.dealValue) - Number(p.dpAmount));
   return (
     <div className="min-w-0 text-xs">
       <p className="font-semibold text-zinc-900">
-        {settlement ? 'Pelunasan' : 'DP'} · {Number(p.invoiceAmount) > 0 ? rupiah(p.invoiceAmount) : 'nominal belum diisi'}
+        Pembayaran awal · {Number(p.invoiceAmount) > 0 ? rupiah(p.invoiceAmount) : 'nominal belum diisi'}
       </p>
       <p className="truncate text-zinc-500">
-        {p.invoiceNumber ?? 'Tanpa nomor invoice'} · Sisa {rupiah(remaining)} dari {rupiah(p.dealValue)}
+        {p.invoiceNumber ?? 'Tanpa nomor invoice'}
       </p>
     </div>
   );
@@ -117,7 +111,6 @@ export function VerificationPage() {
 
   const submitted = queue.data?.submitted ?? [];
   const candidates = queue.data?.candidates ?? [];
-  const pendingBill = useMemo(() => submitted.reduce((sum, p) => sum + Number(p.invoiceAmount || 0), 0), [submitted]);
 
   return (
     <div className="app-page space-y-6">
@@ -125,7 +118,7 @@ export function VerificationPage() {
         kicker="Finance"
         kickerIcon={<ShieldCheck size={13} />}
         title="Verifikasi Pembayaran"
-        subtitle="Cocokkan bukti transfer dengan mutasi rekening, lalu sahkan pembayaran."
+        subtitle="Verifikasi pembayaran awal (DP atau lunas) untuk menetapkan Deal."
         actions={
           <Select
             value={brandScope}
@@ -140,10 +133,9 @@ export function VerificationPage() {
         }
       />
 
-      <StatGrid cols={3}>
+      <StatGrid cols={2}>
         <StatCard label="Menunggu verifikasi" value={submitted.length} icon={<Inbox size={16} />} alert={submitted.length > 0} />
         <StatCard label="Kandidat dari chat" value={candidates.length} note="Gambar/PDF setelah invoice" icon={<Sparkles size={16} />} />
-        <StatCard label="Tagihan menunggu" value={rupiah(pendingBill)} icon={<Wallet size={16} />} />
       </StatGrid>
 
       {queue.isLoading ? (
@@ -154,7 +146,7 @@ export function VerificationPage() {
         <>
           <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <header className="border-b border-zinc-200 bg-zinc-50/75 px-4 py-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Bukti diajukan</h2>
+              <h2 className="text-xs font-semibold text-zinc-500">Bukti diajukan</h2>
             </header>
             {submitted.length === 0 ? (
               <EmptyState icon={CheckCircle2} title="Antrean kosong" description="Tidak ada bukti transfer yang menunggu verifikasi." />
@@ -189,7 +181,7 @@ export function VerificationPage() {
 
           <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <header className="border-b border-zinc-200 bg-zinc-50/75 px-4 py-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Kandidat bukti dari chat</h2>
+              <h2 className="text-xs font-semibold text-zinc-500">Kandidat bukti dari chat</h2>
               <p className="mt-0.5 text-xs text-zinc-500">
                 Gambar/PDF dari jamaah setelah invoice terkirim. Pilih yang merupakan bukti transfer; foto lain (KTP, paspor) abaikan saja.
               </p>

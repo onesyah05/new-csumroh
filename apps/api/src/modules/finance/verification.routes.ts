@@ -7,7 +7,7 @@ import { asyncHandler } from '../../utils/http.js';
 export const verificationRouter = Router();
 verificationRouter.use(authGuard, requireRole('finance', 'admin', 'superadmin'));
 
-const LOST_STATUSES: ProspectStatus[] = ['lose', 'closed_lost'];
+const CLOSED_STATUSES: ProspectStatus[] = ['deal', 'closed_won', 'lose', 'closed_lost'];
 const PROOF_MESSAGE_TYPES = ['imageMessage', 'documentMessage'];
 const MAX_CANDIDATES_PER_PROSPECT = 4;
 
@@ -17,9 +17,6 @@ const prospectSelect = {
   name: true,
   phone: true,
   status: true,
-  paymentStatus: true,
-  dealValue: true,
-  dpAmount: true,
   invoiceAmount: true,
   invoiceNumber: true,
   invoiceSentAt: true,
@@ -44,7 +41,7 @@ const prospectSelect = {
 /**
  * Antrean kerja Finance lintas brand.
  * - `submitted`: bukti sudah diajukan (upload CS atau diambil dari chat) dan belum dipakai
- *   oleh pembayaran terverifikasi mana pun — termasuk bukti pelunasan untuk booking Deal.
+ *   oleh pembayaran terverifikasi mana pun; hanya pembayaran awal sebelum Deal.
  * - `candidates`: invoice sudah terkirim, belum ada bukti yang diajukan, dan jamaah mengirim
  *   gambar/PDF setelah invoice (atau setelah pembayaran terakhir). Tidak otomatis dianggap
  *   bukti karena jamaah juga mengirim KTP/paspor; Finance atau CS mengonfirmasi dengan satu klik.
@@ -54,25 +51,24 @@ verificationRouter.get('/queue', asyncHandler(async (req, res) => {
   const brandWhere = raw === 'all' ? {} : { brandId: scopedBrandId(req, Number(raw)) };
 
   const withProof = await prisma.prospect.findMany({
-    where: { ...brandWhere, paymentProofUrl: { not: null }, status: { notIn: LOST_STATUSES } },
+    where: { ...brandWhere, paymentProofUrl: { not: null }, status: { notIn: CLOSED_STATUSES } },
     select: prospectSelect,
     orderBy: { paymentProofSubmittedAt: 'asc' },
   });
-  const submitted = withProof.filter((p) => !p.payments.some((pay) => pay.proofUrl === p.paymentProofUrl));
+  const submitted = withProof.filter((p) => !CLOSED_STATUSES.includes(p.status) && !p.payments.some((pay) => pay.proofUrl === p.paymentProofUrl));
   const submittedIds = new Set(submitted.map((p) => p.id));
 
   const billed = await prisma.prospect.findMany({
     where: {
       ...brandWhere,
       invoiceSentAt: { not: null },
-      status: { notIn: LOST_STATUSES },
-      paymentStatus: { not: 'paid_full' },
+      status: { notIn: CLOSED_STATUSES },
     },
     select: prospectSelect,
     orderBy: { invoiceSentAt: 'desc' },
     take: 300,
   });
-  const pool = billed.filter((p) => !submittedIds.has(p.id));
+  const pool = billed.filter((p) => !CLOSED_STATUSES.includes(p.status) && !submittedIds.has(p.id));
 
   // Gambar yang masuk sebelum invoice (atau sebelum pembayaran terakhir) bukan kandidat bukti.
   const sinceFor = (p: (typeof pool)[number]) => {

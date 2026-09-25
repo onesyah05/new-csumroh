@@ -40,14 +40,15 @@ beforeEach(() => {
 });
 
 describe('Antrean verifikasi Finance', () => {
-  it('lists proofs not yet used by a verified payment, including settlement proofs on deals', async () => {
+  it('lists proofs not yet used by a verified payment, excluding settlement proofs on deals', async () => {
     const pending = base(1, { paymentProofUrl: '/p/a.jpg' });
     const verified = base(2, { paymentProofUrl: '/p/b.jpg', payments: [{ proofUrl: '/p/b.jpg', createdAt: invoiceAt }] });
     const settlement = base(3, { status: 'deal', paymentStatus: 'partial_dp', paymentProofUrl: '/p/c2.jpg', payments: [{ proofUrl: '/p/c1.jpg', createdAt: invoiceAt }] });
     mocks.prospectFindMany.mockResolvedValueOnce([pending, verified, settlement]).mockResolvedValueOnce([]);
     const data = await queue();
-    expect(data.submitted.map((p: Row) => p.id)).toEqual([1, 3]);
+    expect(data.submitted.map((p: Row) => p.id)).toEqual([1]);
     expect(data.submitted[0]).not.toHaveProperty('payments');
+    expect(mocks.prospectFindMany.mock.calls[0][0].where.status.notIn).toEqual(expect.arrayContaining(['deal', 'closed_won']));
   });
 
   it('suggests only inbound media sent after the invoice or last payment, never already-used messages', async () => {
