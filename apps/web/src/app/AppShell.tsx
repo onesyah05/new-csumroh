@@ -329,9 +329,9 @@ export function AppShell() {
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content
-                side="right"
-                align="end"
-                sideOffset={16}
+                side="top"
+                align="center"
+                sideOffset={8}
                 className="z-50 w-52 rounded-xl border border-zinc-200 bg-white p-1 shadow-lift animate-fade-up"
               >
                 <div className="px-3 py-2 border-b border-zinc-100">
