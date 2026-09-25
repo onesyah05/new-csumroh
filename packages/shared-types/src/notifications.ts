@@ -2,7 +2,7 @@
  * Katalog notifikasi in-app. Dipakai API (tipe yang sah, prioritas default) dan halaman preferensi
  * (label, kelompok, role yang menerimanya). Notifikasi `urgent` selalu tampil sebagai toast.
  */
-export type NotificationRole = 'superadmin' | 'admin' | 'cs' | 'finance';
+export type NotificationRole = 'superadmin' | 'admin' | 'cs' | 'finance' | 'product';
 export type NotificationPriorityLevel = 'info' | 'action' | 'urgent';
 
 type Entry = {
@@ -17,6 +17,7 @@ type Entry = {
 const CS = ['cs'] as const;
 const FINANCE = ['finance'] as const;
 const MANAGERS = ['admin', 'superadmin'] as const;
+const PRODUCT = ['product'] as const;
 
 export const notificationCatalog = [
   // Lead & chat
@@ -37,15 +38,21 @@ export const notificationCatalog = [
   { type: 'followup.due_today', group: 'Follow-up & invoice', label: 'Follow-up hari ini (08.00)', description: 'Ringkasan jadwal follow-up hari ini.', priority: 'action', roles: CS },
   { type: 'followup.overdue', group: 'Follow-up & invoice', label: 'Follow-up terlambat (08.00)', description: 'Follow-up yang tanggalnya sudah lewat.', priority: 'action', roles: CS },
   { type: 'invoice.overdue', group: 'Follow-up & invoice', label: 'Invoice lewat jatuh tempo', description: 'Invoice prospek Anda belum dibayar setelah jatuh tempo.', priority: 'action', roles: CS },
-  { type: 'invoice.overdue_digest', group: 'Follow-up & invoice', label: 'Ringkasan invoice lewat tempo (08.00)', description: 'Jumlah invoice lewat tempo per brand.', priority: 'info', roles: FINANCE },
   // Pembayaran
   { type: 'payment.proof_new', group: 'Pembayaran', label: 'Bukti transfer baru', description: 'Bukti diunggah atau diambil dari chat, menunggu verifikasi.', priority: 'action', roles: FINANCE },
   { type: 'payment.proof_stale', group: 'Pembayaran', label: 'Bukti menunggu terlalu lama', description: 'Lewat 2 jam (Finance) atau 1 hari (juga Admin).', priority: 'urgent', roles: ['finance', 'admin', 'superadmin'] },
   { type: 'payment.verified', group: 'Pembayaran', label: 'Pembayaran diverifikasi', description: 'Finance memverifikasi pembayaran prospek Anda.', priority: 'info', roles: CS },
   { type: 'payment.rejected', group: 'Pembayaran', label: 'Bukti transfer ditolak', description: 'Finance menolak bukti; minta bukti yang benar ke jamaah.', priority: 'urgent', roles: CS },
-  { type: 'payment.overpaid', group: 'Pembayaran', label: 'Kelebihan bayar', description: 'Kas terverifikasi melebihi nilai booking.', priority: 'action', roles: ['finance', 'admin', 'superadmin'] },
   { type: 'booking.cancelled', group: 'Pembayaran', label: 'Booking dibatalkan', description: 'Booking Deal prospek Anda dibatalkan.', priority: 'action', roles: CS },
-  { type: 'refund.needed', group: 'Pembayaran', label: 'Perlu refund', description: 'Booking Deal dibatalkan dan ada dana terverifikasi.', priority: 'urgent', roles: FINANCE },
+  // Layanan custom
+  { type: 'custom.submitted', group: 'Layanan custom', label: 'Permintaan custom baru', description: 'CS mengirim kebutuhan jamaah untuk dihitung.', priority: 'action', roles: PRODUCT },
+  { type: 'custom.revision', group: 'Layanan custom', label: 'Permintaan hitung ulang', description: 'Kebutuhan jamaah berubah atau harga kedaluwarsa.', priority: 'action', roles: PRODUCT },
+  { type: 'custom.quoted', group: 'Layanan custom', label: 'Harga custom sudah dihitung', description: 'Tim LA menetapkan harga untuk jamaah Anda.', priority: 'action', roles: CS },
+  { type: 'custom.returned', group: 'Layanan custom', label: 'Permintaan custom dikembalikan', description: 'Tim LA meminta Anda melengkapi kebutuhan jamaah.', priority: 'action', roles: CS },
+  { type: 'custom.expiring', group: 'Layanan custom', label: 'Harga custom hampir kedaluwarsa', description: 'Kurang dari 6 jam sebelum harga tidak berlaku.', priority: 'urgent', roles: CS },
+  { type: 'custom.updated', group: 'Layanan custom', label: 'Kebutuhan custom diubah CS', description: 'CS mengubah kebutuhan yang sedang Anda hitung.', priority: 'action', roles: PRODUCT },
+  { type: 'custom.agreed', group: 'Layanan custom', label: 'Harga custom disepakati', description: 'CS menyepakati nilai deal dengan jamaah.', priority: 'info', roles: PRODUCT },
+  { type: 'custom.deal', group: 'Layanan custom', label: 'Layanan custom Deal', description: 'Pembayaran awal diverifikasi; siapkan pemesanan vendor.', priority: 'info', roles: PRODUCT },
   // Paket
   { type: 'package.quota_low', group: 'Paket', label: 'Kuota paket menipis', description: 'Paket yang sedang Anda tawarkan tinggal sedikit atau habis.', priority: 'action', roles: CS },
   { type: 'package.quota_empty', group: 'Paket', label: 'Kuota paket habis', description: 'Tambah kuota atau nonaktifkan paket.', priority: 'action', roles: MANAGERS },

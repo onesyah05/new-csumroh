@@ -11,16 +11,25 @@ import { toPayload } from './notify.service.js';
 export const notificationsRouter = Router();
 notificationsRouter.use(authGuard);
 
-// Semua query dibatasi pada penerima = user yang login; tidak ada akses ke notifikasi user lain.
-const unreadWhere = (userId: number): Prisma.NotificationWhereInput => ({ userId, readAt: null, resolvedAt: null });
+const retiredTypes = ['refund.needed', 'payment.overpaid', 'invoice.overdue_digest'];
 
+// Semua query dibatasi pada penerima = user yang login; tidak ada akses ke notifikasi user lain.
+const unreadWhere = (userId: number): Prisma.NotificationWhereInput => ({ userId, readAt: null, resolvedAt: null, type: { notIn: retiredTypes } });
+
+/**
+ * Lencana hanya menghitung yang perlu tindakan (tindakan + mendesak). Info (mis. pesan baru, yang juga
+ * sudah terlihat sebagai hitungan belum dibaca di Inbox) cukup ditandai titik agar angka tetap bermakna.
+ */
 async function unreadCount(userId: number) {
-  const [total, urgent] = await Promise.all([
-    prisma.notification.count({ where: unreadWhere(userId) }),
+  const [actionable, urgent, info] = await Promise.all([
+    prisma.notification.count({ where: { ...unreadWhere(userId), priority: { in: ['action', 'urgent'] } } }),
     prisma.notification.count({ where: { ...unreadWhere(userId), priority: 'urgent' } }),
+    prisma.notification.count({ where: { ...unreadWhere(userId), priority: 'info' } }),
   ]);
-  return { total, urgent };
+  return { actionable, urgent, info };
 }
+
+const ACTION_TAB_LIMIT = 100;
 
 notificationsRouter.get('/', asyncHandler(async (req, res) => {
   const { filter, cursor, limit } = z.object({
@@ -31,11 +40,23 @@ notificationsRouter.get('/', asyncHandler(async (req, res) => {
   }).parse(req.query);
   const userId = req.user!.id;
   const where: Prisma.NotificationWhereInput = {
-    userId,
+    userId, type: { notIn: retiredTypes },
     ...(filter === 'unread' ? { readAt: null, resolvedAt: null } : {}),
     ...(filter === 'action' ? { readAt: null, resolvedAt: null, priority: { in: ['action', 'urgent'] } } : {}),
     ...(cursor ? { id: { lt: cursor } } : {}),
   };
+  if (filter === 'action') {
+    // Daftar kerja: mendesak lebih dulu, lalu terbaru. Hanya berisi yang belum selesai sehingga pendek;
+    // diambil sekaligus (tanpa cursor, karena urutannya bukan berdasarkan id).
+    const rows = await prisma.notification.findMany({
+      where, orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }], take: ACTION_TAB_LIMIT,
+    });
+    res.json({
+      success: true,
+      data: { items: rows.map((row) => ({ ...toPayload(row), readAt: row.readAt, resolvedAt: row.resolvedAt, updatedAt: row.updatedAt })), nextCursor: null },
+    });
+    return;
+  }
   const rows = await prisma.notification.findMany({ where, orderBy: { id: 'desc' }, take: limit + 1 });
   const page = rows.slice(0, limit);
   res.json({

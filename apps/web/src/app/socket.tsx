@@ -4,7 +4,8 @@ import { getAccessToken, onSessionChange, refreshSession } from '../lib/api';
 import { queryClient } from './query';
 import { useAuth } from './auth';
 import { useUiStore } from './store';
-import { pushToast } from './toast';
+import { pushNotificationToast } from './toast';
+import { openNotificationPanel } from '../features/notifications/NotificationBell';
 import { playNotificationSound } from '../lib/notificationSound';
 
 export function SocketBridge() {
@@ -48,6 +49,7 @@ export function SocketBridge() {
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
+      void queryClient.invalidateQueries({ queryKey: ['scripts'] });
     };
 
     const onMessageStatus = (data?: { messageId?: string; status?: string; prospectId?: number }) => {
@@ -98,6 +100,8 @@ export function SocketBridge() {
 
     const onQuotaUpdated = (data?: { packageId?: number }) => {
       void queryClient.invalidateQueries({ queryKey: ['packages'] });
+      // Kuota ikut menentukan isi & status script (audit S13).
+      void queryClient.invalidateQueries({ queryKey: ['scripts'] });
       if (data?.packageId) {
         void queryClient.invalidateQueries({ queryKey: ['package', data.packageId] });
       }
@@ -115,8 +119,10 @@ export function SocketBridge() {
       id: number; priority: 'info' | 'action' | 'urgent'; title: string; body?: string | null; link?: string | null; toast?: boolean; sound?: boolean;
     }) => {
       refreshNotifications();
+      // Antrean Layanan Custom (Tim LA) tidak menerima event brand; segarkan dari notifikasi.
+      void queryClient.invalidateQueries({ queryKey: ['custom-requests'] });
       if (!data || isViewing(data.link)) return;
-      if (data.toast) pushToast({ id: `notification-${data.id}`, title: data.title, body: data.body, link: data.link, priority: data.priority });
+      if (data.toast) pushNotificationToast(data, openNotificationPanel);
       if (data.sound) playNotificationSound({ urgent: data.priority === 'urgent' });
     };
     socket.on('notification:new', onNotification);

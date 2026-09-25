@@ -1,7 +1,8 @@
 import { lostStatuses, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
+import { emitToUser } from '../../realtime/socket.js';
 import { notify, resolveNotifications } from './notify.service.js';
-import { adminsOf, csOfBrand, financeUsers, picOf } from './recipients.js';
+import { adminsOf, csOfBrand, financeUsers, picOf, productUsers } from './recipients.js';
 
 /**
  * Notifikasi per kejadian bisnis. Dipanggil SETELAH transaksi selesai; semua fungsi aman dipanggil
@@ -139,46 +140,74 @@ export async function notifyProspectsReleased(rows: { id: number; brandId: numbe
 
 // ── Pembayaran & booking ────────────────────────────────────────────────────────
 
+const PROOF_SUMMARY_KEY = 'payment.proof_new';
+const PROOF_SUMMARY_TITLE = 'Bukti transfer menunggu verifikasi';
+
+/** Jumlah bukti transfer yang menunggu verifikasi (semua brand), sama dengan antrean Finance. */
+async function pendingProofCount() {
+  const rows = await prisma.prospect.findMany({
+    where: { paymentProofUrl: { not: null }, status: { notIn: [...wonStatuses, ...lostStatuses] } },
+    select: { paymentProofUrl: true, payments: { select: { proofUrl: true } } },
+  });
+  return rows.filter((p) => !p.payments.some((pay) => pay.proofUrl === p.paymentProofUrl)).length;
+}
+
+/**
+ * Finance menerima SATU ringkasan antrean ("Bukti transfer menunggu verifikasi (12)"), bukan satu
+ * notifikasi per prospek: halaman Verifikasi adalah daftar kerjanya. Bukti yang terlalu lama tetap
+ * dilaporkan per prospek oleh job `payment.proof_stale`.
+ */
 export async function notifyProofSubmitted(p: ProspectRef, actor: Actor, fromChat: boolean) {
   // Bukti baru menggantikan bukti yang ditolak.
   await resolveNotifications({ entity: prospectEntity(p), types: ['payment.rejected'] });
+  const pending = await pendingProofCount();
   return notify({
     type: 'payment.proof_new', priority: 'action', brandId: p.brandId, actorId: actor.id,
     userIds: await financeUsers(),
-    title: `Bukti transfer baru: ${p.name}`,
-    body: `${await brandName(p.brandId)} · ${fromChat ? 'diambil dari chat WhatsApp' : 'diunggah'} oleh ${actor.name}`,
-    link: '/verifikasi', entity: prospectEntity(p), activeKey: `payment.proof_new:p${p.id}`,
+    title: PROOF_SUMMARY_TITLE,
+    body: `${pending} bukti menunggu · terbaru: ${p.name} (${await brandName(p.brandId)}), ${fromChat ? 'dari chat WhatsApp' : 'diunggah'} oleh ${actor.name}`,
+    link: '/verifikasi', activeKey: PROOF_SUMMARY_KEY, setCount: pending,
   });
 }
 
+/** Setelah verifikasi/penolakan: perbarui angka ringkasan tanpa toast baru, atau tutup bila antrean kosong. */
+export async function refreshProofSummary() {
+  const pending = await pendingProofCount();
+  if (pending === 0) return resolveNotifications({ types: ['payment.proof_new'] });
+  const rows = await prisma.notification.findMany({
+    where: { type: 'payment.proof_new', activeKey: PROOF_SUMMARY_KEY, resolvedAt: null },
+    select: { id: true, userId: true },
+  });
+  if (!rows.length) return 0;
+  await prisma.notification.updateMany({
+    where: { id: { in: rows.map((r) => r.id) } },
+    data: { count: pending, body: `${pending} bukti menunggu verifikasi` },
+  });
+  for (const row of rows) emitToUser(row.userId, 'notification:updated', { ids: [row.id] });
+  return rows.length;
+}
+
 export async function notifyPaymentVerified(input: {
-  prospect: ProspectRef; actor: Actor; amount: number; total: number; dealValue: number; isNewWin: boolean; isPaidFull: boolean;
+  prospect: ProspectRef; actor: Actor; amount: number; paymentType: 'dp' | 'full';
 }) {
   const { prospect: p, actor } = input;
   await resolveNotifications({ entity: prospectEntity(p), types: ['payment.proof_new', 'payment.proof_stale'] });
+  await refreshProofSummary();
   await notify({
     type: 'payment.verified', priority: 'info', brandId: p.brandId, actorId: actor.id,
     userIds: await picOf({ userId: p.userId ?? null, brandId: p.brandId }),
-    title: input.isNewWin ? `Deal! Pembayaran ${p.name} diverifikasi` : input.isPaidFull ? `${p.name} lunas` : `Pembayaran ${p.name} diverifikasi`,
-    body: `${rupiah(input.amount)} · total kas ${rupiah(input.total)}${input.dealValue > 0 ? ` dari ${rupiah(input.dealValue)}` : ''}`,
+    title: `Deal! Pembayaran awal ${p.name} diverifikasi`,
+    body: `${input.paymentType === 'full' ? 'Pembayaran awal lunas' : 'Pembayaran awal DP'} · ${rupiah(input.amount)}. Penanganan CS selesai.`,
     link: detailLink(p), entity: prospectEntity(p),
   });
-  if (input.dealValue > 0 && input.total > input.dealValue) {
-    const [finance, admins] = await Promise.all([financeUsers(), adminsOf(p.brandId)]);
-    await notify({
-      type: 'payment.overpaid', priority: 'action', brandId: p.brandId, actorId: actor.id,
-      userIds: [...finance, ...admins],
-      title: `Kelebihan bayar: ${p.name}`,
-      body: `Kas ${rupiah(input.total)} melebihi nilai booking ${rupiah(input.dealValue)} (selisih ${rupiah(input.total - input.dealValue)}).`,
-      link: detailLink(p), entity: prospectEntity(p),
-    });
-  }
+
 }
 
 /** Finance menolak bukti: PIC harus meminta bukti yang benar ke jamaah. */
 export async function notifyProofRejected(input: { prospect: ProspectRef; actor: Actor; reason: string }) {
   const { prospect: p, actor } = input;
   await resolveNotifications({ entity: prospectEntity(p), types: ['payment.proof_new', 'payment.proof_stale'] });
+  await refreshProofSummary();
   return notify({
     type: 'payment.rejected', priority: 'urgent', brandId: p.brandId, actorId: actor.id,
     userIds: await picOf({ userId: p.userId ?? null, brandId: p.brandId }),
@@ -219,7 +248,7 @@ export async function notifyQuotaAfterBooking(packageId: number, actor: Actor, l
   }
 }
 
-export async function notifyBookingCancelled(input: { prospect: ProspectRef; actor: Actor; cash: number; reason?: string | null }) {
+export async function notifyBookingCancelled(input: { prospect: ProspectRef; actor: Actor; reason?: string | null }) {
   const { prospect: p, actor } = input;
   await notify({
     type: 'booking.cancelled', priority: 'action', brandId: p.brandId, actorId: actor.id,
@@ -228,15 +257,7 @@ export async function notifyBookingCancelled(input: { prospect: ProspectRef; act
     body: `Oleh ${actor.name}${input.reason ? ` · ${input.reason}` : ''}`,
     link: detailLink(p), entity: prospectEntity(p),
   });
-  if (input.cash > 0) {
-    await notify({
-      type: 'refund.needed', priority: 'urgent', brandId: p.brandId, actorId: actor.id,
-      userIds: await financeUsers(),
-      title: `Perlu refund: ${p.name}`,
-      body: `${await brandName(p.brandId)} · dana terverifikasi ${rupiah(input.cash)} menunggu refund atau pemindahan.`,
-      link: detailLink(p), entity: prospectEntity(p),
-    });
-  }
+
 }
 
 // ── Perangkat WhatsApp & Meta CAPI ──────────────────────────────────────────────
@@ -304,5 +325,88 @@ export async function notifyCapiFailed(brandId: number, reason: string) {
     title: `Event Meta CAPI gagal (${await brandName(brandId)})`,
     body: reason.length > 160 ? `${reason.slice(0, 159)}…` : reason,
     link: '/meta-capi', entity: { type: 'brand', id: brandId }, activeKey: `capi.failed:b${brandId}`,
+  });
+}
+
+// ── Layanan custom ──
+const customLink = (requestId: number) => `/layanan-custom?id=${requestId}`;
+
+/** Permintaan baru atau hitung ulang masuk ke antrean Tim LA (semua brand). */
+export async function notifyCustomSubmitted(input: { prospect: ProspectRef; actor: Actor; requestId: number; revision?: boolean }) {
+  const { prospect: p, actor } = input;
+  await resolveNotifications({ entity: prospectEntity(p), types: ['custom.quoted', 'custom.returned', 'custom.expiring'] });
+  return notify({
+    type: input.revision ? 'custom.revision' : 'custom.submitted', priority: 'action', brandId: p.brandId, actorId: actor.id,
+    userIds: await productUsers(),
+    title: input.revision ? `Hitung ulang layanan custom: ${p.name}` : `Permintaan layanan custom: ${p.name}`,
+    body: `${await brandName(p.brandId)} · dikirim ${actor.name}`,
+    link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom:r${input.requestId}`,
+  });
+}
+
+/** Tim LA mengembalikan permintaan: PIC melengkapi kebutuhan. */
+export async function notifyCustomReturned(input: { prospect: ProspectRef; actor: Actor; requestId: number; note: string }) {
+  const { prospect: p, actor } = input;
+  await resolveNotifications({ entity: prospectEntity(p), types: ['custom.submitted', 'custom.revision'] });
+  return notify({
+    type: 'custom.returned', priority: 'action', brandId: p.brandId, actorId: actor.id,
+    userIds: await picOf({ userId: p.userId ?? null, brandId: p.brandId }),
+    title: `Layanan custom ${p.name} perlu dilengkapi`,
+    body: `${actor.name}: ${input.note}`.slice(0, 240),
+    link: inboxLink(p), entity: prospectEntity(p), activeKey: `custom.returned:p${p.id}`,
+  });
+}
+
+/** CS mengubah kebutuhan yang sedang dihitung Tim LA. */
+export async function notifyCustomUpdated(input: { prospect: ProspectRef; actor: Actor; requestId: number }) {
+  const { prospect: p, actor } = input;
+  return notify({
+    type: 'custom.updated', priority: 'action', brandId: p.brandId, actorId: actor.id,
+    userIds: await productUsers(),
+    title: `Kebutuhan custom ${p.name} diubah`,
+    body: `${actor.name} mengubah kebutuhan jamaah. Muat ulang rincian sebelum menghitung.`,
+    link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom.updated:r${input.requestId}`,
+  });
+}
+
+/** Prospek batal: permintaan custom ikut dibatalkan, notifikasi Tim LA untuk prospek itu ditutup. */
+export function closeCustomNotifications(p: ProspectRef) {
+  return resolveNotifications({ entity: prospectEntity(p), types: ['custom.submitted', 'custom.revision', 'custom.updated', 'custom.expiring', 'custom.returned', 'custom.quoted'] });
+}
+
+/** CS menyepakati nilai deal: Tim LA tahu hasil negosiasinya. */
+export async function notifyCustomAgreed(input: { prospect: ProspectRef; actor: Actor; requestId: number; agreedPrice: number }) {
+  const { prospect: p, actor } = input;
+  return notify({
+    type: 'custom.agreed', priority: 'info', brandId: p.brandId, actorId: actor.id,
+    userIds: await productUsers(),
+    title: `Harga custom ${p.name} disepakati`,
+    body: `${rupiah(input.agreedPrice)} oleh ${actor.name} · ${await brandName(p.brandId)}`,
+    link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom.agreed:r${input.requestId}`,
+  });
+}
+
+/** Deal (pembayaran awal terverifikasi) untuk prospek layanan custom: Tim LA menyiapkan pemesanan vendor. */
+export async function notifyCustomDeal(input: { prospect: ProspectRef; actor: Actor; requestId: number }) {
+  const { prospect: p, actor } = input;
+  return notify({
+    type: 'custom.deal', priority: 'info', brandId: p.brandId, actorId: actor.id,
+    userIds: await productUsers(),
+    title: `Deal layanan custom: ${p.name}`,
+    body: `Pembayaran awal diverifikasi · ${await brandName(p.brandId)}. Siapkan pemesanan vendor.`,
+    link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom.deal:r${input.requestId}`,
+  });
+}
+
+/** Harga sudah dihitung: PIC melanjutkan negosiasi. */
+export async function notifyCustomQuoted(input: { prospect: ProspectRef; actor: Actor; requestId: number; offeredPrice: number }) {
+  const { prospect: p, actor } = input;
+  await resolveNotifications({ entity: prospectEntity(p), types: ['custom.submitted', 'custom.revision'] });
+  return notify({
+    type: 'custom.quoted', priority: 'action', brandId: p.brandId, actorId: actor.id,
+    userIds: await picOf({ userId: p.userId ?? null, brandId: p.brandId }),
+    title: `Harga custom ${p.name} sudah dihitung`,
+    body: `Ditawarkan ${rupiah(input.offeredPrice)} oleh ${actor.name}. Lanjutkan negosiasi dengan jamaah.`,
+    link: inboxLink(p), entity: prospectEntity(p), activeKey: `custom.quoted:p${p.id}`,
   });
 }

@@ -75,7 +75,7 @@ function ToastItem({ toast }: { toast: AppToast }) {
           ? <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" aria-hidden="true" />
           : <Bell size={16} className="mt-0.5 shrink-0 text-zinc-600" aria-hidden="true" />}
       <div className="min-w-0 flex-1">
-        {toast.link ? (
+        {toast.link || toast.onOpen ? (
           <button type="button" onClick={open} className="text-left text-sm font-semibold hover:underline">{toast.title}</button>
         ) : (
           <p className="text-sm font-semibold">{toast.title}</p>
@@ -103,4 +103,52 @@ export function Toaster() {
       {toasts.map((toast) => <ToastItem key={toast.id} toast={toast} />)}
     </div>
   );
+}
+
+// ── Rem banjir toast notifikasi ────────────────────────────────────────────────
+
+const BURST_WINDOW_MS = 5000;
+const BURST_LIMIT = 3;
+const SUMMARY_ID = 'notification-burst';
+let recentArrivals: { at: number; urgent: boolean }[] = [];
+let summary: { total: number; urgent: number } | null = null;
+
+type IncomingNotification = { id: number; title: string; body?: string | null; link?: string | null; priority: ToastPriority };
+
+/**
+ * Toast untuk notifikasi realtime. Hingga 3 notifikasi dalam 5 detik tampil satu per satu; bila lebih
+ * (mis. setelah WhatsApp tersambung ulang dan banyak SLA terlewat), toast individual diganti SATU ringkasan
+ * "N notifikasi baru · M mendesak" yang membuka panel — tidak ada yang hilang diam-diam dari layar.
+ */
+export function pushNotificationToast(notification: IncomingNotification, openPanel: () => void, now = Date.now()) {
+  const store = useToastStore.getState();
+  const urgent = notification.priority === 'urgent';
+  recentArrivals = recentArrivals.filter((arrival) => now - arrival.at < BURST_WINDOW_MS);
+  recentArrivals.push({ at: now, urgent });
+
+  const summaryVisible = summary !== null && store.toasts.some((toast) => toast.id === SUMMARY_ID);
+  if (!summaryVisible && recentArrivals.length <= BURST_LIMIT) {
+    summary = null;
+    store.push({ id: `notification-${notification.id}`, title: notification.title, body: notification.body, link: notification.link, priority: notification.priority });
+    return 'single' as const;
+  }
+
+  summary = summaryVisible && summary
+    ? { total: summary.total + 1, urgent: summary.urgent + (urgent ? 1 : 0) }
+    : { total: recentArrivals.length, urgent: recentArrivals.filter((arrival) => arrival.urgent).length };
+  useToastStore.setState({ toasts: store.toasts.filter((toast) => toast.kind === 'feedback' || toast.id === SUMMARY_ID) });
+  store.push({
+    id: SUMMARY_ID,
+    title: `${summary.total} notifikasi baru`,
+    body: summary.urgent ? `${summary.urgent} mendesak · buka untuk melihat semuanya` : 'Buka untuk melihat semuanya',
+    priority: summary.urgent ? 'urgent' : 'action',
+    onOpen: openPanel,
+  });
+  return 'summary' as const;
+}
+
+/** Untuk tes. */
+export function resetNotificationBurst() {
+  recentArrivals = [];
+  summary = null;
 }

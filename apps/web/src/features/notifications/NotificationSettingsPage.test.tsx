@@ -23,7 +23,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
-    if (url.includes('/unread-count')) return json({ total: 3, urgent: 0 });
+    if (url.includes('/unread-count')) return json({ actionable: 3, urgent: 0, info: 5 });
     if (url.includes('/notifications/preferences') && init?.method === 'PUT') {
       const [item] = JSON.parse(String(init.body)).items;
       return json(preferences.map((p) => (p.type === item.type ? { ...p, ...item } : p)));

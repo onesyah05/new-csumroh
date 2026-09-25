@@ -24,6 +24,8 @@ export type NotifyInput = {
   activeKey?: string;
   /** Kirim sekali saja untuk kunci ini (mis. pesan yang dikirim ulang gateway). */
   dedupeKey?: string;
+  /** Ringkasan berbasis keadaan (mis. "12 bukti menunggu"): isi `count` dengan nilai ini, bukan +1 per kejadian. */
+  setCount?: number;
 };
 
 export type NotificationPayload = {
@@ -68,9 +70,9 @@ async function writeFor(userId: number, input: NotifyInput) {
   if (!input.activeKey) return prisma.notification.create({ data: { ...data, userId } });
 
   const where = { userId_activeKey: { userId, activeKey: input.activeKey } };
-  const update = { ...data, count: { increment: 1 }, readAt: null };
+  const update = { ...data, count: input.setCount ?? { increment: 1 }, readAt: null };
   try {
-    return await prisma.notification.upsert({ where, update, create: { ...data, userId, activeKey: input.activeKey } });
+    return await prisma.notification.upsert({ where, update, create: { ...data, userId, activeKey: input.activeKey, count: input.setCount ?? 1 } });
   } catch (error) {
     // Dua kejadian bersamaan membuat baris yang sama: yang kalah cukup menambah hitungan.
     if (isUniqueViolation(error)) return prisma.notification.update({ where, data: update });
@@ -120,12 +122,12 @@ export async function notify(input: NotifyInput): Promise<number> {
  * Tandai notifikasi kondisi sebagai selesai (mis. jamaah sudah dibalas, bukti sudah diverifikasi):
  * keluar dari "Perlu tindakan" dan hitungan belum dibaca, tetapi tetap ada di riwayat.
  */
-export async function resolveNotifications(input: { entity: NotificationEntity; types: NotificationType[]; userIds?: number[] }) {
+export async function resolveNotifications(input: { entity?: NotificationEntity; types: NotificationType[]; userIds?: number[] }) {
   if (!env.NOTIFICATIONS_ENABLED) return 0;
   try {
     const where: Prisma.NotificationWhereInput = {
-      entityType: input.entity.type,
-      entityId: input.entity.id,
+      // Tanpa entitas: tutup semua notifikasi aktif bertipe ini (mis. ringkasan antrean yang sudah kosong).
+      ...(input.entity ? { entityType: input.entity.type, entityId: input.entity.id } : {}),
       type: { in: input.types },
       resolvedAt: null,
       ...(input.userIds ? { userId: { in: input.userIds } } : {}),

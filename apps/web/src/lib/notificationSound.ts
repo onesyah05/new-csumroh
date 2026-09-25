@@ -25,9 +25,15 @@ if (typeof window !== 'undefined') {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') claimTab(); });
 }
 
+let lastPlayedAt = 0;
+const MIN_GAP_MS = 2000;
+
 /** `force` untuk tombol "Uji suara": selalu berbunyi di tab ini (sekaligus membuka izin audio browser). */
 export function playNotificationSound(options?: { urgent?: boolean; force?: boolean }) {
   if (!options?.force && !isSoundTab()) return false;
+  // Notifikasi beruntun: paling sering sekali per 2 detik agar tidak berisik.
+  if (!options?.force && Date.now() - lastPlayedAt < MIN_GAP_MS) return false;
+  lastPlayedAt = Date.now();
   try {
     const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtor) return false;

@@ -431,3 +431,18 @@ Total F0–F3: sekitar **12–14 hari kerja**.
 - shared-types: 14/14.
 - API: 108/108 (+3: preferensi pada event realtime, GET/PUT preferensi).
 - Web: 39/39 (+3: halaman preferensi, judul tab).
+
+### Penyempurnaan untuk volume tinggi (24/09)
+
+Masukan user: lonceng di kiri bawah kurang terlihat, dan desain belum siap untuk puluhan notifikasi.
+
+| # | Perubahan | Rincian |
+| --- | --- | --- |
+| 1 | Lonceng pindah ke **atas sidebar** | Item pertama di bawah logo (desktop, termasuk Inbox). Panel membuka ke bawah dari atas. Di layar kecil lonceng ada di header halaman/Inbox. Panel dirender lewat portal ke `<body>` (sidebar memakai transform + overflow-hidden yang memotong elemen fixed). |
+| 2 | Lencana hanya **perlu tindakan** | `GET /unread-count` kini `{ actionable, urgent, info }`. Angka = tindakan + mendesak; info (mis. pesan baru) hanya titik. Judul tab juga memakai `actionable`. |
+| 3 | Urutan & pengelompokan | Tab "Perlu tindakan": mendesak lalu terbaru (maks. 100, tanpa cursor), dikelompokkan Mendesak/Tindakan. Tab "Semua": Hari ini / Kemarin / Sebelumnya (WIB), judul kelompok lengket saat di-scroll. |
+| 4 | Ringkasan bukti transfer Finance | Satu notifikasi "Bukti transfer menunggu verifikasi (N)" per Finance (`activeKey` tetap, `setCount` = jumlah antrean saat ini), bukan satu per prospek. Verifikasi/penolakan memperbarui angka tanpa toast; antrean kosong menutupnya. Bukti > 2 jam tetap per prospek (`payment.proof_stale`). |
+| 5 | Rem banjir toast | Maksimal 3 toast notifikasi per 5 detik; selebihnya diganti satu toast "N notifikasi baru · M mendesak" yang membuka panel. Suara paling sering sekali per 2 detik. |
+| 6 | Aksi cepat | Tombol ✓ "Tandai dibaca" per item tanpa membuka halaman tujuan. |
+
+Tes: API 115/115 (+3: ringkasan bukti, pembaruan tanpa toast/penutupan, urutan tab Perlu tindakan); web 60/60 (+5: titik info, pengelompokan per hari, tombol cepat, grup Mendesak, pembuka panel, rem banjir toast).

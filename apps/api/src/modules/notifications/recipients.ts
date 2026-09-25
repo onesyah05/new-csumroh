@@ -40,3 +40,9 @@ export async function adminsOf(brandId: number) {
     : await prisma.user.findMany({ where: { isActive: true, role: 'admin' }, select: { id: true } });
   return [...admins, ...superadmins].map((u) => u.id);
 }
+
+/** Tim LA melayani semua brand holding. */
+export async function productUsers() {
+  const users = await prisma.user.findMany({ where: { isActive: true, role: 'product' }, select: { id: true } });
+  return users.map((u) => u.id);
+}

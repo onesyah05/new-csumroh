@@ -29,9 +29,9 @@ beforeEach(() => vi.clearAllMocks());
 describe('notifications API', () => {
   it('daftar hanya milik user yang login, dengan cursor halaman berikutnya', async () => {
     mocks.findMany.mockResolvedValue([3, 2, 1].map((id) => ({ id, type: 't', priority: 'info', title: 'x', body: null, link: null, count: 1, createdAt: new Date(), readAt: null, resolvedAt: null, updatedAt: new Date() })));
-    const result = await invoke('get', '/', { query: { filter: 'action', limit: '2' } });
+    const result = await invoke('get', '/', { query: { filter: 'all', limit: '2' } });
     const where = mocks.findMany.mock.calls[0][0].where;
-    expect(where).toMatchObject({ userId: 5, readAt: null, resolvedAt: null, priority: { in: ['action', 'urgent'] } });
+    expect(where).toEqual({ userId: 5, type: { notIn: ['refund.needed', 'payment.overpaid', 'invoice.overdue_digest'] } });
     expect(result.data.items).toHaveLength(2);
     expect(result.data.nextCursor).toBe(2);
   });
@@ -49,8 +49,11 @@ describe('notifications API', () => {
   });
 
   it('hitungan belum dibaca tidak menghitung notifikasi yang sudah selesai', async () => {
-    await invoke('get', '/unread-count');
-    expect(mocks.count.mock.calls[0][0].where).toEqual({ userId: 5, readAt: null, resolvedAt: null });
+    const result = await invoke('get', '/unread-count');
+    // Lencana = perlu tindakan saja; info dihitung terpisah (ditampilkan sebagai titik).
+    expect(mocks.count.mock.calls[0][0].where).toEqual({ userId: 5, readAt: null, resolvedAt: null, type: { notIn: ['refund.needed', 'payment.overpaid', 'invoice.overdue_digest'] }, priority: { in: ['action', 'urgent'] } });
+    expect(mocks.count.mock.calls[2][0].where).toEqual({ userId: 5, readAt: null, resolvedAt: null, type: { notIn: ['refund.needed', 'payment.overpaid', 'invoice.overdue_digest'] }, priority: 'info' });
+    expect(Object.keys(result.data)).toEqual(['actionable', 'urgent', 'info']);
   });
 });
 
@@ -70,5 +73,16 @@ describe('preferensi notifikasi', () => {
     await invoke('put', '/preferences', { body: { items: [{ type: 'pic.taken_over', toast: false, sound: true }, { type: 'lead.assigned', toast: false, sound: false }] } });
     const upserts = mocks.upsert.mock.calls.map(([arg]: any) => [arg.where.userId_type.type, arg.update]);
     expect(upserts).toEqual([['pic.taken_over', { toast: true, sound: true }], ['lead.assigned', { toast: false, sound: false }]]);
+  });
+});
+
+describe('tab Perlu tindakan', () => {
+  it('mendesak lebih dulu lalu terbaru; tanpa cursor', async () => {
+    mocks.findMany.mockResolvedValue([]);
+    const result = await invoke('get', '/', { query: { filter: 'action' } });
+    const args = mocks.findMany.mock.calls[0][0];
+    expect(args.where).toMatchObject({ userId: 5, readAt: null, resolvedAt: null, type: { notIn: ['refund.needed', 'payment.overpaid', 'invoice.overdue_digest'] }, priority: { in: ['action', 'urgent'] } });
+    expect(args.orderBy).toEqual([{ priority: 'desc' }, { updatedAt: 'desc' }]);
+    expect(result.data.nextCursor).toBeNull();
   });
 });

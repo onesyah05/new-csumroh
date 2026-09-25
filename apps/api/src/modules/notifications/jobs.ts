@@ -194,7 +194,7 @@ export async function proofStaleJob(now = new Date()) {
   const rows = await prisma.prospect.findMany({
     where: {
       paymentProofUrl: { not: null },
-      status: { notIn: [...lostStatuses] },
+      status: { notIn: [...wonStatuses, ...lostStatuses] },
       paymentProofSubmittedAt: { lte: new Date(now.getTime() - SLA.proofStaleHours * HOUR), gte: new Date(now.getTime() - 7 * 24 * HOUR) },
     },
     select: {
@@ -216,6 +216,27 @@ export async function proofStaleJob(now = new Date()) {
       body: `${p.brand.name} · ${escalate ? 'lewat 1 hari, perlu perhatian Admin' : `lewat ${SLA.proofStaleHours} jam`}. Verifikasi atau tolak dengan alasan.`,
       link: '/verifikasi', entity: { type: 'prospect', id: p.id },
       dedupeKey: `payment.proof_stale:p${p.id}:${submittedAt.getTime()}:${escalate ? 2 : 1}`,
+    });
+  }
+}
+
+// ── Harga layanan custom hampir kedaluwarsa (< 6 jam) ─────────────────────────────
+
+export async function customExpiringJob(now = new Date()) {
+  const rows = await prisma.customRequest.findMany({
+    where: { status: 'quoted', quoteValidUntil: { gt: now, lte: new Date(now.getTime() + 6 * HOUR) } },
+    select: { id: true, quoteCount: true, quoteValidUntil: true, prospect: { select: { id: true, brandId: true, name: true, userId: true } } },
+  });
+  for (const r of rows) {
+    const hours = Math.max(1, Math.round((r.quoteValidUntil!.getTime() - now.getTime()) / HOUR));
+    await notify({
+      type: 'custom.expiring', priority: 'urgent', brandId: r.prospect.brandId,
+      // Tanpa PIC aktif: pengingat ke Admin brand agar harga tidak kedaluwarsa tanpa ada yang tahu.
+      userIds: await picOf({ userId: r.prospect.userId, brandId: r.prospect.brandId }).then((ids) => (ids.length ? ids : adminsOf(r.prospect.brandId))),
+      title: `Harga custom ${r.prospect.name} berakhir ${hours} jam lagi`,
+      body: 'Sepakati nilai deal dengan jamaah sebelum harga kedaluwarsa, atau minta hitung ulang.',
+      link: `/inbox?prospectId=${r.prospect.id}&brandId=${r.prospect.brandId}`, entity: { type: 'prospect', id: r.prospect.id },
+      dedupeKey: `custom.expiring:r${r.id}:${r.quoteCount}`,
     });
   }
 }
@@ -260,7 +281,6 @@ export async function morningDigestJob(now = new Date()) {
     where: { status: 'closing', invoiceDueAt: { lt: now, gte: new Date(now.getTime() - 30 * 24 * HOUR) } },
     select: { id: true, brandId: true, name: true, userId: true, invoiceNumber: true, invoiceDueAt: true, brand: { select: { name: true } } },
   });
-  const perBrand = new Map<number, { name: string; count: number }>();
   for (const inv of invoices) {
     await notify({
       type: 'invoice.overdue', priority: 'action', brandId: inv.brandId,
@@ -269,18 +289,6 @@ export async function morningDigestJob(now = new Date()) {
       body: `${inv.invoiceNumber ?? 'Invoice'} belum dibayar. Ingatkan jamaah atau perbarui jatuh tempo.`,
       link: inboxLink(inv), entity: { type: 'prospect', id: inv.id },
       dedupeKey: `invoice.overdue:p${inv.id}:${inv.invoiceDueAt!.getTime()}`,
-    });
-    const entry = perBrand.get(inv.brandId) ?? { name: inv.brand.name, count: 0 };
-    entry.count++;
-    perBrand.set(inv.brandId, entry);
-  }
-  for (const [brandId, entry] of perBrand) {
-    await notify({
-      type: 'invoice.overdue_digest', priority: 'info', brandId, userIds: await financeUsers(),
-      title: `${entry.count} invoice lewat jatuh tempo (${entry.name})`,
-      body: 'Belum ada pembayaran terverifikasi. Pantau bukti yang masuk di antrean verifikasi.',
-      link: '/verifikasi', entity: { type: 'brand', id: brandId },
-      dedupeKey: `invoice.overdue_digest:b${brandId}:${today}`,
     });
   }
 
