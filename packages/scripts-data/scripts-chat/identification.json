@@ -1,8 +1,8 @@
 {
     "id": "identification_script_bank",
     "nama": "Bank Script Prospect Identification",
-    "deskripsi": "Kumpulan script chat untuk membantu Agen menggali Need, Pain, Gain, Dream, dan informasi qualification sebelum memberikan rekomendasi penawaran (offer).",
-    "tujuan": "Membantu Agen memahami kebutuhan calon jamaah secukupnya agar rekomendasi paket lebih relevan, solutif, dan tepat sasaran.",
+    "deskripsi": "Kumpulan script chat untuk membantu CS menggali Need, Pain, Gain, Dream, dan informasi qualification sebelum memberikan rekomendasi penawaran (offer).",
+    "tujuan": "Membantu CS memahami kebutuhan calon jamaah secukupnya agar rekomendasi paket lebih relevan, solutif, dan tepat sasaran.",
     "guidelines": [
         "Jangan menanyakan semua pertanyaan sekaligus.",
         "Pilih pertanyaan berdasarkan konteks yang sudah diberikan prospek.",
@@ -13,12 +13,8 @@
         "Gunakan bahasa percakapan, bukan seperti formulir survei."
     ],
     "placeholders": [
-        "{{nama}}",
-        "{{bulan}}",
-        "{{kota}}",
-        "{{budget}}",
-        "{{jumlah_jamaah}}",
-        "{{nama_pendamping}}"
+        "{{bulan_target}}",
+        "{{travel}}"
     ],
     "categories": [
         {
@@ -53,7 +49,7 @@
             "category": "need",
             "title": "Cari Kebutuhan Utama",
             "use_when": "Prospek masih menyampaikan kebutuhan secara umum.",
-            "script": "Kalau boleh tahu Kak 😊\n\nUntuk perjalanan ibadah umroh nanti, apa hal yang paling Kakak utamakan?",
+            "script": "Untuk perjalanan umroh nanti, apa yang paling diutamakan?",
             "output_tags": [
                 "need"
             ],
@@ -64,7 +60,7 @@
             "category": "need",
             "title": "Cari Tipe Paket",
             "use_when": "Prospek meminta pilihan paket tetapi belum menyebut prioritasnya.",
-            "script": "Kalau untuk pilihan paket umrohnya nanti 😊\n\nPrioritas utama Kakak lebih mengutamakan efisiensi biaya (paket hemat) atau kenyamanan fasilitas dan layanan terbaik (paket VIP/Premium)?",
+            "script": "Untuk pilihan paket, lebih mengutamakan biaya yang hemat atau fasilitas yang lebih nyaman?",
             "output_tags": [
                 "budget",
                 "kenyamanan",
@@ -77,7 +73,7 @@
             "category": "need",
             "title": "Cari Waktu Keberangkatan",
             "use_when": "Target keberangkatan belum diketahui.",
-            "script": "Rencananya ingin berangkat kapan, Kak?",
+            "script": "Rencananya ingin berangkat kapan?",
             "output_tags": [
                 "jadwal"
             ],
@@ -88,7 +84,7 @@
             "category": "need",
             "title": "Cek Fleksibilitas Jadwal",
             "use_when": "Prospek sudah menyebut periode tetapi belum jelas seberapa fleksibel.",
-            "script": "Untuk tanggalnya harus di periode itu atau masih cukup fleksibel, Kak?",
+            "script": "Untuk tanggalnya harus di periode itu, atau masih bisa disesuaikan?",
             "output_tags": [
                 "jadwal",
                 "fleksibel"
@@ -100,7 +96,7 @@
             "category": "need",
             "title": "Cari Teman Berangkat",
             "use_when": "Belum diketahui prospek akan berangkat dengan siapa.",
-            "script": "Nanti rencananya berangkat sendiri atau bersama keluarga, Kak?",
+            "script": "Rencananya berangkat berapa orang?",
             "output_tags": [
                 "keluarga",
                 "pasangan",
@@ -113,7 +109,7 @@
             "category": "need",
             "title": "Cari Fasilitas Prioritas",
             "use_when": "Prospek sedang membandingkan beberapa paket.",
-            "script": "Kalau ada satu fasilitas yang paling penting buat Kakak, biasanya apa?",
+            "script": "Kalau ada satu fasilitas yang paling penting, apa itu?",
             "output_tags": [
                 "fasilitas"
             ],
@@ -124,7 +120,7 @@
             "category": "pain",
             "title": "Gali Kekhawatiran",
             "use_when": "Prospek terlihat ragu tetapi belum mengatakan penyebabnya.",
-            "script": "Kalau soal perjalanan umroh nanti, ada hal yang paling Kakak khawatirkan nggak?",
+            "script": "Untuk perjalanan umroh nanti, ada hal yang paling dikhawatirkan?",
             "output_tags": [
                 "pain"
             ],
@@ -135,7 +131,7 @@
             "category": "pain",
             "title": "Prospek Terlihat Ragu",
             "use_when": "Prospek mengatakan masih ragu.",
-            "script": "Sangat wajar Kak jika masih menimbang-nimbang 😊\n\nKalau boleh tahu, yang saat ini paling menjadi pertimbangan Kakak lebih ke pencocokan jadwal atau kesiapan biayanya, Kak?",
+            "script": "Wajar kalau masih menimbang.\n\nYang paling menjadi pertimbangan saat ini soal jadwal atau biaya?",
             "output_tags": [
                 "trust",
                 "package",
@@ -149,7 +145,7 @@
             "category": "pain",
             "title": "Gali Kendala Harga",
             "use_when": "Prospek terlihat sensitif terhadap harga.",
-            "script": "Kalau soal biaya, yang lebih jadi pertimbangan total paketnya atau pembayaran awalnya, Kak?",
+            "script": "Soal biaya, yang lebih menjadi pertimbangan total paketnya atau pembayaran awalnya?",
             "output_tags": [
                 "budget",
                 "dp"
@@ -161,20 +157,21 @@
             "category": "pain",
             "title": "Gali Kekhawatiran Membawa Orang Tua",
             "use_when": "Prospek akan berangkat bersama orang tua.",
-            "script": "Kalau untuk Ayah atau Ibu nanti, ada hal yang paling Kakak khawatirkan selama perjalanan?",
+            "script": "Untuk orang tua nanti, ada hal yang paling dikhawatirkan selama perjalanan?",
             "output_tags": [
                 "orang_tua",
                 "lansia",
                 "kenyamanan"
             ],
-            "next_stage": "identification"
+            "next_stage": "identification",
+            "audience": "orang_tua"
         },
         {
             "id": "pain_trust_01",
             "category": "pain",
             "title": "Gali Masalah Kepercayaan",
             "use_when": "Prospek takut salah memilih travel.",
-            "script": "Kakak pernah punya pengalaman kurang nyaman dengan travel sebelumnya atau memang sedang hati-hati memilih?",
+            "script": "Pernah punya pengalaman kurang nyaman dengan travel sebelumnya, atau memang sedang berhati-hati memilih?",
             "output_tags": [
                 "trust",
                 "pengalaman_buruk"
@@ -186,7 +183,7 @@
             "category": "pain",
             "title": "Gali Kekhawatiran Hotel",
             "use_when": "Prospek menanyakan jarak hotel.",
-            "script": "Jarak hotel cukup penting buat Kakak karena ada jamaah lansia atau memang ingin lebih nyaman?",
+            "script": "Apakah jarak hotel penting karena ada jamaah lansia, atau supaya lebih nyaman?",
             "output_tags": [
                 "hotel_dekat",
                 "lansia",
@@ -199,7 +196,7 @@
             "category": "pain",
             "title": "Kekhawatiran Umroh Pertama",
             "use_when": "Prospek baru pertama kali akan umroh.",
-            "script": "Karena ini adalah pengalaman umroh pertama bagi Kakak 😊\n\nAda bagian yang paling membuat Kakak bingung atau khawatir, misalnya soal dokumen, manasik, atau teknis di Tanah Suci?",
+            "script": "Karena ini umroh pertama, bagian mana yang paling membingungkan: dokumen, manasik, atau kegiatan di sana?",
             "output_tags": [
                 "first_timer",
                 "pendampingan",
@@ -211,8 +208,8 @@
             "id": "gain_general_01",
             "category": "gain",
             "title": "Cari Benefit Utama",
-            "use_when": "Agen ingin mengetahui apa yang paling dihargai prospek.",
-            "script": "Kalau perjalanan nanti, yang paling penting buat Kakak apa?",
+            "use_when": "CS ingin mengetahui apa yang paling dihargai prospek.",
+            "script": "Untuk perjalanan nanti, apa yang paling penting?",
             "output_tags": [
                 "gain"
             ],
@@ -223,7 +220,7 @@
             "category": "gain",
             "title": "Harga atau Kenyamanan",
             "use_when": "Prospek belum menunjukkan prioritas paket.",
-            "script": "Kakak lebih mengutamakan harga yang ringan atau perjalanan yang lebih nyaman?",
+            "script": "Lebih mengutamakan harga yang ringan atau perjalanan yang lebih nyaman?",
             "output_tags": [
                 "budget",
                 "kenyamanan"
@@ -235,7 +232,7 @@
             "category": "gain",
             "title": "Harapan terhadap Pelayanan",
             "use_when": "Pelayanan mungkin menjadi faktor penting.",
-            "script": "Kalau dari sisi pelayanan travel, apa yang paling Kakak harapkan?",
+            "script": "Dari pelayanan travel, apa yang paling diharapkan?",
             "output_tags": [
                 "pelayanan",
                 "pendampingan"
@@ -247,7 +244,7 @@
             "category": "gain",
             "title": "Butuh Pendampingan",
             "use_when": "Prospek baru pertama kali atau tampak membutuhkan arahan.",
-            "script": "Kakak lebih nyaman kalau selama persiapan sampai di Tanah Suci ada yang banyak mendampingi?",
+            "script": "Apakah lebih nyaman kalau ada pendampingan sejak persiapan sampai di Tanah Suci?",
             "output_tags": [
                 "pendampingan",
                 "first_timer"
@@ -259,19 +256,20 @@
             "category": "gain",
             "title": "Kenyamanan Keluarga",
             "use_when": "Prospek berangkat bersama keluarga.",
-            "script": "Kalau untuk keluarga nanti, yang paling ingin dipastikan nyaman itu bagian apa?",
+            "script": "Untuk keluarga nanti, bagian mana yang paling ingin dipastikan nyaman?",
             "output_tags": [
                 "keluarga",
                 "kenyamanan"
             ],
-            "next_stage": "identification"
+            "next_stage": "identification",
+            "audience": "keluarga"
         },
         {
             "id": "dream_general_01",
             "category": "dream",
             "title": "Cari Alasan Utama Umroh",
             "use_when": "Percakapan sudah cukup nyaman untuk menggali motivasi lebih dalam.",
-            "script": "Kalau boleh tahu, apa yang paling membuat Kakak ingin berangkat umroh?",
+            "script": "Kalau boleh tahu, apa yang paling membuat ingin berangkat umroh?",
             "output_tags": [
                 "dream",
                 "spiritual"
@@ -283,43 +281,46 @@
             "category": "dream",
             "title": "Impian Bersama Orang Tua",
             "use_when": "Prospek menyebut ayah atau ibu.",
-            "script": "Memang dari awal ada keinginan khusus untuk bisa berangkat bareng orang tua, Kak?",
+            "script": "Memang ada keinginan khusus untuk berangkat bersama orang tua?",
             "output_tags": [
                 "orang_tua",
                 "impian"
             ],
-            "next_stage": "identification"
+            "next_stage": "identification",
+            "audience": "orang_tua"
         },
         {
             "id": "dream_gift_01",
             "category": "dream",
             "title": "Hadiah Umroh",
             "use_when": "Prospek ingin memberangkatkan orang lain.",
-            "script": "Ini rencananya memang ingin dijadikan hadiah untuk beliau, Kak?",
+            "script": "Apakah umroh ini rencananya sebagai hadiah untuk beliau?",
             "output_tags": [
                 "hadiah_umroh",
                 "dream"
             ],
-            "next_stage": "identification"
+            "next_stage": "identification",
+            "audience": "orang_tua"
         },
         {
             "id": "dream_couple_01",
             "category": "dream",
             "title": "Umroh Bersama Pasangan",
             "use_when": "Prospek ingin berangkat bersama suami atau istri.",
-            "script": "Sudah lama punya keinginan umroh berdua sama pasangan, Kak?",
+            "script": "Sudah lama ingin umroh berdua dengan pasangan?",
             "output_tags": [
                 "pasangan",
                 "impian"
             ],
-            "next_stage": "identification"
+            "next_stage": "identification",
+            "audience": "pasangan"
         },
         {
             "id": "dream_timing_01",
             "category": "dream",
             "title": "Alasan Memilih Periode",
             "use_when": "Prospek memilih bulan atau momen tertentu.",
-            "script": "Ada alasan khusus ingin berangkat di bulan {{bulan}}, Kak?",
+            "script": "Ada alasan khusus ingin berangkat di {{bulan_target}}?",
             "output_tags": [
                 "momentum",
                 "jadwal"
@@ -332,7 +333,7 @@
             "subcategory": "pax",
             "title": "Jumlah Jamaah",
             "use_when": "Jumlah orang yang berangkat belum diketahui.",
-            "script": "Rencananya untuk berapa orang, Kak?",
+            "script": "Rencananya berangkat berapa orang?",
             "output_field": "pax",
             "next_stage": "identification"
         },
@@ -342,7 +343,7 @@
             "subcategory": "departure_city",
             "title": "Kota Keberangkatan",
             "use_when": "Kota keberangkatan belum diketahui.",
-            "script": "Untuk keberangkatan nanti, Kakak lebih nyaman terbang dari bandara mana, Kak?",
+            "script": "Rencananya ingin berangkat dari bandara mana?",
             "output_field": "departure_city",
             "next_stage": "identification"
         },
@@ -352,7 +353,7 @@
             "subcategory": "budget",
             "title": "Kisaran Budget",
             "use_when": "Budget perlu diketahui agar tidak memberikan rekomendasi terlalu jauh.",
-            "script": "Supaya saya tidak salah memberikan pilihan rekomendasi 😊\n\nBolehkah tahu kisaran budget yang ingin disiapkan per orang, Kak?",
+            "script": "Agar pilihan paketnya sesuai, kisaran anggaran per orang yang nyaman berapa?",
             "output_field": "budget",
             "next_stage": "identification"
         },
@@ -361,8 +362,8 @@
             "category": "qualification",
             "subcategory": "budget",
             "title": "Budget dengan Bahasa Lebih Ringan",
-            "use_when": "Agen ingin menggali budget tanpa terdengar terlalu langsung.",
-            "script": "Biar saya pilihkan yang paling masuk dan pas dengan rencana Kakak 😊\n\nKakak lebih nyaman mencari paket di kisaran berapa per jamaah?",
+            "use_when": "CS ingin menggali budget tanpa terdengar terlalu langsung.",
+            "script": "Paket di kisaran berapa per orang yang ingin dicari?",
             "output_field": "budget",
             "next_stage": "identification"
         },
@@ -372,7 +373,7 @@
             "subcategory": "documents",
             "title": "Cek Paspor",
             "use_when": "Kesiapan dokumen mulai relevan.",
-            "script": "Untuk paspornya sudah ada atau belum, Kak?",
+            "script": "Paspornya sudah ada, atau masih perlu diurus?",
             "output_field": "documents",
             "next_stage": "identification"
         },
@@ -382,7 +383,7 @@
             "subcategory": "payment",
             "title": "Preferensi Pembayaran",
             "use_when": "Cara pembayaran mulai menjadi faktor penting.",
-            "script": "Kalau pembayarannya, Kakak lebih nyaman langsung atau bertahap?",
+            "script": "Untuk pembayaran awal, rencananya DP dulu atau langsung lunas?",
             "output_field": "payment",
             "next_stage": "identification"
         },
@@ -392,7 +393,7 @@
             "subcategory": "decision_maker",
             "title": "Cari Pengambil Keputusan",
             "use_when": "Kemungkinan keputusan melibatkan pihak lain.",
-            "script": "Untuk rencana keberangkatan umroh ini 😊\n\nApakah nantinya Kakak yang memutuskan langsung atau ada pasangan/keluarga yang ikut berdiskusi bersama, Kak?",
+            "script": "Untuk keputusan berangkat, apakah diputuskan sendiri atau perlu didiskusikan dulu?",
             "output_field": "decision_maker",
             "next_stage": "identification"
         },
@@ -402,7 +403,7 @@
             "subcategory": "special_condition",
             "title": "Kondisi Khusus Jamaah",
             "use_when": "Ada orang tua, anak, atau jamaah yang mungkin butuh perhatian khusus.",
-            "script": "Supaya perjalanan ibadah nanti tenang dan lancar sekeluarga 😊\n\nApakah ada anggota keluarga yang lansia, anak-anak, atau membutuhkan perhatian fisik khusus, Kak?",
+            "script": "Agar perjalanannya nyaman, apakah ada jamaah lansia, anak-anak, atau yang butuh perhatian khusus?",
             "output_field": "special_condition",
             "next_stage": "identification"
         },
@@ -412,46 +413,49 @@
             "subcategory": "special_condition",
             "title": "Usia Orang Tua",
             "use_when": "Prospek akan membawa orang tua.",
-            "script": "Kalau boleh tahu, usia Ayah atau Ibu sekarang berapa, Kak?",
+            "script": "Kalau boleh tahu, usia orang tua sekarang berapa?",
             "output_field": "special_condition",
             "output_tags": [
                 "lansia",
                 "orang_tua"
             ],
-            "next_stage": "identification"
+            "next_stage": "identification",
+            "audience": "orang_tua"
         },
         {
             "id": "combo_family_01",
             "category": "combination",
             "title": "Keluarga + Jadwal",
             "use_when": "Prospek sudah menyebut ingin berangkat bersama keluarga.",
-            "script": "MasyaAllah, berkah sekali niat ibadah bersama keluarga tercinta 😊\n\nRencananya rombongan keluarga yang akan berangkat sekitar berapa orang, Kak?",
+            "script": "Siap, saya bantu untuk keberangkatan bersama keluarga. 😊\n\nRencananya berapa orang yang ikut?",
             "output_fields": [
                 "pax",
                 "departure_time"
             ],
-            "next_stage": "identification"
+            "next_stage": "identification",
+            "audience": "keluarga"
         },
         {
             "id": "combo_parent_01",
             "category": "combination",
             "title": "Orang Tua + Kenyamanan",
             "use_when": "Prospek menyebut ingin membawa orang tua.",
-            "script": "MasyaAllah, mulia sekali niat Kakak membahagiakan orang tua tercinta 😊\n\nUntuk kenyamanan beliau nanti, apakah kondisi fisik Ibu saat ini masih kuat berjalan kaki normal atau membutuhkan bantuan kursi roda, Kak?",
+            "script": "Untuk kenyamanan orang tua nanti, apakah beliau masih kuat berjalan cukup jauh, atau butuh kursi roda?",
             "output_tags": [
                 "orang_tua",
                 "hotel_dekat",
                 "pendampingan",
                 "kenyamanan"
             ],
-            "next_stage": "identification"
+            "next_stage": "identification",
+            "audience": "orang_tua"
         },
         {
             "id": "combo_budget_schedule_01",
             "category": "combination",
             "title": "Budget + Jadwal",
             "use_when": "Prospek menanyakan harga tetapi target keberangkatan belum jelas.",
-            "script": "Boleh Kak 😊 Biar saya carikan paket yang paling pas dengan budget,\n\ntarget rencana berangkatnya di kisaran bulan apa?",
+            "script": "Agar paketnya sesuai anggaran, rencananya ingin berangkat bulan apa?",
             "output_fields": [
                 "budget",
                 "departure_time"
@@ -463,7 +467,7 @@
             "category": "combination",
             "title": "Pertama Kali + Pendampingan",
             "use_when": "Prospek baru pertama kali umroh.",
-            "script": "Karena ini keberangkatan pertama kali, tenang saja Kak, kami siapkan manasik intensif sebelum terbang 😊\n\nApakah Kakak lebih nyaman jika dibimbing langsung oleh muthawif pembimbing sejak dari bandara di Indonesia?",
+            "script": "Untuk umroh pertama, ada manasik sebelum berangkat. Detail pendampingannya mengikuti paket yang dipilih.\n\nBagian mana yang paling ingin dijelaskan dulu?",
             "output_tags": [
                 "first_timer",
                 "pendampingan",
@@ -476,7 +480,7 @@
             "category": "combination",
             "title": "Trust + Kebutuhan",
             "use_when": "Prospek terlihat fokus pada keamanan travel.",
-            "script": "Nanti saya bantu kirimkan informasi legalitas resmi yang bisa Kakak cek langsung 😊\n\nSelain soal keamanan travel, ada hal lain yang penting dari paketnya?",
+            "script": "Informasi legalitas {{travel}} saya kirimkan agar bisa dicek sendiri.\n\nSelain itu, apa yang penting dari paketnya?",
             "output_tags": [
                 "trust",
                 "need"
@@ -487,8 +491,8 @@
             "id": "ready_offer_01",
             "category": "transition",
             "title": "Informasi Sudah Cukup",
-            "use_when": "Agen sudah memahami kebutuhan utama dan siap masuk ke Offer.",
-            "script": "Baik Kak, terima kasih atas informasinya. Saya sudah menangkap gambaran kebutuhan Kakak sekeluarga 😊\n\nIzinkan saya pilihkan rekomendasi paket yang paling pas dan mendekati kebutuhan Kakak ya.",
+            "use_when": "CS sudah memahami kebutuhan utama dan siap masuk ke Offer.",
+            "script": "Terima kasih atas informasinya.\n\nSaya pilihkan paket yang paling sesuai dengan kebutuhan tadi, ya.",
             "next_stage": "offer",
             "tags": [
                 "transition",
@@ -499,8 +503,8 @@
             "id": "ready_offer_02",
             "category": "transition",
             "title": "Transisi ke Rekomendasi",
-            "use_when": "Agen ingin menghubungkan hasil identifikasi dengan offer.",
-            "script": "Dari kebutuhan yang Kakak ceritakan tadi, kami memiliki satu rekomendasi paket yang paling pas dan efisien 😊\n\nBoleh saya jelaskan rincian fasilitasnya sekarang, Kak?",
+            "use_when": "CS ingin menghubungkan hasil identifikasi dengan offer.",
+            "script": "Dari kebutuhan yang tadi disampaikan, ada satu paket yang cocok.\n\nBoleh saya jelaskan rinciannya?",
             "next_stage": "offer",
             "tags": [
                 "transition",
@@ -584,27 +588,27 @@
                     "text": "Umroh berapa kak?"
                 },
                 {
-                    "speaker": "agen",
+                    "speaker": "cs",
                     "script_id": "need_schedule_01",
-                    "text": "Ada beberapa pilihan Kak. Rencananya ingin berangkat kapan?"
+                    "text": "Ada beberapa pilihan. Rencananya ingin berangkat kapan?"
                 },
                 {
                     "speaker": "prospect",
                     "text": "Desember, dua orang sama ibu."
                 },
                 {
-                    "speaker": "agen",
+                    "speaker": "cs",
                     "script_id": "qual_parent_age_01",
-                    "text": "Kalau boleh tahu, usia Ibu sekarang berapa, Kak?"
+                    "text": "Kalau boleh tahu, usia beliau sekarang berapa?"
                 },
                 {
                     "speaker": "prospect",
                     "text": "68 tahun."
                 },
                 {
-                    "speaker": "agen",
+                    "speaker": "cs",
                     "script_id": "combo_parent_01",
-                    "text": "Kalau untuk Ibu nanti, yang paling ingin Kakak pastikan itu hotel dekat, pendampingan, atau ritme perjalanan yang lebih nyaman?"
+                    "text": "Kalau untuk orang tua nanti, yang paling ingin pastikan itu hotel dekat, pendampingan, atau ritme perjalanan yang lebih nyaman?"
                 }
             ],
             "identified": {
@@ -635,18 +639,18 @@
                     "text": "Saya takut salah travel. Banyak berita yang gagal berangkat."
                 },
                 {
-                    "speaker": "agen",
+                    "speaker": "cs",
                     "script_id": "pain_trust_01",
-                    "text": "Kakak pernah punya pengalaman kurang nyaman dengan travel sebelumnya atau memang sedang hati-hati memilih?"
+                    "text": " pernah punya pengalaman kurang nyaman dengan travel sebelumnya atau memang sedang hati-hati memilih?"
                 },
                 {
                     "speaker": "prospect",
                     "text": "Belum pernah, cuma takut saja."
                 },
                 {
-                    "speaker": "agen",
+                    "speaker": "cs",
                     "script_id": "combo_trust_01",
-                    "text": "Nanti saya bantu kasih informasi yang bisa Kakak cek juga. Selain soal keamanan travel, ada hal lain yang penting dari paketnya?"
+                    "text": "Nanti saya bantu kasih informasi yang bisa cek juga. Selain soal keamanan travel, ada hal lain yang penting dari paketnya?"
                 }
             ],
             "identified": {
@@ -664,7 +668,7 @@
         "Jumlah jamaah sudah diketahui.",
         "Kota keberangkatan sudah diketahui jika relevan.",
         "Minimal satu Need, Pain, Gain, atau Dream yang penting sudah diketahui.",
-        "Agen sudah tahu faktor utama yang akan digunakan untuk merekomendasikan paket.",
+        "CS sudah tahu faktor utama yang akan digunakan untuk merekomendasikan paket.",
         "Tidak ada informasi penting yang menghalangi pemberian Offer."
     ],
     "do": [

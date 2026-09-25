@@ -8,7 +8,7 @@ export function PageLoading({ label = 'Memuat halaman' }: { label?: string }) {
     <div className="grid min-h-[52vh] place-items-center" role="status" aria-live="polite">
       <div className="text-center">
         <span className="mx-auto block h-9 w-9 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-950" />
-        <p className="mt-4 text-xs font-bold uppercase tracking-[.14em] text-zinc-500">{label}</p>
+        <p className="mt-4 text-xs font-bold text-zinc-500">{label}</p>
       </div>
     </div>
   );

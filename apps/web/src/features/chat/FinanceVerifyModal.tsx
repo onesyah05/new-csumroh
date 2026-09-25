@@ -45,15 +45,8 @@ export function FinanceVerifyModal({
   onShowToast,
 }: FinanceVerifyModalProps) {
   const alreadyWon = isWonStatus(prospect?.status);
-  const bookingValue = Number(prospect?.dealValue ?? 0);
-  const verifiedSoFar = Number(prospect?.dpAmount ?? 0);
-  const remaining = Math.max(0, bookingValue - verifiedSoFar);
-
-  const [approvedAmount, setApprovedAmount] = useState<number>(() => {
-    const billed = Number(prospect?.invoiceAmount ?? 0);
-    if (billed > 0 && billed <= (remaining || billed)) return billed;
-    return remaining;
-  });
+  const [paymentType, setPaymentType] = useState<'dp' | 'full'>('dp');
+  const [approvedAmount, setApprovedAmount] = useState<number>(() => Number(prospect?.invoiceAmount ?? 0));
   const [bankName, setBankName] = useState<string>('Bank Syariah Indonesia (BSI)');
   const [referenceNo, setReferenceNo] = useState('');
   const [mutationDate, setMutationDate] = useState<string>(todayWib);
@@ -65,6 +58,7 @@ export function FinanceVerifyModal({
     mutationFn: () =>
       api.post<any>(`/prospects/${prospect.id}/verify-payment`, {
         approvedAmount: Number(approvedAmount),
+        paymentType,
         bankName,
         referenceNo: referenceNo.trim() || undefined,
         mutationDate,
@@ -79,8 +73,7 @@ export function FinanceVerifyModal({
       void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
       if (data?.duplicate) {
         onShowToast('Mutasi ini sudah pernah dicatat; tidak ada pembayaran ganda.');
-      } else if (alreadyWon) {
-        onShowToast('Pembayaran lanjutan tercatat di ledger.');
+
       } else {
         onShowToast('Pembayaran diverifikasi. Prospek resmi DEAL dan kuota seat terpotong.');
       }
@@ -91,10 +84,7 @@ export function FinanceVerifyModal({
     },
   });
 
-  if (!open) return null;
-
-  const totalAfter = verifiedSoFar + Number(approvedAmount || 0);
-  const willBePaidFull = bookingValue > 0 && totalAfter >= bookingValue;
+  if (!open || alreadyWon) return null;
 
   return (
     <ModalFrame open={open} onClose={onClose} title="Verifikasi pembayaran Finance">
@@ -106,8 +96,8 @@ export function FinanceVerifyModal({
               <ShieldCheck size={18} />
             </span>
             <div>
-              <h3 className="font-bold text-sm">{alreadyWon ? 'Catat Pembayaran Lanjutan' : 'Verifikasi Finance (Deal Pembayaran)'}</h3>
-              <p className="text-xs text-emerald-100">Validasi mutasi bank · satu mutasi = satu baris ledger</p>
+              <h3 className="font-bold text-sm">Verifikasi pembayaran awal</h3>
+              <p className="text-xs text-emerald-100">Cocokkan bukti pembayaran awal untuk menetapkan Deal</p>
             </div>
           </div>
           <button
@@ -130,26 +120,12 @@ export function FinanceVerifyModal({
               Paket: {prospect?.package?.name || 'Paket Umroh'} · Invoice: {prospect?.invoiceNumber || '-'}
               {Number(prospect?.invoiceAmount) > 0 ? ` (${rupiah(prospect.invoiceAmount)})` : ''}
             </p>
-            <div className="grid grid-cols-3 gap-2 border-t border-zinc-200 pt-2 text-xs">
-              <div>
-                <p className="text-zinc-500">Nilai booking</p>
-                <p className="font-bold text-zinc-900">{bookingValue > 0 ? rupiah(bookingValue) : 'Belum ditetapkan'}</p>
-              </div>
-              <div>
-                <p className="text-zinc-500">Sudah diverifikasi</p>
-                <p className="font-bold text-emerald-700">{rupiah(verifiedSoFar)}</p>
-              </div>
-              <div>
-                <p className="text-zinc-500">Sisa tagihan</p>
-                <p className="font-bold text-zinc-900">{rupiah(remaining)}</p>
-              </div>
-            </div>
           </div>
 
           {/* Payment Proof Preview if uploaded */}
           {prospect?.paymentProofUrl && (
             <div className="space-y-1.5">
-              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
+              <label className="font-bold text-xs text-zinc-500">
                 Bukti Transfer yang Diunggah CS:
               </label>
               <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-100 min-h-24 flex items-center justify-center p-2">
@@ -158,10 +134,13 @@ export function FinanceVerifyModal({
             </div>
           )}
 
+          <label className="panel-field">Jenis pembayaran awal
+            <Select aria-label="Jenis pembayaran awal" value={paymentType} onValueChange={value => setPaymentType(value as 'dp' | 'full')} options={[{ value: 'dp', label: 'DP' }, { value: 'full', label: 'Lunas (pembayaran awal)' }]} />
+          </label>
           {/* Approved Amount */}
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Nominal Mutasi Ini (Rp)
+            <label className="font-bold text-xs text-zinc-500">
+              Nominal pembayaran awal (Rp)
             </label>
             <input
               type="number"
@@ -171,14 +150,14 @@ export function FinanceVerifyModal({
               className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs font-bold text-emerald-700 focus:border-emerald-500 focus:outline-none"
             />
             <span className="text-xs text-zinc-500">
-              {rupiah(approvedAmount)} · total kas setelah verifikasi {rupiah(totalAfter)}
+              {rupiah(approvedAmount)}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             {/* Bank Selection */}
             <div className="space-y-1.5">
-              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
+              <label className="font-bold text-xs text-zinc-500">
                 Bank Tujuan Mutasi
               </label>
               <Select
@@ -191,7 +170,7 @@ export function FinanceVerifyModal({
 
             {/* Mutation Date */}
             <div className="space-y-1.5">
-              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
+              <label className="font-bold text-xs text-zinc-500">
                 Tanggal Mutasi
               </label>
               <input
@@ -205,7 +184,7 @@ export function FinanceVerifyModal({
 
           {/* Reference number */}
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
+            <label className="font-bold text-xs text-zinc-500">
               No. Referensi Mutasi (disarankan)
             </label>
             <input
@@ -220,7 +199,7 @@ export function FinanceVerifyModal({
 
           {/* Notes */}
           <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
+            <label className="font-bold text-xs text-zinc-500">
               Catatan Validasi Finance (Opsional)
             </label>
             <input
@@ -235,10 +214,8 @@ export function FinanceVerifyModal({
           <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-2.5 text-xs text-emerald-900 leading-relaxed">
             🎯 <strong>Dampak Verifikasi:</strong>
             <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
-              {!alreadyWon && <li>Status prospek berubah menjadi <strong>DEAL</strong> dan kuota seat paket dipotong</li>}
-              <li>Mutasi dicatat di ledger pembayaran; kas terverifikasi menjadi <strong>{rupiah(totalAfter)}</strong></li>
-              <li>Status pembayaran menjadi <strong>{willBePaidFull ? 'Lunas (paid_full)' : 'DP sebagian (partial_dp)'}</strong></li>
-              {!alreadyWon && <li>Event CAPI <strong>Purchase</strong> senilai total booking dikirim ke Meta Ads</li>}
+              <li>Status prospek berubah menjadi <strong>DEAL</strong> dan kuota seat paket dipotong</li>
+              <li>Event CAPI <strong>Purchase</strong> senilai deal dikirim ke Meta Ads</li>
             </ul>
           </div>
         </div>
@@ -255,7 +232,7 @@ export function FinanceVerifyModal({
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
           >
             <CheckCircle2 size={14} />
-            {verifyMutation.isPending ? 'Memvalidasi...' : alreadyWon ? 'Catat Pembayaran' : 'Verifikasi & Kunci Deal'}
+            {verifyMutation.isPending ? 'Memvalidasi...' : 'Verifikasi & Tetapkan Deal'}
           </Button>
         </div>
       </div>

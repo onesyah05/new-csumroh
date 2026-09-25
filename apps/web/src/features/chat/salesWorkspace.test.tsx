@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api';
 import { ChatSidePanel, type ChatSidePanelTab } from './ChatSidePanel';
+import { FinanceVerifyModal } from './FinanceVerifyModal';
+import { OfficialInvoiceModal } from './OfficialInvoiceModal';
 import { ChatCopilotPanel } from './ChatCopilotPanel';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 
@@ -28,32 +30,98 @@ function wrapper({ children }: { children: React.ReactNode }) { return <QueryCli
 beforeEach(() => {
   vi.clearAllMocks(); sessionStorage.clear(); queryClient.clear();
   queryClient.setDefaultOptions({ queries: { retry: false }, mutations: { retry: false } });
-  vi.mocked(api.get).mockImplementation(async (url: string) => url.startsWith('/scripts') ? scripts : prospect(Number(url.match(/prospects\/(\d+)/)?.[1] || 11)) as any);
+  vi.mocked(api.get).mockImplementation(async (url: string) => url.startsWith('/custom-requests') ? null as any : url.startsWith('/scripts') ? scripts : prospect(Number(url.match(/prospects\/(\d+)/)?.[1] || 11)) as any);
 });
 afterEach(() => { cleanup(); queryClient.clear(); });
 
 describe('Profil dan Copilot', () => {
-  it('mempertahankan draft saat pindah tab, tutup panel, dan berpindah prospek', async () => {
-    const view = render(<Workspace />, { wrapper });
-    fireEvent.change(await screen.findByLabelText('Nama prospek'), { target: { value: 'Draft Jamaah A' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Copilot' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Profil' }));
-    expect((screen.getByLabelText('Nama prospek') as HTMLInputElement).value).toBe('Draft Jamaah A');
-    view.rerender(<Workspace id={12} />);
-    await waitFor(() => expect((screen.getByLabelText('Nama prospek') as HTMLInputElement).value).toBe('Jamaah 12'));
-    view.unmount();
+  it('simpan otomatis: hanya isian yang diubah yang dikirim, tanpa tombol Simpan', async () => {
+    vi.mocked(api.patch).mockImplementation(async (_url: string, body: any) => ({ ...prospect(), ...body }) as any);
     render(<Workspace />, { wrapper });
-    expect((await screen.findByLabelText('Nama prospek') as HTMLInputElement).value).toBe('Draft Jamaah A');
+    fireEvent.click(await screen.findByRole('tab', { name: 'Catatan' }));
+    const name = await screen.findByLabelText('Nama prospek');
+    fireEvent.change(name, { target: { value: 'Nama Baru' } });
+    fireEvent.blur(name);
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/prospects/11/profile', { name: 'Nama Baru', brandId: 1 }));
+    expect(await screen.findByText('Tersimpan')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Simpan perubahan' })).toBeNull();
+    // Satu baris tab; identitas jamaah tidak diulang di panel.
+    expect(screen.getAllByRole('tablist')).toHaveLength(1);
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.replace('(belum lengkap)', ''))).toEqual(['Paket', 'Kualifikasi', 'Catatan', 'Copilot', 'Riwayat']);
+    // Pindah ke Copilot dan kembali: nilai tetap.
+    fireEvent.click(screen.getByRole('tab', { name: 'Copilot' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Catatan' }));
+    expect((screen.getByLabelText('Nama prospek') as HTMLInputElement).value).toBe('Nama Baru');
   });
-  it('menampilkan kegagalan simpan tanpa membuang isian dan tidak mengubah pipeline', async () => {
-    vi.mocked(api.patch).mockRejectedValue(new Error('Koneksi gagal, coba lagi'));
+  it('catatan hanya bisa ditambah (tidak diedit) dan riwayat menampilkan perubahan data', async () => {
+    const logs = [
+      { id: 2, actionType: 'profile_updated', title: 'Kota diubah', description: 'Kota: – → Solo', createdAt: new Date().toISOString(), user: { name: 'CS Fitri' } },
+      { id: 1, actionType: 'note_added', title: 'Catatan', description: 'Minta kamar dekat lift', createdAt: new Date().toISOString(), user: { name: 'CS Fitri' } },
+      { id: 0, actionType: 'message_sent', title: 'Pesan dikirim oleh CS Fitri', description: null, createdAt: new Date().toISOString(), user: { name: 'CS Fitri' } },
+    ];
+    vi.mocked(api.get).mockImplementation(async (url: string) => url.startsWith('/custom-requests') ? null as any : (url.includes('/logs') ? { logs, legacyNote: 'Catatan lama', legacyNoteAt: null } : url.startsWith('/scripts') ? scripts : prospect()) as any);
+    vi.mocked(api.post).mockResolvedValue({} as any);
     render(<Workspace />, { wrapper });
-    fireEvent.change(await screen.findByLabelText('Nama prospek'), { target: { value: 'Nama baru' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Simpan perubahan' }));
-    expect(await screen.findByText('Koneksi gagal, coba lagi')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Catatan' }));
+    expect(await screen.findByText('Minta kamar dekat lift')).toBeTruthy();
+    expect(screen.getByText('Catatan lama')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Catatan CS' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Catatan baru'), { target: { value: 'Jamaah minta ditelepon sore' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Simpan catatan' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/prospects/11/notes', { note: 'Jamaah minta ditelepon sore', brandId: 1 }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Riwayat' }));
+    expect(await screen.findByText('Kota: – → Solo')).toBeTruthy();
+    expect(screen.queryByText('Pesan dikirim oleh CS Fitri')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'Perubahan data' }));
+    expect(screen.queryByText('Minta kamar dekat lift')).toBeNull();
+  });
+  it('data custom gagal dimuat: panel tidak berpura-pura tanpa custom dan penawaran/invoice ditahan', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.startsWith('/custom-requests')) throw Object.assign(new Error('Gagal'), { status: 500 });
+      return (url.startsWith('/scripts') ? scripts : prospect()) as any;
+    });
+    render(<Workspace />, { wrapper });
+    expect((await screen.findByRole('alert')).textContent).toContain('Layanan custom tidak dapat dimuat');
+    expect(screen.queryByRole('button', { name: 'Kirim penawaran' })).toBeNull();
+    expect(screen.queryByText('Kebutuhan khusus jamaah?')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tindakan lainnya' }));
+    expect((screen.getByRole('button', { name: /Kirim penawaran/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByText('Layanan custom belum termuat').length).toBeGreaterThan(0);
+  });
+  it('aksi menempel pada konteksnya: tahap di atas, penawaran di bawah paket; "Tidak jadi" terpisah di menu', async () => {
+    render(<Workspace />, { wrapper });
+    expect(await screen.findByLabelText('Tahap 2 dari 5')).toBeTruthy();
+    const offer = await screen.findByRole('button', { name: 'Kirim penawaran' });
+    const packageName = screen.getByRole('heading', { name: 'Paket Uji' });
+    // Tombol penawaran muncul setelah paket (konteksnya), bukan di atas tab.
+    expect(packageName.compareDocumentPosition(offer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Tindakan lainnya' }));
+    expect(screen.getByRole('button', { name: 'Tandai tidak jadi' })).toBeTruthy();
+  });
+  it('gangguan jaringan: isian tetap di layar dan bisa dicoba lagi; payload tanpa status/nilai deal', async () => {
+    vi.mocked(api.patch).mockRejectedValueOnce(new Error('Koneksi gagal'));
+    render(<Workspace />, { wrapper });
+    fireEvent.click(await screen.findByRole('tab', { name: 'Catatan' }));
+    const name = await screen.findByLabelText('Nama prospek');
+    fireEvent.change(name, { target: { value: 'Nama baru' } });
+    fireEvent.blur(name);
+    expect((await screen.findByRole('alert')).textContent).toContain('Koneksi gagal');
     expect((screen.getByLabelText('Nama prospek') as HTMLInputElement).value).toBe('Nama baru');
     const payload = vi.mocked(api.patch).mock.calls[0]?.[1] as Record<string, unknown>;
-    expect(payload.brandId).toBe(1); expect(payload).not.toHaveProperty('status'); expect(payload).not.toHaveProperty('dealValue');
+    expect(payload).toEqual({ name: 'Nama baru', brandId: 1 });
+    vi.mocked(api.patch).mockImplementation(async (_url: string, body: any) => ({ ...prospect(), ...body }) as any);
+    fireEvent.click(screen.getByRole('button', { name: 'Coba lagi' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(2));
+  });
+  it('ditolak aturan server (4xx): nilai kembali ke data tersimpan', async () => {
+    vi.mocked(api.patch).mockRejectedValueOnce(Object.assign(new Error('Prospek sudah Terkualifikasi: Bulan keberangkatan tidak boleh dikosongkan.'), { status: 422 }));
+    render(<Workspace />, { wrapper });
+    fireEvent.click(await screen.findByRole('tab', { name: 'Catatan' }));
+    const name = await screen.findByLabelText('Nama prospek');
+    fireEvent.change(name, { target: { value: 'X' } });
+    fireEvent.blur(name);
+    expect((await screen.findByRole('alert')).textContent).toContain('tidak boleh dikosongkan');
+    await waitFor(() => expect((screen.getByLabelText('Nama prospek') as HTMLInputElement).value).toBe('Jamaah 11'));
   });
   it('mencari lintas kategori dan menambahkan hanya satu langkah TGJP tanpa label internal', async () => {
     render(<ChatCopilotPanel brandId={1} stage="qualified" onInsertText={insert} onShowToast={vi.fn()} />, { wrapper });
@@ -89,4 +157,27 @@ describe('Profil dan Copilot', () => {
     expect(appendDraft('Catatan B', 'Skrip')).toBe('Catatan B\n\nSkrip');
     expect(appendFlyerCaption('Catatan B\n\nFlyer', 'Flyer')).toBe('Catatan B\n\nFlyer');
   });
+});
+
+
+it.each(['deal', 'closed_won'])('prospek %s tidak menawarkan tindakan pembayaran lanjutan', async status => {
+  vi.mocked(api.get).mockImplementation(async (url: string) => url.startsWith('/custom-requests') ? null as any : (url.startsWith('/scripts') ? scripts : { ...prospect(), status }) as any);
+  render(<Workspace />, { wrapper });
+  await screen.findByText(/penanganan CS selesai/i);
+  expect(screen.queryByRole('button', { name: 'Tindakan lainnya' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /tagihan|Invoice|Unggah bukti|follow-up/i })).toBeNull();
+  fireEvent.click(screen.getByRole('tab', { name: 'Copilot' }));
+  expect(screen.getByText('Deal terverifikasi')).toBeTruthy();
+  expect(screen.queryByLabelText('Cari di semua skrip')).toBeNull();
+});
+
+it('modal pembayaran hanya tersedia sebelum Deal dan tidak menampilkan saldo', async () => {
+  const props = { open: true, onClose: vi.fn(), prospect: { ...prospect(), invoiceAmount: 5000000 }, onShowToast: vi.fn() };
+  const view = render(<FinanceVerifyModal {...props} />, { wrapper });
+  expect(screen.getByLabelText('Jenis pembayaran awal')).toBeTruthy();
+  expect(screen.queryByText(/Sisa tagihan|Kas terverifikasi|Sudah diverifikasi/)).toBeNull();
+  view.rerender(<FinanceVerifyModal {...props} prospect={{ ...props.prospect, status: 'deal' }} />);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  view.rerender(<OfficialInvoiceModal {...props} prospect={{ ...props.prospect, status: 'deal' }} packages={packages} />);
+  expect(screen.queryByRole('dialog')).toBeNull();
 });

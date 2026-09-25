@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { AlertCircle, Save, X } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
-import { ModalFrame } from '../../components/ui/modal';
+import { Modal } from '../../components/ui/modal';
 
 interface ObjectionModalProps {
   open: boolean;
@@ -16,13 +16,13 @@ interface ObjectionModalProps {
 }
 
 const OBJECTION_CATEGORIES = [
-  { value: 'price', label: '💰 Harga terlalu mahal / di luar budget' },
-  { value: 'competitor', label: '🏢 Bandingkan dengan travel kompetitor' },
-  { value: 'schedule_leave', label: '📅 Kendala jadwal cuti / waktu kerja' },
-  { value: 'passport', label: '🛂 Paspor belum ada / bermasalah' },
-  { value: 'family_decision', label: '👥 Keluarga / pengambil keputusan belum sepakat' },
-  { value: 'facility_distance', label: '🏨 Ragu fasilitas / jarak hotel ke masjid' },
-  { value: 'other', label: '❓ Keberatan lainnya' },
+  { value: 'price', label: 'Harga terlalu mahal / di luar budget' },
+  { value: 'competitor', label: 'Bandingkan dengan travel kompetitor' },
+  { value: 'schedule_leave', label: 'Kendala jadwal cuti / waktu kerja' },
+  { value: 'passport', label: 'Paspor belum ada / bermasalah' },
+  { value: 'family_decision', label: 'Keluarga / pengambil keputusan belum sepakat' },
+  { value: 'facility_distance', label: 'Ragu fasilitas / jarak hotel ke masjid' },
+  { value: 'other', label: 'Keberatan lainnya' },
 ];
 
 export function ObjectionModal({
@@ -46,82 +46,38 @@ export function ObjectionModal({
       void queryClient.invalidateQueries({ queryKey: ['prospect', prospect.id] });
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      onShowToast('Keberatan berhasil dicatat dan status beralih ke Keberatan (objection)!');
+      onShowToast('Keberatan dicatat');
       onClose();
     },
     onError: (err: any) => {
-      onShowToast(err?.message || 'Gagal mencatat keberatan.');
+      onShowToast(err?.message || 'Keberatan gagal dicatat.');
     },
   });
 
   if (!open) return null;
 
   return (
-    <ModalFrame open={open} onClose={onClose} title="Catat keberatan jamaah">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 bg-amber-50/70">
-          <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-amber-100 text-amber-800">
-              <AlertCircle size={18} />
-            </span>
-            <div>
-              <h3 className="font-bold text-sm text-zinc-900">Catat Keberatan Jamaah</h3>
-              <p className="text-xs text-zinc-500">Mempromosikan status ke Keberatan (objection)</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 transition"
-          >
-            <X size={18} />
-          </button>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Catat keberatan"
+      description={prospect?.name}
+      footer={
+        <Button size="sm" icon={<Save size={14} />} loading={objectionMutation.isPending} onClick={() => objectionMutation.mutate()} disabled={objectionMutation.isPending || !notes.trim()}>
+          Simpan keberatan
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Keberatan utama</span>
+          <Select aria-label="Keberatan utama" value={category} onValueChange={setCategory} options={OBJECTION_CATEGORIES} className="w-full" />
         </div>
-
-        {/* Form Body */}
-        <div className="p-5 space-y-4 text-xs">
-          <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Kategori Keberatan Utama
-            </label>
-            <Select
-              value={category}
-              onValueChange={setCategory}
-              options={OBJECTION_CATEGORIES}
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Rincian Keberatan & Solusi dari CS (Wajib Diisi)
-            </label>
-            <textarea
-              rows={4}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contoh: Jamaah merasa harga paket bintang 5 agak berat, kami berikan opsi kamar Quad atau paket reguler bintang 4..."
-              className="w-full rounded-xl border border-zinc-200 p-3 text-xs leading-relaxed focus:border-amber-500 focus:outline-none resize-none"
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-5 py-3.5 bg-zinc-50">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={objectionMutation.isPending}>
-            Batal
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => objectionMutation.mutate()}
-            disabled={objectionMutation.isPending || !notes.trim()}
-            className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold"
-          >
-            <Save size={14} />
-            {objectionMutation.isPending ? 'Menyimpan...' : 'Simpan & Masuk ke Keberatan'}
-          </Button>
-        </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Rincian dan jawaban CS *</span>
+          <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Apa kata jamaah dan apa yang Anda tawarkan" className="field h-auto resize-none py-2" />
+        </label>
       </div>
-    </ModalFrame>
+    </Modal>
   );
 }

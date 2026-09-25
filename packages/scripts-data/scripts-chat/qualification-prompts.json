@@ -1,0 +1,44 @@
+{
+    "scripts": [
+        {
+            "id": "crm_qualification_month",
+            "category": "qualification",
+            "qualificationField": "targetMonth",
+            "title": "Tanyakan bulan keberangkatan",
+            "use_when": "Bulan keberangkatan belum diketahui atau perlu dikonfirmasi ulang.",
+            "script": "Rencananya berangkat bulan apa, Bapak/Ibu?"
+        },
+        {
+            "id": "crm_qualification_pax",
+            "category": "qualification",
+            "qualificationField": "pax",
+            "title": "Tanyakan jumlah jamaah",
+            "use_when": "Jumlah jamaah belum diketahui atau angka bawaan perlu dikonfirmasi.",
+            "script": "Rencananya berangkat berapa orang, Bapak/Ibu?"
+        },
+        {
+            "id": "crm_qualification_room",
+            "category": "qualification",
+            "qualificationField": "room",
+            "title": "Tanyakan preferensi kamar",
+            "use_when": "Jumlah jamaah sudah diketahui; gali pilihan kamar secara terpisah.",
+            "script": "Untuk kamar, lebih nyaman Quad, Triple, atau Double? Kalau belum tahu, saya jelaskan perbedaannya."
+        },
+        {
+            "id": "crm_qualification_budget",
+            "category": "qualification",
+            "qualificationField": "budgetRange",
+            "title": "Tanyakan budget per orang",
+            "use_when": "Gali anggaran untuk mencocokkan paket atau konfirmasi kembali data lama.",
+            "script": "Agar pilihan paketnya sesuai, kisaran anggaran per orang yang nyaman berapa, Bapak/Ibu?"
+        },
+        {
+            "id": "crm_qualification_passport",
+            "category": "qualification",
+            "qualificationField": "passportStatus",
+            "title": "Tanyakan kesiapan paspor",
+            "use_when": "Kesiapan paspor jamaah belum diketahui atau perlu dikonfirmasi ulang.",
+            "script": "Paspornya sudah ada, atau masih perlu diurus, Bapak/Ibu?"
+        }
+    ]
+}

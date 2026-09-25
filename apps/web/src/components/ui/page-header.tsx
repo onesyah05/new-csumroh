@@ -56,7 +56,7 @@ export function PageHeader({
 
         <div className="space-y-1 min-w-0">
           {kicker && (
-            <p className="page-kicker flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <p className="page-kicker flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
               {kickerIcon && <span className="shrink-0 text-zinc-500">{kickerIcon}</span>}
               <span>{kicker}</span>
             </p>

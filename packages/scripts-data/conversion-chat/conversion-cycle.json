@@ -1,14 +1,14 @@
 {
     "id": "umroh_conversion_cycle",
     "nama": "Umroh Conversion Cycle",
-    "deskripsi": "Alur kerja Agen/Konsultan Umroh untuk mendampingi calon jamaah dari perkenalan awal hingga closing dengan status yang jelas.",
-    "tujuan_utama": "Mengarahkan setiap prospek dari percakapan awal hingga closing, nurture, atau batal tanpa membiarkan prospek menggantung.",
+    "deskripsi": "Alur kerja CS holding untuk mendampingi calon jamaah dari sapaan awal sampai Deal, dengan status prospek yang selalu jelas.",
+    "tujuan_utama": "Mengarahkan setiap prospek sampai Deal, dijadwalkan follow-up, atau batal dengan alasan tercatat, tanpa membiarkan prospek menggantung.",
     "stages": [
         {
             "id": "greeting",
             "urutan": 1,
-            "nama": "Greeting + Sell Yourself",
-            "tujuan": "Menyambut calon jamaah, membangun kenyamanan, dan menunjukkan bahwa Agen adalah konsultan dan pendamping yang tepat untuk membantu kebutuhan umrohnya.",
+            "nama": "Sapaan",
+            "tujuan": "Menyambut calon jamaah dengan ramah, memperkenalkan diri sebagai CS resmi brand, lalu membuka pertanyaan kebutuhan.",
             "fokus": [
                 "Sambut dengan ramah",
                 "Perkenalkan diri",
@@ -22,7 +22,7 @@
         {
             "id": "identification",
             "urutan": 2,
-            "nama": "Prospect Identification",
+            "nama": "Kualifikasi (NPGD)",
             "tujuan": "Memahami kebutuhan, masalah, keinginan, impian, dan kondisi prospek sebelum memberikan penawaran.",
             "framework": "NPGD",
             "framework_items": [
@@ -48,17 +48,15 @@
                 }
             ],
             "qualification": [
-                "Waktu keberangkatan",
+                "Bulan keberangkatan",
                 "Jumlah jamaah",
-                "Kota keberangkatan",
-                "Budget",
-                "Pendamping atau anggota keluarga",
-                "Kondisi khusus jamaah",
-                "Kesiapan dokumen",
-                "Cara pembayaran"
+                "Budget per orang",
+                "Kesiapan paspor",
+                "Kota keberangkatan (bila relevan)",
+                "Kondisi khusus jamaah (bila relevan)"
             ],
             "catatan": "Tidak semua unsur NPGD harus digali dalam setiap percakapan. Gunakan yang paling relevan dengan informasi yang dibawa prospek.",
-            "indikator_selesai": "Agen memiliki gambaran yang cukup untuk menentukan paket dan pendekatan penawaran yang relevan.",
+            "indikator_selesai": "Data kualifikasi terisi lengkap (bulan, jumlah jamaah, budget, paspor) sehingga CS bisa memilih paket yang sesuai.",
             "next_stage": "offer",
             "detail_ref": "identification.json",
             "script_ref": "scripts/identification.json"
@@ -66,13 +64,13 @@
         {
             "id": "offer",
             "urutan": 3,
-            "nama": "Offer",
+            "nama": "Penawaran",
             "tujuan": "Memberikan rekomendasi paket atau solusi yang paling sesuai dengan hasil identifikasi prospek.",
             "fokus": [
                 "Hubungkan penawaran dengan kebutuhan prospek",
                 "Jelaskan alasan paket direkomendasikan",
-                "Tonjolkan benefit yang relevan",
-                "Sampaikan harga dan ketentuan dengan jelas",
+                "Sampaikan harga per tipe kamar dan yang belum termasuk dengan jelas",
+                "Kirim penawaran resmi dari CRM",
                 "Arahkan percakapan menuju keputusan"
             ],
             "prinsip": "Jangan hanya mengirim brosur atau daftar paket. Jelaskan mengapa penawaran tersebut cocok untuk prospek.",
@@ -87,31 +85,31 @@
             "id": "closing",
             "urutan": 4,
             "nama": "Closing",
-            "tujuan": "Mendorong prospek mengambil komitmen nyata untuk mengamankan keberangkatan.",
-            "primary_action": "Mengamankan seat dengan minimal DP sesuai ketentuan.",
+            "tujuan": "Mengajak prospek yang sudah cocok untuk mendaftar melalui pembayaran awal sesuai invoice resmi.",
+            "primary_action": "Kirim invoice pembayaran awal (DP atau lunas), terima bukti transfer, lalu teruskan ke Finance untuk verifikasi.",
             "fokus": [
-                "Konfirmasi kecocokan paket",
-                "Konfirmasi kecocokan jadwal",
-                "Minta keputusan",
-                "Arahkan ke pembayaran DP",
-                "Gunakan urgency jika relevan",
-                "Gunakan scarcity jika relevan"
+                "Konfirmasi kecocokan paket dan jadwal",
+                "Minta keputusan dengan satu ajakan yang jelas",
+                "Kirim invoice pembayaran awal dari CRM",
+                "Terima bukti transfer dan teruskan ke Finance",
+                "Sebut promo atau sisa kuota hanya bila datanya ada"
             ],
             "prinsip": [
-                "Urgency harus berdasarkan kondisi nyata.",
-                "Scarcity harus berdasarkan ketersediaan nyata.",
+                "Batas promo dan sisa kuota harus berdasarkan data paket yang berlaku.",
+                "Jangan menjanjikan kursi atau pendaftaran sebelum pembayaran diverifikasi Finance.",
                 "Closing harus menghasilkan tindakan atau status yang jelas."
             ],
-            "success_status": "closed_won",
+            "success_status": "deal",
             "objection_stage": "objection",
             "no_response_stage": "followup",
             "detail_ref": "closing.json",
-            "script_ref": "scripts/closing.json"
+            "script_ref": "scripts/closing.json",
+            "success_condition": "Pembayaran awal diverifikasi Finance."
         },
         {
             "id": "objection",
             "urutan": 5,
-            "nama": "Handling Objection",
+            "nama": "Menangani keberatan",
             "tujuan": "Memahami dan menyelesaikan keberatan yang menghambat prospek mengambil keputusan.",
             "framework": "TGJP",
             "framework_items": [
@@ -157,19 +155,19 @@
             "prinsip": "Tidak boleh ada prospek yang menggantung tanpa status atau rencana tindak lanjut.",
             "possible_results": [
                 {
-                    "status": "closed_won",
-                    "nama": "Closing",
-                    "arti": "Prospek sudah memberikan komitmen sesuai ketentuan, seperti pembayaran DP."
+                    "status": "deal",
+                    "nama": "Deal",
+                    "arti": "Pembayaran awal (DP atau lunas) sudah diverifikasi Finance."
                 },
                 {
-                    "status": "nurture",
-                    "nama": "Belum Sekarang",
-                    "arti": "Prospek masih memiliki potensi tetapi belum siap mengambil keputusan. Harus memiliki waktu follow-up berikutnya."
+                    "status": "followup",
+                    "nama": "Follow-up terjadwal",
+                    "arti": "Prospek belum siap memutuskan. Wajib ada tanggal follow-up berikutnya."
                 },
                 {
-                    "status": "closed_lost",
+                    "status": "lose",
                     "nama": "Batal",
-                    "arti": "Prospek tidak melanjutkan dan alasan batal sudah diketahui."
+                    "arti": "Prospek tidak melanjutkan dan alasan batal sudah dicatat."
                 }
             ],
             "return_to_stage": [
@@ -185,39 +183,45 @@
     "prospect_statuses": [
         {
             "id": "new",
-            "nama": "Prospek Baru"
+            "nama": "Baru"
         },
         {
-            "id": "identifying",
-            "nama": "Sedang Diidentifikasi"
+            "id": "contact",
+            "nama": "Kontak"
         },
         {
-            "id": "offered",
-            "nama": "Sudah Diberikan Penawaran"
+            "id": "qualified",
+            "nama": "Terkualifikasi"
         },
         {
-            "id": "closing",
-            "nama": "Dalam Proses Closing"
+            "id": "offer",
+            "nama": "Penawaran"
         },
         {
             "id": "objection",
-            "nama": "Ada Keberatan"
+            "nama": "Keberatan"
         },
         {
             "id": "followup",
-            "nama": "Perlu Follow-up"
+            "nama": "Follow-up"
         },
         {
-            "id": "nurture",
-            "nama": "Belum Sekarang"
-        },
-        {
-            "id": "closed_won",
+            "id": "closing",
             "nama": "Closing"
         },
         {
-            "id": "closed_lost",
+            "id": "deal",
+            "nama": "Deal"
+        },
+        {
+            "id": "lose",
             "nama": "Batal"
         }
+    ],
+    "batas_peran": [
+        "CS menangani prospek dari sapaan sampai Deal.",
+        "Finance hanya memverifikasi pembayaran awal (DP atau lunas).",
+        "Prospek menjadi Deal setelah pembayaran awal diverifikasi Finance.",
+        "Administrasi pembayaran berikutnya ditangani di luar CRM."
     ]
 }

@@ -177,6 +177,8 @@ export async function getLivechatConversationsForBrand(
     include: {
       user: { select: { id: true, name: true } },
       package: { select: { id: true, name: true, departureDate: true } },
+      // Status layanan custom yang berjalan (label di daftar percakapan & Pipeline).
+      customRequests: { where: { status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, take: 1, select: { id: true, status: true, quoteValidUntil: true } },
       _count: {
         select: {
           messages: {

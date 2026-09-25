@@ -66,11 +66,13 @@ export function Modal({
     <Dialog.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs animate-fade-in" />
+        {/* Pemusatan lewat grid, bukan translate: animasi fade-up memakai transform dan akan menimpanya. */}
+        <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
         <Dialog.Content
           {...(description ? {} : { 'aria-describedby': undefined })}
           onPointerDownOutside={(event) => event.preventDefault()}
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 flex max-h-[90dvh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-lift outline-none animate-fade-up',
+            'pointer-events-auto flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-lift outline-none animate-fade-up',
             SIZES[size],
           )}
         >
@@ -86,6 +88,7 @@ export function Modal({
           {children !== undefined && <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">{children}</div>}
           {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-100 bg-zinc-50/60 px-5 py-3 sm:px-6">{footer}</div>}
         </Dialog.Content>
+        </div>
       </Dialog.Portal>
     </Dialog.Root>
   );

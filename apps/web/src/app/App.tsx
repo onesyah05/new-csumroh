@@ -27,11 +27,12 @@ const DeviceDetailPage = page(() => import('../features/device/DeviceDetailPage'
 const StaffPage = page(() => import('../features/staff/StaffPage'), 'StaffPage');
 const VerificationPage = page(() => import('../features/finance/VerificationPage'), 'VerificationPage');
 const MetaCapiPage = page(() => import('../features/meta/MetaCapiPage'), 'MetaCapiPage');
+const CustomRequestsPage = page(() => import('../features/custom/CustomRequestsPage'), 'CustomRequestsPage');
 const NotificationSettingsPage = page(() => import('../features/notifications/NotificationSettingsPage'), 'NotificationSettingsPage');
 
 export function App() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="grid min-h-screen place-items-center bg-zinc-950 text-white"><div className="text-center"><div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-zinc-700 border-t-white" /><p className="text-xs uppercase tracking-[.2em] text-zinc-400">Menyiapkan workspace</p></div></div>;
+  if (loading) return <div className="grid min-h-screen place-items-center bg-zinc-950 text-white"><div className="text-center"><div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-zinc-700 border-t-white" /><p className="text-xs text-zinc-400">Menyiapkan workspace</p></div></div>;
   if (!user) return <Routes><Route path="*" element={<LoginPage />} /></Routes>;
 
   // Menu pengelolaan (staf, brand, perangkat, Meta) hanya untuk superadmin/admin — sama dengan navigasi.
@@ -40,6 +41,22 @@ export function App() {
   const superadminOnly = (element: JSX.Element, fallback: string) => (user.role === 'superadmin' ? element : <Navigate to={fallback} replace />);
   const canEditPackages = user.role === 'superadmin' || user.role === 'admin';
   const canVerifyPayments = user.role === 'finance' || isManager;
+  // Tim LA hanya mengelola Layanan Custom (semua brand), tidak membuka prospek/chat.
+  if (user.role === 'product') {
+    return (
+      <>
+        <SocketBridge />
+        <Toaster />
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="layanan-custom" element={<CustomRequestsPage />} />
+            <Route path="pengaturan/notifikasi" element={<NotificationSettingsPage />} />
+            <Route path="*" element={<Navigate to="/layanan-custom" replace />} />
+          </Route>
+        </Routes>
+      </>
+    );
+  }
 
   return (
     <>
@@ -58,6 +75,7 @@ export function App() {
             <Route path="packages/:id/edit" element={canEditPackages ? <PackageFormPage /> : <Navigate to="/packages" replace />} />
             <Route path="copilot" element={<Navigate to="/inbox" replace />} />
             <Route path="lms" element={<LmsPage />} />
+            <Route path="layanan-custom" element={user.role === 'finance' ? <Navigate to="/" replace /> : <CustomRequestsPage />} />
             <Route path="brands" element={managerOnly(<BrandPage />)} />
             <Route path="brands/new" element={superadminOnly(<BrandFormPage />, '/brands')} />
             <Route path="brands/:brandId" element={managerOnly(<BrandDetailPage />)} />

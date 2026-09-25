@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { FileText, Send, UploadCloud, X } from 'lucide-react';
+import { FileText, Send } from 'lucide-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
 import { PrivateProofPreview } from './PrivateProof';
-import { ModalFrame } from '../../components/ui/modal';
+import { Modal } from '../../components/ui/modal';
 
 interface PaymentProofModalProps {
   open: boolean;
@@ -60,110 +60,60 @@ export function PaymentProofModal({
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
-      onShowToast('Bukti transfer berhasil diunggah! Notifikasi terkirim ke tim Finance.');
+      onShowToast('Bukti terkirim ke Finance');
       onClose();
     },
     onError: (err: any) => {
-      onShowToast(err?.message || 'Gagal mengunggah bukti transfer.');
+      onShowToast(err?.message || 'Bukti gagal diunggah.');
     },
   });
 
   if (!open) return null;
 
   return (
-    <ModalFrame open={open} onClose={onClose} title="Unggah bukti transfer">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 bg-emerald-50/80">
-          <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-600 text-white">
-              <UploadCloud size={18} />
-            </span>
-            <div>
-              <h3 className="font-bold text-sm text-zinc-900">Unggah Bukti Transfer</h3>
-              <p className="text-xs text-zinc-500">Kirim ke Finance untuk verifikasi mutasi & deal</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 transition"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="thin-scrollbar flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-          <div className="space-y-2">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Pilih Foto / PDF Bukti Transfer (maks. 5MB)
-            </label>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,application/pdf"
-              onChange={handleFileChange}
-              className="w-full text-xs text-zinc-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
-            />
-            {fileError && <p className="text-xs text-rose-600">{fileError}</p>}
-          </div>
-
-          {/* Preview: berkas baru, atau bukti yang sudah tersimpan (dibaca privat) */}
-          {(fileData || prospect?.paymentProofUrl) && (
-            <div className="space-y-1">
-              <span className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-                {fileData ? 'Pratinjau Bukti Baru:' : 'Bukti Tersimpan Saat Ini:'}
-              </span>
-              <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-50 min-h-20 flex items-center justify-center p-2">
-                {fileData ? (
-                  isPdf ? (
-                    <span className="flex items-center gap-2 text-xs text-zinc-700">
-                      <FileText size={16} className="text-emerald-700" /> {fileName}
-                    </span>
-                  ) : (
-                    <img src={fileData} alt="Bukti Transfer" className="max-h-44 object-contain rounded-lg shadow-xs" />
-                  )
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Unggah bukti transfer"
+      description="Deal setelah Finance memverifikasi."
+      footer={
+        <Button size="sm" icon={<Send size={14} />} loading={proofMutation.isPending} onClick={() => proofMutation.mutate()} disabled={proofMutation.isPending || !fileData}>
+          Kirim ke Finance
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Foto atau PDF (maks. 5 MB)</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            onChange={handleFileChange}
+            className="w-full text-xs text-zinc-600 file:mr-3 file:rounded-md file:border file:border-zinc-300 file:bg-white file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-zinc-800"
+          />
+          {fileError && <span role="alert" className="mt-1 block text-xs text-rose-700">{fileError}</span>}
+        </label>
+        {(fileData || prospect?.paymentProofUrl) && (
+          <div>
+            <span className="mb-1 block text-xs font-semibold text-zinc-600">{fileData ? 'Pratinjau' : 'Bukti sebelumnya'}</span>
+            <div className="flex min-h-20 items-center justify-center rounded-lg bg-zinc-50 p-2">
+              {fileData ? (
+                isPdf ? (
+                  <span className="flex items-center gap-2 text-xs text-zinc-700"><FileText size={16} aria-hidden="true" />{fileName}</span>
                 ) : (
-                  <PrivateProofPreview url={prospect.paymentProofUrl} />
-                )}
-              </div>
+                  <img src={fileData} alt="Bukti transfer" className="max-h-44 rounded-md object-contain" />
+                )
+              ) : (
+                <PrivateProofPreview url={prospect.paymentProofUrl} />
+              )}
             </div>
-          )}
-
-          {/* Notes for Finance */}
-          <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Catatan untuk Tim Finance (Opsional)
-            </label>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contoh: Transfer via BSI an Ahmad Sudirman, nominal Rp 10.000.000 untuk 2 pax..."
-              className="w-full rounded-xl border border-zinc-200 p-2.5 text-xs leading-relaxed focus:border-emerald-500 focus:outline-none resize-none"
-            />
           </div>
-
-          <div className="rounded-xl bg-amber-50/70 border border-amber-200 p-2.5 text-xs text-amber-900 leading-relaxed">
-            🛡️ <strong>Info Keamanan Anti-Fraud:</strong> Setelah bukti diunggah, status prospek tetap di Tunggu Verifikasi sampai diverifikasi langsung oleh tim <strong>Finance</strong>. CS tidak dapat mengubah ke Deal secara sepihak.
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-5 py-3.5 bg-zinc-50">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={proofMutation.isPending}>
-            Batal
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => proofMutation.mutate()}
-            disabled={proofMutation.isPending || !fileData}
-            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-          >
-            <Send size={14} />
-            {proofMutation.isPending ? 'Mengunggah...' : 'Kirim ke Finance'}
-          </Button>
-        </div>
+        )}
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Catatan untuk Finance (opsional)</span>
+          <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Mis. transfer BSI a/n pengirim" className="field h-auto resize-none py-2" />
+        </label>
       </div>
-    </ModalFrame>
+    </Modal>
   );
 }

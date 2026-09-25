@@ -4,7 +4,8 @@ import { Router } from 'express';
 import { transformScriptTree } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { authGuard, scopedBrandId } from '../../middleware/auth.js';
-import { asyncHandler } from '../../utils/http.js';
+import { asyncHandler, HttpError } from '../../utils/http.js';
+import { annotateScript, buildScriptContext } from './context.js';
 
 export const scriptsRouter = Router();
 scriptsRouter.use(authGuard);
@@ -26,58 +27,29 @@ function normalizeScriptData(file: string, raw: any) {
   const normalizedScripts = raw.scripts.map((item: any) => {
     const copy = { ...item };
 
-    // Objection format: uses 'tgjp' object instead of flat 'script'
+    // Keberatan (TGJP): tiap langkah menyimpan semua variasinya. Langkah Jawab dipilih berdasarkan ALASAN yang
+    // ditemukan saat menggali (audit S08), bukan otomatis cabang pertama.
     if (!copy.script && copy.tgjp) {
       const tgjp = copy.tgjp;
-      const parts: string[] = [];
-
-      const terima = tgjp.terima;
-      if (terima && (Array.isArray(terima) ? terima.length : true)) {
-        parts.push('🤝 *Terima:*\n' + (Array.isArray(terima) ? terima[0] : terima));
+      const list = (value: unknown) => (Array.isArray(value) ? value : value ? [value] : []).map(String).filter(Boolean);
+      const steps: Array<{ label: string; name: string; text: string; choose?: 'reason'; variants: Array<{ reason?: string; label: string; text: string }> }> = [];
+      const terima = list(tgjp.terima);
+      const gali = list(tgjp.gali);
+      const pastikan = list(tgjp.pastikan);
+      const jawab = (Array.isArray(tgjp.jawab) ? tgjp.jawab : []).filter((item: any) => item?.script);
+      if (terima.length) steps.push({ label: 'T', name: 'Terima', text: terima[0]!, variants: terima.map((text, i) => ({ label: `Variasi ${i + 1}`, text })) });
+      if (gali.length) steps.push({ label: 'G', name: 'Gali', text: gali[0]!, variants: gali.map((text, i) => ({ label: `Pertanyaan ${i + 1}`, text })) });
+      if (jawab.length) {
+        steps.push({
+          label: 'J', name: 'Jawab', text: '', choose: 'reason',
+          variants: jawab.map((item: any) => ({ reason: item.reason, label: item.label || String(item.reason).replaceAll('_', ' '), text: item.script })),
+        });
       }
-
-      const gali = tgjp.gali;
-      if (gali && (Array.isArray(gali) ? gali.length : true)) {
-        parts.push('🔍 *Gali:*\n' + (Array.isArray(gali) ? gali[0] : gali));
-      }
-
-      const jawab = tgjp.jawab;
-      if (Array.isArray(jawab)) {
-        for (const j of jawab) {
-          if (j?.script) {
-            parts.push('💬 *Jawab:*\n' + j.script);
-            break;
-          }
-        }
-      }
-
-      const pastikan = tgjp.pastikan;
-      if (pastikan && (Array.isArray(pastikan) ? pastikan.length : true)) {
-        parts.push('✅ *Pastikan:*\n' + (Array.isArray(pastikan) ? pastikan[0] : pastikan));
-      }
-
-      copy.script = parts.join('\n\n');
-      copy.use_when = (copy.prospect_examples ?? []).slice(0, 2).join(' / ');
-
-      const steps: Array<{ label: string; name: string; text: string }> = [];
-      if (terima && (Array.isArray(terima) ? terima.length : true)) {
-        steps.push({ label: 'T', name: 'Terima', text: Array.isArray(terima) ? terima[0] : terima });
-      }
-      if (gali && (Array.isArray(gali) ? gali.length : true)) {
-        steps.push({ label: 'G', name: 'Gali', text: Array.isArray(gali) ? gali[0] : gali });
-      }
-      if (Array.isArray(jawab)) {
-        for (const j of jawab) {
-          if (j?.script) {
-            steps.push({ label: 'J', name: 'Jawab', text: j.script });
-            break;
-          }
-        }
-      }
-      if (pastikan && (Array.isArray(pastikan) ? pastikan.length : true)) {
-        steps.push({ label: 'P', name: 'Pastikan', text: Array.isArray(pastikan) ? pastikan[0] : pastikan });
-      }
+      if (pastikan.length) steps.push({ label: 'P', name: 'Pastikan', text: pastikan[0]!, variants: pastikan.map((text, i) => ({ label: `Variasi ${i + 1}`, text })) });
       copy.steps = steps;
+      // Teks gabungan hanya untuk pencarian; tidak dipakai sebagai satu pesan.
+      copy.script = [terima[0], gali[0], pastikan[0]].filter(Boolean).join('\n\n');
+      copy.use_when = (copy.prospect_examples ?? []).slice(0, 2).join(' / ');
     }
 
     // NPGD framework mapping for identification scripts
@@ -98,93 +70,57 @@ function normalizeScriptData(file: string, raw: any) {
         .replaceAll('Agen ', 'CS ')
         .replaceAll('agen ', 'cs ');
     }
-    if (Array.isArray(copy.steps)) {
-      copy.steps = copy.steps.map((step: any) => ({
-        ...step,
-        text: String(step.text ?? '')
-          .replaceAll('{{agent_name}}', '{{cs_name}}')
-          .replaceAll('mitra agen', 'tim CS')
-          .replaceAll('Mitra Agen', 'Tim CS'),
-      }));
-    }
+    // Naskah arsip (belum disahkan holding) tidak dikirim ke CS.
+    if (copy.status === 'archived') return null;
 
     return copy;
   });
 
-  return { ...raw, scripts: normalizedScripts };
-}
-
-function formatRupiah(val: any): string {
-  if (!val && val !== 0) return '';
-  const clean = String(val).replace(/[^\d]/g, '');
-  return clean ? 'Rp ' + Number(clean).toLocaleString('id-ID') : String(val);
+  return { ...raw, scripts: normalizedScripts.filter(Boolean) };
 }
 
 async function readScript(name: string) {
   const file = path.resolve(process.cwd(), '../../packages/scripts-data/scripts-chat', `${name}.json`);
-  const raw = JSON.parse(await readFile(file, 'utf8')) as unknown;
+  const raw = JSON.parse(await readFile(file, 'utf8'));
+  // Shared prompts for the qualification form and Copilot; preserve the legacy library.
+  if (name === 'identification') {
+    const promptsFile = path.resolve(process.cwd(), '../../packages/scripts-data/scripts-chat/qualification-prompts.json');
+    const prompts = JSON.parse(await readFile(promptsFile, 'utf8'));
+    raw.scripts = [...prompts.scripts, ...raw.scripts];
+  }
   return normalizeScriptData(name, raw);
 }
 
+/**
+ * Pustaka script dengan konteks prospek (audit S01). Prospek dan paket dibaca dari server dalam brand yang
+ * berhak diakses; client hanya mengirim id. Setiap script dilengkapi status pakai dan data yang kurang (S12, S15).
+ */
 scriptsRouter.get('/', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
-  const [brand, selectedPackage, data] = await Promise.all([
+  const prospectId = Number(req.query.prospectId) || null;
+  const [brand, prospect, data] = await Promise.all([
     prisma.brand.findUniqueOrThrow({ where: { id: brandId } }),
-    req.query.packageId ? prisma.package.findFirst({ where: { id: Number(req.query.packageId), brandId } }) : null,
+    prospectId ? prisma.prospect.findFirst({ where: { id: prospectId, brandId } }) : null,
     Promise.all(categories.map(async (category) => [category, await readScript(category)] as const)),
   ]);
+  if (prospectId && !prospect) throw new HttpError(404, 'Prospek tidak ditemukan di brand ini.');
+  // Paket mengikuti data prospek; packageId dari query hanya untuk pratinjau tanpa prospek.
+  const packageId = prospect ? prospect.packageId : Number(req.query.packageId) || null;
+  const pkg = packageId ? await prisma.package.findFirst({ where: { id: packageId, brandId } }) : null;
 
-  const rawName = String(req.query.nama ?? '').trim();
-  const firstName = rawName.split(' ')[0] || rawName || 'Kak';
-  const customerName = rawName || 'Bapak/Ibu';
-
-  const hotelList = [selectedPackage?.hotelMakkah, selectedPackage?.hotelMadinah].filter(Boolean);
-  const hotel = hotelList.length > 0 ? hotelList.join(' & ') : '{{hotel}}';
-  const jarakHotel = selectedPackage?.hotelMakkah ? 'jarak akomodasi tertera pada rincian brosur paket' : 'informasi akomodasi tertera pada paket';
-  const airline = selectedPackage?.airline || '{{maskapai}}';
-  const departure = selectedPackage?.departureDate?.toLocaleDateString('id-ID') ?? selectedPackage?.departureInfo ?? '{{keberangkatan}}';
-  const duration = selectedPackage?.duration || '{{durasi}}';
-  const highlights = selectedPackage?.highlights || selectedPackage?.facilitiesIncluded || '{{fasilitas_utama}}';
-  const ppiu = brand.ppiuNumber && brand.ppiuNumber !== '-' ? brand.ppiuNumber : '{{ppiu}}';
-
-  const variables = {
-    nama: customerName,
-    cs_name: req.user!.name,
-    agent_name: req.user!.name,
-    travel: brand.name,
-    ppiu,
-    bank: brand.bankName || '{{bank}}',
-    rekening: brand.bankAccountNumber || '{{rekening}}',
-    nama_rekening: brand.bankAccountHolder || '{{nama_rekening}}',
-    alamat: brand.address ?? '',
-    telepon: brand.phone ?? '',
-    paket: selectedPackage?.name ?? 'Paket Umroh Pilihan',
-    harga: formatRupiah(selectedPackage?.price) || '{{harga}}',
-    dp: formatRupiah(selectedPackage?.dp) || '{{dp}}',
-    airline,
-    maskapai: airline,
-    hotel,
-    jarak_hotel: jarakHotel,
-    hotel_makkah: selectedPackage?.hotelMakkah ?? '',
-    hotel_madinah: selectedPackage?.hotelMadinah ?? '',
-    duration,
-    durasi: duration,
-    keberangkatan: departure,
-    tanggal: departure,
-    highlights,
-    fasilitas_utama: highlights,
-    jumlah_jamaah: '{{jumlah_jamaah}}',
-    bulan: '{{bulan}}',
-    deadline: '{{deadline}}',
-    seat: selectedPackage?.quotaRemaining == null ? '{{seat}}' : `${selectedPackage.quotaRemaining} seat`,
-    promo: selectedPackage?.isPromo && selectedPackage.promoDiscount ? selectedPackage.promoDiscount : '{{promo}}',
-    budget: 'anggaran yang sesuai',
-    nama_pendamping: 'keluarga tercinta',
-    followup_date: '{{followup_date}}',
-    kota: '{{kota}}',
-    sumber: 'WhatsApp resmi',
-  };
-  res.json({ success: true, data: { variables, categories: Object.fromEntries(data.map(([key, value]) => [key, transformScriptTree(value, variables)])) } });
+  const context = buildScriptContext({ csName: req.user!.name, brand, pkg, prospect });
+  const categoriesOut = Object.fromEntries(data.map(([key, value]) => {
+    const rendered = transformScriptTree(value, context.variables);
+    return [key, { ...rendered, scripts: (rendered.scripts ?? []).map((script: any) => annotateScript(script, context)) }];
+  }));
+  res.json({
+    success: true,
+    data: {
+      variables: context.variables,
+      context: { prospectId, packageId: pkg?.id ?? null, warnings: context.warnings, version: context.version, state: context.state },
+      categories: categoriesOut,
+    },
+  });
 }));
 
 scriptsRouter.get('/lms', asyncHandler(async (_req, res) => {

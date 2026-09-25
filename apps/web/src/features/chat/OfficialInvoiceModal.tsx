@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CreditCard, Sparkles, AlertCircle, Copy, X } from 'lucide-react';
-import { isWonStatus } from '@csumroh/shared-types';
+import { Copy, CreditCard } from 'lucide-react';
+import { formatRupiah, isWonStatus, parseRupiahStrict } from '@csumroh/shared-types';
+import { waDate, waDateTime, waMessage, waTitle } from './waFormat';
 import { api } from '../../lib/api';
 import { deliverDraftText } from './draftText';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
-import { ModalFrame } from '../../components/ui/modal';
+import { Modal } from '../../components/ui/modal';
+import { dateRange, minDpTotal, type CustomRequest } from '../custom/customApi';
+import { MoneyInput } from '../custom/MoneyInput';
 
 interface OfficialInvoiceModalProps {
   open: boolean;
@@ -17,6 +20,8 @@ interface OfficialInvoiceModalProps {
   brandId?: number;
   onInsertText?: (text: string) => void;
   onShowToast: (msg: string) => void;
+  /** Layanan custom yang disepakati: tagihan antara DP minimal (per jamaah) dan nilai deal akhir. */
+  custom?: CustomRequest | null;
 }
 
 const rupiah = (val: unknown) =>
@@ -32,6 +37,7 @@ export function OfficialInvoiceModal({
   brandId,
   onInsertText,
   onShowToast,
+  custom,
 }: OfficialInvoiceModalProps) {
   const effectiveBrandId = brandId || prospect?.brandId;
 
@@ -56,15 +62,15 @@ export function OfficialInvoiceModal({
     return packages.find((p) => String(p.id) === selectedPkgId) || packages[0];
   }, [packages, selectedPkgId]);
 
-  const packageDp = Number(String(selectedPackage?.dp || 0).replace(/\D/g, ''));
-  // Booking yang sudah Deal menerima tagihan pelunasan (sisa nilai booking), bukan DP baru.
-  const isSettlement = isWonStatus(prospect?.status);
-  const remaining = Math.max(0, Number(prospect?.dealValue ?? 0) - Number(prospect?.dpAmount ?? 0));
+  // Parser ketat: "5 juta" = 5.000.000, bukan 5 (audit S02).
+  const packageDp = parseRupiahStrict(selectedPackage?.dp) ?? 0;
   // Tanpa DP resmi di katalog, nominal wajib diisi manual (tidak ada angka karangan).
-  const defaultAmount = isSettlement ? remaining : packageDp > 0 ? packageDp * totalPax : 0;
+  const customMin = custom ? minDpTotal(custom) : 0;
+  const customMax = custom ? Number(custom.agreedPrice ?? 0) : 0;
+  const defaultAmount = custom ? customMin : packageDp > 0 ? packageDp * totalPax : 0;
 
   const [dpAmount, setDpAmount] = useState<number>(
-    Number(prospect?.invoiceAmount) > 0 && !isSettlement ? Number(prospect.invoiceAmount) : defaultAmount
+    Number(prospect?.invoiceAmount) > 0 ? Number(prospect.invoiceAmount) : defaultAmount
   );
 
   // Default jatuh tempo 24 jam dari sekarang dalam waktu lokal (format datetime-local, bukan UTC).
@@ -105,58 +111,23 @@ export function OfficialInvoiceModal({
   const now = new Date();
   const estimatedInvoiceNum = prospect?.invoiceNumber || `INV/${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}/${String(prospect?.id || 1).padStart(4, '0')}`;
 
+  // Urutan invoice untuk layar ponsel (audit C03): identitas → paket → nominal & batas → rekening → bukti & verifikasi.
   const generatedScript = useMemo(() => {
-    return [
-      isSettlement ? `*🧾 INVOICE RESMI PELUNASAN BIAYA UMROH*` : `*🧾 INVOICE RESMI PEMBAYARAN DOWN PAYMENT (DP) UMROH*`,
-      `No. Dokumen: *${estimatedInvoiceNum}*`,
-      isSettlement ? `Status Tagihan: *Menunggu Pelunasan*` : `Status Tagihan: *Menunggu Pembayaran DP*`,
-      '',
-      `Kepada Yth. Calon Jamaah:`,
-      `👤 *${prospect?.name || 'Jamaah'}*`,
-      prospect?.phone ? `📱 ${prospect.phone}` : null,
-      '',
-      `🕋 *Rincian Pemesanan Paket*:`,
-      `• Paket: *${selectedPackage?.name || 'Paket Umroh Reguler'}*`,
-      `• Jumlah Jamaah: *${totalPax} Pax*`,
-      selectedPackage?.departureInfo ? `• Jadwal Rencana: ${selectedPackage.departureInfo}` : null,
-      '',
-      isSettlement ? `💳 *JUMLAH TAGIHAN PELUNASAN*:` : `💳 *JUMLAH TAGIHAN DP*:`,
-      `👉 *${rupiah(dpAmount)}*`,
-      `⏰ *Batas Waktu Pembayaran (Due Date)*:`,
-      `*${formattedDueDate}*`,
-      '',
-      `🏛️ *Rekening Resmi Biro (Wajib Transfer ke Rekening Resmi Ini)*:`,
-      `• Bank: *${selectedBank.name}*`,
-      `• No. Rekening: *${selectedBank.number}*`,
-      `• Atas Nama: *${selectedBank.holder}*`,
-      '',
-      `⚠️ *PENTING - Konfirmasi Pembayaran*:`,
-      `1. Cantumkan berita transfer: *${isSettlement ? 'PELUNASAN' : 'DP'} UMROH ${prospect?.name || 'JAMAAH'}*`,
-      `2. Setelah transfer, mohon kirimkan foto/tangkapan layar struk bukti transfer ke nomor WhatsApp resmi ini.`,
-      `3. Tim Finance kami akan segera mencocokkan mutasi rekening dan menerbitkan *Kuitansi Resmi & Booking Confirmation Seat*.`,
-      '',
-      `Jazakumullah khairan katsiran atas kepercayaannya. Semoga niat suci menuju Baitullah dimudahkan oleh Allah SWT. 🤲`,
-    ]
-      .filter(Boolean)
-      .join('\n');
-  }, [
-    estimatedInvoiceNum,
-    isSettlement,
-    prospect?.name,
-    prospect?.phone,
-    selectedPackage?.name,
-    selectedPackage?.departureInfo,
-    totalPax,
-    dpAmount,
-    formattedDueDate,
-    selectedBank,
-  ]);
+    const departure = selectedPackage ? waDate(selectedPackage.departureDate) ?? (selectedPackage.departureInfo || null) : null;
+    return waMessage(
+      ['*Invoice pembayaran awal*', `No. ${estimatedInvoiceNum}`],
+      [`Paket: ${custom ? (custom.mode === 'package' && custom.basePackage ? `${waTitle(custom.basePackage.name)} (disesuaikan)` : 'Umroh custom') : waTitle(selectedPackage?.name)}`, custom ? (custom.mode === 'package' ? waDate(custom.departureDate) && `Berangkat: ${waDate(custom.departureDate)}` : dateRange(custom.departureDate, custom.departureDateTo) && `Berangkat: ${dateRange(custom.departureDate, custom.departureDateTo)}`) : departure && `Berangkat: ${departure}`, `Jumlah: ${totalPax} jamaah`, custom && `Total biaya: ${formatRupiah(customMax)}`],
+      [`Nominal: *${formatRupiah(dpAmount || 0)}*`, `Batas pembayaran: ${waDateTime(dueDate) ?? formattedDueDate}`],
+      ['Transfer ke rekening resmi:', `${selectedBank.name} a/n ${selectedBank.holder}`, `*${selectedBank.number}*`],
+      'Setelah transfer, kirim foto bukti transfernya di chat ini. Tim Finance akan memverifikasi, lalu pendaftaran tercatat.',
+    );
+  }, [custom, customMax, estimatedInvoiceNum, selectedPackage, totalPax, dpAmount, dueDate, formattedDueDate, selectedBank]);
 
   const invoiceMutation = useMutation({
     mutationFn: (sendViaWhatsApp: boolean) =>
       api.post(`/prospects/${prospect.id}/invoice`, {
-        packageId: selectedPkgId && !isSettlement ? Number(selectedPkgId) : undefined,
-        // Nominal TAGIHAN; kas hanya bertambah lewat verifikasi Finance.
+        packageId: !custom && selectedPkgId ? Number(selectedPkgId) : undefined,
+        // Invoice pembayaran awal sebelum Deal.
         invoiceAmount: Number(dpAmount),
         dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
         bankAccountName: `${selectedBank.name} - ${selectedBank.number} a/n ${selectedBank.holder}`,
@@ -169,168 +140,81 @@ export function OfficialInvoiceModal({
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       if (sendViaWhatsApp) {
-        onShowToast(isSettlement
-          ? 'Invoice pelunasan terkirim ke WhatsApp jamaah.'
-          : 'Invoice DP terkirim ke WhatsApp jamaah; status beralih ke Tunggu Verifikasi.');
+        onShowToast('Invoice terkirim');
       } else {
         const where = await deliverDraftText(generatedScript, onInsertText);
-        onShowToast(`Draft invoice ${where}; tidak dikirim dan status tidak berubah.`);
+        onShowToast(`Invoice ${where}`);
       }
       onClose();
     },
     onError: (err: any) => {
-      onShowToast(err?.message || 'Gagal memproses invoice DP.');
+      onShowToast(err?.message || 'Invoice gagal diproses.');
     },
   });
 
-  if (!open) return null;
+  if (!open || isWonStatus(prospect?.status)) return null;
+  const pending = invoiceMutation.isPending;
+  // Layanan custom: tagihan antara DP minimal dan nilai deal (server menolak di luar rentang ini).
+  const outOfRange = Boolean(custom) && (dpAmount < customMin || dpAmount > customMax);
+  const invalid = !dpAmount || dpAmount <= 0 || !hasConfiguredBank || outOfRange;
 
   return (
-    <ModalFrame open={open} onClose={onClose} title="Invoice resmi">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 bg-zinc-50/70">
-          <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-zinc-600 text-white">
-              <CreditCard size={18} />
-            </span>
-            <div>
-              <h3 className="font-bold text-sm text-zinc-900">
-                {isSettlement ? 'Invoice Pelunasan Resmi' : 'Terbitkan Invoice DP Resmi'}
-              </h3>
-              <p className="text-xs text-zinc-500">
-                {isSettlement ? 'Status Deal tidak berubah; kas bertambah setelah verifikasi Finance' : 'Status menjadi Tunggu Verifikasi setelah invoice terkirim'}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 transition"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <div className="thin-scrollbar flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-          {/* Package Selection */}
-          <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Paket Umroh yang Dipesan
-            </label>
-            <Select
-              value={selectedPkgId}
-              onValueChange={setSelectedPkgId}
-              options={packages.map((pkg) => ({
-                value: String(pkg.id),
-                label: `${pkg.name} (${pkg.departureInfo || 'Tgl belum ditentukan'})`,
-              }))}
-              className="w-full"
-            />
-          </div>
-
-          {/* Amount & Due Date */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-                {isSettlement ? 'Nominal Tagihan Pelunasan (Rp)' : 'Nominal Tagihan DP (Rp)'}
-              </label>
-              <input
-                type="number"
-                min="500000"
-                step="500000"
-                value={dpAmount}
-                onChange={(e) => setDpAmount(Number(e.target.value))}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs font-bold text-zinc-700 focus:border-zinc-500 focus:outline-none"
-              />
-              <span className="text-xs text-zinc-500">{rupiah(dpAmount)}</span>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-                Jatuh Tempo Pembayaran
-              </label>
-              <input
-                type="datetime-local"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs text-zinc-700 focus:border-zinc-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Official Bank Account */}
-          <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Rekening Bank Resmi Brand ({currentBrand?.name || 'Brand'})
-            </label>
-            {hasConfiguredBank ? (
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 text-xs">
-                <div className="font-bold text-zinc-900">{selectedBank.name}</div>
-                <div className="font-mono text-sm text-zinc-700 font-bold tracking-wide">{selectedBank.number}</div>
-                <div className="text-xs text-zinc-500">a/n {selectedBank.holder}</div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
-                <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold">Rekening bank belum diatur untuk brand ini!</span>
-                  <p className="text-xs text-amber-700 mt-0.5">
-                    Harap lengkapi nomor rekening resmi di menu Pengaturan Brand agar transaksi jamaah aman dan valid.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* WhatsApp Script Preview */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500 flex items-center gap-1">
-                <Sparkles size={12} className="text-amber-500" />
-                Pratinjau Pesan Invoice WhatsApp
-              </label>
-              <span className="text-xs text-zinc-500">Naskah yang dikirim ke WhatsApp jamaah</span>
-            </div>
-            <textarea
-              readOnly
-              value={generatedScript}
-              rows={8}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 font-mono text-xs text-zinc-700 leading-relaxed resize-none focus:outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-zinc-200 px-5 py-3.5 bg-zinc-50">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={invoiceMutation.isPending}>
-            Batal
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title="Kirim invoice pembayaran awal"
+      description={prospect?.name}
+      footer={
+        <>
+          <Button variant="outline" size="sm" icon={<Copy size={13} />} onClick={() => invoiceMutation.mutate(false)} disabled={pending || invalid}>
+            Sisipkan ke chat
           </Button>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => invoiceMutation.mutate(false)}
-              disabled={invoiceMutation.isPending || !dpAmount || dpAmount <= 0 || !hasConfiguredBank}
-              className="gap-1 text-zinc-700"
-              title="Simpan sebagai draft (sisipkan ke chat / salin) tanpa mengirim dan tanpa mengubah status"
-            >
-              <Copy size={13} />
-              <span>Sisipkan Draft Saja</span>
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => invoiceMutation.mutate(true)}
-              disabled={invoiceMutation.isPending || !dpAmount || dpAmount <= 0 || !hasConfiguredBank}
-              className="gap-1.5 bg-zinc-600 hover:bg-zinc-700 text-white font-bold"
-            >
-              <CreditCard size={14} />
-              {invoiceMutation.isPending ? 'Mengirim...' : 'Kirim Invoice via WhatsApp'}
-            </Button>
-          </div>
+          <Button size="sm" icon={<CreditCard size={14} />} loading={pending} onClick={() => invoiceMutation.mutate(true)} disabled={pending || invalid}>
+            Kirim ke WhatsApp
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {custom ? (
+          <p className="text-xs text-zinc-600"><b className="font-semibold text-zinc-900">Layanan custom</b> · nilai deal {rupiah(customMax)}</p>
+        ) : <div>
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Paket</span>
+          <Select
+            aria-label="Paket"
+            value={selectedPkgId}
+            onValueChange={setSelectedPkgId}
+            options={packages.map((pkg) => ({ value: String(pkg.id), label: `${pkg.name}${pkg.departureInfo ? ` (${pkg.departureInfo})` : ''}` }))}
+            className="w-full"
+          />
+        </div>}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-zinc-600">Nominal</span>
+            <MoneyInput aria-label="Nominal tagihan" value={dpAmount || null} onChange={(value) => setDpAmount(value ?? 0)} />
+            <span className={custom && outOfRange ? 'mt-1 block text-xs font-semibold text-rose-700' : 'mt-1 block text-xs text-zinc-500'}>
+              {rupiah(dpAmount)}{custom ? ` · DP minimal ${rupiah(customMin)}, maksimal ${rupiah(customMax)} (lunas)` : ''}
+            </span>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-zinc-600">Jatuh tempo</span>
+            <input type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="field" />
+          </label>
         </div>
+        <div className="text-xs">
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Rekening tujuan</span>
+          {hasConfiguredBank ? (
+            <p className="text-zinc-800"><b className="font-semibold">{selectedBank.name} {selectedBank.number}</b> · a/n {selectedBank.holder}</p>
+          ) : (
+            <p role="alert" className="text-amber-800">Rekening {currentBrand?.name || 'brand'} belum diatur. Hubungi admin.</p>
+          )}
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Pesan yang dikirim</span>
+          <textarea readOnly value={generatedScript} rows={8} className="field h-auto resize-none py-2 leading-relaxed" />
+        </label>
       </div>
-    </ModalFrame>
+    </Modal>
   );
 }

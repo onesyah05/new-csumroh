@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Copy, FileCheck, Sparkles, X } from 'lucide-react';
-import { packageBookingValue } from '@csumroh/shared-types';
+import { Copy, FileCheck } from 'lucide-react';
+import { formatCatalogRupiah, formatRupiah, packageBookingValue } from '@csumroh/shared-types';
+import { waBullets, waDate, waLine, waMessage, waTitle } from './waFormat';
 import { api } from '../../lib/api';
 import { deliverDraftText } from './draftText';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
-import { ModalFrame } from '../../components/ui/modal';
+import { Modal } from '../../components/ui/modal';
+import { formatCustomOffer, type CustomRequest } from '../custom/customApi';
 
 interface OfficialOfferModalProps {
   open: boolean;
@@ -17,12 +19,10 @@ interface OfficialOfferModalProps {
   brandId?: number;
   onInsertText?: (text: string) => void;
   onShowToast: (msg: string) => void;
+  /** Layanan custom yang sudah disepakati: nilai penawaran = nilai deal akhir, tanpa pilihan paket. */
+  custom?: CustomRequest | null;
 }
 
-const rupiah = (val: unknown) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(
-    Number(val ?? 0)
-  );
 
 export function OfficialOfferModal({
   open,
@@ -32,6 +32,7 @@ export function OfficialOfferModal({
   brandId,
   onInsertText,
   onShowToast,
+  custom,
 }: OfficialOfferModalProps) {
   const [selectedPkgId, setSelectedPkgId] = useState<string>(
     prospect?.packageId ? String(prospect.packageId) : packages[0]?.id ? String(packages[0].id) : ''
@@ -50,44 +51,39 @@ export function OfficialOfferModal({
 
   // Sama dengan perhitungan backend (harga katalog × pax); backend tetap menjadi sumber kebenaran.
   const dealValue = useMemo(
-    () => (selectedPackage && prospect ? packageBookingValue(selectedPackage, prospect) : 0),
-    [selectedPackage, prospect],
+    () => (custom ? Number(custom.agreedPrice ?? 0) : selectedPackage && prospect ? packageBookingValue(selectedPackage, prospect) : 0),
+    [custom, selectedPackage, prospect],
   );
 
+  // Naskah WhatsApp (audit C02, C03): paragraf dijaga, rincian biaya per tipe kamar, tanpa janji "amankan seat".
   const generatedScript = useMemo(() => {
+    if (custom) return formatCustomOffer(custom, dealValue, customNote);
     if (!selectedPackage) return '';
-    return [
-      `Bismillah, kami rekomendasikan Penawaran Paket Umroh Terbaik untuk Bapak/Ibu *${prospect?.name || 'Jamaah'}*:`,
-      '',
-      `🕋 *${selectedPackage.name}*`,
-      selectedPackage.airline ? `✈️ Maskapai: ${selectedPackage.airline}` : null,
-      selectedPackage.duration ? `⏳ Durasi: ${selectedPackage.duration}` : null,
-      selectedPackage.departureInfo ? `🗓️ Rencana: ${selectedPackage.departureInfo}` : null,
-      selectedPackage.hotelMakkah ? `🏨 Makkah: ${selectedPackage.hotelMakkah}` : null,
-      selectedPackage.hotelMadinah ? `🏨 Madinah: ${selectedPackage.hotelMadinah}` : null,
-      '',
-      `💰 *Estimasi Total Investasi Ibadah*:`,
-      `• Jumlah Jamaah: ${totalPax} Pax`,
-      prospect?.roomPreference ? `• Tipe Kamar: ${prospect.roomPreference}` : null,
-      dealValue > 0 ? `👉 *Total Estimasi Biaya*: *${rupiah(dealValue)}*` : `👉 *Total Estimasi Biaya*: Menunggu penetapan harga resmi di katalog`,
-      '',
-      `✨ *Fasilitas*:`,
-      selectedPackage.facilitiesIncluded
-        ? `✅ ${selectedPackage.facilitiesIncluded}`
-        : `✅ Sesuai rincian fasilitas resmi brosur paket`,
-      selectedPackage.highlights ? `📌 ${selectedPackage.highlights}` : null,
-      customNote ? `\n📌 *Catatan Khusus*: ${customNote}` : null,
-      '',
-      `Apakah jadwal dan fasilitas penawaran ini sudah sesuai dengan yang diharapkan Bapak/Ibu? Jika cocok, kami dapat amankan kuota seat-nya sekarang. 🙏`,
-    ]
-      .filter(Boolean)
-      .join('\n');
-  }, [selectedPackage, prospect?.name, prospect?.roomPreference, totalPax, dealValue, customNote]);
+    const pkg = selectedPackage;
+    const rooms = ([
+      ['Quad', prospect?.paxQuad, pkg.priceQuad || pkg.price],
+      ['Triple', prospect?.paxTriple, pkg.priceTriple || pkg.price],
+      ['Double', prospect?.paxDouble, pkg.priceDouble || pkg.price],
+      ['Bayi', prospect?.paxInfant, pkg.priceInfant],
+    ] as const)
+      .filter(([, pax]) => Number(pax) > 0)
+      .map(([label, pax, price]) => `• ${label}: ${pax} orang × ${formatCatalogRupiah(price) ?? 'harga dikonfirmasi'}`);
+    const departure = [waDate(pkg.departureDate) ?? (pkg.departureInfo || null), pkg.duration || null].filter(Boolean).join(' · ');
+    return waMessage(
+      'Berikut penawaran paket umroh untuk Bapak/Ibu:',
+      [`*${waTitle(pkg.name)}*`, departure && `Berangkat ${departure}`, waLine('Maskapai', pkg.airline), waLine('Hotel Makkah', pkg.hotelMakkah), waLine('Hotel Madinah', pkg.hotelMadinah)],
+      ['*Rincian biaya*', ...rooms, dealValue > 0 ? `*Total: ${formatRupiah(dealValue)}*` : 'Total biaya kami konfirmasi setelah harga paket ditetapkan.'],
+      waBullets(pkg.facilitiesIncluded).length > 0 && ['*Sudah termasuk*', ...waBullets(pkg.facilitiesIncluded)],
+      waBullets(pkg.facilitiesExcluded, 4).length > 0 && ['*Belum termasuk*', ...waBullets(pkg.facilitiesExcluded, 4)],
+      customNote.trim() && `Catatan: ${customNote.trim()}`,
+      'Apakah paket dan jadwal ini sudah sesuai?',
+    );
+  }, [custom, selectedPackage, prospect?.paxQuad, prospect?.paxTriple, prospect?.paxDouble, prospect?.paxInfant, dealValue, customNote]);
 
   const sendOfferMutation = useMutation({
     mutationFn: (sendViaWhatsApp: boolean) =>
       api.post(`/prospects/${prospect.id}/offer`, {
-        packageId: Number(selectedPkgId),
+        ...(custom ? {} : { packageId: Number(selectedPkgId) }),
         customNotes: customNote,
         brandId: brandId ?? prospect.brandId,
         sendViaWhatsApp,
@@ -99,133 +95,65 @@ export function OfficialOfferModal({
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       if (sendViaWhatsApp) {
-        onShowToast('Penawaran resmi terkirim ke WhatsApp jamaah; status menjadi Ditawarkan (offer).');
+        onShowToast('Penawaran terkirim');
       } else {
         const where = await deliverDraftText(generatedScript, onInsertText);
-        onShowToast(`Draft penawaran ${where}; status prospek tidak berubah.`);
+        onShowToast(`Penawaran ${where}`);
       }
       onClose();
     },
     onError: (err: any) => {
-      onShowToast(err?.message || 'Gagal memproses penawaran resmi.');
+      onShowToast(err?.message || 'Penawaran gagal diproses.');
     },
   });
 
   if (!open) return null;
+  const pending = sendOfferMutation.isPending;
 
   return (
-    <ModalFrame open={open} onClose={onClose} title="Penawaran resmi">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 bg-zinc-50">
-          <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-zinc-100 text-zinc-700">
-              <FileCheck size={18} />
-            </span>
-            <div>
-              <h3 className="font-bold text-sm text-zinc-900">Buat Penawaran Resmi</h3>
-              <p className="text-xs text-zinc-500">Mempromosikan status prospek ke Ditawarkan (offer)</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 transition"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="thin-scrollbar flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-          {/* Package Selection */}
-          <div className="space-y-1.5">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Pilih Paket Umroh
-            </label>
-            <Select
-              value={selectedPkgId}
-              onValueChange={setSelectedPkgId}
-              options={packages.map((pkg) => ({
-                value: String(pkg.id),
-                label: `${pkg.name} (${pkg.departureInfo || 'Tgl belum ditentukan'})`,
-              }))}
-              className="w-full"
-            />
-          </div>
-
-          {/* Deal Value Breakdown */}
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-500">Estimasi Total Deal ({totalPax} Pax):</p>
-              <p className="text-base font-extrabold text-zinc-700">{rupiah(dealValue)}</p>
-            </div>
-            <span className="text-xs font-semibold bg-zinc-50 text-zinc-800 border border-zinc-200 rounded-full px-2.5 py-1">
-              Trigger CAPI: AddToCart
-            </span>
-          </div>
-
-          {/* Custom Notes */}
-          <div className="space-y-1">
-            <label className="font-bold uppercase tracking-wider text-xs text-zinc-500">
-              Catatan Khusus / Promo Tambahan (Opsional)
-            </label>
-            <input
-              type="text"
-              value={customNote}
-              onChange={(e) => setCustomNote(e.target.value)}
-              placeholder="Contoh: Diskon khusus booking hari ini Rp 1 Juta..."
-              className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs focus:border-zinc-500 focus:outline-none"
-            />
-          </div>
-
-          {/* WhatsApp Script Preview */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="font-bold uppercase tracking-wider text-xs text-zinc-500 flex items-center gap-1">
-                <Sparkles size={12} className="text-amber-500" />
-                Pratinjau Pesan Penawaran WhatsApp
-              </label>
-              <span className="text-xs text-zinc-500">Naskah yang dikirim ke WhatsApp jamaah</span>
-            </div>
-            <textarea
-              readOnly
-              value={generatedScript}
-              rows={8}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 font-mono text-xs text-zinc-700 leading-relaxed resize-none focus:outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-zinc-200 px-5 py-3.5 bg-zinc-50">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={sendOfferMutation.isPending}>
-            Batal
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title="Kirim penawaran"
+      description={prospect?.name}
+      footer={
+        <>
+          <Button variant="outline" size="sm" icon={<Copy size={13} />} onClick={() => sendOfferMutation.mutate(false)} disabled={pending || (!custom && !selectedPkgId)}>
+            Sisipkan ke chat
           </Button>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => sendOfferMutation.mutate(false)}
-              disabled={sendOfferMutation.isPending || !selectedPkgId}
-              className="gap-1 text-zinc-700"
-              title="Simpan sebagai draft (sisipkan ke chat / salin) tanpa mengirim dan tanpa mengubah status"
-            >
-              <Copy size={13} />
-              <span>Sisipkan Draft Saja</span>
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => sendOfferMutation.mutate(true)}
-              disabled={sendOfferMutation.isPending || !selectedPkgId || dealValue <= 0}
-              className="gap-1.5 bg-zinc-600 hover:bg-zinc-700 text-white font-bold"
-            >
-              <FileCheck size={14} />
-              {sendOfferMutation.isPending ? 'Mengirim...' : 'Kirim via WhatsApp'}
-            </Button>
-          </div>
+          <Button size="sm" icon={<FileCheck size={14} />} loading={pending} onClick={() => sendOfferMutation.mutate(true)} disabled={pending || (!custom && !selectedPkgId) || dealValue <= 0}>
+            Kirim ke WhatsApp
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {custom ? (
+          <p className="text-xs text-zinc-600"><b className="font-semibold text-zinc-900">Layanan custom</b> · nilai deal akhir yang disepakati dengan jamaah.</p>
+        ) : <div>
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Paket</span>
+          <Select
+            aria-label="Paket"
+            value={selectedPkgId}
+            onValueChange={setSelectedPkgId}
+            options={packages.map((pkg) => ({ value: String(pkg.id), label: `${pkg.name}${pkg.departureInfo ? ` (${pkg.departureInfo})` : ''}` }))}
+            className="w-full"
+          />
+        </div>}
+        <div className="flex items-baseline justify-between border-y border-zinc-100 py-2 text-xs">
+          <span className="text-zinc-600">Total untuk {totalPax} jamaah</span>
+          <b className="text-sm tabular-nums text-zinc-950">{formatRupiah(dealValue)}</b>
         </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Catatan tambahan (opsional)</span>
+          <input type="text" value={customNote} onChange={(e) => setCustomNote(e.target.value)} placeholder="Mis. harga sudah termasuk perlengkapan" className="field" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-zinc-600">Pesan yang dikirim</span>
+          <textarea readOnly value={generatedScript} rows={8} className="field h-auto resize-none py-2 leading-relaxed" />
+        </label>
       </div>
-    </ModalFrame>
+    </Modal>
   );
 }

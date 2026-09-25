@@ -314,7 +314,7 @@ export function EmojiPicker({ onSelectEmoji, onClose }: EmojiPickerProps) {
       <div className="flex-1 overflow-y-auto thin-scrollbar p-2.5 space-y-3">
         {searchResults ? (
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 px-1 mb-1.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-1 mb-1.5">
               Hasil Pencarian ({searchResults.length})
             </p>
             {searchResults.length ? (
@@ -338,7 +338,7 @@ export function EmojiPicker({ onSelectEmoji, onClose }: EmojiPickerProps) {
           </div>
         ) : activeCategory === 'recent' ? (
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 px-1 mb-1.5 flex items-center gap-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-1 mb-1.5 flex items-center gap-1">
               <Sparkles size={11} className="text-amber-500" />
               Sering Digunakan
             </p>
@@ -361,7 +361,7 @@ export function EmojiPicker({ onSelectEmoji, onClose }: EmojiPickerProps) {
             if (!currentCat) return null;
             return (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 px-1 mb-1.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-1 mb-1.5">
                   {currentCat.name}
                 </p>
                 <div className="grid grid-cols-7 sm:grid-cols-8 gap-1">
@@ -383,7 +383,7 @@ export function EmojiPicker({ onSelectEmoji, onClose }: EmojiPickerProps) {
       </div>
 
       {/* Footer hint */}
-      <div className="px-3 py-1.5 border-t border-zinc-100 bg-zinc-50 text-[10px] text-zinc-400 flex items-center justify-between">
+      <div className="px-3 py-1.5 border-t border-zinc-100 bg-zinc-50 text-xs text-zinc-500 flex items-center justify-between">
         <span>Klik untuk menyisipkan ke pesan</span>
         <span className="font-semibold text-zinc-500">WhatsApp Web Style</span>
       </div>

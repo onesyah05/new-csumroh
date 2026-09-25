@@ -3,9 +3,9 @@ import { interpolateScript, transformScriptTree } from './interpolate.js';
 
 describe('script interpolation', () => {
   it('normalizes the agent point of view and interpolates known variables', () => {
-    expect(interpolateScript('Saya {{agent_name}}, agen resmi {{travel}}. Halo {{nama}}.', {
-      cs_name: 'Fitri', travel: 'Hana Tours', nama: 'Aisyah',
-    })).toBe('Saya Fitri, tim layanan jamaah Hana Tours. Halo Aisyah.');
+    expect(interpolateScript('Saya {{agent_name}}, agen resmi {{travel}}. Paket {{paket}}.', {
+      cs_name: 'Fitri', travel: 'Hana Tours', paket: 'Ramadan',
+    })).toBe('Saya Fitri, tim layanan jamaah Hana Tours. Paket Ramadan.');
   });
 
   it('keeps missing tokens visible and transforms nested JSON safely', () => {

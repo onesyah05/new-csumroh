@@ -22,7 +22,11 @@ export function clearProfileDrafts() {
 export function useProfileDraft(identity: string, source: any) {
   const key = prefix + identity;
   const [draft, setDraft] = useState<Draft | null>(() => read(key));
-  const form = draft?.form ?? profileForm(source);
+  const serverForm = profileForm(source);
+  // Paket dipilih langsung tersimpan (bukan bagian draft); draft lama yang membawa paket tidak boleh menimpanya.
+  const form = draft ? { ...draft.form, packageId: serverForm.packageId } : serverForm;
+  // Draft yang isinya sama dengan data server bukan perubahan: jangan tampilkan "Belum disimpan".
+  const dirty = Boolean(draft) && JSON.stringify(form) !== JSON.stringify(serverForm);
   function update(patch: Partial<ProfileForm>) {
     setDraft(previous => {
       const next = { form: { ...(previous?.form ?? profileForm(source)), ...patch }, baseUpdatedAt: previous?.baseUpdatedAt ?? source?.updatedAt };
@@ -31,7 +35,7 @@ export function useProfileDraft(identity: string, source: any) {
     });
   }
   function clear() { try { sessionStorage.removeItem(key); } catch { /* Optional persistence. */ } setDraft(null); }
-  return { form, update, clear, dirty: Boolean(draft), changedOnServer: Boolean(draft?.baseUpdatedAt && source?.updatedAt !== draft.baseUpdatedAt) };
+  return { form, update, clear, dirty, changedOnServer: dirty && Boolean(draft?.baseUpdatedAt && source?.updatedAt !== draft!.baseUpdatedAt) };
 }
 
 export function appendDraft(previous: string, inserted: string) {

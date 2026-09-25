@@ -1,8 +1,17 @@
+/**
+ * Kontrak token script (audit S03). Token berasal dari data server (brand, CS, paket aktif, invoice, profil prospek);
+ * token yang datanya belum ada dibiarkan tampil apa adanya sehingga script ditandai belum siap kirim.
+ */
 export const SCRIPT_VARIABLES = [
-  'nama', 'cs_name', 'agent_name', 'travel', 'ppiu', 'bank', 'rekening', 'nama_rekening', 'alamat', 'telepon',
-  'paket', 'harga', 'dp', 'airline', 'maskapai', 'hotel', 'jarak_hotel', 'hotel_makkah', 'hotel_madinah',
-  'duration', 'durasi', 'keberangkatan', 'tanggal', 'highlights', 'fasilitas_utama',
-  'bulan', 'deadline', 'seat', 'promo', 'jumlah_jamaah', 'budget', 'nama_pendamping', 'followup_date', 'kota', 'sumber',
+  // Brand & CS
+  'travel', 'cs_name', 'ppiu', 'bank', 'rekening', 'nama_rekening',
+  // Paket aktif prospek
+  'paket', 'tanggal_keberangkatan', 'durasi', 'maskapai', 'hotel', 'harga_mulai', 'harga_kamar', 'dp_per_orang',
+  'fasilitas_termasuk', 'fasilitas_tidak_termasuk', 'kuota_paket', 'promo', 'batas_promo',
+  // Penawaran & invoice pembayaran awal
+  'nilai_penawaran', 'nominal_pembayaran_awal', 'nomor_invoice', 'batas_pembayaran',
+  // Profil prospek
+  'jumlah_jamaah', 'bulan_target', 'budget', 'tanggal_followup', 'kota',
 ] as const;
 
 export type ScriptVariables = Partial<Record<(typeof SCRIPT_VARIABLES)[number], string | number>>;

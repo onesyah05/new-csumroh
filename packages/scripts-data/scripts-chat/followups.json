@@ -2,12 +2,12 @@
     "id": "followup_script_bank",
     "nama": "Bank Script Follow-up",
     "deskripsi": "Kumpulan script chat untuk menindaklanjuti prospek berdasarkan posisi terakhir percakapan.",
-    "tujuan": "Membantu Agen melanjutkan silaturahmi dan komunikasi yang terhenti sampai calon jamaah memiliki kejelasan rencana: lanjut, closing, persiapan (nurture), atau belum berjodoh/batal.",
+    "tujuan": "Membantu CS melanjutkan silaturahmi dan komunikasi yang terhenti sampai calon jamaah memiliki kejelasan rencana: lanjut, closing, persiapan (nurture), atau belum berjodoh/batal.",
     "guidelines": [
         "Follow-up harus sesuai konteks terakhir prospek.",
         "Jangan mengirim follow-up generik jika sudah tahu apa yang sedang dipertimbangkan prospek.",
         "Jangan mengulang pertanyaan yang sudah dijawab.",
-        "Gunakan nama prospek jika diketahui.",
+        "Gunakan sapaan netral Bapak/Ibu seperlunya.",
         "Gunakan satu tujuan utama dalam satu pesan.",
         "Jika prospek sudah menjanjikan waktu tertentu, hormati waktu tersebut.",
         "Jika muncul keberatan, arahkan ke Handling Objection.",
@@ -17,16 +17,14 @@
         "Jangan mengejar prospek secara berlebihan."
     ],
     "placeholders": [
-        "{{nama}}",
+        "{{batas_promo}}",
+        "{{bulan_target}}",
+        "{{kuota_paket}}",
+        "{{nomor_invoice}}",
         "{{paket}}",
-        "{{tanggal}}",
-        "{{bulan}}",
-        "{{harga}}",
-        "{{dp}}",
-        "{{seat}}",
-        "{{deadline}}",
         "{{promo}}",
-        "{{followup_date}}"
+        "{{tanggal_followup}}",
+        "{{tanggal_keberangkatan}}"
     ],
     "scripts": [
         {
@@ -34,7 +32,7 @@
             "category": "after_greeting",
             "title": "Tidak Membalas Setelah Greeting",
             "use_when": "Prospek sempat chat atau terdaftar tetapi belum merespons kembali sapaan CS.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Semoga aktivitas hari ini lancar.\n\nMelanjutkan obrolan kita kemarin di layanan resmi {{travel}}, apakah Kakak masih ingin melihat jadwal keberangkatan bulan {{bulan}}, atau ada bulan lain yang ingin dicek?",
+            "script": "Assalamu'alaikum, melanjutkan pembicaraan sebelumnya.\n\nApakah masih ingin melihat jadwal di {{bulan_target}}, atau ada bulan lain?",
             "next_stage_if_reply": "identification",
             "tags": [
                 "greeting",
@@ -46,7 +44,7 @@
             "category": "after_greeting",
             "title": "Follow-up dengan Pertanyaan Ringan",
             "use_when": "CS ingin mempermudah prospek membuka percakapan kembali.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊\n\nUntuk rencana ibadah umrohnya, apakah saat ini masih dalam tahap mencari informasi atau sudah ada target bulan keberangkatan yang pasti, Kak?",
+            "script": "Assalamu'alaikum.\n\nUntuk rencana umrohnya, masih mencari informasi atau sudah ada target bulan berangkat?",
             "next_stage_if_reply": "identification",
             "tags": [
                 "greeting",
@@ -58,7 +56,7 @@
             "category": "after_initial_question",
             "title": "Belum Menjawab Pertanyaan Awal",
             "use_when": "CS sudah bertanya kebutuhan dasar tetapi belum dijawab.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Izin melanjutkan silaturahmi kita kemarin ya Kak.\n\nSupaya saya bisa memberikan pilihan paket yang paling pas, kira-kira target berangkat Kakak sekeluarga di kisaran bulan apa?",
+            "script": "Assalamu'alaikum, melanjutkan pembicaraan sebelumnya.\n\nAgar saya bisa kirimkan paket yang sesuai, rencananya ingin berangkat bulan apa?",
             "next_stage_if_reply": "identification",
             "tags": [
                 "identification",
@@ -70,7 +68,7 @@
             "category": "after_initial_question",
             "title": "Permudah Prospek Menjawab",
             "use_when": "Prospek mungkin belum punya rencana yang terlalu jelas.",
-            "script": "Tidak apa-apa Kak semisal tanggal pastinya belum fix saat ini 😊\n\nUntuk rencana awal, Kakak lebih condong berangkat sebelum bulan Ramadan atau setelah Idul Fitri nanti, Kak?",
+            "script": "Tidak apa-apa kalau tanggalnya belum pasti.\n\nLebih condong berangkat sebelum Ramadan atau setelah Idul Fitri?",
             "next_stage_if_reply": "identification",
             "tags": [
                 "identification",
@@ -82,7 +80,7 @@
             "category": "after_ask_price",
             "title": "Setelah Tanya Harga",
             "use_when": "Prospek sempat menanyakan harga lalu berhenti membalas.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Kemarin sempat menanyakan estimasi harga umroh bersama kami ya.\n\nApakah saat ini masih mencari paket yang sesuai dengan rencana, atau rencananya ingin dijadwalkan ulang di bulan lain, Kak?",
+            "script": "Assalamu'alaikum. Sebelumnya sempat menanyakan harga umroh.\n\nApakah masih mencari paket, atau rencananya bergeser ke bulan lain?",
             "next_stage_if_reply": "identification",
             "tags": [
                 "price",
@@ -94,7 +92,7 @@
             "category": "after_ask_price",
             "title": "Cari Kisaran Budget",
             "use_when": "Harga kemungkinan menjadi pertimbangan.",
-            "script": "Semisal paket kemarin belum sesuai dengan budget yang Kakak anggarkan, kami memiliki beberapa alternatif paket promo hemat 😊\n\nApakah kisaran budget di bawah Rp 30 juta per orang yang saat ini Kakak cari?",
+            "script": "Kalau paket sebelumnya belum sesuai anggaran, ada pilihan yang lebih hemat.\n\nKisaran anggaran per orang yang nyaman berapa?",
             "next_stage_if_reply": "identification",
             "tags": [
                 "price",
@@ -106,7 +104,7 @@
             "category": "after_identification",
             "title": "Lanjut dari Hasil Identifikasi",
             "use_when": "Kebutuhan prospek sudah cukup diketahui tetapi offer belum sempat diberikan.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Dari kebutuhan yang kemarin Kakak ceritakan, saya sudah memiliki gambaran paket yang sangat cocok untuk keluarga.\n\nMasih berkenan saya kirimkan pilihan detailnya hari ini, Kak?",
+            "script": "Assalamu'alaikum. Dari kebutuhan yang disampaikan sebelumnya, saya sudah menyiapkan pilihan paket.\n\nBoleh saya kirimkan hari ini?",
             "next_stage_if_reply": "offer",
             "tags": [
                 "identification",
@@ -118,7 +116,7 @@
             "category": "after_identification",
             "title": "Gunakan Konteks Terakhir",
             "use_when": "Ada kebutuhan spesifik yang sudah diketahui.",
-            "script": "Kemarin Kakak mencari paket yang mengutamakan kenyamanan untuk {{paket}} ya 😊\n\nKebetulan ketersediaan seat dan alokasi kamar untuk jadwal tersebut baru saja diperbarui oleh tim operasional kami.\n\nBoleh saya kirimkan foto fasilitas kamar dan rincian lengkapnya sekarang, Kak?",
+            "script": "Melanjutkan pembahasan *{{paket}}*, sisa kuota paketnya saat ini {{kuota_paket}}.\n\nBoleh saya kirimkan foto kamar dan rinciannya?",
             "next_stage_if_reply": "offer",
             "tags": [
                 "context",
@@ -130,7 +128,7 @@
             "category": "after_offer",
             "title": "Diam Setelah Dikirim Penawaran",
             "use_when": "Prospek sudah menerima rekomendasi paket tetapi belum merespons.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Dari rincian hotel dan jadwal keberangkatan {{tanggal}} yang kemarin saya kirimkan,\n\napakah tanggal tersebut sudah cocok dengan jadwal luang Kakak sekeluarga?",
+            "script": "Assalamu'alaikum. Dari rincian paket yang sebelumnya saya kirim, apakah keberangkatan *{{tanggal_keberangkatan}}* sudah cocok?",
             "next_stage_if_reply": "closing",
             "alternative_stage": "objection",
             "tags": [
@@ -142,8 +140,8 @@
             "id": "fu_after_offer_02",
             "category": "after_offer",
             "title": "Cari Bagian yang Belum Cocok",
-            "use_when": "Agen ingin mengetahui apa yang menghambat pertimbangan prospek.",
-            "script": "Jika paket yang kemarin saya tawarkan dirasa belum sepenuhnya pas di hati Kakak 😊\n\nBagian mana yang sekiranya masih kurang cocok: harga, jadwal, hotel, atau fasilitasnya, Kak?",
+            "use_when": "CS ingin mengetahui apa yang menghambat pertimbangan prospek.",
+            "script": "Kalau paket sebelumnya belum pas, bagian mana yang kurang cocok: harga, jadwal, atau hotel?",
             "next_stage_if_reply": "objection",
             "alternative_stage": "offer",
             "tags": [
@@ -155,8 +153,8 @@
             "id": "fu_after_offer_03",
             "category": "after_offer",
             "title": "Cek Minat",
-            "use_when": "Agen ingin mengetahui apakah paket masih dipertimbangkan.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊\n\nUntuk paket **{{paket}}** yang kemarin kita bahas, apakah masih masuk dalam pertimbangan Kakak atau sudah ada pilihan alternatif lain?",
+            "use_when": "CS ingin mengetahui apakah paket masih dipertimbangkan.",
+            "script": "Assalamu'alaikum. Untuk *{{paket}}* yang sebelumnya dibahas, apakah masih dipertimbangkan?",
             "next_stage_if_reply": "closing",
             "alternative_stage": "closed_lost",
             "tags": [
@@ -169,7 +167,7 @@
             "category": "after_brochure",
             "title": "Setelah Kirim Brosur",
             "use_when": "Prospek hanya menerima brosur lalu diam.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Brosur resmi yang kemarin saya kirimkan apakah sudah sempat dibaca?\n\nDari pilihan paket di sana, ada yang menarik perhatian Kakak sekeluarga?",
+            "script": "Assalamu'alaikum. Dari brosur yang saya kirim, ada paket yang menarik?",
             "next_stage_if_reply": "offer",
             "tags": [
                 "brochure",
@@ -181,7 +179,7 @@
             "category": "after_brochure",
             "title": "Jangan Biarkan Prospek Bingung",
             "use_when": "Brosur berisi beberapa pilihan.",
-            "script": "Jika pilihan di brosur terlalu banyak dan membingungkan, saya bantu sederhanakan ya Kak 😊\n\nKakak lebih memprioritaskan paket promo harga hemat atau paket yang fasilitasnya lebih nyaman/premium?",
+            "script": "Kalau pilihan di brosur terlalu banyak, saya bantu sederhanakan.\n\nLebih mengutamakan harga hemat atau fasilitas yang lebih nyaman?",
             "next_stage_if_reply": "identification",
             "tags": [
                 "brochure",
@@ -193,7 +191,7 @@
             "category": "after_comparison",
             "title": "Setelah Bandingkan Paket",
             "use_when": "Prospek sudah melihat dua atau lebih pilihan.",
-            "script": "Dari dua pilihan paket yang kemarin kita diskusikan bersama 😊\n\nKira-kira Kakak dan keluarga lebih condong ke paket yang mana?",
+            "script": "Dari dua pilihan paket yang sebelumnya dibahas, mana yang lebih sesuai?",
             "next_stage_if_reply": "closing",
             "tags": [
                 "comparison",
@@ -205,7 +203,7 @@
             "category": "after_comparison",
             "title": "Bantu Pilih",
             "use_when": "Prospek masih bingung menentukan pilihan.",
-            "script": "Memilih paket terbaik memang membutuhkan ketelitian Kak 😊\n\nDari dua pilihan kemarin, mana yang lebih membuat Kakak tenang: efisiensi biayanya atau kenyamanan fasilitas hotel & maskapainya, Kak?",
+            "script": "Dari dua pilihan itu, mana yang lebih membuat tenang: biaya yang lebih hemat atau fasilitas yang lebih nyaman?",
             "next_stage_if_reply": "offer",
             "tags": [
                 "comparison",
@@ -217,7 +215,7 @@
             "category": "after_closing",
             "title": "Diam Setelah Closing",
             "use_when": "CS sudah mengajak prospek mengambil keputusan booking tetapi belum mendapat respons.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Izin follow-up silaturahmi kita kemarin ya Kak.\n\nUntuk paket **{{paket}}** yang kemarin kita bahas, apakah masih ingin dilanjutkan atau ada bagian yang masih menjadi pertimbangan keluarga, Kak?",
+            "script": "Assalamu'alaikum. Untuk *{{paket}}* yang sebelumnya dibahas, apakah ingin dilanjutkan, atau masih ada yang dipertimbangkan?",
             "next_stage_if_reply": "closing",
             "alternative_stage": "objection",
             "tags": [
@@ -230,7 +228,7 @@
             "category": "after_closing",
             "title": "Cari Hambatan Closing",
             "use_when": "Prospek terlihat tertarik tetapi tidak melanjutkan.",
-            "script": "Jika pilihan paketnya sebenarnya sudah cocok di hati Kakak 😊\n\nBolehkah kami tahu hal apa yang saat ini masih menahan Kakak untuk melanjutkan pendaftaran?",
+            "script": "Kalau paketnya sudah cocok, apa yang masih membuat ragu untuk mendaftar?",
             "next_stage_if_reply": "objection",
             "tags": [
                 "closing",
@@ -242,7 +240,7 @@
             "category": "promised_dp",
             "title": "Sudah Janji DP",
             "use_when": "Prospek mengatakan akan melakukan DP pada waktu tertentu tetapi belum masuk.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Izin konfirmasi perihal pengamanan seat paket **{{paket}}** yang kemarin kita sepakati.\n\nApakah proses reservasinya masih jadi dilanjutkan hari ini, Kak?",
+            "script": "Assalamu'alaikum. Mengonfirmasi pembayaran awal untuk *{{paket}}* sesuai invoice *{{nomor_invoice}}*.\n\nApakah jadi dilanjutkan hari ini?",
             "next_stage_if_yes": "closing",
             "alternative_stage": "objection",
             "tags": [
@@ -255,7 +253,7 @@
             "category": "promised_dp",
             "title": "Ada Kendala Transfer",
             "use_when": "Prospek sudah berniat bayar tetapi mungkin ada kendala.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Izin konfirmasi apakah ada kendala di nomor rekening atau limit transfer bank hari ini?\n\nJika butuh dibantu split pembayaran atau invoice resmi perusahaan, saya siap bantu siapkan sekarang ya Kak.",
+            "script": "Assalamu'alaikum. Apakah ada kendala saat transfer?\n\nKalau perlu, saya kirimkan ulang rincian invoice dan rekening resminya.",
             "next_stage_if_reply": "closing",
             "alternative_stage": "objection",
             "tags": [
@@ -268,7 +266,7 @@
             "category": "waiting_funds",
             "title": "Menunggu Gajian",
             "use_when": "Prospek sebelumnya mengatakan akan lanjut setelah gajian atau dana tersedia.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Izin menyapa kembali, semoga dilancarkan rezekinya sekeluarga.\n\nMenyambung obrolan kita kemarin perihal kesiapan dana, apakah rencana ibadah umrohnya masih tetap ingin dilanjutkan di musim ini, Kak?",
+            "script": "Assalamu'alaikum, semoga sehat selalu.\n\nMelanjutkan pembicaraan sebelumnya, apakah rencana umrohnya masih untuk musim ini?",
             "next_stage_if_yes": "closing",
             "alternative_stage": "nurture",
             "tags": [
@@ -281,7 +279,7 @@
             "category": "waiting_funds",
             "title": "Dana Belum Siap",
             "use_when": "Saat follow-up prospek ternyata masih belum siap.",
-            "script": "Tidak apa-apa Kak, kami sangat memahami kondisi kesiapan dana masing-masing keluarga 😊\n\nKira-kira di tanggal berapa waktu yang paling nyaman bagi saya untuk menyapa kembali, Kak?",
+            "script": "Tidak apa-apa, kesiapan dana memang berbeda-beda.\n\nKapan waktu yang nyaman untuk saya hubungi kembali?",
             "next_stage": "nurture",
             "tags": [
                 "funds",
@@ -293,45 +291,48 @@
             "category": "discussion_spouse",
             "title": "Hasil Diskusi Pasangan",
             "use_when": "Prospek sebelumnya mengatakan akan berdiskusi dengan pasangan.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Semoga silaturahmi dengan pasangan kemarin berjalan lancar dan penuh berkah.\n\nApakah rincian paket umrohnya sudah sempat dibicarakan berdua, Kak?",
+            "script": "Assalamu'alaikum. Apakah rincian paketnya sudah sempat dibicarakan dengan pasangan?",
             "next_stage_if_reply": "closing",
             "alternative_stage": "objection",
             "tags": [
                 "spouse",
                 "decision_maker"
-            ]
+            ],
+            "audience": "pasangan"
         },
         {
             "id": "fu_discussion_spouse_02",
             "category": "discussion_spouse",
             "title": "Cari Keberatan Pasangan",
             "use_when": "Pasangan belum setuju atau masih ragu.",
-            "script": "Bagaimana respons pasangan Kakak setelah melihat rincian paketnya kemarin? 😊\n\nApakah beliau lebih menyoroti perihal tanggal keberangkatannya atau rincian biayanya, Kak?",
+            "script": "Bagaimana tanggapan pasangan setelah melihat rincian paketnya: lebih banyak soal tanggal atau biaya?",
             "next_stage_if_reply": "objection",
             "tags": [
                 "spouse",
                 "objection"
-            ]
+            ],
+            "audience": "pasangan"
         },
         {
             "id": "fu_discussion_family_01",
             "category": "discussion_family",
             "title": "Hasil Diskusi Keluarga",
             "use_when": "Prospek sebelumnya menunggu keputusan keluarga.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊\n\nBagaimana hasil diskusi bersama keluarga besar mengenai rencana ibadah umroh kemarin, Kak?",
+            "script": "Assalamu'alaikum. Bagaimana hasil diskusi dengan keluarga mengenai rencana umrohnya?",
             "next_stage_if_reply": "closing",
             "alternative_stage": "objection",
             "tags": [
                 "family",
                 "decision_maker"
-            ]
+            ],
+            "audience": "keluarga"
         },
         {
             "id": "fu_after_objection_01",
             "category": "after_objection",
             "title": "Setelah Keberatan Dijawab",
-            "use_when": "Agen sudah memberikan penjelasan atas objection tetapi prospek belum mengambil keputusan.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Mengenai pertimbangan yang kemarin sempat kita bicarakan,\n\napakah saat ini sudah ada gambaran yang lebih nyaman bagi Kakak dan keluarga?",
+            "use_when": "CS sudah memberikan penjelasan atas objection tetapi prospek belum mengambil keputusan.",
+            "script": "Assalamu'alaikum. Mengenai pertimbangan yang sebelumnya dibahas, apakah sekarang sudah lebih jelas?",
             "next_stage_if_clear": "closing",
             "next_stage_if_objection": "objection",
             "tags": [
@@ -343,8 +344,8 @@
             "id": "fu_after_objection_02",
             "category": "after_objection",
             "title": "Pastikan Hambatan Selesai",
-            "use_when": "Agen ingin mengecek apakah keraguan prospek sudah terjawab.",
-            "script": "Jika bagian yang kemarin masih menjadi ganjalan di hati Kakak 😊\n\nApakah masih ada hal lain yang ingin kita diskusikan bersama solusinya?",
+            "use_when": "CS ingin mengecek apakah keraguan prospek sudah terjawab.",
+            "script": "Masih ada hal lain yang ingin dibahas?",
             "next_stage_if_clear": "closing",
             "next_stage_if_objection": "objection",
             "tags": [
@@ -357,7 +358,7 @@
             "category": "thinking",
             "title": "Setelah Pikir-Pikir",
             "use_when": "Prospek meminta waktu untuk mempertimbangkan.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Semoga hari ini menyenangkan dan penuh berkah.\n\nSekadar memastikan agar rencana ibadah Kakak tidak menggantung, setelah dipertimbangkan kemarin, apakah paket ini sudah terasa pas di hati atau ingin dicarikan alternatif tanggal lain, Kak?",
+            "script": "Assalamu'alaikum. Setelah dipertimbangkan, apakah paket ini sudah pas, atau perlu saya carikan tanggal lain?",
             "next_stage_if_yes": "closing",
             "alternative_stage": "objection",
             "tags": [
@@ -370,7 +371,7 @@
             "category": "thinking",
             "title": "Cari Kepastian",
             "use_when": "Prospek masih belum memberi arah yang jelas.",
-            "script": "Agar kami tidak mengganggu waktu istirahat Kakak 😊\n\nBoleh kami dibantu kepastian statusnya saat ini: masih ingin lanjut, ditunda sementara, atau dibatalkan dulu Kak?",
+            "script": "Agar saya tidak mengganggu, boleh tahu status rencananya: lanjut, ditunda, atau belum jadi dulu?",
             "next_stage_if_reply": "status_resolution",
             "tags": [
                 "thinking",
@@ -382,7 +383,7 @@
             "category": "waiting_leave",
             "title": "Menunggu Cuti",
             "use_when": "Prospek sebelumnya menunggu kepastian cuti.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Bagaimana kabar pengajuan cuti kerjanya, Kak?\n\nApakah sudah ada kepastian tanggal untuk periode bulan **{{bulan}}**?",
+            "script": "Assalamu'alaikum. Apakah pengajuan cuti untuk {{bulan_target}} sudah ada kepastian?",
             "next_stage_if_yes": "offer",
             "alternative_stage": "nurture",
             "tags": [
@@ -395,7 +396,7 @@
             "category": "waiting_document",
             "title": "Menunggu Paspor",
             "use_when": "Prospek menunggu pembuatan atau pembaruan paspor.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Bagaimana kabar pengurusan paspornya di kantor imigrasi?\n\nApakah sudah selesai foto biometrik atau masih menunggu jadwal antrean M-Paspor, Kak?",
+            "script": "Assalamu'alaikum. Bagaimana perkembangan pengurusan paspornya?",
             "next_stage_if_ready": "closing",
             "alternative_stage": "nurture",
             "tags": [
@@ -408,7 +409,7 @@
             "category": "waiting_promo",
             "title": "Prospek Menunggu Promo",
             "use_when": "Prospek memilih menunggu penawaran yang lebih sesuai.",
-            "script": "Kabar gembira Kak {{nama}}! Travel kami baru saja merilis program promo potongan DP khusus pendaftaran minggu ini 😊\n\nApakah Kakak masih memprioritaskan keberangkatan di bulan **{{bulan}}**?",
+            "script": "Assalamu'alaikum. Ada promo *{{promo}}* untuk *{{paket}}*, berlaku sampai *{{batas_promo}}*.\n\nApakah masih merencanakan berangkat di {{bulan_target}}?",
             "next_stage_if_reply": "nurture",
             "tags": [
                 "promo",
@@ -420,7 +421,7 @@
             "category": "nurture_short",
             "title": "Nurture Jangka Pendek",
             "use_when": "Prospek belum siap beberapa minggu atau bulan tetapi minatnya masih ada.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Semoga selalu dilimpahkan kelapangan rezeki dan kesehatan.\n\nMenyambung rencana ibadah Kakak tempo hari, apakah di bulan ini kondisinya sudah lebih memungkinkan untuk kita pilihkan jadwal keberangkatan?",
+            "script": "Assalamu'alaikum, semoga sehat selalu.\n\nMelanjutkan rencana umroh sebelumnya, apakah sekarang sudah memungkinkan untuk memilih jadwal?",
             "next_stage_if_yes": "identification",
             "alternative_stage": "nurture",
             "tags": [
@@ -432,8 +433,8 @@
             "id": "fu_nurture_short_02",
             "category": "nurture_short",
             "title": "Cek Apakah Kondisi Berubah",
-            "use_when": "Agen ingin mengetahui apakah kendala sebelumnya masih sama.",
-            "script": "Kemarin pertimbangan Kakak masih di penyesuaian paket **{{paket}}** 😊\n\nUntuk saat ini apakah kondisinya masih sama atau sudah ada perkembangan baru, Kak?",
+            "use_when": "CS ingin mengetahui apakah kendala sebelumnya masih sama.",
+            "script": "Sebelumnya masih ada pertimbangan soal *{{paket}}*.\n\nApakah kondisinya masih sama, atau sudah ada perkembangan?",
             "next_stage_if_reply": "identification",
             "tags": [
                 "nurture",
@@ -445,7 +446,7 @@
             "category": "nurture_long",
             "title": "Nurture Jangka Panjang",
             "use_when": "Target keberangkatan prospek masih cukup jauh.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Semoga sehat dan berkah selalu sekeluarga.\n\nDulu Kakak sempat merencanakan umroh untuk periode bulan {{bulan}}. Mengingat pendaftaran musim tersebut sudah mulai dibuka di kantor kami, apakah rencana Kakak masih tetap di periode tersebut?",
+            "script": "Assalamu'alaikum, semoga sehat selalu.\n\nSebelumnya ada rencana umroh di {{bulan_target}}. Apakah rencananya masih di waktu tersebut?",
             "next_stage_if_yes": "identification",
             "alternative_stage": "nurture",
             "tags": [
@@ -458,7 +459,7 @@
             "category": "reactivation",
             "title": "Aktifkan Prospek Lama",
             "use_when": "Prospek sudah lama tidak dihubungi.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Semoga kabar baik dan sehat selalu sekeluarga.\n\nSekadar menyambung silaturahmi, kami ingin memastikan apakah rencana ibadah umroh Kakak masih ada atau sudah beralih ke jadwal lain?",
+            "script": "Assalamu'alaikum, semoga sehat selalu.\n\nApakah rencana umrohnya masih ada, atau sudah berubah?",
             "next_stage_if_yes": "identification",
             "alternative_stage": "closed_lost",
             "tags": [
@@ -470,8 +471,8 @@
             "id": "fu_reactivation_02",
             "category": "reactivation",
             "title": "Reaktivasi Ringan",
-            "use_when": "Agen ingin menyapa santai tanpa langsung menawarkan paket.",
-            "script": "Assalamu'alaikum Kak {{nama}}, senang bisa menyapa kembali 😊\n\nSemoga Kakak sekeluarga senantiasa sehat. Saya teringat niat suci Kakak beribadah umroh tempo hari, apakah kerinduan ke Baitullah masih ingin diwujudkan di tahun ini?",
+            "use_when": "CS ingin menyapa santai tanpa langsung menawarkan paket.",
+            "script": "Assalamu'alaikum, senang bisa menyapa kembali.\n\nKalau ada rencana umroh tahun ini, saya siap membantu mencarikan jadwalnya.",
             "next_stage_if_yes": "identification",
             "tags": [
                 "reactivation",
@@ -483,7 +484,7 @@
             "category": "new_departure",
             "title": "Ada Jadwal Baru yang Cocok",
             "use_when": "Ada keberangkatan baru yang sesuai kebutuhan lama prospek.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Mengingat dulu Kakak mencari keberangkatan sekitar bulan {{bulan}},\n\nkebetulan saat ini ada jadwal baru di tanggal **{{tanggal}}** yang sangat pas dengan preferensi Kakak. Boleh saya kirimkan detailnya sekarang?",
+            "script": "Assalamu'alaikum. Sebelumnya mencari keberangkatan sekitar {{bulan_target}}.\n\nAda jadwal *{{tanggal_keberangkatan}}* di *{{paket}}*. Boleh saya kirimkan rinciannya?",
             "next_stage_if_yes": "offer",
             "tags": [
                 "new_departure",
@@ -495,7 +496,7 @@
             "category": "relevant_promo",
             "title": "Ada Promo Sesuai Kebutuhan",
             "use_when": "Prospek lama terkendala harga dan sekarang benar-benar ada promo yang relevan.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Mengingat kebutuhan budget Kakak kemarin,\n\nhari ini baru saja dibuka alokasi paket promo **{{promo}}** yang selisih harganya sangat pas dengan budget Kakak. Mau saya kirimkan brosur resminya sebelum kuotanya penuh?",
+            "script": "Assalamu'alaikum. Ada promo *{{promo}}* untuk *{{paket}}*, berlaku sampai *{{batas_promo}}*.\n\nBoleh saya kirimkan brosurnya?",
             "next_stage_if_yes": "offer",
             "requires_verified_data": true,
             "tags": [
@@ -506,9 +507,9 @@
         {
             "id": "fu_seat_update_01",
             "category": "availability_update",
-            "title": "Update Seat",
+            "title": "Update Sisa Kuota",
             "use_when": "Prospek sebelumnya tertarik pada jadwal tertentu dan perubahan seat memang relevan.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Sekadar mengabarkan amanah kuota seat:\n\nJadwal keberangkatan **{{tanggal}}** saat ini tersisa **{{seat}}** saja karena baru ada rombongan yang booking. Agar alokasi seat Kakak tidak tergeser, apakah nama Kakak mau saya kunci sementara dalam antrean hari ini?",
+            "script": "Assalamu'alaikum. Untuk keberangkatan *{{tanggal_keberangkatan}}*, sisa kuota paket saat ini {{kuota_paket}}.\n\nKalau masih berminat, saya siapkan invoice pembayaran awalnya?",
             "next_stage_if_yes": "closing",
             "requires_verified_data": true,
             "tags": [
@@ -521,7 +522,7 @@
             "category": "final_status",
             "title": "Minta Kepastian Status",
             "use_when": "Prospek sudah beberapa kali ditindaklanjuti tetapi belum memberi arah yang jelas.",
-            "script": "Assalamu'alaikum Kak {{nama}} 😊 Izin konfirmasi terakhir agar rencana Kakak tidak menggantung dan tidak mengganggu waktu Kakak.\n\nUntuk rencana umrohnya saat ini apakah masih lanjut, ditunda dulu, atau dibatalkan sementara Kak?",
+            "script": "Assalamu'alaikum. Agar tidak mengganggu, boleh tahu status rencana umrohnya: lanjut, ditunda, atau belum jadi dulu?",
             "next_stage_if_reply": "status_resolution",
             "tags": [
                 "final_status",
@@ -533,7 +534,7 @@
             "category": "final_status",
             "title": "Berikan Ruang untuk Batal",
             "use_when": "CS ingin membuat prospek nyaman memberikan jawaban yang sebenarnya.",
-            "script": "Tidak apa-apa Kak semisal saat ini belum memungkinkan untuk berangkat 😊\n\nSaya hanya ingin memastikan agar tidak terus mengirim pesan. Untuk saat ini boleh saya catat lanjut, ditunda, atau batal dulu Kak?",
+            "script": "Tidak apa-apa kalau saat ini belum memungkinkan.\n\nBoleh saya catat: lanjut, ditunda, atau belum jadi dulu?",
             "next_stage_if_reply": "status_resolution",
             "tags": [
                 "final_status",
@@ -545,7 +546,7 @@
             "category": "final_status",
             "title": "Tidak Ada Respons Setelah Beberapa Follow-up",
             "use_when": "Prospek tidak pernah merespons beberapa follow-up yang wajar.",
-            "script": "Assalamu'alaikum Kak {{nama}} 🙏 Khawatir Kakak sedang ada agenda keluarga yang padat sehingga belum sempat merespons, saya izin jeda follow-up agar tidak mengganggu waktu Kakak ya.\n\nNanti jika kerinduan ke Tanah Suci sudah siap diwujudkan, pintu layanan {{travel}} selalu terbuka untuk Kakak sekeluarga. Semoga sehat dan berkah selalu sekeluarga 😊",
+            "script": "Saya jeda dulu pesannya agar tidak mengganggu.\n\nJika nanti ingin melanjutkan rencana umroh, silakan balas chat ini. Kami siap membantu.",
             "next_stage": "closed_lost",
             "lost_reason": "unreachable",
             "tags": [
@@ -558,7 +559,7 @@
             "category": "closed_lost",
             "title": "Prospek Memilih Travel Lain",
             "use_when": "Prospek menyatakan sudah mendaftar di travel lain.",
-            "script": "Alhamdulillah, terima kasih banyak sudah memberikan kabar Kak 😊\n\nSemoga perjalanan ibadah umroh Kakak sekeluarga lancar, mabrur, dan senantiasa dalam lindungan Allah SWT ya Kak 🙏",
+            "script": "Terima kasih sudah memberi kabar.\n\nSemoga perjalanan umrohnya lancar dan mabrur.",
             "next_stage": "closed_lost",
             "lost_reason": "choose_competitor",
             "tags": [
@@ -571,7 +572,7 @@
             "category": "closed_lost",
             "title": "Rencana Umroh Batal",
             "use_when": "Prospek menyatakan rencana keberangkatan memang batal.",
-            "script": "Baik Kak, saya catat terlebih dahulu ya. Terima kasih banyak atas kabarnya 😊\n\nInsyaAllah jika kelak ada rencana ibadah umroh kembali, kami siap membantu dengan sepenuh hati 🙏",
+            "script": "Baik, saya catat. Terima kasih atas kabarnya.\n\nKalau nanti ada rencana umroh lagi, silakan hubungi kami di chat ini.",
             "next_stage": "closed_lost",
             "lost_reason": "cancel_plan",
             "tags": [
@@ -584,7 +585,7 @@
             "category": "status_resolution",
             "title": "Konfirmasi Nurture",
             "use_when": "Prospek mengatakan belum sekarang tetapi masih punya rencana.",
-            "script": "Baik Kak, alhamdulillah berarti bukan batal ya, hanya dijadwalkan ulang ke waktu yang lebih tepat 😊\n\nKira-kira di tanggal **{{followup_date}}** apakah saya boleh menyapa kembali untuk silaturahmi?",
+            "script": "Baik, berarti rencananya ditunda, bukan batal.\n\nBoleh saya hubungi lagi pada *{{tanggal_followup}}*?",
             "next_stage": "nurture",
             "tags": [
                 "nurture",
@@ -596,7 +597,7 @@
             "category": "status_resolution",
             "title": "Prospek Siap Lanjut",
             "use_when": "Follow-up berhasil dan prospek menyatakan ingin melanjutkan.",
-            "script": "Siap dengan senang hati Kak 😊\n\nMari kita lanjutkan dari pembicaraan terakhir ya. Saya bantu cek kembali ketersediaan kuota seat dan detail paketnya sekarang.",
+            "script": "Siap, kita lanjutkan dari pembahasan terakhir.\n\nSaya cek lagi sisa kuota dan rincian paketnya sekarang.",
             "next_stage": "closing",
             "tags": [
                 "reactivated",

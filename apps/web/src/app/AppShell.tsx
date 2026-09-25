@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { BarChart3, Bell, BookOpen, Building2, ChevronDown, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, Radio, ShieldCheck, Smartphone, Users2, X } from 'lucide-react';
+import { BarChart3, Bell, BookOpen, Building2, ChevronDown, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, Radio, ShieldCheck, Smartphone, SlidersHorizontal, Users2, X } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -13,12 +13,16 @@ import { AppErrorBoundary } from '../components/ui/AppErrorBoundary';
 import { PageLoading } from '../components/ui/page-feedback';
 import { NotificationBell, useNotificationTitle } from '../features/notifications/NotificationBell';
 
+/** Nama peran untuk pengguna; kode peran (mis. `product` = Tim LA) tidak ditampilkan. */
+const ROLE_LABELS: Record<string, string> = { superadmin: 'Superadmin', admin: 'Admin', cs: 'CS', finance: 'Finance', product: 'Tim LA' };
+
 const mainNav: { to: string; label: string; icon: typeof BarChart3; roles?: string[] }[] = [
-  { to: '/', label: 'Ringkasan', icon: BarChart3 },
-  { to: '/inbox', label: 'Kotak masuk', icon: Inbox },
-  { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
+  { to: '/', label: 'Ringkasan', icon: BarChart3, roles: ['superadmin', 'admin', 'cs', 'finance'] },
+  { to: '/inbox', label: 'Kotak masuk', icon: Inbox, roles: ['superadmin', 'admin', 'cs', 'finance'] },
+  { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare, roles: ['superadmin', 'admin', 'cs', 'finance'] },
+  { to: '/layanan-custom', label: 'Layanan custom', icon: SlidersHorizontal, roles: ['product', 'superadmin', 'admin', 'cs'] },
   { to: '/verifikasi', label: 'Verifikasi', icon: ShieldCheck, roles: ['finance', 'admin', 'superadmin'] },
-  { to: '/packages', label: 'Paket Umroh', icon: PackageOpen },
+  { to: '/packages', label: 'Paket Umroh', icon: PackageOpen, roles: ['superadmin', 'admin', 'cs', 'finance'] },
   // Materi melayani jamaah: tidak relevan untuk Finance.
   { to: '/lms', label: 'Akademi CS', icon: BookOpen, roles: ['cs', 'admin', 'superadmin'] },
 ];
@@ -31,6 +35,7 @@ const titles: Record<string, string> = {
   '/packages': 'Paket Umroh',
   '/packages/new': 'Tambah Paket',
   '/lms': 'Akademi CS',
+  '/layanan-custom': 'Layanan custom',
   '/brands': 'Brand Travel',
   '/devices': 'Perangkat WhatsApp',
   '/staff': 'Staf',
@@ -105,7 +110,8 @@ export function AppShell() {
     const p = location.pathname;
 
     if (p === '/') {
-      return [{ label: 'Ringkasan' }];
+      // Judul besar "Ringkasan" sudah tepat di bawahnya; breadcrumb tidak perlu mengulang.
+      return [];
     }
     if (p === '/inbox') {
       return [{ label: 'Kotak masuk' }];
@@ -152,6 +158,9 @@ export function AppShell() {
     if (p === '/meta-capi') {
       return [{ label: 'Meta Conversions API' }];
     }
+    if (p === '/layanan-custom') {
+      return [{ label: 'Layanan custom' }];
+    }
     if (p === '/lms') {
       return [{ label: 'Akademi CS' }];
     }
@@ -194,6 +203,12 @@ export function AppShell() {
           <button className="text-zinc-400 lg:hidden p-1 hover:text-white" onClick={toggleSidebar} aria-label="Tutup navigasi">
             <X size={20} />
           </button>
+        </div>
+
+        {/* Notifikasi: item pertama di bawah logo — titik pertama yang dilihat mata, sama di semua halaman
+            (termasuk Inbox yang tanpa header). Di layar kecil lonceng ada di header halaman/Inbox. */}
+        <div className="relative hidden shrink-0 px-4 pb-2 lg:block">
+          <NotificationBell placement="sidebar" />
         </div>
 
         {/* Main Navigation Links: Exact 1:1 40x40 centered square items when collapsed */}
@@ -288,9 +303,7 @@ export function AppShell() {
         </nav>
 
         {/* User Account / Profile Footer: 1:1 40x40 avatar square at 16px offset */}
-        <div className="relative space-y-2 border-t border-zinc-800 p-4 shrink-0">
-          {/* Notifikasi di area akun (bukan di daftar menu yang bisa di-scroll); juga tampil di Inbox yang tanpa header. */}
-          <NotificationBell placement="sidebar" />
+        <div className="relative border-t border-zinc-800 p-4 shrink-0">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button
@@ -307,8 +320,8 @@ export function AppShell() {
                 </span>
                 <span className="min-w-0 flex-1 overflow-hidden transition-all duration-300 block lg:hidden lg:group-hover/sidebar:block opacity-100 max-w-[160px] lg:opacity-0 lg:max-w-0 lg:group-hover/sidebar:opacity-100 lg:group-hover/sidebar:max-w-[160px]">
                   <b className="block truncate text-xs text-white">{user?.name}</b>
-                  <span className="block truncate text-xs capitalize text-zinc-400">
-                    {user?.role} · {user?.brand?.name ?? 'Lintas brand'}
+                  <span className="block truncate text-xs text-zinc-400">
+                    {ROLE_LABELS[user?.role ?? ''] ?? user?.role} · {user?.brand?.name ?? 'Lintas brand'}
                   </span>
                 </span>
                 <ChevronDown size={14} className="shrink-0 text-zinc-500 transition-all duration-300 block lg:hidden lg:group-hover/sidebar:block" />
@@ -333,7 +346,7 @@ export function AppShell() {
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   onSelect={() => void logout()}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-rose-600 outline-none hover:bg-rose-50 transition"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-rose-600 outline-none hover:bg-rose-50 transition data-[highlighted]:bg-rose-50"
                 >
                   <LogOut size={15} />Keluar
                 </DropdownMenu.Item>
