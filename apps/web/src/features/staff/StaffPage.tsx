@@ -39,6 +39,7 @@ interface Brand {
   id: number;
   name: string;
   code: string;
+  logoUrl?: string | null;
 }
 
 type StaffRole = 'superadmin' | 'admin' | 'cs' | 'finance' | 'product';

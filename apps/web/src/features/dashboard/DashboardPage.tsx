@@ -13,7 +13,7 @@ import { PageHeader } from '../../components/ui/page-header';
 
 type Trend = { value: number; previous: number };
 type Summary = {
-  scope: { isHoldingView: boolean; currentBrandId: number | null; role: string; brands: { id: number; name: string }[] };
+  scope: { isHoldingView: boolean; currentBrandId: number | null; role: string; brands: { id: number; name: string; logoUrl?: string | null }[] };
   period: { key: string; from: string; to: string; prevFrom: string; prevTo: string; comparison: string };
   kpis: {
     leads: Trend;

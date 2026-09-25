@@ -55,7 +55,7 @@ export type CustomRequest = {
     id: number; name: string; phone: string | null; status: string; userId: number | null; brandId: number; user?: { name: string } | null;
     offerSentAt?: string | null; invoiceSentAt?: string | null; invoiceNumber?: string | null;
   };
-  brand?: { id: number; name: string; code: string };
+  brand?: { id: number; name: string; code: string; logoUrl?: string | null };
   basePackage?: CustomBasePackage | null;
   createdBy?: { name: string } | null;
   quotedBy?: { name: string } | null;
