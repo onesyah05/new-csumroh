@@ -1,98 +1,56 @@
-export function formatWaPackageSummary(pkg: any, brandName?: string): string {
+import { businessDateKey, dateOnlyKey, formatCatalogRupiah, formatRupiah, packageFromPrice } from '@csumroh/shared-types';
+import { waBullets, waDate, waLine, waMessage, waTitle } from '../chat/waFormat';
+
+/**
+ * Ringkasan paket untuk WhatsApp (audit C10, C11). Nominal hanya dari parser rupiah ketat (tidak ada "Rp Rp" atau
+ * tebakan), promo hanya bila masih berlaku, kuota hanya bila masih ada; tanpa janji "penguncian seat".
+ */
+const departure = (pkg: any) => [waDate(pkg.departureDate) ?? (pkg.departureInfo || null), pkg.duration || null].filter(Boolean).join(' · ');
+const activePromo = (pkg: any) => {
+  const deadline = dateOnlyKey(pkg.promoDeadline);
+  return pkg.isPromo && pkg.promoDiscount && deadline && deadline >= businessDateKey() ? { text: pkg.promoDiscount as string, until: waDate(pkg.promoDeadline) } : null;
+};
+
+export function formatWaPackageSummary(pkg: any, _brandName?: string): string {
   if (!pkg) return '';
-  const departureStr = pkg.departureDate
-    ? new Date(pkg.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-    : (pkg.departureInfo || 'Jadwal belum dikonfirmasi');
-  const durationStr = pkg.duration ? `${pkg.duration}` : 'Durasi belum dikonfirmasi';
-  const airlineStr = pkg.airline ? `${pkg.airline}${pkg.flightType === 'direct' ? ' (Direct Flight)' : ''}` : 'Maskapai belum dikonfirmasi';
-  const travelName = brandName || pkg.brand?.name || 'Layanan Resmi Umroh';
-
-  const incItems = (pkg.facilitiesIncluded || '')
-    .split('\n')
-    .map((s: string) => s.trim())
-    .filter(Boolean);
-
-  let text = `*${(pkg.name || 'PAKET UMROH').toUpperCase()}*\n`;
-  text += `Travel: ${travelName}\n\n`;
-  text += `📅 Keberangkatan: ${departureStr} (${durationStr})\n`;
-  text += `✈️ Maskapai: ${airlineStr}\n`;
-  if (pkg.hotelMakkah) text += `🏨 Hotel Makkah: ${pkg.hotelMakkah}\n`;
-  if (pkg.hotelMadinah) text += `🏨 Hotel Madinah: ${pkg.hotelMadinah}\n`;
-
-  text += `\n💰 *RINCIAN HARGA KAMAR:*\n`;
-  if (pkg.priceQuad || pkg.price) text += `• Quad (Kamar Ber-4): Rp ${pkg.priceQuad || pkg.price}\n`;
-  if (pkg.priceTriple) text += `• Triple (Kamar Ber-3): Rp ${pkg.priceTriple}\n`;
-  if (pkg.priceDouble) text += `• Double (Kamar Ber-2): Rp ${pkg.priceDouble}\n`;
-  if (pkg.priceInfant) text += `• Infant (< 2 Thn): Rp ${pkg.priceInfant}\n`;
-  if (pkg.dp) text += `• Minimal DP: Rp ${pkg.dp}\n`;
-
-  if (incItems.length > 0) {
-    text += `\n✅ *FASILITAS INCLUDE:*\n`;
-    incItems.slice(0, 6).forEach((item: string) => {
-      text += `• ${item}\n`;
-    });
-  }
-
-  if (pkg.isPromo) {
-    text += `\n🎁 *PROMO KHUSUS:* Potongan ${pkg.promoDiscount || 'Spesial'}\n`;
-  }
-
-  if (pkg.quotaRemaining !== null && pkg.quotaRemaining !== undefined) {
-    text += `\n🎟️ Sisa Kuota: ${pkg.quotaRemaining} Seat\n`;
-  }
-
-  text += `\nInformasi pendaftaran dan penguncian seat silakan balas pesan ini ya Kak. Bismillah kami siap melayani! 🙏`;
-  return text;
+  const rooms = ([['Quad', pkg.priceQuad || pkg.price], ['Triple', pkg.priceTriple], ['Double', pkg.priceDouble], ['Bayi (di bawah 2 tahun)', pkg.priceInfant]] as const)
+    .map(([label, price]) => [label, formatCatalogRupiah(price)] as const)
+    .filter(([, price]) => price)
+    .map(([label, price]) => `• ${label}: ${price}`);
+  const dp = formatCatalogRupiah(pkg.dp);
+  const promo = activePromo(pkg);
+  const quota = Number(pkg.quotaRemaining);
+  return waMessage(
+    [`*${waTitle(pkg.name)}*`, departure(pkg) && `Berangkat ${departure(pkg)}`],
+    [
+      waLine('Maskapai', pkg.airline ? `${pkg.airline}${pkg.flightType === 'direct' ? ' (Direct)' : pkg.flightType === 'transit' ? ' (Transit)' : ''}` : null),
+      waLine('Hotel Makkah', pkg.hotelMakkah),
+      waLine('Hotel Madinah', pkg.hotelMadinah),
+    ],
+    rooms.length > 0 && ['*Harga per orang*', ...rooms, dp && `DP ${dp} per orang`],
+    waBullets(pkg.facilitiesIncluded).length > 0 && ['*Sudah termasuk*', ...waBullets(pkg.facilitiesIncluded)],
+    waBullets(pkg.facilitiesExcluded, 4).length > 0 && ['*Belum termasuk*', ...waBullets(pkg.facilitiesExcluded, 4)],
+    [promo && `Promo: ${promo.text}${promo.until ? `, berlaku sampai ${promo.until}` : ''}`, quota > 0 && `Sisa kuota paket: ${quota} orang`],
+    'Ada yang ingin ditanyakan dari paket ini?',
+  );
 }
 
-export function formatWaPackageItinerary(pkg: any, brandName?: string): string {
+export function formatWaPackageItinerary(pkg: any, _brandName?: string): string {
   if (!pkg) return '';
-  const departureStr = pkg.departureDate
-    ? new Date(pkg.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-    : (pkg.departureInfo || 'Jadwal belum dikonfirmasi');
-  const durationStr = pkg.duration ? `${pkg.duration}` : 'Durasi belum dikonfirmasi';
-  const travelName = brandName || pkg.brand?.name || 'Layanan Resmi Umroh';
-
-  const itinLines = (pkg.itinerary || '')
-    .split('\n')
-    .map((s: string) => s.trim())
-    .filter(Boolean);
-
-  let text = `*${(pkg.name || 'PAKET UMROH').toUpperCase()}*\n`;
-  text += `*Rundown Agenda Perjalanan*\n`;
-  text += `Travel: ${travelName}\n\n`;
-  text += `📅 Keberangkatan: ${departureStr} (${durationStr})\n`;
-  if (pkg.airline) text += `✈️ Penerbangan: ${pkg.airline}\n\n`;
-
-  text += `🕋 *AGENDA HARIAN:*\n`;
-  if (itinLines.length > 0) {
-    itinLines.forEach((line: string) => {
-      text += `• ${line}\n`;
-    });
-  } else {
-    text += `_Rincian agenda harian ziarah sedang disiapkan oleh tim operasional._\n`;
-  }
-
-  text += `\n_Catatan: Jadwal dapat disesuaikan dengan kondisi lapangan demi kelancaran ibadah jamaah._\n\n`;
-  text += `Ada agenda atau kegiatan yang ingin ditanyakan lebih detail, Kak? Kami siap membantu! 🙏`;
-  return text;
+  const agenda = waBullets(pkg.itinerary, 30);
+  return waMessage(
+    [`*Agenda perjalanan ${waTitle(pkg.name)}*`, departure(pkg) && `Berangkat ${departure(pkg)}`],
+    agenda.length ? agenda : 'Rincian agenda harian sedang disiapkan tim operasional.',
+    '_Jadwal dapat menyesuaikan kondisi di lapangan._',
+    'Ada agenda yang ingin ditanyakan?',
+  );
 }
 
-export function formatWaFlyerCaption(pkg: any, brandName?: string): string {
+export function formatWaFlyerCaption(pkg: any, _brandName?: string): string {
   if (!pkg) return '';
-  const travelName = brandName || pkg.brand?.name || 'Layanan Resmi Umroh';
-  let cleanTitle = (pkg.name || '').trim();
-  if (!cleanTitle.match(/^paket\s+/i)) {
-    cleanTitle = cleanTitle.match(/^umroh\s+/i) ? ('Paket ' + cleanTitle) : ('Paket Umroh ' + cleanTitle);
-  }
-
-  let text = `*${cleanTitle.toUpperCase()}*\n`;
-  text += `Travel: ${travelName}\n\n`;
-  text += `📅 Jadwal: ${pkg.departureDate ? new Date(pkg.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : (pkg.departureInfo || '-')} (${pkg.duration || 'Durasi belum dikonfirmasi'})\n`;
-  text += `✈️ Maskapai: ${pkg.airline || '-'}\n`;
-  if (pkg.hotelMakkah) text += `🏨 Hotel Makkah: ${pkg.hotelMakkah}\n`;
-  if (pkg.hotelMadinah) text += `🏨 Hotel Madinah: ${pkg.hotelMadinah}\n`;
-  text += `💰 Quad Mulai: Rp ${pkg.priceQuad || pkg.price}\n\n`;
-  text += `Berikut brosur & flyer resmi perjalanannya ya Kak. Silakan dipelajari detail jadwal & fasilitasnya, jika ada yang ingin ditanyakan silakan balas pesan ini ya Kak 🙏`;
-  return text;
+  const from = packageFromPrice(pkg);
+  return waMessage(
+    [`*${waTitle(pkg.name)}*`, departure(pkg) && `Berangkat ${departure(pkg)}`, from > 0 && `Harga mulai ${formatRupiah(from)} per orang`],
+    'Silakan dipelajari brosurnya. Kalau ada yang ingin ditanyakan, balas saja di chat ini.',
+  );
 }

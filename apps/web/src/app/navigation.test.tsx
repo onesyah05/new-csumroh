@@ -68,7 +68,13 @@ describe('workspace navigation', () => {
       const url = String(input);
       if (url.includes('/auth/refresh')) return response({ accessToken: 'test-token', user });
       if (url.includes('/dashboard/tasks')) return response({ role: 'manager', tasks: [], waiting: null });
-      if (url.includes('/dashboard')) return response({ total: 1, won: 0, conversionRate: 0, unassigned: 1, pipeline: [], recent: [conversation], wa: null });
+      if (url.includes('/dashboard')) return response({
+        scope: { isHoldingView: false, currentBrandId: 1, role: 'cs', brands: [{ id: 1, name: user.brand.name }] },
+        period: { key: 'this_month', comparison: 'periode yang sama bulan lalu', from: '2026-08-31T17:00:00.000Z', to: '2026-09-24T03:00:00.000Z', prevFrom: '2026-07-31T17:00:00.000Z', prevTo: '2026-08-24T03:00:00.000Z' },
+        kpis: { leads: { value: 1, previous: 0 }, deals: { value: 0, previous: 0, jamaah: 0 }, bookingValue: { value: 0, previous: 0 }, cashIn: { value: 0, previous: 0 }, receivables: { amount: 0, bookings: 0, withoutValue: 0 } },
+        funnel: { stages: [{ label: 'Lead masuk', count: 1 }], lost: 0, conversion: 0, sources: [] },
+        brands: [], team: null, departures: [],
+      });
       if (url.includes('/chat/wa/status')) return response({ brandId: 1, status: 'connected', phoneNumber: '628123456789' });
       if (url.includes('/chat/conversations')) return response([conversation]);
       if (url.includes('/chat/prospects/')) return response(conversation.messages);
@@ -99,7 +105,7 @@ describe('workspace navigation', () => {
       </React.StrictMode>,
     );
 
-    await screen.findByText(/aktivitas prospek terbaru/i, undefined, { timeout: 8000 });
+    await screen.findByText(/perjalanan lead/i, undefined, { timeout: 8000 });
 
     fireEvent.click(screen.getByRole('link', { name: /^kotak masuk$/i }));
     await screen.findAllByText("Assalamualaikum", undefined, { timeout: 8000 });

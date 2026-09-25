@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const roleSchema = z.enum(['superadmin', 'admin', 'cs', 'finance']);
+export const roleSchema = z.enum(['superadmin', 'admin', 'cs', 'finance', 'product']);
 export type Role = z.infer<typeof roleSchema>;
 
 export const pipelineStatuses = [
@@ -27,7 +27,7 @@ export type ProspectStatus = z.infer<typeof prospectStatusSchema>;
 // Pengiriman dokumen resmi: `sendViaWhatsApp` hanya niat. Status "terkirim" baru dicatat
 // setelah gateway WhatsApp mengembalikan messageId. Tanpa flag = draft.
 export const offerInputSchema = z.object({
-  packageId: z.number().int().positive(),
+  packageId: z.number().int().positive().optional(),
   paxSummary: z.string().max(255).optional(),
   // Nilai penawaran dihitung backend dari harga paket × pax. Override hanya dihormati untuk admin/finance.
   dealValue: z.number().nonnegative().optional(),
@@ -89,7 +89,8 @@ export const objectionInputSchema = z.object({
 });
 
 export const paymentVerifySchema = z.object({
-  // Nominal mutasi INI (bukan saldo kumulatif). Total kas = jumlah seluruh mutasi terverifikasi.
+  paymentType: z.enum(['dp', 'full']).default('dp'),
+  // Bukti audit pembayaran awal saja; bukan ledger pembayaran lanjutan.
   approvedAmount: z.number().positive(),
   bankName: z.string().trim().min(1).max(50),
   referenceNo: z.string().trim().max(100).optional().or(z.literal('')),

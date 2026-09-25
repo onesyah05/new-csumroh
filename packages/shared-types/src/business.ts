@@ -1,4 +1,5 @@
 import type { ProspectStatus } from './contracts.js';
+import { parseRupiahStrict } from './money.js';
 
 export const wonStatuses = ['deal', 'closed_won'] as const;
 export const lostStatuses = ['lose', 'closed_lost'] as const;
@@ -40,10 +41,12 @@ export function seatCountFor(pax: { paxQuad?: number | null; paxTriple?: number 
   return seats > 0 ? seats : 1;
 }
 
-/** Harga paket disimpan sebagai teks ("Rp 30.000.000"); ambil digitnya saja. */
+/**
+ * Harga paket disimpan sebagai teks ("Rp 30.000.000"). Dibaca dengan parser ketat; teks ambigu bernilai 0
+ * (tidak ditebak), sehingga "5.000.000,00" tidak menjadi Rp500 juta dan "5 juta" tidak menjadi Rp5.
+ */
 export function parseRupiah(value: unknown) {
-  const digits = String(value ?? '').replace(/\D/g, '');
-  return digits ? Number(digits) : 0;
+  return parseRupiahStrict(value) ?? 0;
 }
 
 export const BUSINESS_TIME_ZONE = 'Asia/Jakarta';

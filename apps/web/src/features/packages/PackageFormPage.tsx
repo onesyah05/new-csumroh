@@ -409,7 +409,7 @@ export function PackageFormPage() {
           <Card className="p-5 space-y-5">
             {/* Bagian 1: Informasi Dasar */}
             <div className="space-y-3.5">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+              <h3 className="text-xs font-extrabold text-zinc-700">
                 Informasi Dasar & Jadwal
               </h3>
 
@@ -497,14 +497,14 @@ export function PackageFormPage() {
 
             {/* Bagian 2: Skema Harga Kamar & DP */}
             <div className="border-t border-zinc-100 pt-5 space-y-3.5">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+              <h3 className="text-xs font-extrabold text-zinc-700">
                 Skema Harga Kamar & DP
               </h3>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div>
                   <label className="text-xs font-semibold text-zinc-700 block mb-1">
-                    Quad (Ber-4) <span className="text-rose-500">*</span>
+                    Quad <span className="text-rose-500">*</span>
                   </label>
                   <RupiahInput
                     required
@@ -517,7 +517,7 @@ export function PackageFormPage() {
 
                 <div>
                   <label className="text-xs font-semibold text-zinc-700 block mb-1">
-                    Triple (Ber-3)
+                    Triple
                   </label>
                   <RupiahInput
                     value={form.priceTriple}
@@ -529,7 +529,7 @@ export function PackageFormPage() {
 
                 <div>
                   <label className="text-xs font-semibold text-zinc-700 block mb-1">
-                    Double (Ber-2)
+                    Double
                   </label>
                   <RupiahInput
                     value={form.priceDouble}
@@ -568,7 +568,7 @@ export function PackageFormPage() {
 
             {/* Bagian 3: Penerbangan & Hotel */}
             <div className="border-t border-zinc-100 pt-5 space-y-3.5">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+              <h3 className="text-xs font-extrabold text-zinc-700">
                 Penerbangan & Hotel
               </h3>
 
@@ -594,7 +594,7 @@ export function PackageFormPage() {
                     value={form.flightType}
                     onValueChange={(val) => setForm((prev) => ({ ...prev, flightType: val }))}
                     options={[
-                      { value: 'direct', label: 'Direct (Langsung)' },
+                      { value: 'direct', label: 'Direct' },
                       { value: 'transit', label: 'Transit' },
                     ]}
                     placeholder="Pilih Rute"
@@ -635,7 +635,7 @@ export function PackageFormPage() {
           <Card className="p-5 space-y-5">
             {/* Bagian 1: Fasilitas */}
             <div className="space-y-3.5">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+              <h3 className="text-xs font-extrabold text-zinc-700">
                 Fasilitas Paket
               </h3>
 
@@ -670,7 +670,7 @@ export function PackageFormPage() {
 
             {/* Bagian 2: Itinerary */}
             <div className="border-t border-zinc-100 pt-5 space-y-3.5">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+              <h3 className="text-xs font-extrabold text-zinc-700">
                 Itinerary Perjalanan
               </h3>
               <textarea
@@ -688,7 +688,7 @@ export function PackageFormPage() {
         <div className="space-y-5 lg:col-span-4">
           {/* Card 1: Poster Flyer (Direct Upload & WebP Autocompress) */}
           <Card className="p-4 space-y-3">
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700 pb-2 border-b border-zinc-100">
+            <h3 className="text-xs font-extrabold text-zinc-700 pb-2 border-b border-zinc-100">
               Poster Flyer
             </h3>
 
@@ -805,7 +805,7 @@ export function PackageFormPage() {
 
           {/* Card 2: Pengaturan Publikasi & Promo */}
           <Card className="p-4 space-y-3.5">
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700 pb-2 border-b border-zinc-100">
+            <h3 className="text-xs font-extrabold text-zinc-700 pb-2 border-b border-zinc-100">
               Pengaturan
             </h3>
 

@@ -383,7 +383,7 @@ export function MetaCapiPage() {
                 <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
                   <Radio size={16} className="text-zinc-600" />
                   <div>
-                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                    <h3 className="text-xs font-extrabold text-zinc-700">
                       Kredensial Meta & Dataset · {currentBrand?.name ?? 'Brand'}
                     </h3>
                   </div>
@@ -457,7 +457,7 @@ export function MetaCapiPage() {
                 <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
                   <KeyRound size={16} className="text-zinc-600" />
                   <div>
-                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                    <h3 className="text-xs font-extrabold text-zinc-700">
                       System User Access Token
                     </h3>
                   </div>
@@ -565,7 +565,7 @@ export function MetaCapiPage() {
                 <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                 <input
                   type="text"
-                  className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-400 shadow-xs"
+                  className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
                   placeholder="Cari nama, nomor HP, atau event ID…"
                   value={logSearch}
                   onChange={(e) => setLogSearch(e.target.value)}
@@ -639,7 +639,7 @@ export function MetaCapiPage() {
               <div className="overflow-x-auto">
                 {/* Di bawah lg kolom respons Meta disembunyikan; lengkap di modal detail log (tombol Aksi). */}
                 <table className="w-full text-left text-xs lg:min-w-[760px]">
-                  <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                  <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-500">
                     <tr>
                       <th className="px-4 py-3">Event & Event ID</th>
                       <th className="px-4 py-3">Calon Jamaah</th>
@@ -794,7 +794,7 @@ export function MetaCapiPage() {
           {/* 2 Proportional Technical Cards */}
           <div className="grid gap-6 md:grid-cols-2">
             <Card className="p-5 space-y-3">
-              <h4 className="text-xs font-bold text-zinc-950 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-zinc-950">
                 Keunggulan Server-Side CAPI
               </h4>
               <ul className="space-y-2.5 text-xs leading-relaxed text-zinc-600">
@@ -814,7 +814,7 @@ export function MetaCapiPage() {
             </Card>
 
             <Card className="p-5 space-y-3">
-              <h4 className="text-xs font-bold text-zinc-950 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-zinc-950">
                 Standar Keamanan & Enkripsi
               </h4>
               <ul className="space-y-2.5 text-xs leading-relaxed text-zinc-600">
@@ -851,22 +851,22 @@ export function MetaCapiPage() {
                 {/* 4-Item Grid Info */}
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 space-y-0.5">
-                    <span className="text-xs font-bold text-zinc-500 uppercase">Event ID</span>
+                    <span className="text-xs font-bold text-zinc-500">Event ID</span>
                     <p className="font-mono font-bold text-zinc-900 break-all">{selectedLog.eventId}</p>
                   </div>
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 space-y-0.5">
-                    <span className="text-xs font-bold text-zinc-500 uppercase">Calon Jamaah</span>
+                    <span className="text-xs font-bold text-zinc-500">Calon Jamaah</span>
                     <p className="font-bold text-zinc-900">{selectedLog.prospect?.name ?? '—'}</p>
                     <p className="font-mono text-xs text-zinc-500">{selectedLog.prospect?.phone ?? '-'}</p>
                   </div>
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 space-y-0.5">
-                    <span className="text-xs font-bold text-zinc-500 uppercase">Status & Respon</span>
+                    <span className="text-xs font-bold text-zinc-500">Status & Respon</span>
                     <p className="font-bold capitalize text-zinc-900">
                       {selectedLog.status} ({selectedLog.responseStatus ? `HTTP ${selectedLog.responseStatus}` : 'No Response'})
                     </p>
                   </div>
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 space-y-0.5">
-                    <span className="text-xs font-bold text-zinc-500 uppercase">Waktu Dispatch</span>
+                    <span className="text-xs font-bold text-zinc-500">Waktu Dispatch</span>
                     <p className="font-bold text-zinc-900">{new Date(selectedLog.createdAt).toLocaleString('id-ID')}</p>
                   </div>
                 </div>

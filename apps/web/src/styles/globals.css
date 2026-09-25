@@ -18,7 +18,7 @@
     @apply rounded-xl border border-zinc-200/90 bg-white;
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
-  .field { @apply h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs sm:text-sm text-zinc-900 placeholder:text-zinc-400 outline-none transition focus:border-black focus:ring-1 focus:ring-black; }
+  .field { @apply h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs sm:text-sm text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-black focus:ring-1 focus:ring-black; }
   .label { @apply mb-1.5 block text-xs font-medium text-zinc-700; }
   .page-title { @apply font-sans text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl; }
   .app-page { @apply mx-auto w-full max-w-[1440px] space-y-6 animate-fade-up; }

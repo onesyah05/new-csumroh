@@ -92,7 +92,7 @@ function HotelInfo({ label, rawName }: { label: string; rawName?: string | null 
         {stars > 0 && (
           <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-xs font-bold text-amber-700 border border-amber-200/60">
             <Star size={10} className="fill-amber-400 text-amber-500 shrink-0" />
-            <span>★{stars}</span>
+            <span>{stars}</span>
           </span>
         )}
       </div>
@@ -169,7 +169,7 @@ export function PackageDetailPage() {
         })
       : 'Jadwal menyusul');
   const durationStr = pkg.duration || '9 Hari';
-  const flightTypeLabel = pkg.flightType === 'transit' ? 'Transit' : 'Langsung (Direct)';
+  const flightTypeLabel = pkg.flightType === 'transit' ? 'Transit' : 'Direct';
   const airlineStr = pkg.airline ? `${pkg.airline} (${flightTypeLabel})` : 'TBA';
   const quadPrice = formatRupiah(pkg.priceQuad || pkg.price);
 
@@ -199,9 +199,9 @@ export function PackageDetailPage() {
   if (pkg.hotelMakkah) waSummary += `Hotel Makkah: ${pkg.hotelMakkah}\n`;
   if (pkg.hotelMadinah) waSummary += `Hotel Madinah: ${pkg.hotelMadinah}\n`;
   waSummary += `\n*HARGA PAKET:*\n`;
-  waSummary += `• Quad (Ber-4): ${quadPrice}\n`;
-  if (pkg.priceTriple) waSummary += `• Triple (Ber-3): ${formatRupiah(pkg.priceTriple)}\n`;
-  if (pkg.priceDouble) waSummary += `• Double (Ber-2): ${formatRupiah(pkg.priceDouble)}\n`;
+  waSummary += `• Quad: ${quadPrice}\n`;
+  if (pkg.priceTriple) waSummary += `• Triple: ${formatRupiah(pkg.priceTriple)}\n`;
+  if (pkg.priceDouble) waSummary += `• Double: ${formatRupiah(pkg.priceDouble)}\n`;
   if (pkg.priceInfant) waSummary += `• Infant (< 2 Thn): ${formatRupiah(pkg.priceInfant)}\n`;
   waSummary += `• Minimal DP: ${formatRupiah(pkg.dp)}\n`;
   if (incItems.length > 0) {
@@ -309,7 +309,7 @@ export function PackageDetailPage() {
         <StatCard
           label="Harga Mulai (Quad)"
           value={quadPrice}
-          note="Kamar ber-4 (Quad)"
+          note="per orang"
         />
         <StatCard
           label="Minimal DP"
@@ -325,7 +325,7 @@ export function PackageDetailPage() {
         <StatCard
           label="Penerbangan"
           value={pkg.airline || 'TBA'}
-          note={pkg.flightType === 'transit' ? 'Transit Flight' : 'Direct Flight (Langsung)'}
+          note={pkg.flightType === 'transit' ? 'Transit Flight' : 'Direct Flight'}
         />
       </StatGrid>
 
@@ -336,7 +336,7 @@ export function PackageDetailPage() {
           {/* Card 1: Spesifikasi & Skema Harga */}
           <Card className="p-5 space-y-5">
             <div>
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+              <h3 className="text-xs font-extrabold text-zinc-700">
                 Spesifikasi & Akomodasi
               </h3>
               <div className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4 text-xs">
@@ -356,24 +356,24 @@ export function PackageDetailPage() {
             </div>
 
             <div className="border-t border-zinc-100 pt-4">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+              <h3 className="text-xs font-extrabold text-zinc-700">
                 Skema Harga Kamar
               </h3>
               <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                 <div className="rounded-xl bg-zinc-50/80 p-3.5 border border-zinc-200/80 shadow-xs">
-                  <span className="text-xs font-bold text-zinc-500 block uppercase tracking-wider">Quad (Ber-4)</span>
+                  <span className="text-xs font-bold text-zinc-500 block">Quad</span>
                   <span className="mt-1 font-mono text-sm font-bold text-zinc-950 block">{quadPrice}</span>
                 </div>
                 <div className="rounded-xl bg-zinc-50/80 p-3.5 border border-zinc-200/80 shadow-xs">
-                  <span className="text-xs font-bold text-zinc-500 block uppercase tracking-wider">Triple (Ber-3)</span>
+                  <span className="text-xs font-bold text-zinc-500 block">Triple</span>
                   <span className="mt-1 font-mono text-sm font-bold text-zinc-950 block">{formatRupiah(pkg.priceTriple)}</span>
                 </div>
                 <div className="rounded-xl bg-zinc-50/80 p-3.5 border border-zinc-200/80 shadow-xs">
-                  <span className="text-xs font-bold text-zinc-500 block uppercase tracking-wider">Double (Ber-2)</span>
+                  <span className="text-xs font-bold text-zinc-500 block">Double</span>
                   <span className="mt-1 font-mono text-sm font-bold text-zinc-950 block">{formatRupiah(pkg.priceDouble)}</span>
                 </div>
                 <div className="rounded-xl bg-zinc-50/80 p-3.5 border border-zinc-200/80 shadow-xs">
-                  <span className="text-xs font-bold text-zinc-500 block uppercase tracking-wider">Infant (&lt; 2 Thn)</span>
+                  <span className="text-xs font-bold text-zinc-500 block">Infant (&lt; 2 Thn)</span>
                   <span className="mt-1 font-mono text-sm font-bold text-zinc-950 block">{formatRupiah(pkg.priceInfant)}</span>
                 </div>
               </div>
@@ -387,7 +387,7 @@ export function PackageDetailPage() {
           {/* Card 2: Fasilitas & Itinerary */}
           <Card className="p-5 space-y-5">
             <div>
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700 mb-3">
+              <h3 className="text-xs font-extrabold text-zinc-700 mb-3">
                 Fasilitas Paket
               </h3>
               <div className="grid gap-3.5 sm:grid-cols-2 text-xs">
@@ -395,7 +395,7 @@ export function PackageDetailPage() {
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-                    <span className="font-bold text-emerald-900 text-xs uppercase tracking-wider">
+                    <span className="font-bold text-emerald-900 text-xs">
                       Termasuk (Include)
                     </span>
                   </div>
@@ -417,7 +417,7 @@ export function PackageDetailPage() {
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <XCircle size={13} className="text-zinc-500 shrink-0" />
-                    <span className="font-bold text-zinc-600 text-xs uppercase tracking-wider">
+                    <span className="font-bold text-zinc-600 text-xs">
                       Tidak Termasuk (Exclude)
                     </span>
                   </div>
@@ -439,7 +439,7 @@ export function PackageDetailPage() {
 
             <div className="border-t border-zinc-100 pt-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                <h3 className="text-xs font-extrabold text-zinc-700">
                   Itinerary Perjalanan
                 </h3>
                 {itinLines.length > 0 && (
@@ -474,7 +474,7 @@ export function PackageDetailPage() {
           {/* Card 1: Poster Flyer */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+              <h3 className="text-xs font-extrabold text-zinc-700">
                 Poster Flyer
               </h3>
               {pkg.flyerImage && (
@@ -566,7 +566,7 @@ export function PackageDetailPage() {
           {pkg.brand && (
             <Card className="p-4 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-700">
+                <h3 className="text-xs font-extrabold text-zinc-700">
                   Biro Penyelenggara
                 </h3>
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">

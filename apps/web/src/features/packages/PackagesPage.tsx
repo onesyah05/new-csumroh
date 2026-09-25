@@ -244,7 +244,7 @@ export function PackagesPage() {
         <div className="relative flex-1">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-400 shadow-xs"
+            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
             placeholder="Cari nama paket, maskapai, hotel…"
             value={search}
             onChange={(e) => {
@@ -387,7 +387,7 @@ export function PackagesPage() {
             <div className="overflow-x-auto">
               {/* Di bawah lg kolom Brand & Promo disembunyikan agar nyaman di split-screen; lengkap di Detail Paket. */}
               <table className="w-full text-left text-xs lg:min-w-[940px]">
-                <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">Paket Umroh</th>
                     <th className="hidden px-4 py-3 lg:table-cell">Brand</th>

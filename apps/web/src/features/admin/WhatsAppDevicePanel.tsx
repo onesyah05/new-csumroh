@@ -145,7 +145,7 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
 
           {canManage && currentData.status !== 'connected' && (
             <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+              <p className="text-xs font-bold text-zinc-500">
                 Panduan Menautkan WhatsApp Biro
               </p>
               <ol className="mt-2.5 space-y-2 text-xs text-zinc-700">
@@ -269,7 +269,7 @@ function InfoCard({ icon: Icon, label, value }: { icon: typeof Smartphone; label
     <article className="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4">
       <div className="flex items-center gap-2 text-zinc-500">
         <Icon size={15} />
-        <span className="text-xs font-bold uppercase tracking-[.1em]">{label}</span>
+        <span className="text-xs font-bold">{label}</span>
       </div>
       <p className="mt-2.5 truncate font-display text-sm font-bold text-zinc-900" title={value}>
         {value}

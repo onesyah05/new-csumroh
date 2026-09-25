@@ -19,6 +19,7 @@ import {
   UserCircle2,
   UserPlus,
   Users,
+  SlidersHorizontal,
   Wallet,
 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -40,9 +41,9 @@ interface Brand {
   code: string;
 }
 
-type StaffRole = 'superadmin' | 'admin' | 'cs' | 'finance';
+type StaffRole = 'superadmin' | 'admin' | 'cs' | 'finance' | 'product';
 /** Role yang dapat dipilih superadmin di form; superadmin sendiri tidak dapat ditetapkan/diubah lewat UI. */
-const ASSIGNABLE_ROLES = ['cs', 'admin', 'finance'] as const;
+const ASSIGNABLE_ROLES = ['cs', 'admin', 'finance', 'product'] as const;
 type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 interface StaffUser {
@@ -68,7 +69,7 @@ const roleBadge = (role: string) =>
     : 'border-emerald-200 bg-emerald-50/80 text-emerald-800';
 
 const roleLabel = (role: string) =>
-  role === 'superadmin' ? 'Superadmin' : role === 'admin' ? 'Admin Brand' : role === 'finance' ? 'Finance' : 'Customer Service';
+  role === 'superadmin' ? 'Superadmin' : role === 'admin' ? 'Admin Brand' : role === 'finance' ? 'Finance' : role === 'product' ? 'Tim LA' : 'Customer Service';
 
 /* ─── Brand Multi-Checkbox Component ────────────────────────── */
 /** Catatan toast saat prospek terbuka milik CS dilepas ke antrean (nonaktif, dihapus, atau akses brand dicabut). */
@@ -212,7 +213,8 @@ function StaffFormModal({
       if (!isEdit && form.password.length < 8) throw new Error('Kata sandi minimal 8 karakter.');
       if (isEdit && form.password && form.password.length < 8)
         throw new Error('Kata sandi baru minimal 8 karakter.');
-      if (form.brandIds.length === 0) throw new Error('Pilih minimal 1 brand yang dikaitkan.');
+      // Tim LA melayani semua brand: tanpa akses brand.
+      if (form.role !== 'product' && form.brandIds.length === 0) throw new Error('Pilih minimal 1 brand yang dikaitkan.');
 
       if (isEdit && editing) {
         return api.patch<{ releasedProspects?: number }>(`/catalog/users/${editing.id}`, {
@@ -267,7 +269,7 @@ function StaffFormModal({
                   <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                   <input
                     id="sf-name"
-                    className="w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 transition placeholder:text-zinc-400"
+                    className="w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 transition placeholder:text-zinc-500"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                     placeholder="Nama staf"
@@ -285,7 +287,7 @@ function StaffFormModal({
                   <input
                     id="sf-email"
                     type="email"
-                    className="w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 transition placeholder:text-zinc-400"
+                    className="w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 transition placeholder:text-zinc-500"
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     placeholder="nama@email.com"
@@ -345,9 +347,9 @@ function StaffFormModal({
                 <label className="text-xs font-semibold text-zinc-800">
                   Role Staf
                 </label>
-                <div className="grid grid-cols-3 p-1 bg-zinc-100 rounded-lg gap-1 border border-zinc-200/50">
+                <div className="grid grid-cols-2 sm:grid-cols-4 p-1 bg-zinc-100 rounded-lg gap-1 border border-zinc-200/50">
                   {ASSIGNABLE_ROLES.map((role: AssignableRole) => {
-                    const Icon = role === 'cs' ? UserCircle2 : role === 'admin' ? ShieldCheck : Wallet;
+                    const Icon = role === 'cs' ? UserCircle2 : role === 'admin' ? ShieldCheck : role === 'product' ? SlidersHorizontal : Wallet;
                     const active = form.role === role;
                     return (
                       <button
@@ -374,7 +376,9 @@ function StaffFormModal({
             )}
 
             {/* Akses Brand */}
-            <div className="space-y-1.5">
+            {form.role === 'product' ? (
+              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">Tim LA melayani Layanan Custom semua brand; tidak perlu akses brand.</p>
+            ) : <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-zinc-800">
                   Akses Brand <span className="text-rose-500">*</span>
@@ -418,7 +422,7 @@ function StaffFormModal({
                   </span>
                 )}
               </div>
-            </div>
+            </div>}
 
             {/* Error Message */}
             {error && (
@@ -440,7 +444,7 @@ export function StaffPage() {
   const isAdmin = user?.role === 'admin';
 
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'cs' | 'admin' | 'finance'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'cs' | 'admin' | 'finance' | 'product'>('all');
   const [brandFilter, setBrandFilter] = useState<number | 'all'>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<StaffUser | null>(null);
@@ -561,7 +565,7 @@ export function StaffPage() {
         <div className="relative flex-1">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-400 shadow-xs"
+            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
             placeholder="Cari nama atau email staf…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -586,7 +590,7 @@ export function StaffPage() {
 
         {/* Role Pills Filter */}
         <div className="flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
-          {(['all', 'cs', 'admin', 'finance'] as const).map((r) => (
+          {(['all', 'cs', 'admin', 'finance', 'product'] as const).map((r) => (
             <button
               key={r}
               type="button"
@@ -617,7 +621,7 @@ export function StaffPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs lg:min-w-[720px]">
-              <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-500">
                 <tr>
                   <th className="px-4 py-3">Staf</th>
                   <th className="px-4 py-3">Role</th>
@@ -679,7 +683,7 @@ export function StaffPage() {
 
                       {/* Brand Access Badges */}
                       <td className="px-4 py-3">
-                        {staff.role === 'superadmin' ? (
+                        {staff.role === 'superadmin' || staff.role === 'product' ? (
                           <span className="text-xs text-zinc-500">Semua brand</span>
                         ) : allBrands.length > 0 ? (
                           <div className="flex flex-wrap items-center gap-1.5">
