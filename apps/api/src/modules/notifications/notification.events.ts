@@ -2,7 +2,7 @@ import { lostStatuses, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { emitToUser } from '../../realtime/socket.js';
 import { notify, resolveNotifications } from './notify.service.js';
-import { adminsOf, csOfBrand, financeUsers, picOf, productUsers } from './recipients.js';
+import { adminsOf, csOfBrand, financeOrAdmins, financeUsers, picOf, productOrSuperadmins, productUsers } from './recipients.js';
 
 /**
  * Notifikasi per kejadian bisnis. Dipanggil SETELAH transaksi selesai; semua fungsi aman dipanggil
@@ -163,7 +163,7 @@ export async function notifyProofSubmitted(p: ProspectRef, actor: Actor, fromCha
   const pending = await pendingProofCount();
   return notify({
     type: 'payment.proof_new', priority: 'action', brandId: p.brandId, actorId: actor.id,
-    userIds: await financeUsers(),
+    userIds: await financeOrAdmins(p.brandId),
     title: PROOF_SUMMARY_TITLE,
     body: `${pending} bukti menunggu · terbaru: ${p.name} (${await brandName(p.brandId)}), ${fromChat ? 'dari chat WhatsApp' : 'diunggah'} oleh ${actor.name}`,
     link: '/verifikasi', activeKey: PROOF_SUMMARY_KEY, setCount: pending,
@@ -337,7 +337,7 @@ export async function notifyCustomSubmitted(input: { prospect: ProspectRef; acto
   await resolveNotifications({ entity: prospectEntity(p), types: ['custom.quoted', 'custom.returned', 'custom.expiring'] });
   return notify({
     type: input.revision ? 'custom.revision' : 'custom.submitted', priority: 'action', brandId: p.brandId, actorId: actor.id,
-    userIds: await productUsers(),
+    userIds: await productOrSuperadmins(),
     title: input.revision ? `Hitung ulang layanan custom: ${p.name}` : `Permintaan layanan custom: ${p.name}`,
     body: `${await brandName(p.brandId)} · dikirim ${actor.name}`,
     link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom:r${input.requestId}`,
@@ -362,7 +362,7 @@ export async function notifyCustomUpdated(input: { prospect: ProspectRef; actor:
   const { prospect: p, actor } = input;
   return notify({
     type: 'custom.updated', priority: 'action', brandId: p.brandId, actorId: actor.id,
-    userIds: await productUsers(),
+    userIds: await productOrSuperadmins(),
     title: `Kebutuhan custom ${p.name} diubah`,
     body: `${actor.name} mengubah kebutuhan jamaah. Muat ulang rincian sebelum menghitung.`,
     link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom.updated:r${input.requestId}`,

@@ -46,3 +46,17 @@ export async function productUsers() {
   const users = await prisma.user.findMany({ where: { isActive: true, role: 'product' }, select: { id: true } });
   return users.map((u) => u.id);
 }
+
+/** Finance aktif; bila belum ada, Admin brand + Superadmin (yang juga bisa memverifikasi) agar bukti tidak terlewat. */
+export async function financeOrAdmins(brandId: number) {
+  const finance = await financeUsers();
+  return finance.length ? finance : adminsOf(brandId);
+}
+
+/** Tim LA aktif; bila belum ada, Superadmin (yang juga bisa menghitung harga custom). */
+export async function productOrSuperadmins() {
+  const product = await productUsers();
+  if (product.length) return product;
+  const superadmins = await prisma.user.findMany({ where: { isActive: true, role: 'superadmin' }, select: { id: true } });
+  return superadmins.map((u) => u.id);
+}

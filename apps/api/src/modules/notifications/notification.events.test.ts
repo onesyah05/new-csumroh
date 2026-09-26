@@ -16,6 +16,9 @@ vi.mock('./recipients.js', () => ({
   picOf: async (p: { userId: number | null }) => (p.userId ? [p.userId] : []),
   csOfBrand: async () => [21, 22],
   financeUsers: async () => [31],
+  financeOrAdmins: async () => [31],
+  productUsers: async () => [51],
+  productOrSuperadmins: async () => [51],
   adminsOf: async () => [41, 1],
 }));
 vi.mock('../../db/prisma.js', () => ({
