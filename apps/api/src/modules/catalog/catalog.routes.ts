@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
+import { revokeUserSessions } from '../auth/sessions.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { FLYER_URL_PATTERN, LOGO_URL_PATTERN } from '../../utils/safe-path.js';
 import { releaseProspectsOf } from '../prospects/pic.js';
@@ -261,9 +262,13 @@ const packageInputSchema = z.object({
 });
 
 catalogRouter.get('/packages', asyncHandler(async (req, res) => {
+  // Brand yang diminta dipakai untuk semua role (CS divalidasi ke brand yang ia pegang); tanpa permintaan,
+  // non-superadmin memakai brand utamanya. Sebelumnya permintaan diabaikan, sehingga CS multi-brand dan
+  // Admin/Finance lintas brand mendapat paket brand utama saat melayani brand lain.
+  const requested = req.query.brandId && req.query.brandId !== 'all' ? Number(req.query.brandId) : undefined;
   const brandId = req.user!.role === 'superadmin'
-    ? (req.query.brandId ? Number(req.query.brandId) : undefined)
-    : req.user!.brandId ?? undefined;
+    ? requested
+    : requested ? scopedBrandId(req, requested) : req.user!.brandId ?? undefined;
 
   const where: any = {};
   if (brandId) where.brandId = brandId;
@@ -301,7 +306,8 @@ catalogRouter.get('/packages', asyncHandler(async (req, res) => {
   } else if (quota === 'low') {
     where.quotaRemaining = { gt: 0, lte: 5 };
   } else if (quota === 'sold_out') {
-    where.OR = (where.OR || []).concat([{ quotaRemaining: 0 }, { quotaRemaining: null }]);
+    // AND dengan pencarian: menambah ke OR pencarian membuat semua paket habis ikut tampil.
+    where.AND = [...(where.AND ?? []), { OR: [{ quotaRemaining: 0 }, { quotaRemaining: null }] }];
   }
 
   // Status filter
@@ -327,8 +333,9 @@ catalogRouter.get('/packages/:id', asyncHandler(async (req, res) => {
     include: { brand: { select: { id: true, name: true, code: true, phone: true, ppiuNumber: true } } },
   });
   if (!item) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
-  if (req.user!.role !== 'superadmin' && item.brandId !== req.user!.brandId) {
-    throw new HttpError(403, 'Akses paket antar-brand dibatasi.');
+  // Boleh dibuka oleh siapa pun yang punya akses ke brand paket ini (CS multi-brand, Admin/Finance lintas brand).
+  if (req.user!.role !== 'superadmin') {
+    try { scopedBrandId(req, item.brandId); } catch { throw new HttpError(403, 'Akses paket antar-brand dibatasi.'); }
   }
   res.json({ success: true, data: item });
 }));
@@ -637,6 +644,8 @@ catalogRouter.put('/users/:id/brands', requireRole('superadmin', 'admin'), async
       userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
     },
   });
+  // Klaim brand di token lama tidak lagi benar: sesi user tersebut diputus agar login ulang dengan akses baru.
+  if (id !== req.user!.id) await revokeUserSessions(id);
   res.json({ success: true, data: { ...updated, releasedProspects } });
 }));
 
@@ -655,6 +664,8 @@ catalogRouter.patch('/users/:id/toggle', requireRole('superadmin', 'admin'), asy
   const releasedProspects = data.isActive ? 0 : await releaseProspectsOf(target.id, {
     actor: req.user!, reason: `${target.name} dinonaktifkan`,
   });
+  // Akun nonaktif keluar dari semua perangkat saat itu juga (API & realtime), bukan setelah token kedaluwarsa.
+  if (!data.isActive) await revokeUserSessions(target.id);
   res.json({ success: true, data: { ...data, releasedProspects } });
 }));
 
@@ -759,6 +770,8 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
       userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
     },
   });
+  // Kata sandi, role, atau akses brand berubah: sesi lama user tersebut diputus (kecuali saat mengedit diri sendiri).
+  if (id !== req.user!.id && (input.password || updateData.role || newBrandIds !== undefined)) await revokeUserSessions(id);
   res.json({ success: true, data: { ...updated, releasedProspects } });
 }));
 
@@ -781,6 +794,8 @@ catalogRouter.delete('/users/:id', requireRole('superadmin', 'admin'), asyncHand
 
   // Dicatat sebelum hapus: relasi SetNull akan mengosongkan PIC tanpa jejak di riwayat prospek.
   const releasedProspects = await releaseProspectsOf(id, { actor: req.user!, reason: `akun ${target.name} dihapus` });
+  // Putus sesi & realtime sebelum akun (dan token-nya) dihapus.
+  await revokeUserSessions(id);
   await prisma.user.delete({ where: { id } });
   res.json({
     success: true,
