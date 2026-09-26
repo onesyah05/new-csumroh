@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Ban, CheckCircle2, Clock3, FileText, Inbox, MessageCircle, Search, ShieldCheck, Sparkles, Timer, XCircle } from 'lucide-react';
+import { Ban, CheckCircle2, Clock3, Inbox, MessageCircle, Search, ShieldCheck, Timer, XCircle } from 'lucide-react';
 import { PAYMENT_CATEGORY_LABEL, paymentCategory } from '@csumroh/shared-types';
-import { api, resolveMediaUrl } from '../../lib/api';
+import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
-import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageHeader } from '../../components/ui/page-header';
@@ -18,15 +17,6 @@ import { RejectProofDialog } from './RejectProofDialog';
 import { VerificationHistory } from './VerificationHistory';
 import { durationLabel, rupiah, type VerificationSummary } from './verificationApi';
 import { showFeedback } from '../../app/toast';
-
-type CandidateMessage = {
-  id: number;
-  messageId: string;
-  messageType: string;
-  mediaUrl: string;
-  messageText?: string | null;
-  timestamp: number;
-};
 
 type QueueProspect = {
   id: number;
@@ -46,10 +36,9 @@ type QueueProspect = {
   package?: { id: number; name: string } | null;
   user?: { id: number; name: string } | null;
   brand: { id: number; name: string; code: string };
-  candidateMessages?: CandidateMessage[];
 };
 
-type Queue = { submitted: QueueProspect[]; candidates: QueueProspect[] };
+type Queue = { submitted: QueueProspect[] };
 type Tab = 'queue' | 'history';
 const TABS: Tab[] = ['queue', 'history'];
 
@@ -136,30 +125,8 @@ export function VerificationPage() {
     refetchInterval: 60_000,
   });
 
-  const attach = useMutation({
-    mutationFn: ({ prospect, message }: { prospect: QueueProspect; message: CandidateMessage }) =>
-      api.post(`/prospects/${prospect.id}/payment-proof-from-message`, { messageId: message.id, brandId: prospect.brandId }),
-    onSuccess: (_data, { prospect }) => {
-      void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
-      void queryClient.invalidateQueries({ queryKey: ['prospect', prospect.id] });
-      showToast(`Bukti transfer ${prospect.name} masuk antrean verifikasi.`);
-    },
-    onError: (error: Error) => showToast(error.message),
-  });
-  const dismiss = useMutation({
-    mutationFn: ({ prospect, message }: { prospect: QueueProspect; message: CandidateMessage }) =>
-      api.post('/verification/candidates/dismiss', { prospectId: prospect.id, messageId: message.id }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
-      showToast('Kiriman disingkirkan dari kandidat bukti.');
-    },
-    onError: (error: Error) => showToast(error.message),
-  });
-
   const allSubmitted = queue.data?.submitted ?? [];
-  const allCandidates = queue.data?.candidates ?? [];
   const submitted = allSubmitted.filter((p) => matches(p, search));
-  const candidates = allCandidates.filter((p) => matches(p, search));
   const oldestMinutes = allSubmitted.length ? minutesSince(allSubmitted[0]!.paymentProofSubmittedAt) : null;
   const s = summary.data;
 
@@ -188,7 +155,7 @@ export function VerificationPage() {
         <StatCard
           label="Menunggu verifikasi"
           value={allSubmitted.length}
-          note={oldestMinutes !== null ? `Tertua ${durationLabel(oldestMinutes)}` : `${allCandidates.length} kandidat dari chat`}
+          note={oldestMinutes !== null ? `Tertua ${durationLabel(oldestMinutes)}` : undefined}
           icon={<Inbox size={16} />}
           alert={ageTone(oldestMinutes) !== null}
         />
@@ -215,7 +182,7 @@ export function VerificationPage() {
             onClick={() => setTab(value)}
             className={cn('-mb-px border-b-2 px-4 py-2.5 text-xs font-medium', tab === value ? 'border-zinc-950 font-semibold text-zinc-950' : 'border-transparent text-zinc-500 hover:text-zinc-950')}
           >
-            {value === 'queue' ? `Antrean (${allSubmitted.length + allCandidates.length})` : 'Riwayat'}
+            {value === 'queue' ? `Antrean (${allSubmitted.length})` : 'Riwayat'}
           </button>
         ))}
       </div>
@@ -232,7 +199,7 @@ export function VerificationPage() {
             <PageError description={queue.error.message} onRetry={() => void queue.refetch()} />
           ) : (
             <>
-              {allSubmitted.length + allCandidates.length > 0 && <SearchBox value={search} onChange={setSearch} />}
+              {allSubmitted.length > 0 && <SearchBox value={search} onChange={setSearch} />}
               <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
                 <header className="border-b border-zinc-200 bg-zinc-50/75 px-4 py-3">
                   <h2 className="text-xs font-semibold text-zinc-500">Bukti diajukan · terlama di atas</h2>
@@ -276,67 +243,6 @@ export function VerificationPage() {
                         </li>
                       );
                     })}
-                  </ul>
-                )}
-              </section>
-
-              <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-                <header className="border-b border-zinc-200 bg-zinc-50/75 px-4 py-3">
-                  <h2 className="text-xs font-semibold text-zinc-500">Kandidat bukti dari chat ({allCandidates.length})</h2>
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    Gambar/PDF dari jamaah setelah invoice terkirim. Pilih yang merupakan bukti transfer; foto lain (KTP, paspor) tandai <b className="font-semibold">Bukan bukti</b>.
-                  </p>
-                </header>
-                {candidates.length === 0 ? (
-                  <EmptyState icon={Sparkles} title={allCandidates.length ? 'Tidak ada yang cocok' : 'Belum ada kandidat bukti'}
-                    description={allCandidates.length ? 'Tidak ada kandidat yang cocok dengan pencarian.' : 'Belum ada kiriman gambar/PDF baru dari jamaah yang sudah ditagih.'} />
-                ) : (
-                  <ul className="divide-y divide-zinc-100">
-                    {candidates.map((p) => (
-                      <li key={p.id} className="space-y-2.5 px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <div className="grid min-w-0 flex-1 gap-1 sm:grid-cols-2 sm:gap-4">
-                            <ProspectIdentity p={p} />
-                            <BillSummary p={p} />
-                          </div>
-                          <Button size="sm" variant="secondary" to={chatLink(p)} icon={<MessageCircle size={13} />}>
-                            Chat
-                          </Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(p.candidateMessages ?? []).map((m) => {
-                            const isImage = m.messageType === 'imageMessage';
-                            const busy = attach.isPending && attach.variables?.message.id === m.id;
-                            const pending = attach.isPending || dismiss.isPending;
-                            return (
-                              <div key={m.id} className="w-36 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
-                                <a href={resolveMediaUrl(m.mediaUrl)} target="_blank" rel="noopener noreferrer" className="block h-24 bg-white" title="Buka ukuran penuh">
-                                  {isImage ? (
-                                    <img src={resolveMediaUrl(m.mediaUrl)} alt={`Kiriman ${p.name}`} className="h-full w-full object-cover" />
-                                  ) : (
-                                    <span className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-xs text-zinc-600">
-                                      <FileText size={18} className="text-zinc-500" />
-                                      <span className="line-clamp-2">{m.messageText || 'Dokumen'}</span>
-                                    </span>
-                                  )}
-                                </a>
-                                <div className="space-y-1 p-1.5">
-                                  <p className="text-xs text-zinc-500">{timeAgo(m.timestamp)}</p>
-                                  <Button size="sm" className="w-full" disabled={pending} onClick={() => attach.mutate({ prospect: p, message: m })}>
-                                    {busy ? 'Memproses…' : 'Jadikan bukti'}
-                                  </Button>
-                                  <button type="button" disabled={pending} onClick={() => dismiss.mutate({ prospect: p, message: m })}
-                                    aria-label={`Bukan bukti transfer: kiriman ${p.name} ${timeAgo(m.timestamp)}`}
-                                    className="w-full rounded-md py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 disabled:opacity-50">
-                                    Bukan bukti
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </li>
-                    ))}
                   </ul>
                 )}
               </section>

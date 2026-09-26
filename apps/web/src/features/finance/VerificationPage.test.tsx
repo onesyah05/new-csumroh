@@ -69,30 +69,19 @@ describe('Menu Verifikasi Pembayaran', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows submitted proofs and chat candidates across brands, for initial payments only', async () => {
+  it('menampilkan bukti yang diajukan lintas brand; kandidat dari chat tidak lagi tampil', async () => {
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter><VerificationPage /></MemoryRouter>
       </QueryClientProvider>,
     );
     expect(await screen.findByText('Ibu Siti')).toBeTruthy();
-    expect(screen.getByText('Pak Ahmad')).toBeTruthy();
-    expect(screen.getAllByText(/^Pembayaran DP · /).length).toBe(2);
+    expect(screen.queryByText('Pak Ahmad')).toBeNull();
+    expect(screen.queryByText(/Kandidat bukti/)).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Antrean (1)' })).toBeTruthy();
     expect(screen.queryByText(/Sisa .* dari /)).toBeNull();
     expect(screen.queryByText(/Pelunasan ·/)).toBeNull();
     expect(calls.some((c) => c.url.includes('/verification/queue?brandId=all'))).toBe(true);
-  });
-
-  it('turns a chat image into a proof with one click, without re-uploading the file', async () => {
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter><VerificationPage /></MemoryRouter>
-      </QueryClientProvider>,
-    );
-    fireEvent.click(await screen.findByRole('button', { name: 'Jadikan bukti' }));
-    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/prospects/2/payment-proof-from-message'))).toBe(true));
-    const post = calls.find((c) => c.url.endsWith('/prospects/2/payment-proof-from-message'))!;
-    expect(JSON.parse(String(post.init?.body))).toEqual({ messageId: 99, brandId: 2 });
   });
 
   it('Finance menolak bukti dengan alasan; tombol aktif setelah alasan diisi', async () => {
@@ -126,19 +115,9 @@ describe('Menu Verifikasi Pembayaran', () => {
 
   it('cari di antrean menyaring nama/invoice', async () => {
     renderPage();
-    await screen.findByText('Pak Ahmad');
-    fireEvent.change(screen.getByPlaceholderText('Cari nama, telepon, no. invoice, PIC'), { target: { value: 'siti' } });
-    expect(screen.queryByText('Pak Ahmad')).toBeNull();
-    expect(screen.getByText('Ibu Siti')).toBeTruthy();
-  });
-
-  it('kiriman bukan bukti disingkirkan dari kandidat', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Bukan bukti transfer: kiriman Pak Ahmad/ }));
-    await waitFor(() => {
-      const call = calls.find((c) => c.url.endsWith('/verification/candidates/dismiss'));
-      expect(call && JSON.parse(String(call.init?.body))).toEqual({ prospectId: 2, messageId: 99 });
-    });
+    await screen.findByText('Ibu Siti');
+    fireEvent.change(screen.getByPlaceholderText('Cari nama, telepon, no. invoice, PIC'), { target: { value: 'ahmad' } });
+    expect(screen.queryByText('Ibu Siti')).toBeNull();
   });
 
   it('tab Riwayat: terverifikasi & ditolak, total per bank, tanpa aksi koreksi untuk Finance', async () => {

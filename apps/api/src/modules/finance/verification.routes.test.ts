@@ -74,61 +74,25 @@ describe('Antrean verifikasi Finance', () => {
     const pending = base(1, { paymentProofUrl: '/p/a.jpg' });
     const verified = base(2, { paymentProofUrl: '/p/b.jpg', payments: [{ proofUrl: '/p/b.jpg', createdAt: invoiceAt }] });
     const settlement = base(3, { status: 'deal', paymentStatus: 'partial_dp', paymentProofUrl: '/p/c2.jpg', payments: [{ proofUrl: '/p/c1.jpg', createdAt: invoiceAt }] });
-    mocks.prospectFindMany.mockResolvedValueOnce([pending, verified, settlement]).mockResolvedValueOnce([]);
+    mocks.prospectFindMany.mockResolvedValueOnce([pending, verified, settlement]);
     const data = await queue();
     expect(data.submitted.map((p: Row) => p.id)).toEqual([1]);
     expect(data.submitted[0]).not.toHaveProperty('payments');
     expect(mocks.prospectFindMany.mock.calls[0][0].where.status.notIn).toEqual(expect.arrayContaining(['deal', 'closed_won']));
   });
 
-  it('suggests only inbound media sent after the invoice or last payment, never already-used messages', async () => {
-    const billed = base(4, { payments: [] });
-    const paidOnce = base(5, { status: 'deal', paymentStatus: 'partial_dp', payments: [{ proofUrl: '/p/x.jpg', proofMessageId: 'M-OLD', createdAt: new Date('2026-09-21T03:00:00.000Z') }] });
-    mocks.prospectFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([billed, paidOnce]);
-    mocks.messageFindMany.mockResolvedValue([
-      { id: 10, prospectId: 4, messageId: 'M-AFTER', timestamp: sec('2026-09-20T05:00:00.000Z') },
-      { id: 11, prospectId: 4, messageId: 'M-BEFORE', timestamp: sec('2026-09-19T05:00:00.000Z') },
-      { id: 12, prospectId: 5, messageId: 'M-OLD', timestamp: sec('2026-09-21T04:00:00.000Z') },
-      { id: 13, prospectId: 5, messageId: 'M-BEFORE-PAYMENT', timestamp: sec('2026-09-20T05:00:00.000Z') },
-    ]);
-    const data = await queue({ brandId: '2' });
-    expect(data.candidates.map((p: Row) => [p.id, p.candidateMessages.map((m: Row) => m.messageId)])).toEqual([[4, ['M-AFTER']]]);
-    // Scope brand diteruskan ke query.
-    expect(mocks.prospectFindMany.mock.calls[0]![0].where.brandId).toBe(2);
-  });
-
-  it('a prospect with a pending proof is not also shown as a candidate', async () => {
-    const pending = base(6, { paymentProofUrl: '/p/a.jpg' });
-    mocks.prospectFindMany.mockResolvedValueOnce([pending]).mockResolvedValueOnce([pending]);
-    mocks.messageFindMany.mockResolvedValue([{ id: 20, prospectId: 6, messageId: 'M-NEW', timestamp: sec('2026-09-22T00:00:00.000Z') }]);
-    const data = await queue();
-    expect(data.submitted).toHaveLength(1);
-    expect(data.candidates).toHaveLength(0);
-  });
-});
-
-
-describe('Antrean: patokan & kandidat', () => {
-  it('kiriman yang pernah ditolak/ditandai bukan bukti tidak jadi kandidat; custom membawa DP minimal', async () => {
-    const billed = base(7, {
-      proofRejections: [{ proofMessageId: 'M-REJ' }],
+  it('hanya bukti yang diajukan; tidak ada lagi kandidat dari chat; scope brand diteruskan; custom membawa DP minimal', async () => {
+    const pending = base(7, {
+      paymentProofUrl: '/p/a.jpg',
       customRequests: [{ agreedPrice: 90_000_000, minDpPerPax: 5_000_000, minDpInfant: 1_000_000, paxQuad: 2, paxTriple: 0, paxDouble: 0, paxInfant: 1 }],
     });
-    mocks.prospectFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([billed]);
-    mocks.messageFindMany.mockResolvedValue([
-      { id: 30, prospectId: 7, messageId: 'M-REJ', timestamp: sec('2026-09-22T00:00:00.000Z') },
-      { id: 31, prospectId: 7, messageId: 'M-NEW', timestamp: sec('2026-09-22T01:00:00.000Z') },
-    ]);
-    const data = await queue();
-    expect(data.candidates[0].candidateMessages.map((m: Row) => m.messageId)).toEqual(['M-NEW']);
-    expect(data.candidates[0]).toMatchObject({ customMinDp: 11_000_000, customAgreedPrice: 90_000_000 });
-    expect(data.candidates[0]).not.toHaveProperty('proofRejections');
-  });
-
-  it('Bukan bukti: kiriman dicatat sebagai dismissed', async () => {
-    mocks.messageFindFirst.mockResolvedValue({ messageId: 'M-KTP', mediaUrl: '/m/ktp.jpg', prospect: { brandId: 3 } });
-    await call('post', '/candidates/dismiss', { body: { prospectId: 7, messageId: 40 } });
-    expect(mocks.rejectionCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ brandId: 3, prospectId: 7, kind: 'dismissed', proofMessageId: 'M-KTP' }) });
+    mocks.prospectFindMany.mockResolvedValueOnce([pending]);
+    const data = await queue({ brandId: '2' });
+    expect(Object.keys(data)).toEqual(['submitted']);
+    expect(data.submitted[0]).toMatchObject({ id: 7, customMinDp: 11_000_000, customAgreedPrice: 90_000_000 });
+    expect(mocks.prospectFindMany).toHaveBeenCalledTimes(1);
+    expect(mocks.messageFindMany).not.toHaveBeenCalled();
+    expect(mocks.prospectFindMany.mock.calls[0]![0].where.brandId).toBe(2);
   });
 });
 

@@ -18,11 +18,8 @@ export const verificationRouter = Router();
 verificationRouter.use(authGuard, requireRole('finance', 'admin', 'superadmin'));
 
 const CLOSED_STATUSES: ProspectStatus[] = ['deal', 'closed_won', 'lose', 'closed_lost'];
-const PROOF_MESSAGE_TYPES = ['imageMessage', 'documentMessage'];
-const MAX_CANDIDATES_PER_PROSPECT = 4;
 const HISTORY_PAGE_SIZE = 50;
 const HISTORY_MAX_ROWS = 5000;
-const DISMISS_REASON = 'Bukan bukti transfer';
 
 const prospectSelect = {
   id: true,
@@ -50,8 +47,6 @@ const prospectSelect = {
     select: { proofUrl: true, proofMessageId: true, createdAt: true },
     orderBy: { createdAt: 'desc' as const },
   },
-  // Kiriman yang pernah ditolak / ditandai bukan bukti tidak muncul lagi sebagai kandidat.
-  proofRejections: { select: { proofMessageId: true } },
   customRequests: {
     where: { status: 'agreed' as const },
     orderBy: { id: 'desc' as const },
@@ -76,11 +71,8 @@ const assertNotFuture = (date?: string | null) => {
 
 /**
  * Antrean kerja Finance lintas brand.
- * - `submitted`: bukti sudah diajukan (upload CS atau diambil dari chat) dan belum dipakai
- *   oleh pembayaran terverifikasi mana pun; hanya pembayaran sebelum Deal.
- * - `candidates`: invoice sudah terkirim, belum ada bukti yang diajukan, dan jamaah mengirim
- *   gambar/PDF setelah invoice (atau setelah pembayaran terakhir). Tidak otomatis dianggap
- *   bukti karena jamaah juga mengirim KTP/paspor; Finance atau CS mengonfirmasi dengan satu klik.
+ * `submitted`: bukti sudah diajukan (upload CS atau dikirim dari menu pesan chat) dan belum dipakai
+ * oleh pembayaran terverifikasi mana pun; hanya pembayaran sebelum Deal.
  */
 verificationRouter.get('/queue', asyncHandler(async (req, res) => {
   const brandWhere = brandWhereOf(req);
@@ -91,60 +83,10 @@ verificationRouter.get('/queue', asyncHandler(async (req, res) => {
     orderBy: { paymentProofSubmittedAt: 'asc' },
   });
   const submitted = withProof.filter((p) => !CLOSED_STATUSES.includes(p.status) && !p.payments.some((pay) => pay.proofUrl === p.paymentProofUrl));
-  const submittedIds = new Set(submitted.map((p) => p.id));
-
-  const billed = await prisma.prospect.findMany({
-    where: {
-      ...brandWhere,
-      invoiceSentAt: { not: null },
-      status: { notIn: CLOSED_STATUSES },
-    },
-    select: prospectSelect,
-    orderBy: { invoiceSentAt: 'desc' },
-    take: 300,
-  });
-  const pool = billed.filter((p) => !CLOSED_STATUSES.includes(p.status) && !submittedIds.has(p.id));
-
-  // Gambar yang masuk sebelum invoice (atau sebelum pembayaran terakhir) bukan kandidat bukti.
-  const sinceFor = (p: (typeof pool)[number]) => {
-    const lastPayment = p.payments[0]?.createdAt;
-    const from = lastPayment && p.invoiceSentAt && lastPayment > p.invoiceSentAt ? lastPayment : p.invoiceSentAt!;
-    return Math.floor(from.getTime() / 1000);
-  };
-  const minSince = pool.length ? Math.min(...pool.map(sinceFor)) : 0;
-  const media = pool.length
-    ? await prisma.chatMessage.findMany({
-        where: {
-          prospectId: { in: pool.map((p) => p.id) },
-          isFromMe: false,
-          isDeleted: false,
-          messageType: { in: PROOF_MESSAGE_TYPES },
-          mediaUrl: { not: null },
-          timestamp: { gte: minSince },
-        },
-        select: { id: true, prospectId: true, messageId: true, messageType: true, mediaUrl: true, messageText: true, timestamp: true },
-        orderBy: { timestamp: 'desc' },
-      })
-    : [];
-
-  const candidates = pool
-    .map((p) => {
-      const used = new Set([
-        p.paymentProofMessageId,
-        ...p.payments.map((pay) => pay.proofMessageId),
-        ...(p.proofRejections ?? []).map((r) => r.proofMessageId),
-      ].filter(Boolean));
-      const since = sinceFor(p);
-      const messages = media
-        .filter((m) => m.prospectId === p.id && m.timestamp >= since && !used.has(m.messageId))
-        .slice(0, MAX_CANDIDATES_PER_PROSPECT);
-      return { ...p, candidateMessages: messages };
-    })
-    .filter((p) => p.candidateMessages.length > 0);
 
   // Patokan pengecekan Finance: DP minimal & nilai deal layanan custom yang sudah disepakati.
   const shape = <T extends QueueRow>(row: T) => {
-    const { payments: _payments, proofRejections: _rejections, customRequests, ...rest } = row;
+    const { payments: _payments, customRequests, ...rest } = row;
     const custom = customRequests[0];
     return {
       ...rest,
@@ -156,24 +98,8 @@ verificationRouter.get('/queue', asyncHandler(async (req, res) => {
     success: true,
     data: {
       submitted: submitted.map(shape),
-      candidates: candidates.map(shape),
     },
   });
-}));
-
-/** Kiriman chat yang jelas bukan bukti transfer (KTP, paspor, foto lain) disingkirkan dari kandidat. */
-verificationRouter.post('/candidates/dismiss', asyncHandler(async (req, res) => {
-  const { prospectId, messageId } = z.object({ prospectId: z.number().int().positive(), messageId: z.number().int().positive() }).parse(req.body);
-  const message = await prisma.chatMessage.findFirst({
-    where: { id: messageId, prospectId },
-    select: { messageId: true, mediaUrl: true, prospect: { select: { brandId: true } } },
-  });
-  if (!message?.prospect) throw new HttpError(404, 'Kiriman tidak ditemukan.');
-  const brandId = scopedBrandId(req, message.prospect.brandId);
-  await prisma.paymentProofRejection.create({
-    data: { brandId, prospectId, kind: 'dismissed', proofUrl: message.mediaUrl, proofMessageId: message.messageId, reason: DISMISS_REASON, rejectedById: req.user!.id },
-  });
-  res.json({ success: true });
 }));
 
 /** Ringkasan harian untuk Finance & manajemen (hari kerja WIB). */
