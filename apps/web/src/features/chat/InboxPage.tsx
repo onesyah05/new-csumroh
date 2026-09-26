@@ -10,6 +10,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowDown,
   ArrowUp,
   Ban,
   Building2,
@@ -184,6 +185,9 @@ function ContactAvatar({
     </span>
   );
 }
+
+/** Jumlah pesan per halaman riwayat chat (sama dengan bawaan API). */
+const MESSAGE_PAGE = 100;
 
 export function InboxPage() {
   const { user } = useAuth();
@@ -447,9 +451,21 @@ export function InboxPage() {
     });
   }
 
+  // Riwayat berhalaman: 100 pesan terbaru dulu; "Muat pesan lebih lama" menambah halaman di atas. Muat ulang
+  // (pesan baru, dsb.) mempertahankan jumlah yang sudah dimuat agar pesan lama tidak hilang dari layar.
+  const messagesIdentity = `${selectedId ?? ''}:${brandId ?? ''}`;
+  const [olderPage, setOlderPage] = useState<{ identity: string; hasMore: boolean; loading: boolean }>({ identity: '', hasMore: false, loading: false });
+  const messagesUrl = (params: Record<string, number>) =>
+    `/chat/prospects/${selectedId}/messages${query}${query ? '&' : '?'}${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString()}`;
   const messages = useQuery({
     queryKey: ['messages', selectedId, brandId],
-    queryFn: () => api.get<any[]>(`/chat/prospects/${selectedId}/messages${query}`),
+    queryFn: async () => {
+      const loaded = queryClient.getQueryData<any[]>(['messages', selectedId, brandId])?.length ?? 0;
+      const limit = Math.min(1000, Math.max(MESSAGE_PAGE, loaded));
+      const data = await api.get<any[]>(messagesUrl({ limit }));
+      setOlderPage({ identity: messagesIdentity, hasMore: data.length >= limit, loading: false });
+      return data;
+    },
     enabled: !!selectedId && !!brandId,
   });
 
@@ -461,7 +477,29 @@ export function InboxPage() {
     retry: false,
   });
 
-  const { timelineRef, contentRef } = useChatAutoScroll(`${brandId}:${selected?.id ?? ''}`, messages.data);
+  const { timelineRef, contentRef, showScrollToLatest, scrollToLatest } = useChatAutoScroll(`${brandId}:${selected?.id ?? ''}`, messages.data);
+
+  async function loadOlderMessages() {
+    const oldest = messages.data?.[0];
+    if (!oldest || olderPage.loading) return;
+    setOlderPage((current) => ({ ...current, loading: true }));
+    try {
+      const older = await api.get<any[]>(messagesUrl({ limit: MESSAGE_PAGE, beforeTs: oldest.timestamp, beforeId: oldest.id }));
+      // Posisi baca dijaga: tinggi yang bertambah di atas dikompensasi ke scrollTop.
+      const timeline = timelineRef.current;
+      const previousHeight = timeline?.scrollHeight ?? 0;
+      const previousTop = timeline?.scrollTop ?? 0;
+      queryClient.setQueryData<any[]>(['messages', selectedId, brandId], (current = []) => {
+        const known = new Set(current.map((m) => m.id));
+        return [...older.filter((m) => !known.has(m.id)), ...current];
+      });
+      setOlderPage({ identity: messagesIdentity, hasMore: older.length >= MESSAGE_PAGE, loading: false });
+      requestAnimationFrame(() => { if (timeline) timeline.scrollTop = previousTop + (timeline.scrollHeight - previousHeight); });
+    } catch (error) {
+      setOlderPage((current) => ({ ...current, loading: false }));
+      showToast((error as Error).message || 'Pesan lama gagal dimuat');
+    }
+  }
 
   function scrollToMessage(messageId?: string | null) {
     if (!messageId) return;
@@ -1354,7 +1392,7 @@ export function InboxPage() {
 
                   <span className="block min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="block min-w-0 flex-1 truncate text-sm font-semibold text-[#111b21] md:flex-none">{selected.name}</span>
+                      <span className="block min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-[#111b21] md:flex-none md:leading-5">{selected.name}</span>
                       {selected.leadSource === 'meta_ads' && (
                         <span
                           title={[selected.adHeadline, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
@@ -1366,7 +1404,7 @@ export function InboxPage() {
                       <span
                         title={selected.user?.name ? `Penanggung jawab: ${selected.user.name}` : 'Percakapan belum memiliki PIC'}
                         className={cn(
-                          'inline-flex min-w-0 max-w-[48%] shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs leading-4 md:hidden',
+                          'inline-flex min-w-0 max-w-[48%] shrink-0 items-center gap-1 rounded-md px-1.5 text-xs leading-4 md:hidden',
                           selected.user?.name ? 'bg-zinc-100 text-zinc-700' : 'bg-amber-50 text-amber-800',
                         )}
                       >
@@ -1387,8 +1425,8 @@ export function InboxPage() {
                         ? (selected.phone.startsWith('+') ? selected.phone : `+${selected.phone}`)
                         : 'WhatsApp'}
                     </span>
-                    <span className="mt-1 flex min-w-0 items-center gap-2 md:hidden">
-                      <span className="min-w-0 max-w-24" title={activeBrand?.name} aria-label={`Brand: ${activeBrand?.name || activeBrand?.code || brandId}`}>
+                    <span className="flex min-w-0 items-center gap-2 text-xs leading-4 md:hidden">
+                      <span className="flex min-w-0 max-w-24" title={activeBrand?.name} aria-label={`Brand: ${activeBrand?.name || activeBrand?.code || brandId}`}>
                         <StatusBadge
                           size="sm"
                           label={activeBrand?.code || `Brand ${brandId}`}
@@ -1489,7 +1527,8 @@ export function InboxPage() {
               </header>
 
               {/* Chat Message Timeline with WhatsApp Web Wallpaper */}
-              <div ref={timelineRef} className="thin-scrollbar flex-1 overflow-y-auto wa-chat-bg px-3 py-4 sm:px-6">
+              <div className="relative flex min-h-0 flex-1">
+              <div ref={timelineRef} className="thin-scrollbar min-w-0 flex-1 overflow-y-auto wa-chat-bg px-3 py-4 sm:px-6">
                 <div ref={contentRef} className="mx-auto max-w-3xl space-y-1.5">
                   {/* Encrypted Notice Banner */}
                   <div className="mb-4 text-center">
@@ -1498,6 +1537,19 @@ export function InboxPage() {
                       Pesan terenkripsi secara end-to-end oleh WhatsApp
                     </span>
                   </div>
+
+                  {olderPage.identity === messagesIdentity && olderPage.hasMore && !messages.isLoading && (
+                    <div className="mb-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => void loadOlderMessages()}
+                        disabled={olderPage.loading}
+                        className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-[#54656f] shadow-2xs hover:bg-white disabled:opacity-60"
+                      >
+                        {olderPage.loading ? 'Memuat…' : 'Muat pesan lebih lama'}
+                      </button>
+                    </div>
+                  )}
 
                   {messages.isLoading && (
                     <div className="space-y-3" role="status" aria-label="Memuat percakapan">
@@ -1716,7 +1768,7 @@ export function InboxPage() {
                                         </DropdownMenu.Item>
 
                                         {/* Bukti transfer langsung dari chat: server menyalin berkas, tanpa unduh-unggah ulang */}
-                                        {!['deal', 'closed_won'].includes(selected?.status || '') && !isMessageDeleted && !item.isFromMe && item.mediaUrl && (item.messageType === 'imageMessage' || item.messageType === 'documentMessage') && (
+                                        {(canReply || user?.role === 'finance') && !['deal', 'closed_won'].includes(selected?.status || '') && !isMessageDeleted && !item.isFromMe && item.mediaUrl && (item.messageType === 'imageMessage' || item.messageType === 'documentMessage') && (
                                           selected?.paymentProofMessageId === item.messageId ? (
                                             <DropdownMenu.Item
                                               disabled
@@ -2035,6 +2087,21 @@ export function InboxPage() {
                     );
                   })}
                 </div>
+              </div>
+
+                {showScrollToLatest && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={scrollToLatest}
+                    size="icon"
+                    aria-label="Ke pesan terbaru"
+                    title="Ke pesan terbaru"
+                    className="absolute bottom-3 right-3 z-20 h-11 w-11 rounded-full border-[#d1d7db] bg-white text-[#54656f] shadow-md hover:bg-[#f0f2f5] sm:bottom-4 sm:right-6"
+                  >
+                    <ArrowDown size={20} aria-hidden="true" />
+                  </Button>
+                )}
               </div>
 
               {/* Quick Reply Chips Bar */}
@@ -2401,15 +2468,26 @@ export function InboxPage() {
                         <Lock size={16} />
                       </div>
                       <div>
-                        <p className="font-bold text-zinc-950">
-                          Hanya Admin dan PIC yang dapat membalas chat
-                        </p>
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          Percakapan ini ditugaskan kepada PIC <strong>{selected.user?.name || 'CS lain'}</strong>.{' '}
-                          {canTakeOver
-                            ? 'Jamaah belum dibalas lebih dari 15 menit, jadi Anda boleh mengambil alih.'
-                            : 'Anda hanya dapat membaca pesan. Bila jamaah belum dibalas lebih dari 15 menit, CS lain boleh mengambil alih.'}
-                        </p>
+                        {user?.role === 'finance' ? (
+                          <>
+                            <p className="font-bold text-zinc-950">Finance hanya melihat percakapan</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              Balasan dikirim oleh PIC{selected.user?.name ? <> (<strong>{selected.user.name}</strong>)</> : ''} atau Admin. Kiriman gambar/PDF jamaah bisa dijadikan bukti transfer dari menu pesannya.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-bold text-zinc-950">
+                              Hanya Admin dan PIC yang dapat membalas chat
+                            </p>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              Percakapan ini ditugaskan kepada PIC <strong>{selected.user?.name || 'CS lain'}</strong>.{' '}
+                              {canTakeOver
+                                ? 'Jamaah belum dibalas lebih dari 15 menit, jadi Anda boleh mengambil alih.'
+                                : 'Anda hanya dapat membaca pesan. Bila jamaah belum dibalas lebih dari 15 menit, CS lain boleh mengambil alih.'}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </div>
                     {canTakeOver && (

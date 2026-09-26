@@ -63,7 +63,7 @@ import { FinanceVerifyModal } from './FinanceVerifyModal';
 import { PrivateProofThumb } from './PrivateProof';
 import { LostReasonModal } from './LostReasonModal';
 import { QualificationModal } from './QualificationModal';
-import { PicDialog, isLockedForCs } from '../prospects/PicDialog';
+import { PicDialog, canEditProspect, readOnlyNote } from '../prospects/PicDialog';
 
 const rupiah = (value: unknown) =>
   new Intl.NumberFormat('id-ID', {
@@ -144,7 +144,9 @@ export function ChatProspectProfile({
   const customBase = custom?.mode === 'package' ? packages.find((pkg) => pkg.id === custom.basePackageId) ?? null : null;
   const offerBlocked = customFailed ? 'Layanan custom belum termuat' : custom && customStatus !== 'agreed' ? 'Sepakati harga custom dulu' : null;
   // CS yang bukan PIC hanya membaca profil; server juga menolak perubahannya.
-  const locked = Boolean(p) && isLockedForCs(user, p);
+  const locked = Boolean(p) && !canEditProspect(user, p);
+  // Finance: prospek hanya-baca, kecuali tindakan pembayaran (unggah bukti, verifikasi).
+  const financeView = user?.role === 'finance';
   const [showHandover, setShowHandover] = useState(false);
 
   const autosave = useProfileAutosave({
@@ -243,8 +245,8 @@ export function ChatProspectProfile({
   const lastRejection = p.proofRejections?.[0] as { reason: string; createdAt: string; rejectedBy?: { name: string } | null } | undefined;
   const proofRejected = lastRejection && !p.paymentProofUrl && !won && !['lose', 'closed_lost'].includes(p.status)
     && (!p.invoiceSentAt || new Date(lastRejection.createdAt) >= new Date(p.invoiceSentAt)) ? lastRejection : null;
-  function openAction(setter: (open: boolean) => void) {
-    if (locked) { onShowToast(`Ditangani ${p?.user?.name ?? 'CS lain'}; hanya PIC atau Admin yang dapat mengubah.`); return; }
+  function openAction(setter: (open: boolean) => void, payment = false) {
+    if (locked && !(payment && financeView)) { onShowToast(readOnlyNote(user, p)); return; }
     setter(true);
   }
   const isPic = Boolean(p?.userId && p.userId === user?.id);
@@ -279,7 +281,8 @@ export function ChatProspectProfile({
 
   type StageAction = { label: string; icon: typeof FileCheck; onClick: () => void; disabled?: boolean; variant?: 'primary' | 'secondary' };
   const stageAction: { hint?: string; warn?: boolean; primary?: StageAction; secondary?: StageAction } | null = (() => {
-    if (won || lost || locked || customFailed) return null;
+    if (won || lost || customFailed) return null;
+    if (locked && !(financeView && stageIndex === 4)) return null;
     if (stageIndex <= 1) {
       return stageIndex === 1
         ? { primary: { label: 'Lengkapi kualifikasi', icon: UserCheck, variant: 'secondary', onClick: () => setActiveTab('qualification') } }
@@ -288,8 +291,8 @@ export function ChatProspectProfile({
     if (stageIndex === 4) {
       const invoice = `${p.invoiceNumber || 'Invoice'} · ${rupiah(p.invoiceAmount || 0)}`;
       if (p.paymentProofUrl && !financialRole) return { hint: `${invoice} · bukti di Finance` };
-      if (p.paymentProofUrl) return { hint: invoice, primary: { label: 'Verifikasi pembayaran', icon: ShieldCheck, onClick: () => openAction(setShowFinanceVerifyModal) } };
-      return { hint: invoice, primary: { label: 'Unggah bukti transfer', icon: UploadCloud, onClick: () => openAction(setShowPaymentProofModal) } };
+      if (p.paymentProofUrl) return { hint: invoice, primary: { label: 'Verifikasi pembayaran', icon: ShieldCheck, onClick: () => openAction(setShowFinanceVerifyModal, true) } };
+      return { hint: invoice, primary: { label: 'Unggah bukti transfer', icon: UploadCloud, onClick: () => openAction(setShowPaymentProofModal, true) } };
     }
     // Layanan custom: aksi tahap baru tersedia setelah nilai deal disepakati (status ada di kartu custom).
     if (custom) { if (customStatus !== 'agreed') return null; } else if (!selectedPackage) return { hint: 'Pilih paket untuk penawaran.' };
@@ -323,12 +326,15 @@ export function ChatProspectProfile({
     </div>
   ) : null;
 
-  const menuItems: { label: string; icon: typeof FileCheck; onClick: () => void; disabled?: boolean; hint?: string | null }[] = [
+  const paymentItems = [
+    { label: 'Unggah bukti transfer', icon: UploadCloud, onClick: () => openAction(setShowPaymentProofModal, true) },
+    ...(financialRole ? [{ label: 'Verifikasi pembayaran', icon: ShieldCheck, onClick: () => openAction(setShowFinanceVerifyModal, true) }] : []),
+  ];
+  const menuItems: { label: string; icon: typeof FileCheck; onClick: () => void; disabled?: boolean; hint?: string | null }[] = financeView ? paymentItems : [
     { label: 'Catat keberatan', icon: AlertCircle, onClick: () => openAction(setShowObjectionModal) },
     { label: 'Kirim penawaran', icon: FileCheck, onClick: () => openAction(setShowOfferModal), disabled: !connected || Boolean(offerBlocked), hint: offerBlocked },
     { label: 'Kirim invoice', icon: CreditCard, onClick: () => openAction(setShowInvoiceModal), disabled: Boolean(offerBlocked), hint: offerBlocked },
-    { label: 'Unggah bukti transfer', icon: UploadCloud, onClick: () => openAction(setShowPaymentProofModal) },
-    ...(financialRole ? [{ label: 'Verifikasi pembayaran', icon: ShieldCheck, onClick: () => openAction(setShowFinanceVerifyModal) }] : []),
+    ...paymentItems,
     ...(user?.role === 'cs' && isPic ? [{ label: 'Serahkan ke CS lain', icon: UserPlus2, onClick: () => setShowHandover(true) }] : []),
   ];
 
@@ -337,8 +343,8 @@ export function ChatProspectProfile({
       <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto">
       {/* Tahap prospek: di mana prospek sekarang dan apa berikutnya. Tanpa tombol besar. */}
       <section aria-label="Tahap prospek" className="space-y-2 border-b border-zinc-200 px-4 py-3">
-        {locked && <p role="note" className="text-xs text-zinc-600">Hanya baca: ditangani {p.user?.name ?? 'CS lain'}.</p>}
-        {!connected && <p className="text-xs text-amber-800">WhatsApp terputus; profil tetap bisa diubah.</p>}
+        {locked && <p role="note" className="text-xs text-zinc-600">Hanya baca: {financeView ? readOnlyNote(user, p) : `ditangani ${p.user?.name ?? 'CS lain'}.`}</p>}
+        {!connected && <p className="text-xs text-amber-800">WhatsApp terputus{locked ? '.' : '; profil tetap bisa diubah.'}</p>}
         <div className="flex items-center gap-2 text-xs">
           {lost ? (
             <p className="flex-1 text-zinc-700"><b className="font-semibold text-rose-700">Tidak jadi</b>{p?.lostReason ? ` · ${p.lostReason}` : ''}</p>
@@ -347,7 +353,7 @@ export function ChatProspectProfile({
               <b className="font-semibold tabular-nums text-zinc-900">{stageIndex}/5</b> · {won ? <>{nextText} · <b className="font-semibold text-emerald-800">{rupiah(p?.dealValue || 0)}</b></> : nextText}
             </p>
           )}
-          {!won && !lost && !locked && (
+          {!won && !lost && (!locked || financeView) && (
             <div className="relative" onKeyDown={(event) => { if (event.key === 'Escape') setShowMoreActions(false); }}>
               <button
                 type="button"
@@ -366,10 +372,12 @@ export function ChatProspectProfile({
                     </button>
                   ))}
                   {/* Aksi yang mengakhiri prospek dipisah dari aksi biasa. */}
-                  <div className="my-1 border-t border-zinc-100" />
-                  <button type="button" onClick={() => openAction(setShowLostModal)} className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left font-medium text-rose-700 hover:bg-rose-50">
-                    <Ban size={13} aria-hidden="true" />Tandai tidak jadi
-                  </button>
+                  {!financeView && <>
+                    <div className="my-1 border-t border-zinc-100" />
+                    <button type="button" onClick={() => openAction(setShowLostModal)} className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left font-medium text-rose-700 hover:bg-rose-50">
+                      <Ban size={13} aria-hidden="true" />Tandai tidak jadi
+                    </button>
+                  </>}
                 </div>
               )}
             </div>
@@ -496,7 +504,7 @@ export function ChatProspectProfile({
             </label>
             <div className="border-t border-zinc-100 pt-3">
               <ProspectNotes prospectId={prospectId} brandId={brandId}
-                disabledReason={won ? 'Penanganan CS selesai pada Deal.' : locked ? 'Hanya PIC yang dapat menambah catatan.' : null} />
+                disabledReason={won ? 'Penanganan CS selesai pada Deal.' : locked ? (financeView ? 'Finance tidak menambah catatan prospek.' : 'Hanya PIC yang dapat menambah catatan.') : null} />
             </div>
             {p?.paymentProofUrl && (
               <div className="flex items-center gap-2 border-t border-zinc-100 pt-3 text-xs">
