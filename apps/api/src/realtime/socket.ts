@@ -2,6 +2,7 @@ import type { Server as HttpServer } from 'node:http';
 import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import type { SessionUser } from '@csumroh/shared-types';
+import { isTokenRevoked } from '../modules/auth/sessions.js';
 import { allowedOrigins, env } from '../config/env.js';
 
 let io: Server | undefined;
@@ -12,7 +13,10 @@ export function createSocketServer(server: HttpServer) {
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth.token as string;
-      socket.data.user = jwt.verify(token, env.JWT_ACCESS_SECRET) as SessionUser;
+      const payload = jwt.verify(token, env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] }) as SessionUser & { type?: string; iat?: number; exp?: number };
+      if (payload.type !== 'access' || isTokenRevoked(payload.id, payload.iat)) throw new Error('revoked');
+      socket.data.user = payload;
+      socket.data.exp = payload.exp;
       next();
     } catch { next(new Error('unauthorized')); }
   });
@@ -27,6 +31,13 @@ export function createSocketServer(server: HttpServer) {
     for (const brandId of brandIds) socket.join(`brand:${brandId}`);
     // Room pribadi untuk notifikasi in-app: semua tab/perangkat user yang sama.
     socket.join(userRoom(user.id));
+    // Koneksi tidak boleh hidup lebih lama dari token-nya: diputus saat kedaluwarsa, klien menyambung ulang
+    // dengan token hasil refresh (atau keluar bila akses sudah dicabut).
+    const exp = Number(socket.data.exp);
+    if (exp) {
+      const timer = setTimeout(() => socket.disconnect(true), Math.max(0, exp * 1000 - Date.now()));
+      socket.on('disconnect', () => clearTimeout(timer));
+    }
   });
   return io;
 }
@@ -37,6 +48,11 @@ export function emitToBrand(brandId: number, event: string, payload: unknown) {
 }
 
 const userRoom = (userId: number) => `user:${userId}`;
+
+/** Putus semua koneksi realtime milik user (akses dicabut). */
+export function disconnectUser(userId: number) {
+  io?.in(userRoom(userId)).disconnectSockets(true);
+}
 
 export function emitToUser(userId: number, event: string, payload: unknown) {
   io?.to(userRoom(userId)).emit(event, payload);

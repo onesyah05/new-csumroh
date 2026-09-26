@@ -28,7 +28,14 @@ export function SocketBridge() {
       if (hasConnectedBefore) refresh();
       hasConnectedBefore = true;
     });
-    socket.on('disconnect', () => setRealtimeStatus('offline'));
+    socket.on('disconnect', (reason) => {
+      setRealtimeStatus('offline');
+      // Server memutus saat access token kedaluwarsa atau akses dicabut. socket.io tidak menyambung ulang
+      // sendiri untuk alasan ini: refresh dulu. Bila refresh ditolak (akun nonaktif), sesi berakhir → keluar.
+      if (reason === 'io server disconnect') {
+        void refreshSession().then((session) => { if (session) socket.connect(); });
+      }
+    });
     socket.on('connect_error', (error) => {
       setRealtimeStatus('offline');
       // Handshake ditolak middleware auth (token kedaluwarsa): socket.io tidak mencoba lagi sendiri.
@@ -41,16 +48,43 @@ export function SocketBridge() {
       if (session && !socket.connected) socket.connect();
     });
 
+    // Sinkron penuh: hanya setelah tersambung ulang (event yang terlewat tidak diputar ulang server).
     const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      void queryClient.invalidateQueries({ queryKey: ['prospects'] });
-      void queryClient.invalidateQueries({ queryKey: ['prospect'] });
-      void queryClient.invalidateQueries({ queryKey: ['messages'] });
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
-      void queryClient.invalidateQueries({ queryKey: ['scripts'] });
+      for (const key of ['contacts', 'prospects', 'prospect', 'messages', 'conversations', 'dashboard', 'verification-queue', 'scripts']) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
     };
+
+    // Event realtime datang beruntun (WhatsApp ramai, impor riwayat). Muat ulang digabung per 1,5 detik dan hanya
+    // untuk data yang terdampak; sebelumnya setiap event memuat ulang daftar + chat terbuka di setiap browser.
+    const pendingKeys = new Set<string>();
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = (...keys: string[]) => {
+      keys.forEach((key) => pendingKeys.add(key));
+      if (flushTimer) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        const keysNow = [...pendingKeys];
+        pendingKeys.clear();
+        for (const key of keysNow) void queryClient.invalidateQueries({ queryKey: [key] });
+      }, 1500);
+    };
+    const refreshLists = () => scheduleRefresh('conversations', 'prospects', 'contacts', 'dashboard', 'verification-queue');
+
+    // Pesan baru langsung masuk ke chat yang sedang terbuka (tanpa memuat ulang riwayat), lalu daftar menyusul.
+    const onMessageNew = (message?: { id?: number; prospectId?: number | null; remoteJid?: string; timestamp?: number }) => {
+      if (message?.id) {
+        queryClient.setQueriesData<any[]>({ queryKey: ['messages'] }, (old) => {
+          if (!Array.isArray(old) || old.some((m) => m.id === message.id)) return old;
+          const sameConversation = old.some((m) => (message.prospectId && m.prospectId === message.prospectId) || (message.remoteJid && m.remoteJid === message.remoteJid));
+          if (!sameConversation) return old;
+          return [...old, message].sort((a, b) => (a.timestamp - b.timestamp) || (a.id - b.id));
+        });
+      }
+      refreshLists();
+    };
+    // Reaksi/hapus/bintang mengubah isi chat terbuka; daftar hanya bila pesan terakhir ikut berubah.
+    const onMessageChanged = () => scheduleRefresh('messages', 'conversations');
 
     const onMessageStatus = (data?: { messageId?: string; status?: string; prospectId?: number }) => {
       if (data?.messageId && data?.status) {
@@ -73,7 +107,7 @@ export function SocketBridge() {
           });
         });
       }
-      refresh();
+      // Status cukup diperbarui di cache; tidak memuat ulang daftar/chat (dulu ±3 muat ulang per pesan keluar).
     };
 
     const refreshWhatsApp = () => {
@@ -82,13 +116,13 @@ export function SocketBridge() {
       void queryClient.invalidateQueries({ queryKey: ['brands'] });
     };
 
-    socket.on('message:new', refresh);
+    socket.on('message:new', onMessageNew);
     socket.on('message:status', onMessageStatus);
-    socket.on('message:reaction', refresh);
-    socket.on('message:deleted', refresh);
-    socket.on('message:starred', refresh);
-    socket.on('contacts:synced', refresh);
-    socket.on('conversations:updated', refresh);
+    socket.on('message:reaction', onMessageChanged);
+    socket.on('message:deleted', onMessageChanged);
+    socket.on('message:starred', onMessageChanged);
+    socket.on('contacts:synced', refreshLists);
+    socket.on('conversations:updated', refreshLists);
     const onFinanceProof = (data?: { prospectId?: number; name?: string }) => {
       if (data?.prospectId) {
         void queryClient.invalidateQueries({ queryKey: ['prospect', data.prospectId] });
@@ -107,9 +141,11 @@ export function SocketBridge() {
       }
     };
 
-    socket.on('conversation:read', refresh);
-    socket.on('prospect:updated', refresh);
-    socket.on('prospect:claimed', refresh);
+    socket.on('conversation:read', refreshLists);
+    // Data prospek berubah (status, PIC, kualifikasi): profil & skrip ikut, tanpa memuat ulang chat.
+    const onProspectChanged = () => scheduleRefresh('prospect', 'prospects', 'conversations', 'dashboard', 'verification-queue', 'scripts');
+    socket.on('prospect:updated', onProspectChanged);
+    socket.on('prospect:claimed', onProspectChanged);
 
     // Notifikasi in-app: lencana/panel disegarkan; tindakan & mendesak juga muncul sebagai toast,
     // kecuali user sedang melihat objeknya (mis. chat prospek yang sama sudah terbuka).
@@ -135,6 +171,7 @@ export function SocketBridge() {
     socket.on('wa:qr', refreshWhatsApp);
 
     return () => {
+      if (flushTimer) clearTimeout(flushTimer);
       unsubscribeSession();
       socket.close();
       setRealtimeStatus('offline');

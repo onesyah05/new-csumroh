@@ -1,9 +1,8 @@
-import { lazy, type ComponentType } from 'react';
+import { lazy, Suspense, type ComponentType } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth';
 import { AppShell } from './AppShell';
 import { LoginPage } from '../features/auth/LoginPage';
-import { SocketBridge } from './socket';
 import { Toaster } from './toast';
 
 // Setiap halaman dimuat saat dibuka: CS tidak mengunduh modul admin/paket/Meta yang tidak dipakainya.
@@ -30,6 +29,8 @@ const MetaCapiPage = page(() => import('../features/meta/MetaCapiPage'), 'MetaCa
 const CustomRequestsPage = page(() => import('../features/custom/CustomRequestsPage'), 'CustomRequestsPage');
 const NotificationSettingsPage = page(() => import('../features/notifications/NotificationSettingsPage'), 'NotificationSettingsPage');
 const MorePage = page(() => import('./MorePage'), 'MorePage');
+// socket.io-client (±40 KB) baru diunduh setelah login, bukan di halaman login.
+const SocketBridge = page(() => import('./socket'), 'SocketBridge');
 
 export function App() {
   const { user, loading } = useAuth();
@@ -46,7 +47,7 @@ export function App() {
   if (user.role === 'product') {
     return (
       <>
-        <SocketBridge />
+        <Suspense fallback={null}><SocketBridge /></Suspense>
         <Toaster />
         <Routes>
           <Route element={<AppShell />}>
@@ -62,7 +63,7 @@ export function App() {
 
   return (
     <>
-      <SocketBridge />
+      <Suspense fallback={null}><SocketBridge /></Suspense>
       <Toaster />
       <Routes>
           <Route element={<AppShell />}>
