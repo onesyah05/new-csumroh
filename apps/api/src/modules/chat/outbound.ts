@@ -3,6 +3,7 @@ import type { SessionUser } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { emitToBrand } from '../../realtime/socket.js';
+import { scheduleConversationStats } from './conversation-stats.js';
 import { HttpError } from '../../utils/http.js';
 import { queueCapiForStatus } from '../capi/capi.service.js';
 import { dispatch, notifyPicChange, onWhatsappStatus, resolveReplyNotifications } from '../notifications/notification.events.js';
@@ -175,6 +176,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
     emitToBrand(brandId, 'prospect:updated', { id: prospect.id, status: 'contact' });
     queueCapiForStatus(prospect.id, 'contact');
   }
+  scheduleConversationStats([prospect.id]);
   emitToBrand(brandId, 'message:new', message);
   return message;
 }

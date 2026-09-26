@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { secretMatches } from '../../utils/secrets.js';
+import { ensureConversationStats, loadConversationWindows, scheduleConversationStats, summarizeMessages } from './conversation-stats.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Router } from 'express';
@@ -12,8 +14,9 @@ import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from './outbound.js';
-import { resolveFlyerFile } from '../../utils/safe-path.js';
-import { avatarNeedsRefresh, firstUnansweredAt } from '@csumroh/shared-types';
+import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
+import { Prisma, type ChatMessage } from '@prisma/client';
+import { avatarNeedsRefresh } from '@csumroh/shared-types';
 import { refreshProspectAvatar, refreshProspectAvatars } from './avatar.service.js';
 import { pickAutoAssignee } from '../prospects/pic.js';
 import { resolveNotifications } from '../notifications/notify.service.js';
@@ -65,7 +68,26 @@ export function isGenericContactName(name?: string | null, phone?: string | null
   return false;
 }
 
+/**
+ * Peta @lid ↔ nomor dibangun dari seluruh pesan & prospek brand (pemindaian LIKE '%@lid'). Hasilnya di-cache
+ * 30 detik per brand dan dikosongkan saat pesan/kontak membawa pasangan @lid↔nomor baru (invalidateLidPhoneMap).
+ */
+const lidMapCache = new Map<number, { at: number; ownKey: string; value: { lidToPhone: Map<string, string>; phoneToLid: Map<string, string> } }>();
+const LID_MAP_TTL_MS = 30_000;
+export function invalidateLidPhoneMap(brandId: number) {
+  lidMapCache.delete(brandId);
+}
+
 export async function buildLidPhoneMap(brandId: number, ownPhones: Set<string>) {
+  const ownKey = [...ownPhones].sort().join(',');
+  const cached = lidMapCache.get(brandId);
+  if (cached && cached.ownKey === ownKey && Date.now() - cached.at < LID_MAP_TTL_MS) return cached.value;
+  const value = await computeLidPhoneMap(brandId, ownPhones);
+  lidMapCache.set(brandId, { at: Date.now(), ownKey, value });
+  return value;
+}
+
+async function computeLidPhoneMap(brandId: number, ownPhones: Set<string>) {
   const lidToPhone = new Map<string, string>();
   const phoneToLid = new Map<string, string>();
 
@@ -135,6 +157,15 @@ export function chooseCanonicalProspect<T extends ProspectIdentity>(prospects: T
   return [...prospects].sort((a, b) => prospectScore(b) - prospectScore(a))[0]!;
 }
 
+/** Field pesan terakhir untuk daftar percakapan/Pipeline; teks dipotong untuk pratinjau & pencarian. */
+function messagePreview(message: ChatMessage) {
+  return {
+    id: message.id, messageId: message.messageId, prospectId: message.prospectId, remoteJid: message.remoteJid,
+    isFromMe: message.isFromMe, messageText: message.messageText?.slice(0, 300) ?? null, messageType: message.messageType,
+    mediaUrl: message.mediaUrl, status: message.status, timestamp: message.timestamp, senderName: message.senderName,
+  };
+}
+
 export async function getLivechatConversationsForBrand(
   brandId: number,
   options?: { requireConnected?: boolean }
@@ -155,20 +186,13 @@ export async function getLivechatConversationsForBrand(
 
   const { lidToPhone } = await buildLidPhoneMap(brandId, ownPhones);
 
+  // Ringkasan percakapan dibaca dari tabel prospek (lihat conversation-stats.ts); prospek lama/impor yang belum
+  // punya ringkasan dihitung dulu. Prospek tanpa pesan tampil (lastMessageAt null) tidak masuk daftar.
+  await ensureConversationStats(brandId);
   const prospects = await prisma.prospect.findMany({
     where: {
       brandId,
-      messages: {
-        some: {
-          isDeleted: false,
-          messageType: { notIn: ['protocolMessage', 'reactionMessage'] },
-          OR: [
-            { messageText: { not: '' } },
-            { mediaUrl: { not: null } },
-            { messageType: { in: ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'contactMessage', 'locationMessage'] } },
-          ],
-        },
-      },
+      lastMessageAt: { not: null },
       NOT: [
         { remoteJid: { contains: '@newsletter' } },
         { remoteJid: { contains: '@broadcast' } },
@@ -179,29 +203,6 @@ export async function getLivechatConversationsForBrand(
       package: { select: { id: true, name: true, departureDate: true } },
       // Status layanan custom yang berjalan (label di daftar percakapan & Pipeline).
       customRequests: { where: { status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, take: 1, select: { id: true, status: true, quoteValidUntil: true } },
-      _count: {
-        select: {
-          messages: {
-            where: {
-              isDeleted: false,
-              messageType: { notIn: ['protocolMessage', 'reactionMessage'] },
-            },
-          },
-        },
-      },
-      messages: {
-        where: {
-          isDeleted: false,
-          messageType: { notIn: ['protocolMessage', 'reactionMessage'] },
-          OR: [
-            { messageText: { not: '' } },
-            { mediaUrl: { not: null } },
-            { messageType: { in: ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'contactMessage', 'locationMessage'] } },
-          ],
-        },
-        orderBy: { timestamp: 'desc' },
-        take: 20,
-      },
     },
     orderBy: { updatedAt: 'desc' },
   });
@@ -220,22 +221,24 @@ export async function getLivechatConversationsForBrand(
     grouped.set(key, [...(grouped.get(key) ?? []), prospect]);
   }
 
-  const data = [...grouped.values()].map((group) => {
-    const canonical = chooseCanonicalProspect(group);
-    const sortedMessages = group.flatMap((item) => item.messages).sort((a, b) => b.timestamp - a.timestamp);
-    const latest = sortedMessages[0];
+  const data = (await Promise.all([...grouped.values()].map(async (group) => {
+    const { lastMessage: _last, inboundSenderName: _sender, conversationStatsAt: _statsAt, ...canonical } = chooseCanonicalProspect(group);
+    const summary = group.length === 1
+      ? {
+          latest: group[0]!.lastMessage as unknown as (ChatMessage | null),
+          unreadCount: group[0]!.unreadCount,
+          awaitingSince: group[0]!.awaitingSince,
+          inboundSenderName: group[0]!.inboundSenderName,
+        }
+      : summarizeMessages(await loadConversationWindows(group.map((item) => item.id)));
+    const latest = summary.latest;
     const isGroup = Boolean(canonical.remoteJid && canonical.remoteJid.endsWith('@g.us'));
     const resolvedPhone = isGroup ? null : (normalizePhoneIdentifier(canonical.phone) || (canonical.remoteJid ? lidToPhone.get(canonical.remoteJid) : null));
     const pn = normalizePhoneIdentifier(canonical.phone) || (canonical.remoteJid ? lidToPhone.get(canonical.remoteJid) : '');
     const isOwn = (pn && ownPhones.has(pn)) || (canonical.remoteJid && ownPhones.has(normalizePhoneIdentifier(canonical.remoteJid)));
 
-    let unreadCount = 0;
-    for (const m of sortedMessages) {
-      if (m.isFromMe) break;
-      if (m.status !== 'read') unreadCount++;
-    }
-    // Sejak kapan jamaah menunggu balasan (dasar aturan ambil alih PIC); null bila pesan terakhir dari CS.
-    const awaitingSince = isGroup ? null : firstUnansweredAt(sortedMessages);
+    const unreadCount = summary.unreadCount;
+    const awaitingSince = isGroup ? null : summary.awaitingSince;
 
     let displayName = canonical.name;
     if (canonical.remoteJid === '0@s.whatsapp.net') {
@@ -247,16 +250,15 @@ export async function getLivechatConversationsForBrand(
     } else if (isGroup) {
       displayName = canonical.name && canonical.name !== canonical.remoteJid ? canonical.name : 'Grup WhatsApp';
     } else {
-      const msgWithSender = group.flatMap((i) => i.messages).find((m) => m.senderName && !m.isFromMe);
       const nameIsGeneric = isGenericContactName(displayName, resolvedPhone || canonical.phone);
-      if (msgWithSender?.senderName && nameIsGeneric) {
-        displayName = msgWithSender.senderName;
+      if (summary.inboundSenderName && nameIsGeneric) {
+        displayName = summary.inboundSenderName;
       } else if (nameIsGeneric) {
         displayName = resolvedPhone ? `+${resolvedPhone}` : (canonical.phone ? `+${canonical.phone}` : 'Kontak WhatsApp');
       }
     }
 
-    const totalMessageCount = group.reduce((sum, item) => sum + (item._count?.messages ?? item.messages.length), 0);
+    const totalMessageCount = group.reduce((sum, item) => sum + item.messageCount, 0);
 
     return {
       ...canonical,
@@ -267,12 +269,14 @@ export async function getLivechatConversationsForBrand(
       unreadCount,
       awaitingSince,
       messageCount: totalMessageCount,
-      messages: latest ? [latest] : [],
+      // Pratinjau baris: hanya field yang dipakai daftar (bukan seluruh kolom pesan).
+      messages: latest ? [messagePreview(latest)] : [],
       duplicateIds: group.map((item) => item.id),
       brand: brand!,
-      session: session!,
+      // Ringkas: tanpa qrCode (QR penautan perangkat tidak boleh sampai ke CS) dan kolom lain yang tidak dipakai.
+      session: session ? { status: session.status, phoneNumber: session.phoneNumber, sessionName: session.sessionName } : null,
     };
-  }).filter((item) => {
+  }))).filter((item) => {
     const m = item.messages[0];
     return m && (Boolean(m.messageText?.trim()) || Boolean(m.mediaUrl) || ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'].includes(m.messageType));
   })
@@ -328,8 +332,31 @@ chatRouter.post('/avatars/refresh', asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 }));
 
+/**
+ * Riwayat chat berhalaman: `limit` pesan terbaru (bawaan 100, maks. 1000), urut lama→baru. Pesan lebih lama
+ * lewat cursor `beforeTs` + `beforeId` (pesan tertua yang sudah dimuat). Sebelumnya seluruh riwayat dikirim
+ * sekaligus (±900 KB untuk 1.700 pesan) setiap chat dibuka.
+ */
+const messagePageSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(1000).default(100),
+  beforeTs: z.coerce.number().int().nonnegative().optional(),
+  beforeId: z.coerce.number().int().positive().optional(),
+});
+function pageWhere(page: z.infer<typeof messagePageSchema>): Prisma.ChatMessageWhereInput {
+  if (page.beforeTs === undefined) return {};
+  return {
+    AND: [{
+      OR: [
+        { timestamp: { lt: page.beforeTs } },
+        ...(page.beforeId ? [{ timestamp: page.beforeTs, id: { lt: page.beforeId } }] : []),
+      ],
+    }],
+  };
+}
+
 chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
+  const page = messagePageSchema.parse(req.query);
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
   const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { phone: true } });
   const ownPhones = new Set([
@@ -349,10 +376,12 @@ chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {
         remoteJid: target.remoteJid,
         isDeleted: false,
         messageType: { notIn: ['protocolMessage', 'reactionMessage'] },
+        ...pageWhere(page),
       },
-      orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
+      orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
+      take: page.limit,
     });
-    res.json({ success: true, data });
+    res.json({ success: true, data: data.reverse() });
     return;
   }
 
@@ -377,10 +406,12 @@ chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {
         ...(phones.length ? [{ phone: { in: phones } }] : []),
         ...(remoteJids.length ? [{ remoteJid: { in: remoteJids } }] : []),
       ],
+      ...pageWhere(page),
     },
-    orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
+    orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
+    take: page.limit,
   });
-  res.json({ success: true, data });
+  res.json({ success: true, data: data.reverse() });
 }));
 
 chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
@@ -430,6 +461,7 @@ chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
       },
       data: { status: 'read' },
     });
+    scheduleConversationStats(prospectIds);
   }
 
   // Notify WhatsApp gateway to send read receipt to network & clear unread on real phone
@@ -597,9 +629,10 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   // Save media file locally to uploads/media/ if not already a local file
   if (!resolvedLocalUrl) {
     try {
-      const ext = path.extname(resolvedFileName) || (resolvedMimeType.includes('image') ? '.jpg' : resolvedMimeType.includes('pdf') ? '.pdf' : resolvedMimeType.includes('video') ? '.mp4' : resolvedMimeType.includes('audio') ? '.mp3' : '');
-      const cleanBase = path.basename(resolvedFileName, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30) || 'file';
-      const uniqueFileName = `${Date.now()}_${cleanBase}${ext}`;
+      // Ekstensi dari daftar putih (bukan dari nama file pengirim) dan nama acak: media chat tidak bisa
+      // disajikan sebagai konten aktif dan URL-nya tidak bisa ditebak.
+      const ext = safeChatMediaExtension(resolvedFileName, resolvedMimeType);
+      const uniqueFileName = `${Date.now()}_${randomUUID()}${ext}`;
       const uploadsDir = path.resolve(process.cwd(), 'uploads', 'media');
       await fs.promises.mkdir(uploadsDir, { recursive: true });
       const filePath = path.join(uploadsDir, uniqueFileName);
@@ -703,6 +736,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
     emitToBrand(brandId, 'prospect:updated', { id: prospect.id, status: 'contact' });
     queueCapiForStatus(prospect.id, 'contact');
   }
+  scheduleConversationStats([prospect.id]);
   emitToBrand(brandId, 'message:new', message);
   res.status(201).json({ success: true, data: message });
 }));
@@ -820,6 +854,7 @@ chatRouter.delete('/messages/:id', asyncHandler(async (req, res) => {
     where: { id },
     data: { isDeleted: true, deletedAt: new Date() },
   });
+  scheduleConversationStats([updated.prospectId]);
 
   // If outgoing message and WhatsApp is connected, attempt to revoke on WhatsApp
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
@@ -931,7 +966,7 @@ chatRouter.get('/wa/status', asyncHandler(async (req, res) => {
 }));
 
 export const internalRouter = Router();
-internalRouter.use((req, _res, next) => req.get('x-internal-secret') === env.WA_GATEWAY_SECRET ? next() : next(new HttpError(401, 'Internal secret tidak valid.')));
+internalRouter.use((req, _res, next) => (secretMatches(req.get('x-internal-secret'), env.WA_GATEWAY_SECRET) ? next() : next(new HttpError(401, 'Internal secret tidak valid.'))));
 
 const gatewayMessageSchema = z.object({
   brandId: z.coerce.number().int().positive(),
@@ -963,6 +998,8 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   ) {
     return null;
   }
+  // Pasangan @lid↔nomor baru bisa menggabungkan dua percakapan: peta di-cache dibangun ulang.
+  if (remoteJid.endsWith('@lid') && input.phone) invalidateLidPhoneMap(brandId);
   if (messageType === 'protocolMessage' || messageType === 'reactionMessage') {
     return null;
   }
@@ -1076,6 +1113,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     ? await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true } })
     : null;
 
+  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { prospectId: true } });
   const message = await prisma.chatMessage.upsert({
     where: { brandId_messageId: { brandId, messageId } },
     update: {
@@ -1108,6 +1146,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     }
   });
 
+  scheduleConversationStats([message.prospectId, previousOwner?.prospectId]);
   if (options.realtime) emitToBrand(brandId, 'message:new', message);
   if (options.realtime) {
     const ref = { id: prospect.id, brandId, name: prospect.name, userId: prospect.userId };
@@ -1148,9 +1187,12 @@ internalRouter.post('/messages/status', asyncHandler(async (req, res) => {
   });
 
   if (updated.count > 0) {
+    const owner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { prospectId: true } });
+    scheduleConversationStats([owner?.prospectId]);
     emitToBrand(input.brandId, 'message:status', {
       messageId: input.messageId,
       status: input.status,
+      prospectId: owner?.prospectId,
     });
   }
 
@@ -1193,6 +1235,7 @@ internalRouter.post('/chats/read', asyncHandler(async (req, res) => {
   });
 
   if (updated.count > 0) {
+    scheduleConversationStats(prospectIds);
     emitToBrand(input.brandId, 'conversations:updated', { remoteJid: input.remoteJid });
     emitToBrand(input.brandId, 'message:status', { remoteJid: input.remoteJid, status: 'read' });
   }
@@ -1256,6 +1299,7 @@ internalRouter.post('/contacts/sync', asyncHandler(async (req, res) => {
     contacts: z.array(gatewayContactSchema).max(100),
   }).parse(req.body);
   let imported = 0;
+  invalidateLidPhoneMap(input.brandId);
   for (const contact of input.contacts) {
     if (contact.brandId !== input.brandId) throw new HttpError(400, 'Brand kontak tidak konsisten.');
     const phone = normalizePhoneIdentifier(contact.phone);

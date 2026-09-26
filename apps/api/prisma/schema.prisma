@@ -232,6 +232,15 @@ model Prospect {
   lastFollowupAt          DateTime?               @map("last_followup_at")
   createdAt               DateTime                @default(now()) @map("created_at")
   updatedAt               DateTime                @updatedAt @map("updated_at")
+  // Ringkasan percakapan (dihitung ulang tiap pesan berubah; lihat chat/conversation-stats.ts). Daftar Inbox/Pipeline
+  // dan job SLA membaca kolom ini alih-alih memuat 20 pesan terakhir setiap prospek.
+  lastMessageAt           Int?                    @map("last_message_at") @db.UnsignedInt
+  lastMessage             Json?                   @map("last_message")
+  unreadCount             Int                     @default(0) @map("unread_count")
+  awaitingSince           Int?                    @map("awaiting_since") @db.UnsignedInt
+  inboundSenderName       String?                 @map("inbound_sender_name") @db.VarChar(100)
+  messageCount            Int                     @default(0) @map("message_count")
+  conversationStatsAt     DateTime?               @map("conversation_stats_at")
   brand                   Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
   user                    User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
   package                 Package?                @relation(fields: [packageId], references: [id], onDelete: SetNull)
@@ -244,6 +253,11 @@ model Prospect {
 
   @@index([brandId, status])
   @@index([userId])
+  // Jalur panas: pencocokan pesan masuk (remoteJid/phone) dan urutan daftar percakapan.
+  @@index([brandId, remoteJid])
+  @@index([brandId, phone])
+  @@index([brandId, lastMessageAt])
+  @@index([brandId, conversationStatsAt])
   @@map("prospects")
 }
 

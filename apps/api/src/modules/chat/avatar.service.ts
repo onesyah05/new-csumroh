@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import { AVATAR_URL_PATTERN, avatarNeedsRefresh } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
@@ -57,14 +58,21 @@ export async function refreshProspectAvatar(prospect: AvatarProspect, options: {
   const type = buffer.length <= MAX_AVATAR_BYTES ? detectProofType(buffer) : null;
   if (!type || type === 'pdf') return localCurrent;
 
+  // Foto profil hanya tampil 32–40 px: disimpan 128 px WebP (±4 KB, dari rata-rata 54 KB). Bila konversi gagal,
+  // berkas asli dipakai.
+  const small = await shrinkAvatar(buffer);
   const dir = avatarsDir(options.cwd);
   await fs.promises.mkdir(dir, { recursive: true });
-  const fileName = `p${prospect.id}-${now}-${crypto.randomBytes(6).toString('hex')}.${type}`;
-  await fs.promises.writeFile(path.join(dir, fileName), buffer);
+  const fileName = `p${prospect.id}-${now}-${crypto.randomBytes(6).toString('hex')}.${small ? 'webp' : type}`;
+  await fs.promises.writeFile(path.join(dir, fileName), small ?? buffer);
   const photoUrl = `/uploads/avatars/${fileName}`;
   await prisma.prospect.update({ where: { id: prospect.id }, data: { photoUrl } });
   removeLocalAvatar(prospect.photoUrl, options.cwd);
   return photoUrl;
+}
+
+export async function shrinkAvatar(buffer: Buffer) {
+  return sharp(buffer).rotate().resize(128, 128, { fit: 'cover' }).webp({ quality: 78 }).toBuffer().catch(() => null);
 }
 
 /** Perbarui beberapa avatar sekaligus dengan paralelisme terbatas agar gateway tidak dibanjiri. */
