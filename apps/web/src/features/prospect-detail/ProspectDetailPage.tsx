@@ -11,7 +11,6 @@ import {
   MessageCircle,
   NotebookPen,
   Save,
-  ShieldCheck,
   Sparkles,
   UserPlus2,
   UsersRound,
@@ -44,7 +43,7 @@ export function ProspectDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const { brandId: scopeBrandId } = useBrandScope();
-  const [tab, setTab] = useState<'profile' | 'activity' | 'tgjp'>('profile');
+  const [tab, setTab] = useState<'profile' | 'activity'>('profile');
   const [form, setForm] = useState<any>({});
   // Form tidak ditimpa refetch/realtime selama user sedang mengedit (A18).
   const [dirty, setDirty] = useState(false);
@@ -198,7 +197,6 @@ export function ProspectDetailPage() {
         {[
           ['profile', 'Profil 360°'],
           ['activity', 'Catatan & riwayat'],
-          ['tgjp', 'Wizard TGJP'],
         ].map(([value, label]) => (
           <button
             key={value}
@@ -333,13 +331,6 @@ export function ProspectDetailPage() {
 
             <PaymentsCard payments={p.payments ?? []} rejection={p.paymentProofUrl ? null : p.proofRejections?.[0] ?? null} />
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 shadow-xs">
-              <ShieldCheck size={18} className="text-zinc-700" />
-              <h3 className="mt-3 text-xs sm:text-sm font-semibold text-zinc-950">Data Brand Terlindungi</h3>
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                Rekening dan legalitas selalu diambil dari brand akun yang aktif secara terisolasi.
-              </p>
-            </div>
           </aside>
         </div>
       )}
@@ -352,7 +343,6 @@ export function ProspectDetailPage() {
         </div>
       )}
 
-      {tab === 'tgjp' && <TgjpWizard name={p.name} />}
     </div>
   );
 }
@@ -428,72 +418,5 @@ function FormSection({
       </div>
       {children}
     </section>
-  );
-}
-
-function TgjpWizard({ name }: { name: string }) {
-  const steps = [
-    { id: 'T', title: 'Terima', text: `Validasi perasaan ${name} tanpa menyela atau membantah.` },
-    { id: 'G', title: 'Gali', text: 'Temukan akar keberatan dengan satu pertanyaan terarah.' },
-    { id: 'J', title: 'Jawab', text: 'Berikan solusi rasional sesuai kebutuhan dan fakta paket.' },
-    { id: 'P', title: 'Pastikan', text: 'Pastikan keberatan selesai dan arahkan ke komitmen mikro.' },
-  ];
-  const [active, setActive] = useState(0);
-
-  return (
-    <div className="surface p-6 sm:p-8">
-      <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
-          <Sparkles size={13} className="text-zinc-500" />
-          <span>Framework Keberatan</span>
-        </div>
-        <h3 className="mt-1.5 font-sans text-xl sm:text-2xl font-bold tracking-tight text-zinc-950">
-          TGJP Guided Response
-        </h3>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-4">
-        {steps.map((step, index) => (
-          <button
-            key={step.id}
-            type="button"
-            onClick={() => setActive(index)}
-            className={`rounded-xl border p-4 text-left transition ${
-              active === index
-                ? 'border-zinc-950 bg-zinc-950 text-white shadow-xs'
-                : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800'
-            }`}
-          >
-            <span
-              className={`grid h-7 w-7 place-items-center rounded-md text-xs font-bold ${
-                active === index ? 'bg-white text-black' : 'bg-zinc-100 text-zinc-700'
-              }`}
-            >
-              {step.id}
-            </span>
-            <b className="mt-3 block font-sans text-xs sm:text-sm font-semibold">{step.title}</b>
-            <p className={`mt-1.5 text-xs leading-relaxed ${active === index ? 'text-zinc-400' : 'text-zinc-500'}`}>
-              {step.text}
-            </p>
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5 shadow-2xs">
-        <p className="text-xs font-semibold text-zinc-500">
-          Langkah {active + 1} dari 4
-        </p>
-        <h4 className="mt-1 font-sans text-base font-bold text-zinc-950">{steps[active]?.title}</h4>
-        <textarea
-          className="mt-3 min-h-28 w-full resize-none rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black placeholder:text-zinc-500 shadow-xs"
-          placeholder={`Tulis respons tahap ${steps[active]?.title.toLowerCase()} di sini…`}
-        />
-        <div className="mt-3 flex justify-end">
-          <Button onClick={() => setActive(Math.min(3, active + 1))}>
-            <span>{active === 3 ? 'Selesai' : 'Lanjutkan'}</span>
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }
