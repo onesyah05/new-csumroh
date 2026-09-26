@@ -1,6 +1,9 @@
+import { useSessionState } from '../../lib/useSessionState';
+import { useInboxNavigation } from './useInboxNavigation';
+import { useOnline } from '../../app/pwa';
 import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { businessDateKey, isLostStatus, isTakeoverOpen, isWonStatus } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -56,12 +59,13 @@ import { useNow } from '../../lib/useNow';
 import { NotificationBell } from '../notifications/NotificationBell';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { cn } from '../../lib/cn';
-import { ChatSidePanel, type ChatSidePanelTab } from './ChatSidePanel';
+import { ChatSidePanel } from './ChatSidePanel';
 import { canAccessBrand, useBrandScope } from '../../lib/scope';
 import { useAuth } from '../../app/auth';
 import { useUiStore } from '../../app/store';
 import { queryClient } from '../../app/query';
 import { Badge } from '../../components/ui/badge';
+import { StatusBadge } from '../../components/ui/status-badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
@@ -205,9 +209,13 @@ export function InboxPage() {
   useEffect(() => {
     setSelectedId(null);
   }, [brandId]);
-  const [search, setSearch] = useState('');
-  const [chatFilter, setChatFilter] = useState<InboxWorkFilter>('all');
-  const [ownerFilter, setOwnerFilter] = useState('all');
+  const listKey = `azhan.inbox.${user?.id}:${brandId}`;
+  const [search, setSearch] = useSessionState(`${listKey}.search`, '');
+  const [chatFilter, setChatFilter] = useSessionState<InboxWorkFilter>(`${listKey}.filter`, 'all');
+  const [ownerFilter, setOwnerFilter] = useSessionState(`${listKey}.owner`, 'all');
+  const restoreList = useCallback((node: HTMLDivElement | null) => {
+    if (node) { try { node.scrollTop = Number(sessionStorage.getItem(`${listKey}.scroll`)) || 0; } catch { /* Optional scroll restore. */ } }
+  }, [listKey]);
   const [today, setToday] = useState(() => businessDateKey());
 
   useEffect(() => {
@@ -221,12 +229,9 @@ export function InboxPage() {
     };
   }, []);
 
-  useEffect(() => {
-    setOwnerFilter('all');
-  }, [brandId]);
   const [message, setMessage] = useConversationDraft(`${user?.id}:${brandId}:${selectedId}`);
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<number | null>(null);
-  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+  const { mobile, mobileView, sidePanelTab, setSidePanelTab, backToList } = useInboxNavigation();
   const [previewFlyer, setPreviewFlyer] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<{ id: number; messageId: string; senderName: string; text: string } | null>(null);
   const [showDeletedMessages, setShowDeletedMessages] = useState(false);
@@ -238,10 +243,6 @@ export function InboxPage() {
   const [showPackagePickerModal, setShowPackagePickerModal] = useState(false);
   const [packageSearch, setPackageSearch] = useState('');
   const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
-  // Di bawah 1280 px panel tampil sebagai dialog modal; jangan dibuka otomatis agar tidak menutupi chat dan navigasi.
-  const [sidePanelTab, setSidePanelTab] = useState<ChatSidePanelTab | null>(() =>
-    window.matchMedia?.('(max-width: 1279px)').matches ? null : 'profile'
-  );
   const [mediaPreview, setMediaPreview] = useState<{
     file: File;
     url: string;
@@ -257,6 +258,16 @@ export function InboxPage() {
   } | null>(null);
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const focusDraftAfterPanel = useRef(false);
+  useEffect(() => {
+    if (sidePanelTab || !focusDraftAfterPanel.current) return;
+    const frame = requestAnimationFrame(() => {
+      focusDraftAfterPanel.current = false;
+      adjustTextareaHeight(composerRef.current);
+      composerRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sidePanelTab]);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const flyerInputRef = useRef<HTMLInputElement>(null);
@@ -319,7 +330,6 @@ export function InboxPage() {
     const nextId = requested?.id ?? (currentExists ? selectedId : items[0].id);
     if (nextId !== selectedId) {
       setSelectedId(nextId);
-      if (requestedId) setMobileView('chat');
     }
   }, [conversations.data, searchParams, selectedId]);
 
@@ -348,7 +358,8 @@ export function InboxPage() {
     && isTakeoverOpen(selected.awaitingSince, now),
   );
   // Hak membalas (role/PIC) dan kemampuan mengirim (perangkat terhubung) dibedakan.
-  const canSend = canReply && isConnected;
+  const online = useOnline();
+  const canSend = canReply && isConnected && online;
 
   const currentPackage = useMemo(() => {
     return packages.data?.find((p) => p.id === (selected?.packageId || selected?.package?.id));
@@ -425,6 +436,7 @@ export function InboxPage() {
   }
 
   function handleInsertDirectText(text: string) {
+    focusDraftAfterPanel.current = mobile && Boolean(sidePanelTab);
     setMessage(previous => appendDraft(previous, text));
     showToast('Teks ditambahkan ke draft; belum dikirim.');
     requestAnimationFrame(() => {
@@ -606,10 +618,10 @@ export function InboxPage() {
       if (brandId) next.set('brandId', String(brandId));
       next.delete('phone');
       next.delete('jid');
+      next.delete('panel');
       return next;
-    });
+    }, { state: mobile ? { inboxList: true } : null });
     setSelectedId(id);
-    setMobileView('chat');
     void api.post(`/chat/prospects/${id}/read${query}`).catch(() => null);
     queryClient.setQueryData<any[]>(['conversations', brandId], (old) => {
       if (!old) return old;
@@ -663,6 +675,7 @@ export function InboxPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!canSend) return;
     if (mediaPreview) {
       void handleSendMedia();
     } else if (message.trim() && !send.isPending) {
@@ -672,6 +685,7 @@ export function InboxPage() {
 
   /** Titik kirim terakhir: draft yang masih memuat {{token}} tidak boleh sampai ke jamaah (audit S15). */
   function sendDraft() {
+    if (!canSend) return;
     const text = message.trim();
     if (!text) return;
     if (unresolvedScript(text)) {
@@ -863,6 +877,7 @@ export function InboxPage() {
   }
 
   async function handleSendMedia(fileToSend?: File, customCaption?: string) {
+    if (!canSend) return;
     const targetFile = fileToSend || mediaPreview?.file;
     if (!selectedId || uploadingMedia || !targetFile) return;
     setUploadingMedia(true);
@@ -928,7 +943,7 @@ export function InboxPage() {
   if (conversations.isError) return <PageError description={conversations.error.message} onRetry={() => void conversations.refetch()} />;
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-white">
+    <div className="inbox-mobile-root relative h-screen w-full overflow-hidden bg-white" data-mobile-view={mobileView}>
 
       <div className={cn('inbox-workspace', selected && sidePanelTab && 'has-side-panel')}>
         {/* Left Column: WhatsApp Web Conversation List */}
@@ -942,7 +957,7 @@ export function InboxPage() {
               <button
                 type="button"
                 onClick={toggleSidebar}
-                className="lg:hidden p-1.5 rounded-lg text-[#54656f] hover:bg-black/5 hover:text-[#111b21] transition shrink-0 cursor-pointer"
+                className="hidden md:inline-flex lg:hidden p-1.5 rounded-lg text-[#54656f] hover:bg-black/5 hover:text-[#111b21] transition shrink-0 cursor-pointer"
                 aria-label="Buka menu navigasi"
               >
                 <Menu size={20} />
@@ -1005,6 +1020,7 @@ export function InboxPage() {
                                 next.delete('prospectId');
                                 next.delete('phone');
                                 next.delete('jid');
+                                next.delete('panel');
                                 return next;
                               });
                               setActiveBrandId(b.id);
@@ -1113,7 +1129,7 @@ export function InboxPage() {
                 size="sm"
                 className="w-full"
               />
-              <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium" role="group" aria-label="Filter pekerjaan CS">
+              <div className="mobile-compact-filters flex flex-wrap items-center gap-1.5 text-xs font-medium" role="group" aria-label="Filter pekerjaan CS">
                 {inboxWorkFilters.map((filter) => (
                   <button
                     key={filter.id}
@@ -1122,7 +1138,7 @@ export function InboxPage() {
                     aria-pressed={chatFilter === filter.id}
                     title={filter.description}
                     className={cn(
-                      'rounded-full px-2.5 py-1.5 transition-colors whitespace-nowrap',
+                      'mobile-compact-control rounded-full px-2.5 py-1.5 transition-colors whitespace-nowrap',
                       chatFilter === filter.id
                         ? 'bg-[#d9fdd3] text-[#008069] font-bold'
                         : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
@@ -1152,7 +1168,7 @@ export function InboxPage() {
             </div>
           )}
           {(
-            <div className="thin-scrollbar flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
+            <div ref={restoreList} onScroll={event => { if (event.currentTarget.clientHeight) { try { sessionStorage.setItem(`${listKey}.scroll`, String(event.currentTarget.scrollTop)); } catch { /* Optional scroll restore. */ } } }} className="thin-scrollbar flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#8696a0]">
                 <p className="font-semibold text-[#54656f]">
@@ -1309,13 +1325,13 @@ export function InboxPage() {
             <>
               {/* WhatsApp Web Chat Header */}
               <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-[#e9edef] bg-[#f0f2f5] px-4">
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex flex-1 items-center gap-3 min-w-0">
                   {/* Mobile Back Button — di luar area profil agar kliknya tidak ikut membuka/menutup panel. */}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="md:hidden mr-0.5 shrink-0 text-[#54656f]"
-                    onClick={() => setMobileView('list')}
+                    onClick={backToList}
                     aria-label="Kembali ke daftar percakapan"
                   >
                     <ArrowLeft size={18} />
@@ -1327,7 +1343,7 @@ export function InboxPage() {
                     onClick={() => setSidePanelTab((prev) => (prev ? null : 'profile'))}
                     title={sidePanelTab ? 'Klik untuk menutup panel samping' : 'Klik untuk membuka profil prospek'}
                     aria-expanded={Boolean(sidePanelTab)}
-                    className="flex min-w-0 items-center gap-3 rounded-lg text-left outline-none cursor-pointer select-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
+                    className="flex min-w-0 flex-1 items-center gap-2 md:gap-3 rounded-lg text-left outline-none cursor-pointer select-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
                   >
                   <ContactAvatar
                     size="md"
@@ -1336,20 +1352,31 @@ export function InboxPage() {
                     isWhatsAppOfficial={selected.remoteJid === '0@s.whatsapp.net' || selected.name === 'WhatsApp'}
                   />
 
-                  <span className="block min-w-0">
-                    <span className="flex items-center gap-2">
-                      <span className="block truncate text-sm font-semibold text-[#111b21]">{selected.name}</span>
+                  <span className="block min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="block min-w-0 flex-1 truncate text-sm font-semibold text-[#111b21] md:flex-none">{selected.name}</span>
                       {selected.leadSource === 'meta_ads' && (
                         <span
                           title={[selected.adHeadline, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
                           className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-950 px-2 py-0.5 text-[9px] font-bold text-white"
                         >
-                          <Megaphone size={10} />Meta Ads
+                          <Megaphone size={10} /><span className="hidden md:inline">Meta Ads</span><span className="sr-only md:hidden">Meta Ads</span>
                         </span>
                       )}
+                      <span
+                        title={selected.user?.name ? `Penanggung jawab: ${selected.user.name}` : 'Percakapan belum memiliki PIC'}
+                        className={cn(
+                          'inline-flex min-w-0 max-w-[48%] shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs leading-4 md:hidden',
+                          selected.user?.name ? 'bg-zinc-100 text-zinc-700' : 'bg-amber-50 text-amber-800',
+                        )}
+                      >
+                        <User size={12} className="shrink-0" aria-hidden="true" />
+                        {selected.user?.name && <span className="shrink-0 font-medium">PIC</span>}
+                        <span className="truncate font-semibold">{selected.user?.name || 'Tanpa PIC'}</span>
+                      </span>
                     </span>
 
-                    <span className="block truncate text-xs text-[#667781]">
+                    <span className="hidden md:block truncate text-xs text-[#667781]">
                       {selected.remoteJid === '0@s.whatsapp.net' || selected.name === 'WhatsApp'
                         ? 'Akun Resmi WhatsApp'
                         : selected.name?.includes('(Anda)')
@@ -1360,12 +1387,25 @@ export function InboxPage() {
                         ? (selected.phone.startsWith('+') ? selected.phone : `+${selected.phone}`)
                         : 'WhatsApp'}
                     </span>
+                    <span className="mt-1 flex min-w-0 items-center gap-2 md:hidden">
+                      <span className="min-w-0 max-w-24" title={activeBrand?.name} aria-label={`Brand: ${activeBrand?.name || activeBrand?.code || brandId}`}>
+                        <StatusBadge
+                          size="sm"
+                          label={activeBrand?.code || `Brand ${brandId}`}
+                          className="max-w-full rounded-md border-zinc-200 bg-white px-1.5 py-0 text-zinc-600 shadow-none [&>span]:truncate"
+                        />
+                      </span>
+                      {!selected.isGroup && <Badge value={selected.status || 'new'} className={cn(
+                        'shrink-0 whitespace-nowrap rounded-none border-0 bg-transparent p-0 font-medium shadow-none',
+                        isWonStatus(selected.status) ? 'text-emerald-700 [&>span:first-child]:bg-emerald-600' : 'text-zinc-600 [&>span:first-child]:bg-zinc-500',
+                      )} />}
+                    </span>
                   </span>
                   </button>
                 </div>
 
                 {/* Right Action Tools */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="hidden md:flex items-center gap-2 shrink-0">
                   {/* Status Pipeline Badge */}
                   {!selected.isGroup && (
                     <button
@@ -1918,7 +1958,7 @@ export function InboxPage() {
 
                                      {Boolean(item.messageText) &&
                                        !['[Gambar]', '[Video]', '[Audio]', '[Voice Note]', '[Dokumen]', '[Stiker]', '[Lokasi]'].includes(item.messageText!.trim()) && (
-                                         <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-[#111b21] mt-1">
+                                         <p className="text-base md:text-[14px] leading-relaxed whitespace-pre-wrap break-words text-[#111b21] mt-1">
                                            {item.messageText}
                                          </p>
                                      )}
@@ -2001,9 +2041,7 @@ export function InboxPage() {
               {selected && canSend && (
                 <div className="border-t border-[#e9edef] bg-[#f0f2f5] px-3 py-1.5 shrink-0">
                   <div className="thin-scrollbar mx-auto flex max-w-3xl items-center gap-1.5 overflow-x-auto pb-0.5">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#667781] shrink-0 mr-1">
-                      Template:
-                    </span>
+                    <button type="button" onClick={() => setSidePanelTab('copilot')} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-950 px-3 py-2 text-xs font-semibold text-white md:hidden"><Sparkles size={14} aria-hidden="true" />Script</button>
                     {visibleQuickReplies.map((chip) => {
                       const Icon = chip.icon;
                       return (
@@ -2031,7 +2069,7 @@ export function InboxPage() {
                   </div>
                 </div>
               ) : canReply ? (
-                <form onSubmit={submit} className="border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
+                <form onSubmit={submit} className="chat-composer border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
                   {/* Hidden file inputs: Dokumen, Foto & Video, dan Flyer Paket */}
                   <input
                     ref={documentInputRef}
@@ -2307,11 +2345,12 @@ export function InboxPage() {
 
                     <textarea
                       ref={composerRef}
+                      data-chat-composer
                       rows={1}
                       value={message}
                       onChange={handleComposerChange}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                        if (!mobile && event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                           event.preventDefault();
                           event.currentTarget.form?.requestSubmit();
                         }
@@ -2323,12 +2362,12 @@ export function InboxPage() {
 
                     <button
                       type="submit"
-                      disabled={(!message.trim() && !mediaPreview) || send.isPending || uploadingMedia}
+                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia}
                       aria-label="Kirim pesan WhatsApp"
-                      title="Kirim pesan (Enter)"
+                      title={mobile ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
                       className={cn(
                         'h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-white transition shadow-xs cursor-pointer',
-                        (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia
+                        canSend && (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia
                           ? 'bg-[#00a884] hover:bg-[#008f6f] active:scale-95'
                           : 'bg-[#8696a0] opacity-60 cursor-not-allowed'
                       )}

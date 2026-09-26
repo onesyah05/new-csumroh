@@ -16,7 +16,7 @@ function read(key: string): Draft | null {
   try { const data = JSON.parse(sessionStorage.getItem(key) || 'null'); return data?.form ? { ...data, form: profileForm(data.form) } : null; } catch { return null; }
 }
 export function clearProfileDrafts() {
-  try { for (const key of Object.keys(sessionStorage)) if (key.startsWith(prefix)) sessionStorage.removeItem(key); } catch { /* Logout must remain available without browser storage. */ }
+  try { for (const key of Object.keys(sessionStorage)) if (key.startsWith(prefix) || key.startsWith('azhan.chat-draft.') || key.startsWith('azhan.inbox.')) sessionStorage.removeItem(key); } catch { /* Logout must remain available without browser storage. */ }
 }
 // Mount this hook in a component keyed by staff + brand + prospect.
 export function useProfileDraft(identity: string, source: any) {
@@ -51,10 +51,15 @@ export function validateProfile(form: ProfileForm): string | null {
 // The setter captures the conversation identity, including during an async send.
 export function useConversationDraft(identity: string) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const readMessage = (key: string) => { try { return sessionStorage.getItem(`azhan.chat-draft.${key}`) || ''; } catch { return ''; } };
   function setMessage(value: string | ((previous: string) => string)) {
-    setDrafts(previous => ({ ...previous, [identity]: typeof value === 'function' ? value(previous[identity] || '') : value }));
+    setDrafts(previous => {
+      const next = typeof value === 'function' ? value(previous[identity] ?? readMessage(identity)) : value;
+      try { if (next) sessionStorage.setItem(`azhan.chat-draft.${identity}`, next); else sessionStorage.removeItem(`azhan.chat-draft.${identity}`); } catch { /* Draft stays available in memory when storage is full. */ }
+      return { ...previous, [identity]: next };
+    });
   }
-  return [drafts[identity] || '', setMessage] as const;
+  return [drafts[identity] ?? readMessage(identity), setMessage] as const;
 }
 export function appendFlyerCaption(previous: string, caption: string) {
   return previous.trimEnd().endsWith(caption.trimEnd()) ? previous : appendDraft(previous, caption);

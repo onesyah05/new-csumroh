@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
-import { AlertCircle, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, X } from 'lucide-react';
 import { businessDateKey, dateOnlyKey, isLostStatus, isWonStatus, qualificationMissing } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
 import { useAuth } from '../../app/auth';
@@ -51,9 +51,13 @@ export function ChatSidePanel(props: ChatSidePanelProps) {
   function insert(text: string) { inserted.current = true; props.onInsertText(text); if (overlay) props.onClose(); }
   const content = <aside className="inbox-copilot is-open sales-panel flex h-full min-h-0 flex-col border-l border-zinc-200 bg-white" aria-label="Profil dan Copilot" style={overlay ? { position: 'fixed', height: '100dvh' } : undefined}>
     {overlay && <Dialog.Title className="sr-only">Profil dan Copilot</Dialog.Title>}
+    <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-3 py-2 md:hidden">
+      <Button variant="ghost" size="icon" aria-label="Kembali ke percakapan" onClick={props.onClose}><ArrowLeft size={20} /></Button>
+      <div className="min-w-0"><p className="truncate text-sm font-semibold">{prospect?.name || props.prospectName}</p><p className="truncate text-xs text-zinc-600">{props.activeBrand?.name} · {props.activeTab === 'copilot' ? 'Copilot' : 'Profil prospek'}</p></div>
+    </div>
     {/* Satu baris tab: identitas jamaah sudah ada di header chat, jadi panel langsung ke pekerjaan. */}
-    <header className="flex shrink-0 items-stretch border-b border-zinc-200 pl-1 pr-1">
-      <div role="tablist" aria-label="Panel percakapan" className="flex min-w-0 flex-1">
+    <header className="flex min-h-12 shrink-0 items-stretch border-b border-zinc-200 pl-1 pr-1">
+      <div role="tablist" aria-label="Panel percakapan" className="thin-scrollbar flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -76,7 +80,7 @@ export function ChatSidePanel(props: ChatSidePanelProps) {
           </button>
         ))}
       </div>
-      <Button size="icon" variant="ghost" aria-label="Tutup panel" onClick={props.onClose} className="shrink-0 self-center"><X size={16} /></Button>
+      <Button size="icon" variant="ghost" aria-label="Tutup panel" onClick={props.onClose} className="hidden shrink-0 self-center md:inline-flex"><X size={16} /></Button>
     </header>
     <div key={identity} className="min-h-0 flex-1">
       <div className={props.activeTab === 'profile' ? 'h-full' : 'hidden'}><ChatProspectProfile {...props} activeTab={profileTab} onChangeTab={setProfileTab} onInsertText={insert} onOpenCopilot={() => props.onChangeTab('copilot')} /></div>
@@ -85,5 +89,5 @@ export function ChatSidePanel(props: ChatSidePanelProps) {
   </aside>;
   if (!props.isOpen) return null;
   if (!overlay) return content;
-  return <Dialog.Root open={props.isOpen} onOpenChange={open => { if (!open) props.onClose(); }}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-30 bg-black/25" /><Dialog.Content asChild aria-describedby={undefined} onCloseAutoFocus={event => { event.preventDefault(); if (!inserted.current) trigger.current?.focus(); }}>{content}</Dialog.Content></Dialog.Portal></Dialog.Root>;
+  return <Dialog.Root open={props.isOpen} onOpenChange={open => { if (!open) props.onClose(); }}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-30 bg-black/25" /><Dialog.Content asChild aria-describedby={undefined} onCloseAutoFocus={event => { event.preventDefault(); if (!inserted.current) trigger.current?.focus(); else requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-chat-composer]')?.focus()); }}>{content}</Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
