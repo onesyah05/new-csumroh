@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   Wallet,
 } from 'lucide-react';
+import { RowActions } from '../../components/ui/row-actions';
 import { api } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { queryClient } from '../../app/query';
@@ -602,7 +603,7 @@ export function StaffPage() {
                 roleFilter === r ? 'bg-zinc-950 text-white font-semibold shadow-xs' : 'text-zinc-600 hover:text-zinc-950'
               }`}
             >
-              {r === 'all' ? 'Semua' : r === 'cs' ? 'CS' : r === 'admin' ? 'Admin' : 'Finance'}
+              {r === 'all' ? 'Semua' : r === 'cs' ? 'CS' : r === 'admin' ? 'Admin' : r === 'finance' ? 'Finance' : 'Tim LA'}
             </button>
           ))}
         </div>
@@ -715,52 +716,13 @@ export function StaffPage() {
                       </td>
 
                       {/* Action Buttons */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-
-                          {/* Edit button */}
-                          {canManage && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditing(staff);
-                                setFormOpen(true);
-                              }}
-                              title="Edit staf"
-                              className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition"
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                          )}
-
-                          {/* Toggle Active status */}
-                          {canManage && !isSelf && (
-                            <button
-                              type="button"
-                              onClick={() => toggleActive.mutate(staff.id)}
-                              title={staff.isActive ? 'Nonaktifkan akun' : 'Aktifkan akun'}
-                              className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 transition"
-                            >
-                              {staff.isActive ? (
-                                <ToggleRight size={17} className="text-emerald-600" />
-                              ) : (
-                                <ToggleLeft size={17} className="text-zinc-500" />
-                              )}
-                            </button>
-                          )}
-
-                          {/* Delete button */}
-                          {canManage && !isSelf && staff.role !== 'superadmin' && (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(staff)}
-                              title="Hapus staf"
-                              className="rounded-lg p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-600 transition"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 text-right">
+                        <RowActions label={`Aksi staf ${staff.name}`} actions={[
+                          { label: 'Edit staf', icon: Edit2, onSelect: () => { setEditing(staff); setFormOpen(true); }, hidden: !canManage },
+                          { label: staff.isActive ? 'Nonaktifkan akun' : 'Aktifkan akun', icon: staff.isActive ? ToggleLeft : ToggleRight, onSelect: () => toggleActive.mutate(staff.id), hidden: !canManage || isSelf },
+                          { label: 'Hapus staf', icon: Trash2, onSelect: () => setDeleteTarget(staff), danger: true, hidden: !canManage || isSelf || staff.role === 'superadmin' },
+                        ]} />
+                        {!canManage && <span className="text-zinc-500">—</span>}
                       </td>
                     </tr>
                   );

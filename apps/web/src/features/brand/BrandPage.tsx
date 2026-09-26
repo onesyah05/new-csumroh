@@ -21,6 +21,7 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
+import { RowActions } from '../../components/ui/row-actions';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { PageHeader } from '../../components/ui/page-header';
@@ -288,7 +289,7 @@ export function BrandPage() {
                               </span>
                             )}
                             <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
+                              <div className="flex items-center gap-1.5">
                                 <Link
                                   to={`/brands/${brand.id}`}
                                   className="font-bold text-xs text-zinc-950 hover:underline tracking-tight truncate max-w-xs"
@@ -353,43 +354,12 @@ export function BrandPage() {
 
                         {/* Actions */}
                         <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
-                            <Link
-                              to={`/brands/${brand.id}`}
-                              className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition"
-                              title="Lihat detail brand"
-                            >
-                              <Eye size={14} />
-                            </Link>
-
-                            <Link
-                              to={`/devices/${brand.id}`}
-                              className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition"
-                              title="Kelola perangkat WhatsApp"
-                            >
-                              <Smartphone size={14} />
-                            </Link>
-
-                            {canManage && (
-                              <>
-                                <Link
-                                  to={`/brands/${brand.id}/edit`}
-                                  className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition"
-                                  title="Edit brand"
-                                >
-                                  <Pencil size={14} />
-                                </Link>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteTarget(brand)}
-                                  className="rounded-lg p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
-                                  title="Hapus brand"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </>
-                            )}
-                          </div>
+                          <RowActions label={`Aksi brand ${brand.name}`} actions={[
+                            { label: 'Lihat detail', icon: Eye, to: `/brands/${brand.id}` },
+                            { label: 'Kelola perangkat WhatsApp', icon: Smartphone, to: `/devices/${brand.id}` },
+                            { label: 'Edit brand', icon: Pencil, to: `/brands/${brand.id}/edit`, hidden: !canManage },
+                            { label: 'Hapus brand', icon: Trash2, onSelect: () => setDeleteTarget(brand), danger: true, hidden: !canManage },
+                          ]} />
                         </td>
                       </tr>
                     );
