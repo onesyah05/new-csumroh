@@ -13,7 +13,7 @@ import { isTokenRevoked } from './sessions.js';
  */
 export const MEDIA_COOKIE = 'media_token';
 const MEDIA_TTL_MS = 12 * 3_600_000;
-const PROTECTED_DIRS = ['media', 'chat', 'avatars'];
+const PROTECTED_DIRS = ['media', 'chat', 'avatars', 'ad-creatives'];
 /** Tipe yang boleh tampil langsung di browser; lainnya dipaksa diunduh. */
 const INLINE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.3gp', '.mov', '.mp3', '.ogg', '.opus', '.m4a', '.aac', '.wav', '.pdf']);
 

@@ -16,6 +16,8 @@ const settingsSchema = z.object({
   pixelId: metaId,
   facebookPageId: metaId,
   whatsappBusinessAccountId: metaId,
+  // Boleh ditempel dengan awalan act_ seperti di Ads Manager; disimpan angkanya saja.
+  adAccountId: z.string().trim().max(60).transform((value) => value.replace(/^act_/i, '')).pipe(metaId).default(''),
   accessToken: z.string().trim().max(4096).optional(),
   clearAccessToken: z.boolean().optional(),
   testEventCode: z.string().trim().max(100),
@@ -28,6 +30,7 @@ function settingsResponse(brand: {
   metaAccessToken: string | null;
   facebookPageId: string | null;
   metaWabaId: string | null;
+  metaAdAccountId: string | null;
   metaTestEventCode: string | null;
   metaVerifiedAt: Date | null;
   metaLastError: string | null;
@@ -40,6 +43,7 @@ function settingsResponse(brand: {
     pixelId: brand.metaPixelId ?? '',
     facebookPageId: brand.facebookPageId ?? '',
     whatsappBusinessAccountId: brand.metaWabaId ?? '',
+    adAccountId: brand.metaAdAccountId ?? '',
     testEventCode: brand.metaTestEventCode ?? '',
     accessTokenConfigured: Boolean(brand.metaAccessToken),
     maskedAccessToken: maskMetaToken(brand.metaAccessToken),
@@ -73,6 +77,7 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
       metaPixelId: input.pixelId || null,
       facebookPageId: input.facebookPageId || null,
       metaWabaId: input.whatsappBusinessAccountId || null,
+      metaAdAccountId: input.adAccountId || null,
       metaTestEventCode: input.testEventCode || null,
       metaAccessToken,
       metaVerifiedAt: null,
@@ -135,7 +140,7 @@ capiRouter.get('/logs', asyncHandler(async (req, res) => {
 capiRouter.post('/test-event', asyncHandler(async (req, res) => {
   const input = z.object({
     brandId: z.number().int().positive().optional(),
-    eventName: z.enum(['Contact', 'AddToCart', 'InitiateCheckout', 'Purchase']).default('Contact'),
+    eventName: z.enum(['Contact', 'Lead', 'AddToCart', 'InitiateCheckout', 'Purchase']).default('Contact'),
     testEventCode: z.string().trim().max(100).optional(),
   }).parse(req.body);
 

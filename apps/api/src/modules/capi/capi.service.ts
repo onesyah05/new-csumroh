@@ -35,6 +35,8 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
     include: { brand: true, package: true },
   });
   if (!prospect?.metaReferralMarker) return { status: 'skipped', reason: 'NO_CTWA_MARKER' };
+  // Chat spam tidak pernah dikirim: Meta hanya belajar dari prospek yang serius.
+  if (prospect.spamAt) return { status: 'skipped', reason: 'SPAM' };
 
   const eventId = buildCapiEventId(prospect.id, eventName, prospect.closedWonCount);
   const successful = await prisma.metaCapiLog.findUnique({ where: { brandId_eventId: { brandId: prospect.brandId, eventId } }, select: { status: true } });
@@ -95,7 +97,14 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
   return { status: status === 'success' ? 'sent' : 'failed', ...(status === 'failed' ? { reason: responseBody } : {}), eventId };
 }
 
+/**
+ * Lead = prospek terkualifikasi. Dikirim sekali saat pertama kali mencapai Terkualifikasi atau tahap sesudahnya
+ * (event_id tetap, jadi tidak ganda), agar kampanye bisa dioptimalkan ke lead berkualitas, bukan sekadar chat masuk.
+ */
+const QUALIFIED_OR_LATER = new Set<string>(['qualified', 'offer', 'offered', 'objection', 'followup', 'closing', 'deal', 'closed_won']);
+
 export async function dispatchCapiForStatus(prospectId: number, status: ProspectStatus) {
+  if (QUALIFIED_OR_LATER.has(status)) await dispatchCapiEvent(prospectId, 'Lead');
   const eventName = capiEventForStatus(status);
   if (!eventName) return { status: 'skipped', reason: 'STATUS_HAS_NO_META_EVENT' } as DispatchResult;
   return dispatchCapiEvent(prospectId, eventName as CapiEventName);

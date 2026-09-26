@@ -66,35 +66,38 @@ enum CapiStatus {
 }
 
 model Brand {
-  id                Int                     @id @default(autoincrement())
-  name              String                  @db.VarChar(100)
-  code              String                  @unique @db.VarChar(30)
-  logoUrl           String?                 @map("logo_url") @db.VarChar(255)
-  ppiuNumber        String?                 @map("ppiu_number") @db.VarChar(100)
-  bankName          String?                 @map("bank_name") @db.VarChar(50)
-  bankAccountNumber String?                 @map("bank_account_number") @db.VarChar(50)
-  bankAccountHolder String?                 @map("bank_account_holder") @db.VarChar(100)
-  address           String?                 @db.Text
-  gmapsUrl          String?                 @map("gmaps_url") @db.Text
-  phone             String?                 @db.VarChar(30)
-  metaPixelId       String?                 @map("meta_pixel_id") @db.VarChar(50)
-  metaAccessToken   String?                 @map("meta_access_token") @db.Text
-  facebookPageId    String?                 @map("facebook_page_id") @db.VarChar(50)
-  metaWabaId        String?                 @map("meta_waba_id") @db.VarChar(50)
-  metaTestEventCode String?                 @map("meta_test_event_code") @db.VarChar(100)
-  metaVerifiedAt    DateTime?               @map("meta_verified_at")
-  metaLastError     String?                 @map("meta_last_error") @db.Text
-  createdAt         DateTime                @default(now()) @map("created_at")
-  users             User[]
-  packages          Package[]
-  prospects         Prospect[]
-  whatsappSession   WhatsappSession?
-  chatMessages      ChatMessage[]
-  capiLogs          MetaCapiLog[]
-  userBrands        UserBrand[]
-  payments          Payment[]
-  customRequests    CustomRequest[]
-  proofRejections   PaymentProofRejection[]
+  id                 Int                     @id @default(autoincrement())
+  name               String                  @db.VarChar(100)
+  code               String                  @unique @db.VarChar(30)
+  logoUrl            String?                 @map("logo_url") @db.VarChar(255)
+  ppiuNumber         String?                 @map("ppiu_number") @db.VarChar(100)
+  bankName           String?                 @map("bank_name") @db.VarChar(50)
+  bankAccountNumber  String?                 @map("bank_account_number") @db.VarChar(50)
+  bankAccountHolder  String?                 @map("bank_account_holder") @db.VarChar(100)
+  address            String?                 @db.Text
+  gmapsUrl           String?                 @map("gmaps_url") @db.Text
+  phone              String?                 @db.VarChar(30)
+  metaPixelId        String?                 @map("meta_pixel_id") @db.VarChar(50)
+  metaAccessToken    String?                 @map("meta_access_token") @db.Text
+  facebookPageId     String?                 @map("facebook_page_id") @db.VarChar(50)
+  metaWabaId         String?                 @map("meta_waba_id") @db.VarChar(50)
+  metaAdAccountId    String?                 @map("meta_ad_account_id") @db.VarChar(50)
+  metaSpamAudienceId String?                 @map("meta_spam_audience_id") @db.VarChar(50)
+  metaSpamSyncedAt   DateTime?               @map("meta_spam_synced_at")
+  metaTestEventCode  String?                 @map("meta_test_event_code") @db.VarChar(100)
+  metaVerifiedAt     DateTime?               @map("meta_verified_at")
+  metaLastError      String?                 @map("meta_last_error") @db.Text
+  createdAt          DateTime                @default(now()) @map("created_at")
+  users              User[]
+  packages           Package[]
+  prospects          Prospect[]
+  whatsappSession    WhatsappSession?
+  chatMessages       ChatMessage[]
+  capiLogs           MetaCapiLog[]
+  userBrands         UserBrand[]
+  payments           Payment[]
+  customRequests     CustomRequest[]
+  proofRejections    PaymentProofRejection[]
 
   @@map("brands")
 }
@@ -205,6 +208,9 @@ model Prospect {
   dpPaidAt                DateTime?               @map("dp_paid_at")
   paymentStatus           PaymentStatus           @default(unpaid) @map("payment_status")
   lostReason              String?                 @map("lost_reason") @db.VarChar(100)
+  // Chat iseng/spam (umumnya dari iklan): keluar dari pipeline & laporan, tidak dikirim ke Meta, masuk audiens pengecualian.
+  spamAt                  DateTime?               @map("spam_at")
+  spamByUserId            Int?                    @map("spam_by_user_id")
   lostReasonDetail        String?                 @map("lost_reason_detail") @db.Text
   remoteJid               String?                 @map("remote_jid") @db.VarChar(100)
   metaReferralMarker      String?                 @map("meta_referral_marker") @db.Text
@@ -257,6 +263,7 @@ model Prospect {
   @@index([brandId, remoteJid])
   @@index([brandId, phone])
   @@index([brandId, lastMessageAt])
+  @@index([brandId, spamAt])
   @@index([brandId, conversationStatsAt])
   @@map("prospects")
 }

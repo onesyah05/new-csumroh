@@ -22,6 +22,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { SpamAudienceCard } from './SpamAudienceCard';
 import { useAuth } from '../../app/auth';
 import { useBrandScope } from '../../lib/scope';
 import { useUiStore } from '../../app/store';
@@ -48,6 +49,7 @@ interface MetaSettings {
   pixelId: string;
   facebookPageId: string;
   whatsappBusinessAccountId: string;
+  adAccountId: string;
   testEventCode: string;
   accessTokenConfigured: boolean;
   maskedAccessToken?: string;
@@ -82,12 +84,18 @@ const emptyForm = {
   pixelId: '',
   facebookPageId: '',
   whatsappBusinessAccountId: '',
+  adAccountId: '',
   accessToken: '',
   testEventCode: '',
 };
 
 /* ─── Main Component ────────────────────────────────────────── */
-export function MetaCapiPage() {
+/**
+ * Meta CAPI per brand. Dipakai sebagai tab di detail Brand (`brandId` terkunci, tanpa judul & pemilih brand);
+ * tanpa `brandId` menjadi halaman mandiri dengan pemilih brand.
+ */
+export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {}) {
+  const embedded = fixedBrandId !== undefined;
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { brandId: scopedId } = useBrandScope();
@@ -112,7 +120,7 @@ export function MetaCapiPage() {
     }
   }, [scopedId, brands.data]);
 
-  const currentBrandId = selectedBrandId ?? scopedId ?? (brands.data?.[0]?.id ?? 0);
+  const currentBrandId = fixedBrandId ?? selectedBrandId ?? scopedId ?? (brands.data?.[0]?.id ?? 0);
   const currentBrand = brands.data?.find((b) => b.id === currentBrandId);
 
   // Meta Settings Query
@@ -145,7 +153,7 @@ export function MetaCapiPage() {
   // Modals state
   const [selectedLog, setSelectedLog] = useState<MetaLog | null>(null);
   const [testModalOpen, setTestModalOpen] = useState(false);
-  const [testEventName, setTestEventName] = useState<'Contact' | 'AddToCart' | 'InitiateCheckout' | 'Purchase'>('Contact');
+  const [testEventName, setTestEventName] = useState<'Contact' | 'Lead' | 'AddToCart' | 'InitiateCheckout' | 'Purchase'>('Contact');
   const [testEventCodeInput, setTestEventCodeInput] = useState('');
   const [testResult, setTestResult] = useState<TestEventResponse | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -167,6 +175,7 @@ export function MetaCapiPage() {
       pixelId: settingsQuery.data.pixelId ?? '',
       facebookPageId: settingsQuery.data.facebookPageId ?? '',
       whatsappBusinessAccountId: settingsQuery.data.whatsappBusinessAccountId ?? '',
+      adAccountId: settingsQuery.data.adAccountId ?? '',
       accessToken: '',
       testEventCode: settingsQuery.data.testEventCode ?? '',
     });
@@ -254,9 +263,38 @@ export function MetaCapiPage() {
   }));
 
   return (
-    <div className="app-page space-y-6 pb-16">
+    <div className={embedded ? 'space-y-6' : 'app-page space-y-6 pb-16'}>
 
-      {/* Standard Page Header */}
+      {embedded ? (
+        <div className="flex flex-wrap justify-end gap-2">
+            {/* Quick Test Event Button */}
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              onClick={() => {
+                setTestResult(null);
+                setTestModalOpen(true);
+              }}
+              icon={<Play size={13} className="text-zinc-600" />}
+            >
+              Uji Coba Event
+            </Button>
+
+            {/* Verify Connection Button */}
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              disabled={!settings?.connectionConfigured || verifyMutation.isPending}
+              onClick={() => verifyMutation.mutate()}
+              loading={verifyMutation.isPending}
+              icon={<RefreshCw size={13} />}
+            >
+              Tes Koneksi
+            </Button>
+        </div>
+      ) : (
       <PageHeader
         title="Meta Conversions API"
         subtitle="Pelacakan konversi iklan dan event server-side."
@@ -306,6 +344,7 @@ export function MetaCapiPage() {
           </div>
         }
       />
+      )}
 
       {/* 4 Metric Stats Grid */}
       <StatGrid cols={4}>
@@ -347,11 +386,11 @@ export function MetaCapiPage() {
       </StatGrid>
 
       {/* Segmented Navigation Bar */}
-      <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs w-fit">
+      <div role="tablist" aria-label="Meta CAPI" className="scroll-row flex min-h-9 max-w-full w-fit items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
         {[
-          { id: 'settings', label: 'Konfigurasi & Token', icon: KeyRound },
-          { id: 'logs', label: `Log Audit Event (${logs.length})`, icon: Activity },
-          { id: 'funnel', label: 'Alur & Atribusi', icon: Layers },
+          { id: 'settings', label: 'Konfigurasi & token', icon: KeyRound },
+          { id: 'logs', label: `Log event (${logs.length})`, icon: Activity },
+          { id: 'funnel', label: 'Alur & atribusi', icon: Layers },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -359,8 +398,10 @@ export function MetaCapiPage() {
             <button
               key={tab.id}
               type="button"
+              role="tab"
+              aria-selected={active}
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`h-full inline-flex items-center gap-1.5 rounded-md px-3.5 text-xs font-semibold transition cursor-pointer ${
+              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3.5 text-xs font-semibold transition cursor-pointer ${
                 active
                   ? 'bg-zinc-950 text-white shadow-xs'
                   : 'text-zinc-600 hover:text-zinc-950'
@@ -434,6 +475,22 @@ export function MetaCapiPage() {
                       onChange={(e) => setForm({ ...form, whatsappBusinessAccountId: e.target.value.replace(/\D/g, '') })}
                       placeholder="Contoh: 543216789012345"
                     />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="meta-ad-account" className="label text-xs font-semibold">
+                      Ad Account ID
+                    </label>
+                    <input
+                      id="meta-ad-account"
+                      type="text"
+                      className="field"
+                      value={form.adAccountId}
+                      onChange={(e) => setForm({ ...form, adAccountId: e.target.value.trim().replace(/^act_/i, '').replace(/\D/g, '') })}
+                      placeholder="Contoh: 1234567890 (tanpa act_)"
+                      aria-describedby="meta-ad-account-hint"
+                    />
+                    <p id="meta-ad-account-hint" className="text-xs text-zinc-500">Untuk biaya iklan di Laporan. Token perlu izin ads_read.</p>
                   </div>
 
                   <div className="space-y-1.5">
@@ -551,6 +608,7 @@ export function MetaCapiPage() {
               </div>
             </form>
           </Card>
+          {currentBrandId > 0 && <SpamAudienceCard brandId={currentBrandId} />}
         </div>
       )}
 
@@ -558,8 +616,8 @@ export function MetaCapiPage() {
       {activeTab === 'logs' && (
         <div className="space-y-4">
           {/* Filter Bar Toolbar */}
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="contents">
               {/* Search */}
               <div className="relative flex-1 min-w-[220px] max-w-sm">
                 <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
@@ -573,37 +631,37 @@ export function MetaCapiPage() {
               </div>
 
               {/* Event Filter Pills */}
-              <div className="thin-scrollbar flex min-h-9 max-w-full items-center overflow-x-auto rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
-                {['all', 'Contact', 'AddToCart', 'InitiateCheckout', 'Purchase'].map((ev) => (
+              <div className="scroll-row flex min-h-9 max-w-full items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
+                {['all', 'Contact', 'Lead', 'AddToCart', 'InitiateCheckout', 'Purchase'].map((ev) => (
                   <button
                     key={ev}
                     type="button"
                     onClick={() => setLogEventFilter(ev)}
-                    className={`h-full inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition cursor-pointer ${
+                    className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition cursor-pointer ${
                       logEventFilter === ev
                         ? 'bg-zinc-950 text-white font-semibold shadow-xs'
                         : 'text-zinc-600 hover:text-zinc-950'
                     }`}
                   >
-                    {ev === 'all' ? 'Semua Event' : ev}
+                    {ev === 'all' ? 'Semua event' : ev}
                   </button>
                 ))}
               </div>
 
               {/* Status Filter Pills */}
-              <div className="thin-scrollbar flex min-h-9 max-w-full items-center overflow-x-auto rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
+              <div className="scroll-row flex min-h-9 max-w-full items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
                 {['all', 'success', 'failed'].map((st) => (
                   <button
                     key={st}
                     type="button"
                     onClick={() => setLogStatusFilter(st)}
-                    className={`h-full inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition cursor-pointer capitalize ${
+                    className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition cursor-pointer ${
                       logStatusFilter === st
                         ? 'bg-zinc-950 text-white font-semibold shadow-xs'
                         : 'text-zinc-600 hover:text-zinc-950'
                     }`}
                   >
-                    {st === 'all' ? 'Semua Status' : st === 'success' ? 'Sukses' : 'Gagal'}
+                    {st === 'all' ? 'Semua status' : st === 'success' ? 'Sukses' : 'Gagal'}
                   </button>
                 ))}
               </div>
@@ -613,6 +671,7 @@ export function MetaCapiPage() {
               type="button"
               variant="secondary"
               size="md"
+              className="ml-auto"
               onClick={() => void logsQuery.refetch()}
               loading={logsQuery.isFetching}
               icon={<RefreshCw size={13} />}
@@ -744,7 +803,7 @@ export function MetaCapiPage() {
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {[
                 {
                   step: '01',
@@ -754,18 +813,24 @@ export function MetaCapiPage() {
                 },
                 {
                   step: '02',
+                  event: 'Lead',
+                  trigger: 'Terkualifikasi',
+                  desc: 'Bulan keberangkatan dan jumlah jamaah terisi. Dikirim sekali; chat spam tidak pernah dikirim.',
+                },
+                {
+                  step: '03',
                   event: 'AddToCart',
                   trigger: 'Penawaran Program',
                   desc: 'CS mengirimkan paket umroh ke prospek. Server mendispatch estimasi nilai paket ke Meta.',
                 },
                 {
-                  step: '03',
+                  step: '04',
                   event: 'InitiateCheckout',
                   trigger: 'Tahap Booking / DP',
                   desc: 'Prospek menyetujui booking dan diarahkan bayar DP. Mengirimkan nominal uang muka.',
                 },
                 {
-                  step: '04',
+                  step: '05',
                   event: 'Purchase',
                   trigger: 'Deal (diverifikasi Finance)',
                   desc: 'Prospek resmi terdaftar (Closed Won). Mengirimkan total nilai transaksi riil paket umroh.',
@@ -973,6 +1038,7 @@ export function MetaCapiPage() {
                   onValueChange={(val) => setTestEventName(val as typeof testEventName)}
                   options={[
                     { value: 'Contact', label: 'Contact (Prospek Baru)' },
+                    { value: 'Lead', label: 'Lead (Terkualifikasi)' },
                     { value: 'AddToCart', label: 'AddToCart (Penawaran Program)' },
                     { value: 'InitiateCheckout', label: 'InitiateCheckout (Booking / DP)' },
                     { value: 'Purchase', label: 'Purchase (Deal)' },

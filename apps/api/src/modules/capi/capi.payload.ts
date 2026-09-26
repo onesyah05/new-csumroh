@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export type CapiEventName = 'Contact' | 'AddToCart' | 'InitiateCheckout' | 'Purchase';
+export type CapiEventName = 'Contact' | 'Lead' | 'AddToCart' | 'InitiateCheckout' | 'Purchase';
 
 export const normalizePhone = (phone: string) => {
   const digits = phone.replace(/\D/g, '').replace(/^0/, '62');
@@ -12,6 +12,7 @@ export const sha256 = (value: string) => createHash('sha256').update(value.trim(
 export function buildCapiEventId(prospectId: number, eventName: CapiEventName, closedWonCount = 0) {
   const suffix: Record<CapiEventName, string> = {
     Contact: 'contact',
+    Lead: 'lead',
     AddToCart: 'offered',
     InitiateCheckout: 'closing',
     Purchase: `won_${Math.max(1, closedWonCount)}`,
