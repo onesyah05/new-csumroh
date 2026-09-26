@@ -51,24 +51,64 @@ afterEach(() => {
 });
 
 describe('Pipeline', () => {
-  it('menggabungkan chip cepat dengan filter paket (AND), dari URL', async () => {
-    renderAs('admin', '/pipeline?view=table&quick=won&paket=10');
+  it('mobile kembali ke Tabel secara bawaan dan dapat beralih ke Papan', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    renderAs('admin', '/pipeline');
+    expect(await screen.findByRole('table')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Tabel$/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Ekspor CSV' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Tahap prospek' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Papan$/ }));
+    expect(await screen.findByRole('article', { name: 'Kartu prospek Deal Syawal' })).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+  it('lingkup Deal digabung dengan filter paket (AND), dari URL; tautan lama ?quick=won tetap berlaku', async () => {
+    renderAs('admin', '/pipeline?view=table&lingkup=deal&paket=10');
     expect(await screen.findByText('Deal Syawal')).toBeTruthy();
     expect(screen.queryByText('Deal Ramadhan')).toBeNull();
-    // Jumlah di chip Deal mengikuti filter paket yang aktif.
-    const dealChip = screen.getByRole('button', { name: /^Deal\s*1$/ });
-    expect(dealChip.getAttribute('aria-pressed')).toBe('true');
+    // Status & paket tampil sebagai chip filter aktif yang bisa dihapus; toolbar tidak punya tombol lingkup.
+    expect(screen.getByRole('button', { name: 'Hapus filter Status: Deal' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Hapus filter Paket: Syawal' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Lingkup prospek' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus filter Status: Deal' }));
+    expect(await screen.findByText('Tidak ada prospek yang cocok dengan pencarian atau filter ini.')).toBeTruthy();
+    cleanup();
+    queryClient.clear();
+    renderAs('admin', '/pipeline?view=table&quick=won');
+    expect(await screen.findByText('Deal Ramadhan')).toBeTruthy();
+    expect(screen.queryByText('Keberatan Harga')).toBeNull();
+  });
+
+  it('Tabel: bawaan lingkup Aktif (Deal/Batal disembunyikan); filter cepat urut mendesak, jumlah 0 dipudarkan', async () => {
+    renderAs('admin', '/pipeline?view=table');
+    expect(await screen.findByText('Keberatan Harga')).toBeTruthy();
+    expect(screen.queryByText('Deal Syawal')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Lingkup prospek' })).toBeNull();
+    const chips = within(screen.getByRole('group', { name: 'Filter cepat' })).getAllByRole('button');
+    expect(chips.map((b) => b.textContent?.replace(/\d+$/, ''))).toEqual(['Semua', 'Follow-up terlambat', 'Menunggu balasan', 'Belum ada PIC', 'Follow-up hari ini', 'Minat tinggi']);
+    expect(chips.some((b) => /Deal|Batal/.test(b.textContent ?? ''))).toBe(false);
+    expect(chips[1]!.className).toContain('border-dashed');
+    cleanup();
+    queryClient.clear();
+    renderAs('admin', '/pipeline?view=table&lingkup=semua');
+    expect(await screen.findByText('Deal Syawal')).toBeTruthy();
+  });
+
+  it('Papan tidak memakai lingkup: kolom Deal tetap berisi', async () => {
+    renderAs('admin', '/pipeline?view=kanban');
+    expect(await screen.findByRole('article', { name: 'Kartu prospek Deal Syawal' })).toBeTruthy();
+    expect(screen.queryByLabelText('Filter status')).toBeNull();
   });
 
   it('klaim hanya untuk CS; admin mendapat "Tugaskan PIC"', async () => {
     renderAs('admin', '/pipeline?view=table');
-    await screen.findByText('Deal Syawal');
+    await screen.findByText('Keberatan Harga');
     expect(screen.queryByRole('button', { name: /Klaim/ })).toBeNull();
     expect(screen.getAllByRole('button', { name: /Tugaskan PIC/ }).length).toBeGreaterThan(0);
     cleanup();
     queryClient.clear();
     renderAs('cs', '/pipeline?view=table');
-    await screen.findByText('Deal Syawal');
+    await screen.findByText('Keberatan Harga');
     expect(screen.getAllByRole('button', { name: /Klaim/ }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: /Tugaskan PIC/ })).toBeNull();
   });
@@ -105,7 +145,7 @@ describe('Pipeline', () => {
     renderAs('admin', '/pipeline?view=table&q=tidakada');
     expect(await screen.findByText('Tidak ada prospek yang cocok dengan pencarian atau filter ini.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Hapus semua filter' }));
-    expect(await screen.findByText('Deal Syawal')).toBeTruthy();
+    expect(await screen.findByText('Keberatan Harga')).toBeTruthy();
   });
 
   it('CS bukan PIC: kartu hanya-baca (tanpa follow-up dan tidak bisa diseret)', async () => {

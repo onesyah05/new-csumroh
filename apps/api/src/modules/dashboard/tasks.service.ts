@@ -204,7 +204,7 @@ export async function tasksForManager(brandIds: number[], now = new Date()): Pro
       task('invalid_pic', 'Prospek dengan PIC bukan CS aktif', invalidPic, '/pipeline', {
         hint: invalidPic ? 'Tugaskan ulang ke CS atau lepas ke antrean' : null, action: 'Tugaskan',
       }),
-      task('deal_incomplete', 'Nilai deal belum lengkap', incomplete, '/pipeline?quick=won', {
+      task('deal_incomplete', 'Nilai deal belum lengkap', incomplete, '/pipeline?view=table&lingkup=deal', {
         hint: incomplete ? 'Lengkapi nilai deal untuk laporan penjualan' : null, action: 'Lengkapi',
       }),
     ],

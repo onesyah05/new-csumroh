@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { RowActions } from '../../components/ui/row-actions';
 import {
   businessDateKey,
   canTransitionStatus,
@@ -120,17 +121,27 @@ function subtitleOf(p: Prospect) {
  * "Menunggu balasan": pesan terakhir percakapan berasal dari jamaah (bisa di tahap mana pun, mis. jamaah
  * bertanya lagi setelah penawaran). Bukan berarti CS belum pernah membalas.
  */
-/** Filter cepat. Semuanya dihitung di klien dengan helper yang sama dengan backend (tanggal bisnis WIB). */
-const QUICK_FILTERS: { id: string; label: string; test(p: Prospect, today: string): boolean }[] = [
+/**
+ * Filter cepat "perlu tindakan", urut dari yang paling mendesak. Dihitung di klien dengan helper yang sama
+ * dengan backend (tanggal bisnis WIB). `tone` menonjolkan jumlahnya bila > 0.
+ */
+const QUICK_FILTERS: { id: string; label: string; tone?: 'urgent' | 'attention'; test(p: Prospect, today: string): boolean }[] = [
   { id: 'all', label: 'Semua', test: () => true },
-  { id: 'reply', label: 'Menunggu balasan', test: (p) => awaitingReply(p) },
+  { id: 'overdue', label: 'Follow-up terlambat', tone: 'urgent', test: (p, today) => { const d = dateOnlyKey(p.nextFollowupDate); return isOpen(p) && d !== null && d < today; } },
+  { id: 'reply', label: 'Menunggu balasan', tone: 'attention', test: (p) => awaitingReply(p) },
+  { id: 'unassigned', label: 'Belum ada PIC', tone: 'attention', test: (p) => isOpen(p) && !p.userId },
   { id: 'today', label: 'Follow-up hari ini', test: (p, today) => isOpen(p) && dateOnlyKey(p.nextFollowupDate) === today },
-  { id: 'overdue', label: 'Follow-up terlambat', test: (p, today) => { const d = dateOnlyKey(p.nextFollowupDate); return isOpen(p) && d !== null && d < today; } },
-  { id: 'unassigned', label: 'Belum ada PIC', test: (p) => isOpen(p) && !p.userId },
   { id: 'hot', label: 'Minat tinggi', test: (p) => ['offer', 'offered', 'closing'].includes(p.status) },
-  { id: 'won', label: 'Deal', test: (p) => isWonStatus(p.status) },
-  { id: 'lost', label: 'Batal', test: (p) => isLostStatus(p.status) },
 ];
+
+/** Lingkup tampilan Tabel. Papan tidak memakainya: kolom Deal/Batal di sana sekaligus tujuan tarik kartu. */
+const SCOPES = [
+  { id: 'aktif', label: 'Aktif', test: (p: Prospect) => isOpen(p) },
+  { id: 'deal', label: 'Deal', test: (p: Prospect) => isWonStatus(p.status) },
+  { id: 'batal', label: 'Batal', test: (p: Prospect) => isLostStatus(p.status) },
+  { id: 'semua', label: 'Semua', test: () => true },
+] as const;
+type ScopeId = (typeof SCOPES)[number]['id'];
 
 /**
  * Apa yang terjadi bila kartu dilepas di kolom tertentu. Kolom Baru/Terhubung diisi otomatis oleh sistem,
@@ -186,7 +197,13 @@ export function PipelinePage() {
   const [narrowDefault] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 899px)').matches));
   const viewParam = params.get('view');
   const view = viewParam === 'table' || viewParam === 'kanban' ? viewParam : narrowDefault ? 'table' : 'kanban';
-  const quick = params.get('quick') ?? 'all';
+  const rawQuick = params.get('quick') ?? 'all';
+  const legacyScope: ScopeId | null = rawQuick === 'won' ? 'deal' : rawQuick === 'lost' ? 'batal' : null;
+  const quick = legacyScope ? 'all' : rawQuick;
+  const scopeParam = params.get('lingkup');
+  const scope: ScopeId = legacyScope ?? (SCOPES.some((sc) => sc.id === scopeParam) ? scopeParam as ScopeId : 'aktif');
+  // Tautan lama (?quick=won/lost) tetap menyaring di Papan seperti sebelumnya.
+  const scoped = view === 'table' || legacyScope !== null;
   const search = params.get('q') ?? '';
   const filterPaket = params.get('paket') ?? '';
   const filterLeadSource = params.get('sumber') ?? '';
@@ -200,7 +217,7 @@ export function PipelinePage() {
     }, { replace: true });
   };
 
-  const [showFilters, setShowFilters] = useState(Boolean(filterPaket || filterLeadSource || filterPic));
+  const [showFilters, setShowFilters] = useState(Boolean(filterPaket || filterLeadSource || filterPic || params.get('lingkup')));
   const [followupFor, setFollowupFor] = useState<Prospect | null>(null);
   const [picDialog, setPicDialog] = useState<{ mode: 'assign' | 'handover'; prospect: Prospect } | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
@@ -237,7 +254,7 @@ export function PipelinePage() {
 
   // Pencarian + filter paket + sumber lead diterapkan bersama (AND), lalu filter cepat di atasnya.
   const today = businessDateKey();
-  const base = useMemo(() => {
+  const searched = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (prospects.data ?? []).filter((p) => {
       if (q && !`${p.name} ${p.phone ?? ''} ${p.city ?? ''}`.toLowerCase().includes(q)) return false;
@@ -249,6 +266,14 @@ export function PipelinePage() {
       return true;
     });
   }, [prospects.data, search, filterPaket, filterLeadSource, filterPic, user?.id]);
+  const scopeCounts = useMemo(
+    () => Object.fromEntries(SCOPES.map((sc) => [sc.id, searched.filter(sc.test).length])) as Record<ScopeId, number>,
+    [searched],
+  );
+  const base = useMemo(() => {
+    const test = SCOPES.find((sc) => sc.id === scope)!.test;
+    return scoped ? searched.filter(test) : searched;
+  }, [searched, scope, scoped]);
   // Pilihan PIC: CS melihat "PIC saya"; Admin memilih per CS dari PIC yang ada di data.
   const picOptions = useMemo(() => {
     const team = new Map<number, string>();
@@ -433,12 +458,32 @@ export function PipelinePage() {
   if (!brandId) return <PageError title="Belum ada brand aktif" description="Buat brand melalui menu Brand agar pipeline dapat memakai data prospek sebenarnya." />;
   if (prospects.isError) return <PageError description={prospects.error.message} onRetry={() => void prospects.refetch()} />;
 
-  const activeFiltersCount = [filterPaket, filterLeadSource, filterPic].filter(Boolean).length;
-  const hasAnyFilter = Boolean(search || quick !== 'all' || filterPaket || filterLeadSource || filterPic);
+  const scopeFiltered = scoped && scope !== 'aktif';
+  const activeFiltersCount = [filterPaket, filterLeadSource, filterPic, scopeFiltered].filter(Boolean).length;
+  const hasAnyFilter = Boolean(search || quick !== 'all' || filterPaket || filterLeadSource || filterPic || (scoped && scope !== 'aktif'));
+  const setScope = (id: ScopeId) => setParams((current) => {
+    const next = new URLSearchParams(current);
+    if (id === 'aktif') next.delete('lingkup'); else next.set('lingkup', id);
+    if (next.get('quick') === 'won' || next.get('quick') === 'lost') next.delete('quick');
+    return next;
+  }, { replace: true });
+  // Filter lanjutan yang aktif selalu terlihat sebagai chip yang bisa dihapus.
+  const activeFilterChips = [
+    scopeFiltered && { key: 'lingkup', label: `Status: ${SCOPES.find((sc) => sc.id === scope)!.label}` },
+    filterPaket && { key: 'paket', label: `Paket: ${packageOptions.find((o) => o.value === filterPaket)?.label ?? filterPaket}` },
+    filterLeadSource && { key: 'sumber', label: `Sumber: ${LEAD_SOURCES.find((o) => o.value === filterLeadSource)?.label ?? filterLeadSource}` },
+    filterPic && { key: 'pic', label: `PIC: ${picOptions.find((o) => o.value === filterPic)?.label ?? filterPic}` },
+  ].filter(Boolean) as { key: string; label: string }[];
+  const clearAdvancedFilters = () => setParams((current) => {
+    const next = new URLSearchParams(current);
+    ['paket', 'sumber', 'pic', 'lingkup'].forEach((key) => next.delete(key));
+    if (next.get('quick') === 'won' || next.get('quick') === 'lost') next.delete('quick');
+    return next;
+  }, { replace: true });
   const clearAllFilters = () => {
     setParams((current) => {
       const next = new URLSearchParams(current);
-      ['q', 'quick', 'paket', 'sumber', 'pic'].forEach((key) => next.delete(key));
+      ['q', 'quick', 'paket', 'sumber', 'pic', 'lingkup'].forEach((key) => next.delete(key));
       return next;
     }, { replace: true });
   };
@@ -476,7 +521,7 @@ export function PipelinePage() {
                   aria-pressed={view === id}
                   onClick={() => setParam('view', id)}
                   className={cn(
-                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
+                    'mobile-compact-control flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
                     view === id ? 'bg-zinc-950 text-white font-semibold shadow-xs' : 'text-zinc-600 hover:text-zinc-950',
                   )}
                 >
@@ -484,63 +529,107 @@ export function PipelinePage() {
                 </button>
               ))}
             </div>
-            <Button variant="secondary" onClick={exportCsv}><Download size={14} />Ekspor CSV</Button>
+            <Button variant="secondary" className="mobile-compact-control" onClick={exportCsv}><Download size={14} />Ekspor CSV</Button>
           </div>
         }
       />
 
-      <section className="surface flex flex-col gap-2.5 p-3 xl:flex-row xl:items-start">
-        <div className="relative w-full xl:w-72 xl:shrink-0">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input
-            value={search}
-            onChange={(e) => setParam('q', e.target.value)}
-            aria-label="Cari prospek"
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-8 text-xs text-zinc-900 placeholder:text-zinc-500 shadow-xs outline-none transition focus:border-black focus:ring-1 focus:ring-black"
-            placeholder="Cari nama, nomor, atau kota..."
-          />
-          {search && (
-            <button onClick={() => setParam('q', null)} aria-label="Hapus pencarian" className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900">
-              <X size={13} />
-            </button>
-          )}
+      <section className="surface space-y-2.5 p-3" aria-label="Cari dan filter prospek">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input
+              value={search}
+              onChange={(e) => setParam('q', e.target.value)}
+              aria-label="Cari prospek"
+              className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-8 text-xs text-zinc-900 placeholder:text-zinc-500 shadow-xs outline-none transition focus:border-black focus:ring-1 focus:ring-black"
+              placeholder="Cari nama, nomor, atau kota..."
+            />
+            {search && (
+              <button onClick={() => setParam('q', null)} aria-label="Hapus pencarian" className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900">
+                <X size={13} />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            aria-expanded={showFilters}
+            className={cn(
+              'flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-xs transition',
+              showFilters || activeFiltersCount > 0 ? 'border-zinc-950 bg-zinc-950 text-white font-semibold' : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400',
+            )}
+          >
+            <SlidersHorizontal size={13} /><span className="max-sm:sr-only">Filter</span>
+            {activeFiltersCount > 0 && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-xs font-bold text-zinc-950">{activeFiltersCount}</span>
+            )}
+            <ChevronDown size={12} className={cn('transition max-sm:hidden', showFilters && 'rotate-180')} />
+          </button>
         </div>
-        <div className="flex flex-1 flex-wrap gap-1.5" role="group" aria-label="Filter cepat">
-          {QUICK_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              aria-pressed={quick === f.id}
-              onClick={() => setParam('quick', f.id)}
-              className={cn(
-                'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition',
-                quick === f.id ? 'bg-zinc-950 text-white font-semibold shadow-xs' : 'border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950',
-              )}
-            >
-              {f.label}
-              <span className={cn('rounded-full px-1.5 text-[11px] tabular-nums', quick === f.id ? 'bg-white/20' : 'bg-zinc-100 text-zinc-600')}>
-                {quickCounts[f.id] ?? 0}
+
+        {/* Satu baris; di layar sempit digeser ke samping. Jumlah 0 dipudarkan, posisi chip tetap. */}
+        <div className="thin-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5" role="group" aria-label="Filter cepat">
+          {QUICK_FILTERS.map((f) => {
+            const count = quickCounts[f.id] ?? 0;
+            const active = quick === f.id;
+            const muted = !active && count === 0 && f.id !== 'all';
+            return (
+              <button
+                key={f.id}
+                aria-pressed={active}
+                onClick={() => setParam('quick', f.id)}
+                className={cn(
+                  'mobile-compact-control flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition',
+                  active ? 'bg-zinc-950 font-semibold text-white shadow-xs'
+                    : muted ? 'border border-dashed border-zinc-200 bg-white text-zinc-500 hover:text-zinc-900'
+                      : 'border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950',
+                )}
+              >
+                {f.label}
+                <span className={cn('rounded-full px-1.5 text-[11px] font-semibold tabular-nums',
+                  active ? 'bg-white/20'
+                    : count > 0 && f.tone === 'urgent' ? 'bg-rose-600 text-white'
+                      : count > 0 && f.tone === 'attention' ? 'bg-amber-100 text-amber-900'
+                        : muted ? 'bg-zinc-50 font-medium text-zinc-500' : 'bg-zinc-100 text-zinc-600')}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {activeFilterChips.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2.5" aria-label="Filter aktif">
+            {activeFilterChips.map((chip) => (
+              <span key={chip.key} className="inline-flex max-w-full items-center gap-1 rounded-md bg-zinc-100 py-0.5 pl-2 pr-0.5 text-xs font-medium text-zinc-800">
+                <span className="truncate">{chip.label}</span>
+                <button type="button" onClick={() => (chip.key === 'lingkup' ? setScope('aktif') : setParam(chip.key, null))} aria-label={`Hapus filter ${chip.label}`}
+                  className="mobile-compact-control grid h-5 w-5 place-items-center rounded text-zinc-500 hover:bg-zinc-200 hover:text-zinc-950">
+                  <X size={12} />
+                </button>
               </span>
+            ))}
+            <button type="button" onClick={clearAdvancedFilters} className="mobile-compact-control px-1.5 py-0.5 text-xs font-semibold text-zinc-700 underline hover:text-zinc-950">
+              Hapus semua
             </button>
-          ))}
-        </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          aria-expanded={showFilters}
-          className={cn(
-            'flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-xs transition',
-            showFilters || activeFiltersCount > 0 ? 'border-zinc-950 bg-zinc-950 text-white font-semibold' : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400',
-          )}
-        >
-          <SlidersHorizontal size={13} />Filter
-          {activeFiltersCount > 0 && (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-xs font-bold text-zinc-950">{activeFiltersCount}</span>
-          )}
-          <ChevronDown size={12} className={cn('transition', showFilters && 'rotate-180')} />
-        </button>
+          </div>
+        )}
       </section>
 
       {showFilters && (
         <section className="surface flex flex-wrap items-end gap-3 px-4 py-3">
+          {scoped && (
+            <div className="min-w-[160px] flex-1">
+              <p className="mb-1 text-xs font-semibold text-zinc-500">Status</p>
+              <Select
+                value={scope}
+                onValueChange={(value) => setScope(value as ScopeId)}
+                aria-label="Filter status"
+                options={SCOPES.map((sc) => ({ value: sc.id, label: `${sc.id === 'aktif' ? 'Aktif (belum Deal/Batal)' : sc.label} · ${scopeCounts[sc.id]}` }))}
+                className="w-full"
+              />
+            </div>
+          )}
           <div className="min-w-[200px] flex-1">
             <p className="mb-1 text-xs font-semibold text-zinc-500">Paket</p>
             <Select
@@ -571,11 +660,6 @@ export function PipelinePage() {
               className="w-full"
             />
           </div>
-          {activeFiltersCount > 0 && (
-            <button onClick={() => { setParam('paket', null); setParam('sumber', null); setParam('pic', null); }} className="min-h-6 rounded px-1.5 py-1 text-xs font-semibold text-zinc-700 underline hover:text-zinc-950">
-              Reset filter
-            </button>
-          )}
         </section>
       )}
 
@@ -594,13 +678,13 @@ export function PipelinePage() {
         <>
           {/* Satu baris ringkas: lompat ke tahap (berguna saat kolom di luar layar) + info/petunjuk. */}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
-            <nav aria-label="Lompat ke tahap" className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-zinc-700">
+            <nav aria-label="Lompat ke tahap" className="mobile-compact-filters flex flex-wrap items-center gap-x-1 gap-y-0.5 text-zinc-700">
               <span className="mr-1 font-medium text-zinc-600">Lompat ke</span>
               {columns.map((column) => (
                 <button
                   key={column.id}
                   onClick={() => jumpToColumn(column.id)}
-                  className="min-h-6 rounded px-1.5 py-1 hover:bg-zinc-100 hover:text-zinc-950"
+                  className="mobile-compact-control min-h-6 rounded px-1.5 py-1 hover:bg-zinc-100 hover:text-zinc-950"
                 >
                   {column.label} <span className="tabular-nums text-zinc-600">{columnItems(column.id).length}</span>
                 </button>
@@ -611,9 +695,7 @@ export function PipelinePage() {
                 <><GripVertical size={14} />{dropHint(dragOverStatus, dragged, user?.role)}</>
               ) : filtered.length !== (prospects.data ?? []).length ? (
                 <span className="font-semibold">Menampilkan {filtered.length} dari {(prospects.data ?? []).length} prospek</span>
-              ) : (
-                <><GripVertical size={14} />Tarik kartu atau pakai menu … untuk langkah berikutnya</>
-              )}
+              ) : null}
             </p>
           </div>
 
@@ -741,7 +823,7 @@ export function PipelinePage() {
             {/* Split-screen (±700 px) membuka Tabel secara bawaan: Paket & Nilai baru tampil mulai lg (ada di Kanban/Detail). */}
             <table className="w-full text-left lg:min-w-[960px]">
               <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-600">
-                <tr>
+                <tr className="whitespace-nowrap">
                   <th className="px-5 py-3">Jamaah</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="hidden px-4 py-3 lg:table-cell">Paket</th>
@@ -756,7 +838,7 @@ export function PipelinePage() {
                 {filtered.slice(0, tableLimit).map((p) => {
                   const due = dateOnlyKey(p.nextFollowupDate);
                   return (
-                    <tr key={p.id} className="text-sm hover:bg-zinc-50/60">
+                    <tr key={p.id} className="whitespace-nowrap text-sm hover:bg-zinc-50/60">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2.5">
                           <ProspectAvatar photoUrl={photoFor(p)} size="sm" className="shrink-0" />
@@ -767,7 +849,7 @@ export function PipelinePage() {
                         </div>
                       </td>
                       <td className="px-4"><Badge value={p.status} /></td>
-                      <td className="hidden px-4 text-xs text-zinc-600 lg:table-cell">{p.package?.name ?? '—'}</td>
+                      <td className="hidden min-w-[12rem] whitespace-normal px-4 text-xs text-zinc-600 lg:table-cell">{p.package?.name ?? '—'}</td>
                       <td className="hidden px-4 text-xs lg:table-cell">{Number(p.dealValue) > 0 ? <b>Rp {money(p.dealValue)}</b> : <span className="text-zinc-500">Belum ada penawaran</span>}</td>
                       <td className="px-4 text-xs">
                         <PicControl {...cardProps(p)} />
@@ -783,19 +865,11 @@ export function PipelinePage() {
                         {timeAgo(lastActivity(p)) ?? '—'}{awaitingReply(p) && <span className="ml-1 font-semibold text-zinc-950" title="Pesan terakhir dari jamaah dan belum dijawab CS">· menunggu balasan</span>}
                       </td>
                       <td className="px-5 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Link to={`/inbox?prospectId=${p.id}`} aria-label={`Chat ${p.name}`} title="Buka chat" className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950">
-                            <MessageSquareText size={15} />
-                          </Link>
-                          {!isLockedForCs(user, p) && (
-                            <button onClick={() => setFollowupFor(p)} aria-label={`Catat follow-up ${p.name}`} title="Catat follow-up" className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950">
-                              <ClipboardList size={15} />
-                            </button>
-                          )}
-                          <Link to={`/prospects/${p.id}`} aria-label={`Buka profil ${p.name}`} title="Buka profil" className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950">
-                            <ArrowUpRight size={15} />
-                          </Link>
-                        </div>
+                        <RowActions label={`Aksi ${p.name}`} actions={[
+                          { label: 'Buka chat', icon: MessageSquareText, to: `/inbox?prospectId=${p.id}` },
+                          { label: 'Catat follow-up', icon: ClipboardList, onSelect: () => setFollowupFor(p), hidden: isLockedForCs(user, p) },
+                          { label: 'Buka profil', icon: ArrowUpRight, to: `/prospects/${p.id}` },
+                        ]} />
                       </td>
                     </tr>
                   );
