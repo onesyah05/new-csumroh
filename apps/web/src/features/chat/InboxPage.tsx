@@ -39,6 +39,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  ShieldAlert,
   ShieldCheck,
   Smartphone,
   Sparkles,
@@ -76,6 +77,7 @@ import { customBadge } from '../custom/customApi';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxWorkFilters, type InboxWorkFilter } from './inboxFilters';
+import { useSpamToggle } from './useSpamToggle';
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog, ModalFrame } from '../../components/ui/modal';
 import { ImageLightbox } from '../../components/ui/image-lightbox';
@@ -424,7 +426,7 @@ export function InboxPage() {
       const quotaLine = currentPackage && typeof quota === 'number' && quota > 0
         ? `Sisa kuota *${currentPackage.name}* saat ini ${quota} orang.\n\n`
         : '';
-      text = `${quotaLine}Kalau paketnya sudah cocok, langkah berikutnya pembayaran awal (DP atau lunas) sesuai invoice resmi.\n\nMasih ada yang ingin ditanyakan sebelum mendaftar?`;
+      text = `${quotaLine}Kalau paketnya sudah cocok, langkah berikutnya pembayaran (DP atau lunas) sesuai invoice resmi.\n\nMasih ada yang ingin ditanyakan sebelum mendaftar?`;
     } else if (type === 'ppiu') {
       const ppiu = activeBrand?.ppiuNumber?.trim();
       if (!ppiu) {
@@ -567,6 +569,8 @@ export function InboxPage() {
     },
     onError: (err: any) => showToast(err?.message || 'Gagal mengirim bukti ke Finance'),
   });
+
+  const spamToggle = useSpamToggle(brandId, showToast);
 
   const claimMutation = useMutation({
     mutationFn: (prospectId: number) => api.post(`/prospects/${prospectId}/claim`),
@@ -1289,6 +1293,7 @@ export function InboxPage() {
                           )}
                         </span>
 
+                        {item.spamAt && <span className="shrink-0 rounded bg-rose-50 px-1 text-xs font-semibold text-rose-700">Spam</span>}
                         {(() => {
                           const tag = customBadge(item.customRequests?.[0]);
                           return tag && <span title={tag.text} className={cn('shrink-0 rounded px-1 text-[11px] font-semibold', tag.urgent ? 'bg-amber-100 text-amber-900' : 'border border-zinc-300 text-zinc-600')}>Custom</span>;
@@ -1393,6 +1398,7 @@ export function InboxPage() {
                   <span className="block min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="block min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-[#111b21] md:flex-none md:leading-5">{selected.name}</span>
+                      {selected.spamAt && <span className="inline-flex shrink-0 items-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700">Spam</span>}
                       {selected.leadSource === 'meta_ads' && (
                         <span
                           title={[selected.adHeadline, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
@@ -1508,6 +1514,20 @@ export function InboxPage() {
                     >
                       <UserPlus2 size={14} />
                       <span className="hidden sm:inline">Ambil alih</span>
+                    </Button>
+                  )}
+
+                  {canReply && !selected.isGroup && !selected.isOwn && !isWonStatus(selected.status) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => spamToggle.mutate({ prospectId: selected.id, spam: !selected.spamAt })}
+                      disabled={spamToggle.isPending}
+                      className={cn('gap-1.5 text-xs hover:bg-black/5', selected.spamAt ? 'text-[#54656f] hover:text-[#111b21]' : 'text-rose-700 hover:text-rose-800')}
+                      title={selected.spamAt ? 'Kembalikan ke pipeline dan antrean' : 'Keluarkan dari pipeline & laporan, tidak dikirim ke Meta, masuk audiens pengecualian iklan'}
+                    >
+                      <ShieldAlert size={15} />
+                      <span className="hidden lg:inline">{selected.spamAt ? 'Bukan spam' : 'Tandai spam'}</span>
                     </Button>
                   )}
 

@@ -17,6 +17,7 @@ export interface InboxConversation {
   isOwn?: boolean;
   userId?: number | null;
   status?: string;
+  spamAt?: string | null;
   nextFollowupDate?: string | null;
   messages?: Array<{ isFromMe?: boolean; messageText?: string | null; timestamp?: number }>;
 }
@@ -27,7 +28,8 @@ function isJamaahConversation(item: InboxConversation) {
 
 function matchesWork(item: InboxConversation, work: InboxWorkFilter, today: string) {
   if (work === 'all') return true;
-  if (!isJamaahConversation(item)) return false;
+  // Chat spam tetap terlihat di Semua, tetapi tidak masuk antrean kerja.
+  if (!isJamaahConversation(item) || item.spamAt) return false;
   if (work === 'needs_reply') return item.messages?.[0]?.isFromMe === false;
   const due = dateOnlyKey(item.nextFollowupDate);
   // Scheduled post-booking follow-ups remain actionable, even after Deal.
@@ -48,7 +50,7 @@ export function getInboxQueue<T extends InboxConversation>(items: T[], options: 
     if (owner === 'all') return true;
     if (!isJamaahConversation(item)) return false;
     if (owner === 'mine') return userId !== undefined && item.userId === userId;
-    if (owner === 'unassigned') return !item.userId && !isWonStatus(item.status) && !isLostStatus(item.status);
+    if (owner === 'unassigned') return !item.userId && !item.spamAt && !isWonStatus(item.status) && !isLostStatus(item.status);
     return /^user:\d+$/.test(owner) && item.userId === Number(owner.slice(5));
   });
   const counts = {

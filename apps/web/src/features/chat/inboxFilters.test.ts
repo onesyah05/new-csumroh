@@ -55,4 +55,14 @@ describe('antrean kerja CS inbox', () => {
     expect(getInboxQueue(list, { ...defaults, work: 'followup', today: businessDateKey(new Date('2026-09-23T16:59:59Z')) }).counts.followup).toBe(0);
     expect(getInboxQueue(list, { ...defaults, work: 'followup', today: businessDateKey(new Date('2026-09-23T17:00:00Z')) }).counts.followup).toBe(1);
   });
+
+  it('chat spam tetap di Semua, tetapi tidak masuk antrean perlu dibalas, follow-up, atau belum ada PIC', () => {
+    const spam = contact(1, { userId: null, spamAt: '2026-09-23T01:00:00.000Z', nextFollowupDate: '2026-09-20' });
+    const normal = contact(2, { userId: null, nextFollowupDate: '2026-09-20' });
+    const list = [spam, normal];
+    expect(getInboxQueue(list, defaults).conversations.map((p) => p.id)).toEqual([1, 2]);
+    expect(getInboxQueue(list, { ...defaults, work: 'needs_reply' }).conversations.map((p) => p.id)).toEqual([2]);
+    expect(getInboxQueue(list, { ...defaults, work: 'followup' }).conversations.map((p) => p.id)).toEqual([2]);
+    expect(getInboxQueue(list, { ...defaults, owner: 'unassigned' }).conversations.map((p) => p.id)).toEqual([2]);
+  });
 });

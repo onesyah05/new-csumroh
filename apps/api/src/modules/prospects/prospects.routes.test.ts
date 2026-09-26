@@ -16,6 +16,7 @@ type Row = Record<string, any>;
 const mocks = vi.hoisted(() => ({
   state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[], rejections: [] as Row[] },
   capi: vi.fn(),
+  spamAudience: vi.fn(async () => undefined),
   send: vi.fn(),
   conversations: vi.fn(),
   emit: vi.fn(),
@@ -147,6 +148,7 @@ vi.mock('../../middleware/auth.js', () => ({
 }));
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: mocks.emit }));
 vi.mock('../capi/capi.service.js', () => ({ queueCapiForStatus: mocks.capi }));
+vi.mock('../ads/spam-audience.js', () => ({ updateSpamAudienceMember: mocks.spamAudience }));
 vi.mock('../chat/chat.routes.js', () => ({ getLivechatConversationsForBrand: mocks.conversations }));
 vi.mock('../notifications/notification.events.js', () => ({
   dispatch: (task: () => Promise<unknown>) => { void task(); },
@@ -365,7 +367,7 @@ describe('R02 payment verification', () => {
     expect(mocks.capi).toHaveBeenCalledTimes(1);
   });
 
-  it('pembayaran awal lunas tetap satu Deal dengan label informasi', async () => {
+  it('pembayaran lunas tetap satu Deal dengan label informasi', async () => {
     const result = await invoke('post', '/:id/verify-payment', { body: { ...body, approvedAmount: 60_000_000, paymentType: 'full' }, role: 'finance' });
     expect(result.status).toBe(200);
     expect(prospect(1).paymentStatus).toBe('paid_full');
@@ -374,7 +376,7 @@ describe('R02 payment verification', () => {
     expect(mocks.capi).toHaveBeenCalledTimes(1);
   });
 
-  it('dua verifikasi dengan key berbeda hanya boleh membuat satu pembayaran awal', async () => {
+  it('dua verifikasi dengan key berbeda hanya boleh membuat satu pembayaran', async () => {
     const results = await Promise.all([
       invoke('post', '/:id/verify-payment', { body: { ...body, idempotencyKey: 'approval-first' }, role: 'finance' }),
       invoke('post', '/:id/verify-payment', { body: { ...body, idempotencyKey: 'approval-second' }, role: 'finance' }),
@@ -525,6 +527,39 @@ describe('PIC: hanya PIC atau Admin yang mengubah prospek', () => {
     prospect(1).status = 'deal';
     expect((await invoke('patch', '/:id/status', { role: 'finance', body: { status: 'lose', lostReason: 'Batal' } })).status).toBe(403);
 
+  });
+});
+
+describe('Tandai spam', () => {
+  it('PIC menandai spam: record duplikat ikut, tercatat di riwayat, nomor dikirim ke audiens; batal spam mengembalikan', async () => {
+    seedProspect(2, { remoteJid: '6281234@lid', phone: '081234' });
+    const marked = await invoke('post', '/:id/spam', { body: { spam: true } });
+    expect(marked.status).toBe(200);
+    expect(prospect(1).spamAt).toBeInstanceOf(Date);
+    expect(prospect(2).spamAt).toBeInstanceOf(Date);
+    expect(prospect(1).spamByUserId).toBe(7);
+    expect(mocks.state.logs.at(-1)).toMatchObject({ actionType: 'marked_spam' });
+    expect(mocks.spamAudience).toHaveBeenCalledWith(1, '6281234', true);
+
+    expect((await invoke('post', '/:id/spam', { body: { spam: false } })).status).toBe(200);
+    expect(prospect(1).spamAt).toBeNull();
+    expect(mocks.spamAudience).toHaveBeenLastCalledWith(1, '6281234', false);
+  });
+
+  it('CS bukan PIC ditolak; prospek Deal tidak bisa ditandai spam', async () => {
+    expect((await invoke('post', '/:id/spam', { userId: 8, body: { spam: true } })).status).toBe(403);
+    prospect(1).status = 'deal';
+    expect((await invoke('post', '/:id/spam', { body: { spam: true } })).status).toBe(409);
+    expect(prospect(1).spamAt).toBeUndefined();
+  });
+
+  it('pipeline tidak menampilkan chat spam', async () => {
+    mocks.conversations.mockResolvedValueOnce([
+      { id: 1, status: 'new', remoteJid: 'a@s.whatsapp.net', spamAt: null },
+      { id: 2, status: 'new', remoteJid: 'b@s.whatsapp.net', spamAt: new Date() },
+    ]);
+    const list = await invoke('get', '/');
+    expect(list.data.map((p: Row) => p.id)).toEqual([1]);
   });
 });
 

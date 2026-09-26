@@ -31,7 +31,7 @@ dashboardRouter.get('/', asyncHandler(async (req, res) => {
 
   const [prospects, csUsers, packages] = await Promise.all([
     prisma.prospect.findMany({
-      where: { brandId: { in: brandIds }, ...ownerFilter },
+      where: { brandId: { in: brandIds }, ...ownerFilter, spamAt: null },
       select: {
         id: true, brandId: true, userId: true, status: true, leadSource: true, dealValue: true,
         dpPaidAt: true, createdAt: true, offerSentAt: true, invoiceSentAt: true,

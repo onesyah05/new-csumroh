@@ -42,6 +42,7 @@ import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { queueCapiForStatus } from '../capi/capi.service.js';
+import { updateSpamAudienceMember } from '../ads/spam-audience.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
@@ -122,7 +123,8 @@ prospectsRouter.get('/', asyncHandler(async (req, res) => {
 
   // STRICT RULE: Data pipeline HANYA menampilkan kontak yang ada di live chat WA
   const livechatList = await getLivechatConversationsForBrand(brandId, { requireConnected: false });
-  let prospects = livechatList.filter((c) => !c.isOwn && c.remoteJid !== '0@s.whatsapp.net');
+  // Chat spam tidak ikut pipeline (tetap terlihat di Inbox dengan label Spam).
+  let prospects = livechatList.filter((c) => !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && !c.spamAt);
 
   if (status) {
     prospects = prospects.filter((p) => p.status === status);
@@ -372,6 +374,31 @@ prospectsRouter.post('/:id/claim', asyncHandler(async (req, res) => {
   dispatch(() => notifyPicChange({
     prospect: { id, brandId, name: existing.name }, kind: 'claimed', fromUserId: null, toUserId: req.user!.id, actor: req.user!,
   }));
+  res.json({ success: true, data: prospect });
+}));
+
+/**
+ * Tandai chat iseng/spam (atau batalkan). Spam keluar dari pipeline, antrean, dan laporan; tidak dikirim ke Meta
+ * CAPI; nomornya masuk audiens pengecualian brand bila audiens sudah dibuat. Berlaku juga untuk record duplikat nomornya.
+ */
+prospectsRouter.post('/:id/spam', asyncHandler(async (req, res) => {
+  const { spam } = z.object({ spam: z.boolean() }).parse(req.body);
+  const { id, brandId, existing } = await findScopedProspect(req);
+  await assertCanActOnProspect(req.user!, existing);
+  if (spam && isWonStatus(existing.status)) throw new HttpError(409, 'Prospek sudah Deal; tidak dapat ditandai spam.');
+  const linked = await linkedProspectIds(prisma, existing);
+  await prisma.$transaction(async (tx) => {
+    await tx.prospect.updateMany({
+      where: { id: { in: linked }, brandId },
+      data: spam ? { spamAt: new Date(), spamByUserId: req.user!.id } : { spamAt: null, spamByUserId: null },
+    });
+    await tx.prospectLog.create({
+      data: { prospectId: id, userId: req.user!.id, actionType: spam ? 'marked_spam' : 'unmarked_spam', title: spam ? `Ditandai spam oleh ${req.user!.name}` : `Tanda spam dibatalkan oleh ${req.user!.name}` },
+    });
+  });
+  const prospect = await prisma.prospect.findUniqueOrThrow({ where: { id }, include });
+  emitToBrand(brandId, 'prospect:updated', prospect);
+  void updateSpamAudienceMember(brandId, existing.phone, spam).catch((error) => console.error('Spam audience update failed', error));
   res.json({ success: true, data: prospect });
 }));
 
@@ -694,6 +721,7 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
   });
 
   emitToBrand(brandId, 'prospect:updated', updated);
+  if (promotedToQualified) queueCapiForStatus(id, 'qualified');
   res.json({ success: true, data: updated });
 }));
 
@@ -898,7 +926,7 @@ prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
   if (isWon && input.packageId && input.packageId !== existing.packageId) {
     throw new HttpError(409, 'Paket booking Deal terkunci. Revisi booking melalui Finance/Admin.');
   }
-  // Layanan custom: tagihan pembayaran awal antara DP minimal (per jamaah dari Tim LA) dan nilai deal akhir.
+  // Layanan custom: tagihan pembayaran antara DP minimal (per jamaah dari Tim LA) dan nilai deal akhir.
   const custom = await activeCustomFor(id);
   if (custom) {
     const agreed = assertAgreedCustom(custom, existing);
@@ -1229,7 +1257,7 @@ prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
 
   if (isWonStatus(existing.status)) throw new HttpError(409, 'Prospek sudah Deal; pembayaran berikutnya dicatat di luar CRM.');
 
-  // Layanan custom: pembayaran awal minimal DP yang ditetapkan Tim LA. Kuota hanya dipotong bila ada paket dasar.
+  // Layanan custom: pembayaran minimal DP yang ditetapkan Tim LA. Kuota hanya dipotong bila ada paket dasar.
   const custom = await activeCustomFor(id);
   if (custom) {
     const agreed = assertAgreedCustom(custom, existing);
@@ -1311,7 +1339,7 @@ prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
           prospectId: id,
           userId: req.user!.id,
           actionType: 'payment_verified',
-          title: `Pembayaran awal ${isPaidFull ? 'Lunas' : 'DP'} diverifikasi Finance: Rp ${amount.toLocaleString('id-ID')}`,
+          title: `Pembayaran ${isPaidFull ? 'Lunas' : 'DP'} diverifikasi Finance: Rp ${amount.toLocaleString('id-ID')}`,
           description: [
             `Bank: ${input.bankName}`,
             referenceNo ? `Ref: ${referenceNo}` : null,
