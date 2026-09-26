@@ -316,9 +316,14 @@ async function loadHistory(req: Request) {
 
 const STATUS_LABEL = { verified: 'Terverifikasi', reversed: 'Dibatalkan', rejected: 'Ditolak' } as const;
 const wibDateTime = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' });
+// Sel diawali = + - @ TAB CR dianggap formula oleh Excel/Sheets; nama kontak WhatsApp dikendalikan pihak luar,
+// jadi teks seperti itu diberi awalan ' (sama dengan web/src/lib/csv.ts). Angka asli tidak diubah.
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
 const csvCell = (value: unknown) => {
-  const text = value === null || value === undefined ? '' : String(value);
-  return /[",\n;]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  if (value === null || value === undefined) return '""';
+  const text = String(value);
+  const safe = typeof value !== 'number' && FORMULA_PREFIX.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
 };
 
 /** Riwayat pembayaran terverifikasi, dibatalkan, dan bukti ditolak (terbaru di atas), atau CSV sesuai filter. */

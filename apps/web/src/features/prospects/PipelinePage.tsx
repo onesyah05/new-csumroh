@@ -59,7 +59,7 @@ import { cn } from '../../lib/cn';
 import { customBadge } from '../custom/customApi';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { useWhatsAppAvatars } from '../../lib/avatars';
-import { PicDialog, isLockedForCs } from './PicDialog';
+import { PicDialog, canEditProspect, isLockedForCs, readOnlyNote } from './PicDialog';
 import { useNow } from '../../lib/useNow';
 import { showFeedback } from '../../app/toast';
 import { Modal } from '../../components/ui/modal';
@@ -498,7 +498,7 @@ export function PipelinePage() {
     // Aturan ambil alih: jamaah belum dibalas lebih dari 15 menit (server memeriksa ulang dari riwayat chat).
     canTakeOver: isLockedForCs(user, p) && isOpen(p) && isTakeoverOpen(p.awaitingSince, now),
     onTakeOver: () => takeover.mutate(p),
-    locked: isLockedForCs(user, p),
+    locked: !canEditProspect(user, p),
     onClaim: () => claim.mutate(p.id),
     onAssign: () => setPicDialog({ mode: 'assign', prospect: p }),
     onHandover: () => setPicDialog({ mode: 'handover', prospect: p }),
@@ -867,7 +867,7 @@ export function PipelinePage() {
                       <td className="px-5 text-right">
                         <RowActions label={`Aksi ${p.name}`} actions={[
                           { label: 'Buka chat', icon: MessageSquareText, to: `/inbox?prospectId=${p.id}` },
-                          { label: 'Catat follow-up', icon: ClipboardList, onSelect: () => setFollowupFor(p), hidden: isLockedForCs(user, p) },
+                          { label: 'Catat follow-up', icon: ClipboardList, onSelect: () => setFollowupFor(p), hidden: !canEditProspect(user, p) },
                           { label: 'Buka profil', icon: ArrowUpRight, to: `/prospects/${p.id}` },
                         ]} />
                       </td>
@@ -1073,7 +1073,7 @@ function ProspectCard({
       draggable={!disabled && !locked}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      title={locked ? `Ditangani ${prospect.user?.name ?? 'CS lain'}: hanya PIC atau Admin yang dapat mengubah` : undefined}
+      title={locked ? readOnlyNote({ role: role ?? '' }, prospect) : undefined}
       className={cn(
         'group rounded-xl border border-zinc-200 bg-white p-3 shadow-2xs transition hover:border-zinc-300 hover:shadow-xs',
         !locked && 'cursor-grab active:cursor-grabbing',
@@ -1108,8 +1108,8 @@ function ProspectCard({
               )}
               {locked && (
                 <p className="px-2 py-2 text-xs text-zinc-600">
-                  Ditangani {prospect.user?.name ?? 'CS lain'}. Hanya PIC atau Admin yang dapat mengubah prospek ini
-                  {canTakeOver ? '.' : ', kecuali jamaah belum dibalas lebih dari 15 menit.'}
+                  {role === 'finance' ? readOnlyNote({ role }, prospect) : <>Ditangani {prospect.user?.name ?? 'CS lain'}. Hanya PIC atau Admin yang dapat mengubah prospek ini
+                  {canTakeOver ? '.' : ', kecuali jamaah belum dibalas lebih dari 15 menit.'}</>}
                 </p>
               )}
               {canTakeOver && (

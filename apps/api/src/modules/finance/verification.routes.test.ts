@@ -165,8 +165,13 @@ describe('Riwayat verifikasi', () => {
 
     const csv = await call('get', '/history', { query: { status: 'verified', format: 'csv' } });
     expect(csv.body.startsWith('﻿Waktu (WIB),Status')).toBe(true);
-    expect(csv.body).toContain('Terverifikasi,Azhan,Jamaah 1');
+    expect(csv.body).toContain('"Terverifikasi","Azhan","Jamaah 1"');
     expect(csv.headers['Content-Type']).toContain('text/csv');
+
+    // Nama kontak WhatsApp berisi formula tidak dieksekusi saat CSV dibuka di Excel.
+    mocks.paymentFindMany.mockResolvedValue([pay(1, { prospect: { ...pay(1).prospect, name: '=HYPERLINK("http://x","klik")' } })]);
+    const evil = await call('get', '/history', { query: { status: 'verified', format: 'csv' } });
+    expect(evil.body).toContain(`"'=HYPERLINK(""http://x"",""klik"")"`);
   });
 });
 

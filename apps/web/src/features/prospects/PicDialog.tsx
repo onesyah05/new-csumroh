@@ -12,6 +12,24 @@ type Candidate = { id: number; name: string; openProspects: number };
 const RELEASE = 'release';
 
 /** Klien-side cermin aturan server: CS hanya mengubah prospek miliknya atau yang belum ber-PIC. */
+/**
+ * Siapa yang boleh mengubah prospek — sama dengan API (`pic.ts: canActOnProspect`): Admin/Superadmin selalu,
+ * CS bila PIC atau prospek belum ber-PIC. Finance hanya menangani bukti & verifikasi pembayaran (bukan ubah prospek).
+ */
+export function canEditProspect(user: { id: number; role: string } | null | undefined, prospect: { userId?: number | null }) {
+  if (!user) return false;
+  if (user.role === 'admin' || user.role === 'superadmin') return true;
+  if (user.role !== 'cs') return false;
+  return !prospect.userId || prospect.userId === user.id;
+}
+
+/** Keterangan hanya-baca untuk pengguna yang tidak boleh mengubah prospek. */
+export function readOnlyNote(user: { role: string } | null | undefined, prospect: { user?: { name?: string } | null }) {
+  return user?.role === 'finance'
+    ? 'Finance hanya menangani bukti transfer dan verifikasi pembayaran.'
+    : `Ditangani ${prospect.user?.name ?? 'CS lain'}; hanya PIC atau Admin yang dapat mengubah.`;
+}
+
 export function isLockedForCs(user: { id: number; role: string } | null | undefined, prospect: { userId?: number | null }) {
   return user?.role === 'cs' && Boolean(prospect.userId) && prospect.userId !== user.id;
 }

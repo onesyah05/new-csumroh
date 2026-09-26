@@ -31,7 +31,7 @@ import { Select } from '../../components/ui/select';
 import { PageError, PageLoading, EmptyState } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
-import { isLockedForCs } from '../prospects/PicDialog';
+import { canEditProspect, readOnlyNote } from '../prospects/PicDialog';
 import { QualificationFields } from '../prospects/QualificationFields';
 
 const n = (value: unknown) => Number(String(value ?? 0).replace(/\D/g, '')) || 0;
@@ -148,7 +148,7 @@ export function ProspectDetailPage() {
       />
     );
 
-  const locked = isLockedForCs(user, p);
+  const locked = !canEditProspect(user, p);
   const customTag = isWonStatus(p.status) ? null : customBadge(p.customRequests?.[0]);
   const won = isWonStatus(p.status);
   const adults = adultPaxOf(form);
@@ -319,7 +319,7 @@ export function ProspectDetailPage() {
                   <span>{save.isPending ? 'Menyimpan…' : 'Simpan Perubahan'}</span>
                 </Button>
                 {locked && (
-                  <p className="text-xs text-zinc-600">Ditangani {p.user?.name ?? 'CS lain'}. Hanya PIC atau Admin yang dapat menyimpan perubahan.</p>
+                  <p className="text-xs text-zinc-600">{readOnlyNote(user, p)}</p>
                 )}
                 {save.isSuccess && (
                   <p className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
@@ -347,7 +347,7 @@ export function ProspectDetailPage() {
       {tab === 'activity' && (
         <div className="surface grid gap-8 p-6 sm:p-8 lg:grid-cols-2">
           <ProspectNotes prospectId={p.id} brandId={p.brandId}
-            disabledReason={isWonStatus(p.status) ? 'Penanganan CS selesai pada Deal.' : locked ? 'Hanya PIC atau Admin yang dapat menambah catatan.' : null} />
+            disabledReason={isWonStatus(p.status) ? 'Penanganan CS selesai pada Deal.' : locked ? (user?.role === 'finance' ? 'Finance tidak menambah catatan prospek.' : 'Hanya PIC atau Admin yang dapat menambah catatan.') : null} />
           <ProspectTimeline prospectId={p.id} brandId={p.brandId} />
         </div>
       )}

@@ -195,12 +195,9 @@ prospectsRouter.get('/:id', asyncHandler(async (req, res) => {
           phone: true,
         },
       },
-      logs: {
-        include: { user: { select: { name: true } } },
-        orderBy: { createdAt: 'desc' },
-      },
+      // Pesan & log sengaja tidak dimuat di sini: web mengambilnya lewat /chat/prospects/:id/messages (berhalaman)
+      // dan /prospects/:id/logs. Dulu seluruh riwayat ikut termuat (≈900 KB untuk 1.700 pesan) tanpa dipakai.
       customRequests: { where: { status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, take: 1, select: { id: true, status: true, quoteValidUntil: true } },
-      messages: { orderBy: { timestamp: 'asc' } },
       payments: {
         select: {
           id: true, amount: true, bankName: true, referenceNo: true, mutationDate: true, status: true, notes: true, proofUrl: true,
@@ -1123,9 +1120,15 @@ prospectsRouter.get('/payment-proof-file/:filename', asyncHandler(async (req, re
   const fileUrl = `${PAYMENT_PROOF_PATH_PREFIX}${filename}`;
   const owner = await prisma.prospect.findFirst({
     where: { id: prospectId },
-    select: { brandId: true, paymentProofUrl: true, payments: { where: { proofUrl: fileUrl }, select: { id: true }, take: 1 } },
+    select: {
+      brandId: true,
+      paymentProofUrl: true,
+      payments: { where: { proofUrl: fileUrl }, select: { id: true }, take: 1 },
+      // Bukti yang ditolak tetap bisa ditinjau di Riwayat Verifikasi.
+      proofRejections: { where: { proofUrl: fileUrl }, select: { id: true }, take: 1 },
+    },
   });
-  if (!owner || (owner.paymentProofUrl !== fileUrl && owner.payments.length === 0)) {
+  if (!owner || (owner.paymentProofUrl !== fileUrl && owner.payments.length === 0 && owner.proofRejections.length === 0)) {
     throw new HttpError(404, 'Berkas bukti transfer tidak ditemukan.');
   }
   scopedBrandId(req, owner.brandId);

@@ -148,6 +148,14 @@ describe('Pipeline', () => {
     expect(await screen.findByText('Keberatan Harga')).toBeTruthy();
   });
 
+  it('Finance: semua kartu hanya-baca (sama dengan aturan API), tanpa follow-up dan tidak bisa diseret', async () => {
+    renderAs('finance');
+    const card = await screen.findByRole('article', { name: 'Kartu prospek Milik Tester' });
+    expect(card.getAttribute('draggable')).toBe('false');
+    expect(card.getAttribute('title')).toBe('Finance hanya menangani bukti transfer dan verifikasi pembayaran.');
+    expect(screen.queryAllByRole('button', { name: /Catat follow-up/ })).toHaveLength(0);
+  });
+
   it('CS bukan PIC: kartu hanya-baca (tanpa follow-up dan tidak bisa diseret)', async () => {
     renderAs('cs');
     const card = await screen.findByRole('article', { name: 'Kartu prospek Keberatan Harga' });
