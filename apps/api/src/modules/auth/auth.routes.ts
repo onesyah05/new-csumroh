@@ -8,6 +8,7 @@ import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { authGuard } from '../../middleware/auth.js';
+import { clearMediaCookie, setMediaCookie } from './media-access.js';
 
 export const authRouter = Router();
 const loginLimiter = rateLimit({
@@ -16,6 +17,16 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
+});
+// Per akun: menahan tebak kata sandi terdistribusi (banyak IP ke satu email). Hanya percobaan gagal yang dihitung.
+const loginAccountLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: env.NODE_ENV === 'production' ? 10 : 1000,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => `login:${String(req.body?.email ?? '').trim().toLowerCase()}`,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { success: false, error: 'Terlalu banyak percobaan login untuk akun ini. Coba lagi dalam 15 menit.' },
 });
 const refreshLimiter = rateLimit({
   windowMs: 15 * 60_000,
@@ -61,7 +72,7 @@ function setRefreshCookie(res: import('express').Response, token: string) {
   res.cookie('refresh_token', token, { httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: 'strict', path: '/api/v1/auth', maxAge: 30 * 86400_000 });
 }
 
-authRouter.post('/login', loginLimiter, asyncHandler(async (req, res) => {
+authRouter.post('/login', loginLimiter, loginAccountLimiter, asyncHandler(async (req, res) => {
   const input = loginSchema.parse(req.body);
   const user = await prisma.user.findUnique({
     where: { email: input.email.toLowerCase() },
@@ -74,6 +85,7 @@ authRouter.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const session = sessionFromUser(user);
   const tokens = await issueTokens(session, req);
   setRefreshCookie(res, tokens.refreshToken);
+  setMediaCookie(res, session.id);
   res.json({ success: true, data: { accessToken: tokens.accessToken, user: session } });
 }));
 
@@ -90,7 +102,7 @@ authRouter.post('/refresh', refreshLimiter, asyncHandler(async (req, res) => {
   const oldToken = req.cookies.refresh_token as string | undefined;
   if (!oldToken) throw new HttpError(401, 'Refresh token tidak tersedia.');
   let payload: jwt.JwtPayload;
-  try { payload = jwt.verify(oldToken, env.JWT_REFRESH_SECRET) as jwt.JwtPayload; } catch { throw new HttpError(401, 'Refresh token tidak valid.'); }
+  try { payload = jwt.verify(oldToken, env.JWT_REFRESH_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload; } catch { throw new HttpError(401, 'Refresh token tidak valid.'); }
   const now = new Date();
   const stored = await prisma.refreshToken.findFirst({ where: { tokenHash: hashToken(oldToken), expiresAt: { gt: now } } });
   if (!stored || stored.userId !== Number(payload.sub)) throw new HttpError(401, 'Refresh token sudah tidak aktif.');
@@ -119,6 +131,7 @@ authRouter.post('/refresh', refreshLimiter, asyncHandler(async (req, res) => {
   const session = sessionFromUser(user);
   const tokens = await issueTokens(session, req);
   setRefreshCookie(res, tokens.refreshToken);
+  setMediaCookie(res, session.id);
   res.json({ success: true, data: { accessToken: tokens.accessToken, user: session } });
 }));
 
@@ -131,6 +144,7 @@ authRouter.post('/logout', asyncHandler(async (req, res) => {
     await prisma.refreshToken.updateMany({ where: { tokenHash: hashToken(token), revokedAt: null }, data: { revokedAt: now } });
   }
   res.clearCookie('refresh_token', { path: '/api/v1/auth' });
+  clearMediaCookie(res);
   res.json({ success: true, data: null });
 }));
 

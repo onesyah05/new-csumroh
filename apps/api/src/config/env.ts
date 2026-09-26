@@ -21,4 +21,7 @@ const schema = z.object({
 });
 
 export const env = schema.parse(process.env);
+if (env.NODE_ENV === 'production' && !env.META_TOKEN_ENCRYPTION_KEY) {
+  throw new Error('META_TOKEN_ENCRYPTION_KEY wajib diisi di production (kunci enkripsi token Meta CAPI, terpisah dari secret JWT).');
+}
 export const allowedOrigins = env.WEB_ORIGIN.split(',').map((origin) => origin.trim());

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
@@ -24,7 +25,14 @@ import { acquireInstanceLock } from './instance-lock.js';
 
 dotenv.config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
 
-const env = z.object({ WA_GATEWAY_PORT: z.coerce.number().default(4001), WA_GATEWAY_SECRET: z.string().min(16), API_INTERNAL_URL: z.string().url().default('http://localhost:4000'), WEB_ORIGIN: z.string().default('http://localhost:5173') }).parse(process.env);
+const env = z.object({ WA_GATEWAY_PORT: z.coerce.number().default(4001), WA_GATEWAY_SECRET: z.string().min(16), API_INTERNAL_URL: z.string().url().default('http://localhost:4000'), WEB_ORIGIN: z.string().default('http://localhost:5173'), WA_GATEWAY_HOST: z.string().default('127.0.0.1') }).parse(process.env);
+
+/** Perbandingan secret internal yang tidak membocorkan panjang prefix yang cocok lewat waktu respons. */
+function secretMatches(candidate: string | undefined) {
+  const a = Buffer.from(candidate ?? '');
+  const b = Buffer.from(env.WA_GATEWAY_SECRET);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 const logger = pino({ level: process.env.NODE_ENV === 'production' ? 'info' : 'warn' });
 const sessions = new Map<number, WASocket>();
 const statuses = new Map<number, string>();
@@ -42,6 +50,23 @@ async function notify(pathname: string, payload: unknown) {
   } catch (error) {
     logger.warn({ error, pathname }, 'API notification unavailable');
   }
+}
+
+/**
+ * Ekstensi dokumen dari daftar putih, bukan dari nama file kiriman jamaah: .html/.svg/.js dsb. disimpan
+ * sebagai .bin agar tidak pernah disajikan sebagai konten aktif. Samakan dengan API (`CHAT_MEDIA_EXTENSIONS`).
+ */
+const SAFE_MEDIA_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic',
+  '.mp4', '.3gp', '.mov', '.mp3', '.ogg', '.opus', '.m4a', '.aac', '.wav',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv', '.zip', '.rar',
+]);
+function safeMediaExtension(fileName: string | undefined, mimeType = '') {
+  const ext = path.extname(fileName ?? '').toLowerCase();
+  if (SAFE_MEDIA_EXTENSIONS.has(ext)) return ext;
+  if (mimeType.startsWith('image/')) return '.jpg';
+  if (mimeType.includes('pdf')) return '.pdf';
+  return '.bin';
 }
 
 async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promise<string | null> {
@@ -70,12 +95,12 @@ async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promi
     else if (messageType === 'videoMessage') ext = '.mp4';
     else if (messageType === 'audioMessage') ext = (content as any).audioMessage?.ptt ? '.ogg' : '.mp3';
     else if (messageType === 'documentMessage') {
-      const fileName = (content as any).documentMessage?.fileName || '';
-      ext = path.extname(fileName) || '.pdf';
+      const doc = (content as any).documentMessage;
+      ext = safeMediaExtension(doc?.fileName, doc?.mimetype);
     }
 
-    const cleanId = (message.key.id || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const fileName = `${Date.now()}_${cleanId}${ext}`;
+    // Nama acak: URL media tidak bisa ditebak dari ID pesan WhatsApp.
+    const fileName = `${Date.now()}_${randomUUID()}${ext}`;
 
     const uploadsDir = path.resolve(process.cwd(), '..', 'api', 'uploads', 'media');
     await mkdir(uploadsDir, { recursive: true });
@@ -304,15 +329,16 @@ const app = express();
 app.use(helmet());
 const origins=env.WEB_ORIGIN.split(',').map((item)=>item.trim());
 app.use(cors({origin(origin,callback){callback(null,!origin||origins.includes(origin));},credentials:true}));
-app.use(express.json({limit:'50mb'}));
+// Hanya dipanggil API (media base64 hingga ±40 MB); ditempatkan setelah pemeriksaan secret di bawah.
 app.get('/health', (_req, res) => res.json({ success: true, data: { service: 'wa-gateway', sessions: sessions.size } }));
 app.use((req, res, next) => {
-  if (req.get('x-internal-secret') !== env.WA_GATEWAY_SECRET) {
+  if (!secretMatches(req.get('x-internal-secret'))) {
     res.status(401).json({ success: false, error: 'Unauthorized' });
     return;
   }
   next();
 });
+app.use(express.json({ limit: '50mb' }));
 app.post('/sessions/:brandId/start', async (req, res, next) => {
   try {
     const brandId = brandIdSchema.parse(req.params.brandId);
@@ -667,8 +693,9 @@ if (!instanceLock.acquired) {
 process.on('exit', () => instanceLock.release());
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => process.exit(0));
 
-const server = app.listen(env.WA_GATEWAY_PORT, () => {
-  logger.info(`WA gateway ready on :${env.WA_GATEWAY_PORT}`);
+// Hanya didengar di mesin yang sama dengan API (bawaan 127.0.0.1); set WA_GATEWAY_HOST bila API di host lain.
+const server = app.listen(env.WA_GATEWAY_PORT, env.WA_GATEWAY_HOST, () => {
+  logger.info(`WA gateway ready on ${env.WA_GATEWAY_HOST}:${env.WA_GATEWAY_PORT}`);
   void restoreSessions().catch((error) => logger.error(error, 'Failed to restore WhatsApp sessions'));
 });
 // Gagal mendapat port = jangan tetap hidup setengah jalan; keluar agar tidak ada sesi yatim.

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import type { Role, SessionUser } from '@csumroh/shared-types';
 import { env } from '../config/env.js';
 import { HttpError } from '../utils/http.js';
+import { isTokenRevoked } from '../modules/auth/sessions.js';
 
 type TokenPayload = SessionUser & { type: 'access'; iat: number; exp: number };
 
@@ -10,8 +11,9 @@ export function authGuard(req: Request, _res: Response, next: NextFunction) {
   const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null;
   if (!token) return next(new HttpError(401, 'Sesi tidak tersedia. Silakan login.'));
   try {
-    const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as TokenPayload;
+    const payload = jwt.verify(token, env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] }) as TokenPayload;
     if (payload.type !== 'access') throw new Error('Wrong token type');
+    if (isTokenRevoked(payload.id, payload.iat)) throw new Error('Revoked');
     req.user = {
       id: payload.id,
       name: payload.name,

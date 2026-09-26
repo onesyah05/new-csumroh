@@ -32,6 +32,27 @@ export async function resolveFlyerFile(flyerImage: string | null | undefined, cw
   return stat.isFile() ? realCandidate : null;
 }
 
+/**
+ * Ekstensi media chat yang boleh disimpan. Nama file berasal dari pengirim (jamaah/staf): ekstensi lain
+ * (.html, .svg, .js, …) disimpan sebagai .bin agar tidak pernah disajikan sebagai konten aktif. Samakan
+ * dengan daftar di wa-gateway (`safeMediaExtension`).
+ */
+export const CHAT_MEDIA_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic',
+  '.mp4', '.3gp', '.mov', '.mp3', '.ogg', '.opus', '.m4a', '.aac', '.wav',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv', '.zip', '.rar',
+]);
+
+export function safeChatMediaExtension(fileName: string | null | undefined, mimeType = '') {
+  const ext = path.extname(fileName ?? '').toLowerCase();
+  if (CHAT_MEDIA_EXTENSIONS.has(ext)) return ext;
+  if (mimeType.startsWith('image/')) return '.jpg';
+  if (mimeType.includes('pdf')) return '.pdf';
+  if (mimeType.startsWith('video/')) return '.mp4';
+  if (mimeType.startsWith('audio/')) return '.mp3';
+  return '.bin';
+}
+
 /** Media percakapan yang disimpan gateway/API: `/uploads/media/<file>` (dan lokasi lama `/uploads/chat/`). */
 export const CHAT_MEDIA_URL_PATTERN = /^\/uploads\/(?:media|chat)\/[A-Za-z0-9._-]+$/;
 

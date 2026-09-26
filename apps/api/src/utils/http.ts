@@ -45,6 +45,17 @@ export function errorHandler(error: unknown, _req: Request, res: Response, _next
     return;
   }
 
+  // Error body-parser (body terlalu besar / JSON rusak): status 4xx dari library, tanpa detail internal.
+  const parserError = error as { type?: string; status?: number };
+  if (parserError?.type === 'entity.too.large') {
+    res.status(413).json({ success: false, error: 'Ukuran data terlalu besar.' });
+    return;
+  }
+  if (parserError?.type === 'entity.parse.failed') {
+    res.status(400).json({ success: false, error: 'Format data tidak valid.' });
+    return;
+  }
+
   console.error(error);
   res.status(500).json({ success: false, error: 'Terjadi kesalahan pada server.' });
 }
