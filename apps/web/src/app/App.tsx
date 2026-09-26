@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ComponentType } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { useBrandScope } from '../lib/scope';
 import { useAuth } from './auth';
 import { AppShell } from './AppShell';
 import { LoginPage } from '../features/auth/LoginPage';
@@ -21,11 +22,10 @@ const PackageFormPage = page(() => import('../features/packages/PackageFormPage'
 const BrandPage = page(() => import('../features/brand/BrandPage'), 'BrandPage');
 const BrandDetailPage = page(() => import('../features/brand/BrandDetailPage'), 'BrandDetailPage');
 const BrandFormPage = page(() => import('../features/brand/BrandFormPage'), 'BrandFormPage');
-const DevicePage = page(() => import('../features/device/DevicePage'), 'DevicePage');
-const DeviceDetailPage = page(() => import('../features/device/DeviceDetailPage'), 'DeviceDetailPage');
+
 const StaffPage = page(() => import('../features/staff/StaffPage'), 'StaffPage');
 const VerificationPage = page(() => import('../features/finance/VerificationPage'), 'VerificationPage');
-const MetaCapiPage = page(() => import('../features/meta/MetaCapiPage'), 'MetaCapiPage');
+const ReportsPage = page(() => import('../features/reports/ReportsPage'), 'ReportsPage');
 const CustomRequestsPage = page(() => import('../features/custom/CustomRequestsPage'), 'CustomRequestsPage');
 const NotificationSettingsPage = page(() => import('../features/notifications/NotificationSettingsPage'), 'NotificationSettingsPage');
 const MorePage = page(() => import('./MorePage'), 'MorePage');
@@ -68,10 +68,11 @@ export function App() {
       <Routes>
           <Route element={<AppShell />}>
             <Route path="lainnya" element={<MorePage />} />
-            <Route index element={<DashboardPage />} />
+            <Route index element={user.role === 'finance' ? <Navigate to="/verifikasi" replace /> : <DashboardPage />} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="pipeline" element={<PipelinePage />} />
             <Route path="prospects/:id" element={<ProspectDetailPage />} />
+            <Route path="laporan" element={managerOnly(<ReportsPage />)} />
             <Route path="verifikasi" element={canVerifyPayments ? <VerificationPage /> : <Navigate to="/" replace />} />
             <Route path="packages" element={<PackagesPage />} />
             <Route path="packages/new" element={canEditPackages ? <PackageFormPage /> : <Navigate to="/packages" replace />} />
@@ -84,14 +85,23 @@ export function App() {
             <Route path="brands/new" element={superadminOnly(<BrandFormPage />, '/brands')} />
             <Route path="brands/:brandId" element={managerOnly(<BrandDetailPage />)} />
             <Route path="brands/:brandId/edit" element={superadminOnly(<BrandFormPage />, '/brands')} />
-            <Route path="devices" element={managerOnly(<DevicePage />)} />
-            <Route path="devices/:brandId" element={managerOnly(<DeviceDetailPage />)} />
+            {/* Perangkat WhatsApp & Meta CAPI kini tab di detail Brand; tautan lama (notifikasi tersimpan) dialihkan. */}
+            <Route path="devices" element={managerOnly(<Navigate to="/brands" replace />)} />
+            <Route path="devices/:brandId" element={managerOnly(<LegacyBrandTab tab="perangkat" />)} />
             <Route path="staff" element={managerOnly(<StaffPage />)} />
-            <Route path="meta-capi" element={managerOnly(<MetaCapiPage />)} />
+            <Route path="meta-capi" element={managerOnly(<LegacyBrandTab tab="meta" />)} />
             <Route path="pengaturan/notifikasi" element={<NotificationSettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
       </Routes>
     </>
   );
+}
+
+/** /devices/:brandId → Brand · tab Perangkat; /meta-capi → Brand aktif · tab Meta CAPI. */
+function LegacyBrandTab({ tab }: { tab: 'perangkat' | 'meta' }) {
+  const { brandId: routeBrandId } = useParams<{ brandId?: string }>();
+  const { brandId } = useBrandScope();
+  const target = routeBrandId ?? (brandId ? String(brandId) : null);
+  return <Navigate to={target ? `/brands/${target}?tab=${tab}` : '/brands'} replace />;
 }

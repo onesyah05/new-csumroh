@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -29,6 +29,18 @@ import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { StatusBadge } from '../../components/ui/status-badge';
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog } from '../../components/ui/modal';
+import { cn } from '../../lib/cn';
+import { WhatsAppDevicePanel } from '../admin/WhatsAppDevicePanel';
+import { MetaCapiPage } from '../meta/MetaCapiPage';
+import { onRovingKey, rovingTabIndex } from '../custom/roving';
+
+/** Semua pengaturan satu brand di satu tempat (dulu menu Perangkat WhatsApp & Meta CAPI terpisah). */
+const BRAND_TABS = [
+  { id: 'profil', label: 'Profil & rekening' },
+  { id: 'perangkat', label: 'Perangkat WhatsApp' },
+  { id: 'meta', label: 'Meta CAPI' },
+] as const;
+type BrandTab = (typeof BRAND_TABS)[number]['id'];
 
 interface BrandDetail {
   id: number;
@@ -64,6 +76,10 @@ interface BrandDetail {
 
 export function BrandDetailPage() {
   const { brandId } = useParams<{ brandId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const tab: BrandTab = BRAND_TABS.some((t) => t.id === tabParam) ? (tabParam as BrandTab) : 'profil';
+  const setTab = (next: BrandTab) => setSearchParams(next === 'profil' ? {} : { tab: next }, { replace: true });
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -154,15 +170,6 @@ export function BrandDetailPage() {
         subtitle={`${brand.address || 'Kantor Pusat'} · ${brand.phone || 'Nomor resmi belum diisi'}`}
         actions={
           <>
-            <Button
-              variant="secondary"
-              size="md"
-              to={`/devices/${brand.id}`}
-              icon={<Smartphone size={13} className="text-zinc-500" />}
-            >
-              Perangkat WA
-            </Button>
-
             {canManage && (
               <>
                 <Button
@@ -201,8 +208,38 @@ export function BrandDetailPage() {
         />
       </StatGrid>
 
+      <div role="tablist" aria-label="Pengaturan brand" className="scroll-row flex gap-2 border-b border-zinc-200" onKeyDown={(e) => onRovingKey(e, BRAND_TABS.map((t) => t.id), tab, setTab)}>
+        {BRAND_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            id={`brand-tab-${t.id}`}
+            aria-selected={tab === t.id}
+            aria-controls={`brand-panel-${t.id}`}
+            tabIndex={rovingTabIndex(t.id, tab, 'profil')}
+            onClick={() => setTab(t.id)}
+            className={cn('-mb-px shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-medium', tab === t.id ? 'border-zinc-950 font-semibold text-zinc-950' : 'border-transparent text-zinc-500 hover:text-zinc-950')}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'perangkat' && (
+        <div role="tabpanel" id="brand-panel-perangkat" aria-labelledby="brand-tab-perangkat">
+          <WhatsAppDevicePanel brandId={brand.id} brandName={brand.name} canManage={canManage} />
+        </div>
+      )}
+      {tab === 'meta' && (
+        <div role="tabpanel" id="brand-panel-meta" aria-labelledby="brand-tab-meta">
+          <MetaCapiPage brandId={brand.id} />
+        </div>
+      )}
+
       {/* 2-Column Responsive Layout */}
-      <div className="grid gap-6 lg:grid-cols-2 items-start">
+      {tab === 'profil' && (
+      <div role="tabpanel" id="brand-panel-profil" aria-labelledby="brand-tab-profil" className="grid gap-6 lg:grid-cols-2 items-start">
         {/* Left Column */}
         <div className="space-y-5">
           {/* 1. Legalitas & Kontak Kantor */}
@@ -264,7 +301,7 @@ export function BrandDetailPage() {
                   <h3 className="font-display text-xs font-extrabold text-zinc-700">
                     Rekening Resmi Bank
                   </h3>
-                  <p className="text-xs text-zinc-500">Rekening tujuan pembayaran awal jamaah (DP atau lunas).</p>
+                  <p className="text-xs text-zinc-500">Rekening tujuan pembayaran jamaah (DP atau lunas).</p>
                 </div>
               </div>
 
@@ -333,7 +370,7 @@ export function BrandDetailPage() {
             <Button
               variant="outline"
               size="md"
-              to={`/devices/${brand.id}`}
+              onClick={() => setTab('perangkat')}
               icon={<Smartphone size={13} />}
               className="w-full"
             >
@@ -379,6 +416,7 @@ export function BrandDetailPage() {
           </Card>
         </div>
       </div>
+      )}
 
       <ConfirmDialog
         open={Boolean(deleteConfirmOpen)}

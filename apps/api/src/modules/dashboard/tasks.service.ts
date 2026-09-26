@@ -41,7 +41,7 @@ const STALE_HINT = `Belum dibalas lebih dari ${ACTIVE_WAIT_HOURS} jam: balas, ta
 
 async function conversationsFor(brandIds: number[]) {
   const lists = await Promise.all(brandIds.map((id) => getLivechatConversationsForBrand(id, { requireConnected: false })));
-  return lists.flat().filter((c) => !c.isGroup && !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && !isWonStatus(c.status) && !isLostStatus(c.status));
+  return lists.flat().filter((c) => !c.isGroup && !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && !c.spamAt && !isWonStatus(c.status) && !isLostStatus(c.status));
 }
 
 function waitingList(items: Conversation[], now: Date, title: string, brandNames: Map<number, string>) {
@@ -194,7 +194,7 @@ export async function tasksForManager(brandIds: number[], now = new Date()): Pro
         hint: assignableOld.length ? `${assignableOld.length} menunggu lebih dari ${UNASSIGNED_MINUTES} menit` : null,
         action: 'Bagikan',
       }),
-      task('wa_disconnected', 'WhatsApp brand terputus', disconnected.length, '/devices', {
+      task('wa_disconnected', 'WhatsApp brand terputus', disconnected.length, '/brands', {
         urgent: true, hint: disconnected.length ? `${disconnected.map((id) => names.get(id) ?? `Brand ${id}`).join(', ')}: chat jamaah tidak masuk` : null, action: 'Hubungkan',
       }),
       task('proofs', 'Bukti transfer menunggu verifikasi', proofs.length, '/verifikasi', {

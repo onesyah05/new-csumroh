@@ -1,4 +1,4 @@
-import { Bell, BookOpen, Building2, ChevronRight, KanbanSquare, LogOut, PackageOpen, Radio, ShieldCheck, SlidersHorizontal, Smartphone, Users2 } from 'lucide-react';
+import { Bell, BookOpen, Building2, ChevronRight, LogOut, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from './auth';
 import { InstallApp } from './pwa';
@@ -11,14 +11,12 @@ export function MorePage() {
   const items = [
     ...(!product ? [{ to: '/packages', label: 'Paket Umroh', icon: PackageOpen }] : []),
     ...(!product && !finance ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
-    ...(!finance ? [{ to: '/layanan-custom', label: 'Layanan custom', icon: SlidersHorizontal }] : []),
-    ...(finance ? [{ to: '/pipeline', label: 'Prospek', icon: KanbanSquare }] : []),
+    ...(!finance ? [{ to: '/layanan-custom', label: product || user?.role === 'superadmin' ? 'Layanan custom' : 'Status custom', icon: SlidersHorizontal }] : []),
     ...(manager ? [
-      { to: '/verifikasi', label: 'Verifikasi pembayaran awal', icon: ShieldCheck },
+      { to: '/laporan', label: 'Laporan', icon: TrendingUp },
+      { to: '/verifikasi', label: 'Verifikasi pembayaran', icon: ShieldCheck },
       { to: '/staff', label: 'Staf', icon: Users2 },
       { to: '/brands', label: 'Brand Travel', icon: Building2 },
-      { to: '/devices', label: 'Perangkat WhatsApp', icon: Smartphone },
-      { to: '/meta-capi', label: 'Meta CAPI', icon: Radio },
     ] : []),
     { to: '/pengaturan/notifikasi', label: 'Pengaturan notifikasi', icon: Bell },
   ];

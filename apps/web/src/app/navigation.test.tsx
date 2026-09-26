@@ -127,8 +127,9 @@ describe('workspace navigation', () => {
     fireEvent.click(screen.getByRole('link', { name: /^brand travel$/i }));
     await screen.findByRole('heading', { name: 'Brand Travel' }, { timeout: 8000 });
 
-    fireEvent.click(screen.getByRole('link', { name: /^perangkat whatsapp$/i }));
-    await screen.findByRole('heading', { name: 'Perangkat WhatsApp' }, { timeout: 8000 });
+    // Perangkat WhatsApp & Meta CAPI kini tab di detail Brand, bukan menu sidebar.
+    expect(screen.queryByRole('link', { name: /^perangkat whatsapp$/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /^meta capi$/i })).toBeNull();
 
     await waitFor(() => expect(screen.queryByText('Halaman gagal ditampilkan')).toBeNull());
   }, 30_000); // halaman dimuat lazy per route; run dingin perlu waktu transform lebih lama

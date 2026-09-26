@@ -8,11 +8,16 @@ export function mobileDestinations(role?: string) {
     { to: '/layanan-custom', label: 'Layanan', icon: SlidersHorizontal },
     { to: '/pengaturan/notifikasi', label: 'Notifikasi', icon: Bell },
   ];
+  // Finance mulai dari Verifikasi (tanpa Beranda: isinya sama dengan Verifikasi).
+  if (role === 'finance') return [
+    { to: '/verifikasi', label: 'Verifikasi', icon: ShieldCheck },
+    { to: '/inbox', label: 'Inbox', icon: Inbox },
+    { to: '/pipeline', label: 'Prospek', icon: KanbanSquare },
+  ];
   return [
     { to: '/', label: 'Beranda', icon: Home },
     { to: '/inbox', label: 'Inbox', icon: Inbox },
-    role === 'finance' ? { to: '/verifikasi', label: 'Verifikasi', icon: ShieldCheck }
-      : { to: '/pipeline', label: 'Prospek', icon: KanbanSquare },
+    { to: '/pipeline', label: 'Prospek', icon: KanbanSquare },
   ];
 }
 

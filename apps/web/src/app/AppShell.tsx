@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { BarChart3, Bell, BookOpen, Building2, ChevronDown, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, Radio, ShieldCheck, Smartphone, SlidersHorizontal, Users2, X } from 'lucide-react';
+import { BarChart3, Bell, BookOpen, Building2, ChevronDown, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2, X } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -19,22 +19,58 @@ import { useAppViewport } from '../lib/useMobile';
 /** Nama peran untuk pengguna; kode peran (mis. `product` = Tim LA) tidak ditampilkan. */
 const ROLE_LABELS: Record<string, string> = { superadmin: 'Superadmin', admin: 'Admin', cs: 'CS', finance: 'Finance', product: 'Tim LA' };
 
-const mainNav: { to: string; label: string; icon: typeof BarChart3; roles?: string[] }[] = [
-  { to: '/', label: 'Ringkasan', icon: BarChart3, roles: ['superadmin', 'admin', 'cs', 'finance'] },
-  { to: '/inbox', label: 'Kotak masuk', icon: Inbox, roles: ['superadmin', 'admin', 'cs', 'finance'] },
-  { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare, roles: ['superadmin', 'admin', 'cs', 'finance'] },
-  { to: '/layanan-custom', label: 'Layanan custom', icon: SlidersHorizontal, roles: ['product', 'superadmin', 'admin', 'cs'] },
-  { to: '/verifikasi', label: 'Verifikasi', icon: ShieldCheck, roles: ['finance', 'admin', 'superadmin'] },
-  { to: '/packages', label: 'Paket Umroh', icon: PackageOpen, roles: ['superadmin', 'admin', 'cs', 'finance'] },
-  // Materi melayani jamaah: tidak relevan untuk Finance.
-  { to: '/lms', label: 'Akademi CS', icon: BookOpen, roles: ['cs', 'admin', 'superadmin'] },
-];
+type NavItem = { to: string; label: string; icon: typeof BarChart3 };
+type NavGroup = { label: string; items: NavItem[] };
+
+/**
+ * Menu per role dalam tiga grup: Utama (pekerjaan CS & pemantauan penjualan), Operasional (antrean lintas tim:
+ * harga custom, verifikasi), Pengaturan (staf; brand beserta perangkat WhatsApp & Meta CAPI).
+ * Finance memulai dari Verifikasi (Operasional di atas); Ringkasan tidak ditampilkan karena isinya sama.
+ */
+export function navGroupsFor(role?: string): NavGroup[] {
+  const is = (...roles: string[]) => roles.includes(role ?? '');
+  const groups: NavGroup[] = [
+    {
+      label: 'Utama',
+      items: [
+        ...(is('superadmin', 'admin', 'cs') ? [{ to: '/', label: 'Ringkasan', icon: BarChart3 }] : []),
+        ...(is('superadmin', 'admin') ? [{ to: '/laporan', label: 'Laporan', icon: TrendingUp }] : []),
+        ...(is('superadmin', 'admin', 'cs', 'finance') ? [
+          { to: '/inbox', label: 'Kotak masuk', icon: Inbox },
+          { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
+        ] : []),
+        // CS/Admin mengajukan & menyepakati custom dari Inbox; menu ini untuk memantau statusnya.
+        ...(is('cs', 'admin') ? [{ to: '/layanan-custom', label: 'Status custom', icon: SlidersHorizontal }] : []),
+        ...(is('superadmin', 'admin', 'cs', 'finance') ? [{ to: '/packages', label: 'Paket Umroh', icon: PackageOpen }] : []),
+        // Materi melayani jamaah: tidak relevan untuk Finance.
+        ...(is('cs', 'admin', 'superadmin') ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
+      ],
+    },
+    {
+      label: 'Operasional',
+      items: [
+        ...(is('product', 'superadmin') ? [{ to: '/layanan-custom', label: 'Layanan custom', icon: SlidersHorizontal }] : []),
+        ...(is('finance', 'admin', 'superadmin') ? [{ to: '/verifikasi', label: 'Verifikasi', icon: ShieldCheck }] : []),
+      ],
+    },
+    {
+      label: 'Pengaturan',
+      items: is('superadmin', 'admin') ? [
+        { to: '/staff', label: 'Staf', icon: Users2 },
+        { to: '/brands', label: 'Brand Travel', icon: Building2 },
+      ] : [],
+    },
+  ];
+  if (role === 'finance') groups.unshift(...groups.splice(1, 1));
+  return groups.filter((group) => group.items.length > 0);
+}
 const titles: Record<string, string> = {
   '/': 'Ringkasan',
   '/inbox': 'Kotak masuk',
   '/pipeline': 'Pipeline',
   '/pengaturan/notifikasi': 'Pengaturan Notifikasi',
   '/verifikasi': 'Verifikasi Pembayaran',
+  '/laporan': 'Laporan',
   '/packages': 'Paket Umroh',
   '/packages/new': 'Tambah Paket',
   '/lms': 'Akademi CS',
@@ -47,7 +83,7 @@ const titles: Record<string, string> = {
 
 /**
  * Halaman yang datanya mengikuti brand aktif. Hanya di sini pemilih brand header ditampilkan; halaman
- * lintas brand (Ringkasan, Verifikasi, Paket, Staf, Meta CAPI) memakai filter di halamannya sendiri, dan
+ * lintas brand (Ringkasan, Laporan, Verifikasi, Paket, Staf, Meta CAPI) memakai filter di halamannya sendiri, dan
  * halaman lain (Brand, Perangkat, Akademi, Pengaturan) tidak bergantung pada brand aktif.
  * Inbox punya pemilih brand di header percakapannya.
  */
@@ -217,64 +253,21 @@ export function AppShell() {
 
         {/* Main Navigation Links: Exact 1:1 40x40 centered square items when collapsed */}
         <nav className="relative flex-1 space-y-2 px-4 py-2 overflow-y-auto thin-scrollbar overflow-x-hidden">
-          <div className="block lg:hidden lg:group-hover/sidebar:block pb-1">
-            <p className="text-xs font-bold uppercase tracking-[.16em] text-zinc-400 whitespace-nowrap px-1">
-              Workspace
-            </p>
-          </div>
-
-          {mainNav.filter((item) => !item.roles || item.roles.includes(user?.role ?? '')).map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              title={label}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center rounded-xl text-sm font-medium transition-all duration-200',
-                  'h-10 w-full justify-start px-3 gap-3 aspect-auto',
-                  'lg:h-10 lg:w-10 lg:aspect-square lg:justify-center lg:p-0 lg:px-0 lg:py-0 lg:gap-0',
-                  'lg:group-hover/sidebar:w-full lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:aspect-auto lg:group-hover/sidebar:px-3 lg:group-hover/sidebar:gap-3',
-                  isActive
-                    ? 'bg-white text-zinc-950 font-bold shadow-sm'
-                    : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
-                )
-              }
-            >
-              <Icon size={20} strokeWidth={1.9} className="shrink-0" />
-              <span
-                className={cn(
-                  'truncate whitespace-nowrap transition-all duration-300',
-                  'block max-w-[180px] opacity-100',
-                  'lg:hidden lg:max-w-0 lg:opacity-0',
-                  'lg:group-hover/sidebar:inline-block lg:group-hover/sidebar:max-w-[180px] lg:group-hover/sidebar:opacity-100'
-                )}
-              >
-                {label}
-              </span>
-            </NavLink>
-          ))}
-
-          {/* Brand & Device nav — hanya untuk superadmin/admin */}
-          {(user?.role === 'superadmin' || user?.role === 'admin') && (
-            <>
-              <div className="py-2">
+          {navGroupsFor(user?.role).map((group, groupIndex) => (
+            <div key={group.label} className="space-y-2">
+              <div className={groupIndex === 0 ? '' : 'pt-2'}>
                 <div className="block lg:hidden lg:group-hover/sidebar:block pb-1">
                   <p className="text-xs font-bold uppercase tracking-[.16em] text-zinc-400 whitespace-nowrap px-1">
-                    Pengelolaan
+                    {group.label}
                   </p>
                 </div>
-                <div className="h-px bg-zinc-800/80 mx-auto w-8 lg:group-hover/sidebar:w-full transition-all duration-300" />
+                {groupIndex > 0 && <div className="h-px bg-zinc-800/80 mx-auto w-8 lg:group-hover/sidebar:hidden" />}
               </div>
-              {[
-                { to: '/staff', label: 'Staf', icon: Users2 },
-                { to: '/brands', label: 'Brand Travel', icon: Building2 },
-                { to: '/devices', label: 'Perangkat WhatsApp', icon: Smartphone },
-                { to: '/meta-capi', label: 'Meta CAPI', icon: Radio },
-              ].map(({ to, label, icon: Icon }) => (
+              {group.items.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
                   to={to}
+                  end={to === '/'}
                   title={label}
                   className={({ isActive }) =>
                     cn(
@@ -301,8 +294,8 @@ export function AppShell() {
                   </span>
                 </NavLink>
               ))}
-            </>
-          )}
+            </div>
+          ))}
 
         </nav>
 

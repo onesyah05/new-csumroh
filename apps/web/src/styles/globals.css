@@ -28,6 +28,9 @@
 }
 
 .thin-scrollbar { scrollbar-color: #d4d4d8 transparent; scrollbar-width: thin; }
+/* Baris tab/chip yang bisa digeser: tanpa batang scrollbar (digeser dengan sentuh/trackpad). */
+.scroll-row { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.scroll-row::-webkit-scrollbar { display: none; }
 .noise { background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E"); }
 
 /* Inbox uses an explicit application grid. Keeping this outside generated utility

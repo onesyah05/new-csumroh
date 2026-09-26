@@ -356,7 +356,7 @@ export function BrandPage() {
                         <td className="px-4 py-3.5 text-right whitespace-nowrap">
                           <RowActions label={`Aksi brand ${brand.name}`} actions={[
                             { label: 'Lihat detail', icon: Eye, to: `/brands/${brand.id}` },
-                            { label: 'Kelola perangkat WhatsApp', icon: Smartphone, to: `/devices/${brand.id}` },
+                            { label: 'Kelola perangkat WhatsApp', icon: Smartphone, to: `/brands/${brand.id}?tab=perangkat` },
                             { label: 'Edit brand', icon: Pencil, to: `/brands/${brand.id}/edit`, hidden: !canManage },
                             { label: 'Hapus brand', icon: Trash2, onSelect: () => setDeleteTarget(brand), danger: true, hidden: !canManage },
                           ]} />

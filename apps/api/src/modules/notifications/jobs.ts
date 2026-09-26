@@ -156,7 +156,7 @@ export async function gatewayHealthJob(now = new Date(), probe = defaultProbe) {
       await resolveNotifications({ entity: { type: 'system', id: 0 }, types: ['system.gateway_down'] });
       await notify({
         type: 'system.gateway_up', priority: 'info', userIds: await superadmins(),
-        title: 'Gateway WhatsApp aktif kembali', link: '/devices', entity: { type: 'system', id: 0 },
+        title: 'Gateway WhatsApp aktif kembali', link: '/brands', entity: { type: 'system', id: 0 },
       });
     }
     return;
@@ -169,7 +169,7 @@ export async function gatewayHealthJob(now = new Date(), probe = defaultProbe) {
     type: 'system.gateway_down', priority: 'urgent', userIds: await superadmins(),
     title: 'Gateway WhatsApp tidak merespons',
     body: 'Semua brand tidak dapat menerima atau mengirim pesan WhatsApp. Periksa proses wa-gateway.',
-    link: '/devices', entity: { type: 'system', id: 0 }, activeKey: 'system.gateway_down',
+    link: '/brands', entity: { type: 'system', id: 0 }, activeKey: 'system.gateway_down',
   });
 }
 

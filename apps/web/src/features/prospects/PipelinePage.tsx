@@ -568,7 +568,7 @@ export function PipelinePage() {
         </div>
 
         {/* Satu baris; di layar sempit digeser ke samping. Jumlah 0 dipudarkan, posisi chip tetap. */}
-        <div className="thin-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5" role="group" aria-label="Filter cepat">
+        <div className="scroll-row -mx-3 flex gap-1.5 px-3" role="group" aria-label="Filter cepat">
           {QUICK_FILTERS.map((f) => {
             const count = quickCounts[f.id] ?? 0;
             const active = quick === f.id;
