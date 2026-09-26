@@ -99,7 +99,7 @@ export function Toaster() {
   const toasts = useToastStore((state) => state.toasts);
   return (
     // Tiap toast sudah membawa role status/alert sendiri; wadah tidak perlu live region kedua.
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-2">
+    <div className="app-toasts pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-2">
       {toasts.map((toast) => <ToastItem key={toast.id} toast={toast} />)}
     </div>
   );

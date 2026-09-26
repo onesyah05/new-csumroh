@@ -1,0 +1,16 @@
+# Mobile CRM Azhan
+
+Implementasi 25 September 2026. Panduan ui-ux-pro-max diterapkan dengan mempertahankan MASTER.md: monokrom, ikon Lucide, primitive bersama. Hasil pencarian design-system yang berorientasi landing page dan palet biru tidak diterapkan pada CRM internal ini.
+
+- Di bawah 768 px: navigasi bawah Beranda, Inbox, Prospek, Lainnya. Finance memakai Verifikasi sebagai tujuan ketiga. Tim LA hanya mendapat Layanan, Notifikasi, Lainnya.
+- Desktop tetap memakai sidebar. Pada tablet, menu samping dan komposisi Inbox dua kolom tetap tersedia.
+- Percakapan mobile menyembunyikan navigasi bawah. Header putih dua baris: nama prospek sebagai fokus utama dan penanda PIC berikon di kanan; baris pendukung berisi label kode brand bersudut lembut serta titik status dengan teks tanpa bingkai. PIC tampil sebagai nama atau "Tanpa PIC" (amber); nama panjang memakai elipsis dan tersedia lengkap di Profil. Nama lengkap brand tersedia pada label aksesibel/tooltip. Header minimal 64 px dengan padding vertikal 10 px dan tinggi mengikuti teks. Enter di keyboard mobile membuat baris baru; pengiriman lewat tombol Kirim.
+- Profil/Copilot selebar layar, memiliki tombol kembali. Panel dan percakapan mengikuti URL/history. Pilihan tab internal tetap lokal; pergantian tab tidak menambah langkah Back.
+- Draft teks/caption disimpan di sessionStorage, terpisah per staf/brand/prospek. Dihapus saat logout. File lampiran dan rekaman tidak dipersistenkan. Pilihan filter/pencarian serta posisi daftar Inbox dipulihkan pada sesi tab yang sama.
+- Aksi utama, tombol ikon, dan input memakai target 44 CSS px. Toolbar serta filter ringkas Pipeline/Inbox memakai `.mobile-compact-control` setinggi minimal 36 px, dengan jarak antarchip 8 px (`.mobile-compact-filters`), agar proporsional dengan label 12 px. Ini kontrol web, bukan ukuran native iOS/Android. Input setidaknya 16 px dan mengikuti pembesaran font akar. Safe-area dipakai pada header, navigasi, panel, dan composer. VisualViewport menyesuaikan tinggi aplikasi tanpa merusak pinch zoom.
+- Revisi 26 September 2026 atas permintaan pengguna: Pipeline mobile kembali mengikuti tampilan sebelumnya, dengan pilihan Papan/Tabel. Tabel menjadi bawaan di bawah 900 px bila URL tidak menentukan tampilan. Semua filter cepat dan tombol ekspor kembali tampil seperti sebelumnya; daftar kartu khusus mobile dihapus. Navigasi bawah dan fitur mobile lainnya tetap berlaku.
+- Ringkasan CS memprioritaskan tugas. Holding mendapat ringkasan lintas brand serta kartu brand/CS. Finance tetap memverifikasi pembayaran awal DP atau lunas pertama.
+- PWA standalone menggunakan manifest dan ikon AZ sesuai wordmark sidebar. Service worker produksi hanya menyimpan halaman bantuan offline publik, tanpa cache API, percakapan, lampiran, atau halaman autentikasi. Tidak ada antrean transaksi offline baru.
+- Dialog singkat menjadi panel bawah; form panjang menjadi layar penuh. Toast mobile ditempatkan di atas agar tidak menutup composer/navigasi bawah.
+
+Validasi minimum: 360/375/430 px, split-screen 700 px, desktop, orientasi landscape, teks diperbesar, reduced motion, Back/Forward, draft lintas percakapan/halaman, role CS/Finance/Tim LA, manifest dan offline fallback. Pemeriksaan browser tidak menggantikan pengujian keyboard dan instalasi pada perangkat fisik Android/iPhone.

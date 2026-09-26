@@ -48,7 +48,7 @@ export function Select({
               {selectedOption.iconUrl ? (
                 <img src={resolveMediaUrl(selectedOption.iconUrl)} alt="" className={cn("shrink-0 rounded-md object-cover border border-zinc-200", isCompact ? "h-5 w-5" : "h-6 w-6")} />
               ) : selectedOption.iconInitials ? (
-                <span className={cn("grid shrink-0 place-items-center rounded-md bg-zinc-200 font-bold text-zinc-700", isCompact ? "h-5 w-5 text-[9px]" : "h-6 w-6 text-[10px]")}>
+                <span className={cn("grid shrink-0 place-items-center rounded-md bg-zinc-200 font-bold text-zinc-700", isCompact ? "h-5 w-5 text-xs" : "h-6 w-6 text-xs")}>
                   {selectedOption.iconInitials}
                 </span>
               ) : null}
@@ -85,7 +85,7 @@ export function Select({
                       {option.iconUrl ? (
                         <img src={resolveMediaUrl(option.iconUrl)} alt="" className={cn("shrink-0 rounded-md object-cover border border-zinc-200 bg-white", isCompact ? "h-5 w-5" : "h-6 w-6")} />
                       ) : option.iconInitials ? (
-                        <span className={cn("grid shrink-0 place-items-center rounded-md bg-zinc-200 font-bold text-zinc-700", isCompact ? "h-5 w-5 text-[9px]" : "h-6 w-6 text-[10px]")}>
+                        <span className={cn("grid shrink-0 place-items-center rounded-md bg-zinc-200 font-bold text-zinc-700", isCompact ? "h-5 w-5 text-xs" : "h-6 w-6 text-xs")}>
                           {option.iconInitials}
                         </span>
                       ) : null}

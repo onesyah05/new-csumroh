@@ -12,6 +12,9 @@ import { Select } from '../components/ui/select';
 import { AppErrorBoundary } from '../components/ui/AppErrorBoundary';
 import { PageLoading } from '../components/ui/page-feedback';
 import { NotificationBell, useNotificationTitle } from '../features/notifications/NotificationBell';
+import { MobileNavigation } from './MobileNavigation';
+import { NetworkBanner } from './pwa';
+import { useAppViewport } from '../lib/useMobile';
 
 /** Nama peran untuk pengguna; kode peran (mis. `product` = Tim LA) tidak ditampilkan. */
 const ROLE_LABELS: Record<string, string> = { superadmin: 'Superadmin', admin: 'Admin', cs: 'CS', finance: 'Finance', product: 'Tim LA' };
@@ -86,6 +89,7 @@ export function RealtimeIndicator() {
 }
 
 export function AppShell() {
+  useAppViewport();
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -183,7 +187,7 @@ export function AppShell() {
         className={cn(
           'group/sidebar fixed inset-y-0 left-0 z-40 flex flex-col border-r border-zinc-800 bg-zinc-950 text-white overflow-hidden',
           'transition-[width,box-shadow,transform] duration-300 ease-in-out',
-          sidebarOpen ? 'translate-x-0 w-[252px]' : '-translate-x-full w-[252px]',
+          sidebarOpen ? 'visible translate-x-0 w-[252px]' : 'invisible lg:visible -translate-x-full w-[252px]',
           'lg:translate-x-0 lg:w-[72px] lg:hover:w-[252px] lg:hover:shadow-[12px_0_35px_rgba(0,0,0,0.35)]'
         )}
       >
@@ -357,14 +361,14 @@ export function AppShell() {
       </aside>
 
       {/* Main Content Area - Placed with lg:pl-[72px] for mini rail mode */}
-      <div className="transition-[padding] duration-300 lg:pl-[72px]">
+      <div className="app-content transition-[padding] duration-300 lg:pl-[72px]">
         {location.pathname !== '/inbox' && (
           <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-zinc-200/90 bg-white/80 px-4 backdrop-blur-md sm:px-6">
             <div className="flex items-center gap-3 min-w-0">
-              <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={toggleSidebar}>
+              <Button variant="ghost" size="icon" aria-label="Buka menu" className="hidden h-8 w-8 md:inline-flex lg:hidden" onClick={toggleSidebar}>
                 <Menu size={18} />
               </Button>
-              <nav className="flex items-center gap-1.5 min-w-0 text-xs" aria-label="Breadcrumb">
+              <nav className="hidden md:flex items-center gap-1.5 min-w-0 text-xs" aria-label="Breadcrumb">
                 <NavLink to="/" className="font-medium text-zinc-500 hover:text-zinc-800 transition shrink-0">
                   CRM AZHAN
                 </NavLink>
@@ -386,6 +390,7 @@ export function AppShell() {
                   );
                 })}
               </nav>
+              <span className="truncate text-sm font-semibold md:hidden">{location.pathname === '/' ? 'CRM Azhan' : location.pathname === '/pipeline' ? 'Prospek' : location.pathname === '/lainnya' ? 'Lainnya' : titles[location.pathname] ?? 'CRM Azhan'}</span>
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0">
@@ -395,7 +400,7 @@ export function AppShell() {
                   onValueChange={(value) => setActiveBrandId(Number(value))}
                   options={(brands.data ?? []).map((brand) => ({ value: String(brand.id), label: brand.name }))}
                   placeholder="Pilih brand"
-                  className="w-40 sm:w-52"
+                  className="w-36 sm:w-52"
                   aria-label="Brand aktif"
                 />
               )}
@@ -404,7 +409,7 @@ export function AppShell() {
             </div>
           </header>
         )}
-        <main className={cn('mx-auto', location.pathname === '/inbox' ? 'h-screen p-0 max-w-none overflow-hidden' : 'max-w-[1600px] p-4 sm:p-6 lg:p-8')}>
+        <main className={cn('mx-auto', location.pathname === '/inbox' ? 'inbox-main h-screen p-0 max-w-none overflow-hidden' : 'mobile-page max-w-[1600px] p-4 sm:p-6 lg:p-8')}>
           <AppErrorBoundary compact resetKey={location.pathname}>
             <Suspense fallback={<PageLoading label="Memuat halaman…" />}>
               <Outlet />
@@ -412,6 +417,8 @@ export function AppShell() {
           </AppErrorBoundary>
         </main>
       </div>
+      <MobileNavigation />
+      <NetworkBanner />
     </div>
   );
 }

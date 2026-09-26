@@ -48,7 +48,7 @@ export function TodayTasks({ scope }: { scope: string }) {
         <CheckCircle2 size={18} className="shrink-0 text-emerald-700" aria-hidden="true" />
         <p className="text-sm text-zinc-700">
           <span id="today-tasks" className="font-semibold text-zinc-950">Tidak ada yang perlu ditindaklanjuti.</span>{' '}
-          Chat terbalas, lead terbagi, dan bukti transfer terverifikasi.
+          Tidak ada tugas tertunda pada cakupan yang Anda lihat.
         </p>
       </section>
     );
@@ -65,7 +65,7 @@ export function TodayTasks({ scope }: { scope: string }) {
           <ul className="divide-y divide-zinc-100">
             {pending.map((t) => (
               <li key={t.key}>
-                <Link to={t.link} className="group flex items-center gap-4 px-5 py-3 transition hover:bg-zinc-50">
+                <Link to={t.link} className="group flex items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5 sm:py-3 transition hover:bg-zinc-50">
                   <span
                     className={cn(
                       'w-10 shrink-0 text-right text-xl font-bold leading-none tabular-nums',
@@ -85,10 +85,10 @@ export function TodayTasks({ scope }: { scope: string }) {
                         </>
                       )}
                     </span>
-                    {t.hint && <span className="mt-0.5 block truncate text-xs text-zinc-600">{t.hint}</span>}
+                    {t.hint && <span className="mt-0.5 block text-xs text-zinc-600">{t.hint}</span>}
                   </span>
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-800 transition group-hover:border-zinc-400 group-hover:text-zinc-950">
-                    {t.action ?? 'Buka'}
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-lg sm:border border-zinc-200 sm:px-2.5 py-1 text-xs font-semibold text-zinc-800 transition group-hover:border-zinc-400 group-hover:text-zinc-950">
+                    <span className="hidden sm:inline">{t.action ?? 'Buka'}</span>
                     <ChevronRight size={14} aria-hidden="true" />
                   </span>
                 </Link>

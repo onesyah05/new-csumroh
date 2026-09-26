@@ -11,7 +11,7 @@ export function RoomPriceTable({ request, showFloor = true, className }: {
   showFloor?: boolean; className?: string;
 }) {
   const rooms = customRoomsFor(request);
-  return <table className={cn('w-full text-xs tabular-nums', className)}>
+  return <div className="overflow-x-auto"><table className={cn('w-full text-xs tabular-nums', className)}>
     <thead>
       <tr className="text-left text-zinc-500">
         <th className="py-1 font-medium">Kamar</th>
@@ -31,5 +31,5 @@ export function RoomPriceTable({ request, showFloor = true, className }: {
         {showFloor && <td className="py-1 text-right font-normal text-zinc-500">{money(request.floorPrice)}</td>}
       </tr>
     </tbody>
-  </table>;
+  </table></div>;
 }

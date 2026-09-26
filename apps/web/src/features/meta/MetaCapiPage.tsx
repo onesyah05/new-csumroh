@@ -573,13 +573,13 @@ export function MetaCapiPage() {
               </div>
 
               {/* Event Filter Pills */}
-              <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
+              <div className="thin-scrollbar flex min-h-9 max-w-full items-center overflow-x-auto rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
                 {['all', 'Contact', 'AddToCart', 'InitiateCheckout', 'Purchase'].map((ev) => (
                   <button
                     key={ev}
                     type="button"
                     onClick={() => setLogEventFilter(ev)}
-                    className={`h-full inline-flex items-center justify-center rounded-md px-3 text-xs font-medium transition cursor-pointer ${
+                    className={`h-full inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition cursor-pointer ${
                       logEventFilter === ev
                         ? 'bg-zinc-950 text-white font-semibold shadow-xs'
                         : 'text-zinc-600 hover:text-zinc-950'
@@ -591,13 +591,13 @@ export function MetaCapiPage() {
               </div>
 
               {/* Status Filter Pills */}
-              <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
+              <div className="thin-scrollbar flex min-h-9 max-w-full items-center overflow-x-auto rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
                 {['all', 'success', 'failed'].map((st) => (
                   <button
                     key={st}
                     type="button"
                     onClick={() => setLogStatusFilter(st)}
-                    className={`h-full inline-flex items-center justify-center rounded-md px-3 text-xs font-medium transition cursor-pointer capitalize ${
+                    className={`h-full inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition cursor-pointer capitalize ${
                       logStatusFilter === st
                         ? 'bg-zinc-950 text-white font-semibold shadow-xs'
                         : 'text-zinc-600 hover:text-zinc-950'

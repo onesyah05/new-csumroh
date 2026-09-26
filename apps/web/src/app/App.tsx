@@ -29,6 +29,7 @@ const VerificationPage = page(() => import('../features/finance/VerificationPage
 const MetaCapiPage = page(() => import('../features/meta/MetaCapiPage'), 'MetaCapiPage');
 const CustomRequestsPage = page(() => import('../features/custom/CustomRequestsPage'), 'CustomRequestsPage');
 const NotificationSettingsPage = page(() => import('../features/notifications/NotificationSettingsPage'), 'NotificationSettingsPage');
+const MorePage = page(() => import('./MorePage'), 'MorePage');
 
 export function App() {
   const { user, loading } = useAuth();
@@ -49,6 +50,7 @@ export function App() {
         <Toaster />
         <Routes>
           <Route element={<AppShell />}>
+            <Route path="lainnya" element={<MorePage />} />
             <Route path="layanan-custom" element={<CustomRequestsPage />} />
             <Route path="pengaturan/notifikasi" element={<NotificationSettingsPage />} />
             <Route path="*" element={<Navigate to="/layanan-custom" replace />} />
@@ -64,6 +66,7 @@ export function App() {
       <Toaster />
       <Routes>
           <Route element={<AppShell />}>
+            <Route path="lainnya" element={<MorePage />} />
             <Route index element={<DashboardPage />} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="pipeline" element={<PipelinePage />} />

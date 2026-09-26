@@ -1,3 +1,4 @@
+import { useMobile } from '../../lib/useMobile';
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
@@ -99,6 +100,7 @@ const th = 'whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-zinc-600';
 const td = 'whitespace-nowrap px-3 py-3 tabular-nums text-zinc-800';
 
 export function DashboardPage() {
+  const mobile = useMobile();
   const { user } = useAuth();
   const { brandId, query } = useBrandScope();
   const isHolding = isHoldingRole(user?.role);
@@ -134,7 +136,7 @@ export function DashboardPage() {
   return (
     <div className="app-page space-y-5">
       <PageHeader
-        title="Ringkasan"
+        title={mobile ? (isCs ? "Pekerjaan hari ini" : "Ringkasan holding") : "Ringkasan"}
         subtitle={isCs ? `Jamaah yang Anda tangani di ${brandName} · ${rangeLabel}` : `${scopeLabel} · ${rangeLabel}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -154,6 +156,7 @@ export function DashboardPage() {
       />
 
       <TodayTasks scope={scopeParam} />
+      {mobile && isCs && <Link to="/inbox" className="flex min-h-12 items-center justify-center rounded-xl bg-zinc-950 px-4 py-3 text-sm font-semibold text-white">Buka Inbox</Link>}
 
       {/* Angka bisnis periode ini, dibandingkan dengan rentang yang sama sebelumnya. */}
       <section aria-label="Kinerja periode" className="surface overflow-hidden">
@@ -260,7 +263,15 @@ export function DashboardPage() {
 
       {data.scope.isHoldingView && data.brands.length > 1 && (
         <Panel title="Per brand" subtitle={`Kinerja ${rangeLabel}. Klik nama brand untuk melihat rinciannya.`}>
-          <div className="overflow-x-auto">
+          {mobile ? <div className="divide-y divide-zinc-100">{data.brands.map(b => <article key={b.id} className="space-y-3 p-4">
+            <button type="button" onClick={() => setHoldingScope(String(b.id))} className="text-left text-base font-semibold">{b.name}</button>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div><dt className="text-zinc-600">Lead masuk</dt><dd className="font-semibold">{b.leads}</dd></div>
+              <div><dt className="text-zinc-600">Deal</dt><dd className="font-semibold">{b.deals} · {b.jamaah} jamaah</dd></div>
+              <div><dt className="text-zinc-600">Konversi</dt><dd className="font-semibold">{b.conversion}%</dd></div>
+              <div><dt className="text-zinc-600">Nilai deal</dt><dd className="font-semibold">{money(b.bookingValue)}</dd></div>
+            </dl><p className="text-xs text-zinc-600">{b.activeCs} CS aktif · {b.unassignedOpen} prospek belum ada PIC</p>
+          </article>)}</div> : <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="border-b border-zinc-200 bg-zinc-50">
                 <tr>
@@ -291,7 +302,7 @@ export function DashboardPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div>}
         </Panel>
       )}
 
@@ -305,7 +316,16 @@ export function DashboardPage() {
             <p className="px-5 py-8 text-center text-sm text-zinc-600">
               Belum ada CS aktif pada cakupan ini. <Link to="/staff" className="font-semibold text-zinc-900 underline">Tambah CS</Link>
             </p>
-          ) : (
+          ) : mobile ? <div className="divide-y divide-zinc-100">{data.team.map(cs => <article key={cs.id} className="space-y-2 p-4">
+            <p className="text-base font-semibold">{cs.name}{!cs.isActive && <span className="ml-2 text-xs text-zinc-600">Nonaktif</span>}</p>
+            <p className="text-xs text-zinc-600">{cs.brands.join(' · ')}</p>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div><dt className="text-zinc-600">Deal</dt><dd className="font-semibold">{cs.deals} · {cs.jamaah} jamaah</dd></div>
+              <div><dt className="text-zinc-600">Prospek aktif</dt><dd className="font-semibold">{cs.openNow}</dd></div>
+              <div><dt className="text-zinc-600">Konversi</dt><dd className="font-semibold">{cs.conversion}%</dd></div>
+              <div><dt className="text-zinc-600">Nilai deal</dt><dd className="font-semibold">{money(cs.bookingValue)}</dd></div>
+            </dl>
+          </article>)}</div> : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-zinc-200 bg-zinc-50">

@@ -65,7 +65,7 @@ export function QualificationFields({
   const missing = qualificationMissing(value);
   const warning = passportWarning({ passportStatus: value.passportStatus, targetMonth: value.targetMonth, departure });
   const matches = packages && target.key ? matchPackages(packages, value) : null;
-  const grid = layout === 'page' ? 'grid gap-3 sm:grid-cols-2' : 'grid grid-cols-2 gap-2';
+  const grid = layout === 'page' ? 'grid gap-3 sm:grid-cols-2' : 'grid gap-3 md:grid-cols-2 md:gap-2';
 
   return (
     <div className="space-y-3">

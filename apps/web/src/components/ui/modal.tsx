@@ -67,12 +67,12 @@ export function Modal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs animate-fade-in" />
         {/* Pemusatan lewat grid, bukan translate: animasi fade-up memakai transform dan akan menimpanya. */}
-        <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
+        <div className="mobile-modal-frame pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
         <Dialog.Content
           {...(description ? {} : { 'aria-describedby': undefined })}
           onPointerDownOutside={(event) => event.preventDefault()}
           className={cn(
-            'pointer-events-auto flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-lift outline-none animate-fade-up',
+            'mobile-modal-content pointer-events-auto flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-lift outline-none animate-fade-up',
             SIZES[size],
           )}
         >
