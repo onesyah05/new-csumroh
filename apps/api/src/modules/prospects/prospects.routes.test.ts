@@ -809,3 +809,31 @@ describe('Prospek batal membatalkan layanan custom', () => {
     expect(mocks.state.logs.at(-1)!.description).toContain('Layanan custom ikut dibatalkan');
   });
 });
+
+describe('Riwayat berhalaman', () => {
+  it('kursor, filter jenis, dan catatan awal hanya di halaman pertama', async () => {
+    const calls: any[] = [];
+    const original = (await import('../../db/prisma.js')).prisma.prospectLog.findMany;
+    const { prisma } = await import('../../db/prisma.js');
+    const rows = Array.from({ length: 31 }, (_, i) => ({ id: 100 - i, prospectId: 1, actionType: 'note_added', title: 'Catatan', description: `n${i}`, createdAt: new Date(Date.UTC(2026, 8, 26, 0, 60 - i)) }));
+    (prisma.prospectLog as any).findMany = async (args: any) => { calls.push(args); return rows.slice(0, args.take); };
+    prospect(1).notes = 'Catatan lama';
+    try {
+      const first = await invoke('get', '/:id/logs', { query: { kind: 'notes' } });
+      expect(first.data.logs).toHaveLength(30);
+      expect(first.data.nextCursor).toBe(`${rows[29]!.createdAt.toISOString()}_${rows[29]!.id}`);
+      expect(first.data.legacyNote).toBe('Catatan lama');
+      expect(calls[0]).toMatchObject({ take: 31, where: { prospectId: 1, actionType: 'note_added' } });
+
+      const next = await invoke('get', '/:id/logs', { query: { kind: 'notes', cursor: first.data.nextCursor } });
+      expect(next.data.legacyNote).toBeNull();
+      expect(calls[1].where.OR[1]).toMatchObject({ id: { lt: rows[29]!.id } });
+
+      await invoke('get', '/:id/logs', {});
+      expect(calls[2].where.NOT).toMatchObject({ actionType: 'message_sent' });
+      expect((await invoke('get', '/:id/logs', { query: { cursor: 'bukan-kursor' } })).status).toBe(422);
+    } finally {
+      (prisma.prospectLog as any).findMany = original;
+    }
+  });
+});

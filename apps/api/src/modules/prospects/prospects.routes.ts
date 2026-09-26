@@ -726,15 +726,45 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
 }));
 
 /** Riwayat prospek: semua aktivitas tercatat, terbaru di atas. `legacyNote` = catatan lama sebelum catatan tambah-saja. */
+const LOG_PAGE_SIZE = 30;
+const logsQuerySchema = z.object({
+  kind: z.enum(['all', 'notes', 'changes']).default('all'),
+  // Kursor = entri terakhir halaman sebelumnya: "<ISO createdAt>_<id>".
+  cursor: z.string().regex(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z_\d+$/).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(LOG_PAGE_SIZE),
+});
+
+/**
+ * Berhalaman (kursor, terbaru dulu). `kind`: semua, catatan saja, atau perubahan data. Pesan chat biasa tidak
+ * termasuk (sudah terlihat di percakapan); kiriman resmi (penawaran, invoice) tetap termasuk.
+ */
 prospectsRouter.get('/:id/logs', asyncHandler(async (req, res) => {
   const { id, existing } = await findScopedProspect(req);
-  const logs = await prisma.prospectLog.findMany({
-    where: { prospectId: id },
+  const { kind, cursor, limit } = logsQuerySchema.parse(req.query);
+  const kindWhere: Prisma.ProspectLogWhereInput = kind === 'notes'
+    ? { actionType: 'note_added' }
+    : kind === 'changes'
+      ? { actionType: { in: ['profile_updated', 'offer_outdated'] } }
+      : { NOT: { actionType: 'message_sent', OR: [{ title: { startsWith: 'Pesan dikirim oleh' } }, { title: { startsWith: 'Media dikirim oleh' } }] } };
+  const after: Prisma.ProspectLogWhereInput = {};
+  if (cursor) {
+    const [at, lastId] = cursor.split('_') as [string, string];
+    const createdAt = new Date(at);
+    after.OR = [{ createdAt: { lt: createdAt } }, { createdAt, id: { lt: Number(lastId) } }];
+  }
+  const rows = await prisma.prospectLog.findMany({
+    where: { prospectId: id, ...kindWhere, ...after },
     include: { user: { select: { name: true } } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: 300,
+    take: limit + 1,
   });
-  res.json({ success: true, data: { logs, legacyNote: existing.notes?.trim() || null, legacyNoteAt: existing.createdAt } });
+  const logs = rows.slice(0, limit);
+  const last = logs.at(-1);
+  const nextCursor = rows.length > limit && last ? `${new Date(last.createdAt).toISOString()}_${last.id}` : null;
+  res.json({
+    success: true,
+    data: { logs, nextCursor, legacyNote: cursor ? null : existing.notes?.trim() || null, legacyNoteAt: existing.createdAt },
+  });
 }));
 
 /** Catatan CS bersifat tambah-saja: tidak bisa diedit atau dihapus, koreksi ditulis sebagai catatan baru. */

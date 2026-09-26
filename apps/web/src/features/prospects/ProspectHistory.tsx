@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import {
   ArrowRightLeft, BadgeCheck, Clock3, FilePenLine, MessageSquareWarning, PhoneCall, Send, SlidersHorizontal, StickyNote, UserRound,
 } from 'lucide-react';
@@ -12,15 +12,41 @@ import { cn } from '../../lib/cn';
 export type ProspectLog = {
   id: number; actionType: string; title: string; description: string | null; createdAt: string; user?: { name: string } | null;
 };
-type History = { logs: ProspectLog[]; legacyNote: string | null; legacyNoteAt: string | null };
+type HistoryPage = { logs: ProspectLog[]; nextCursor: string | null; legacyNote: string | null; legacyNoteAt: string | null };
+export type HistoryKind = 'all' | 'notes' | 'changes';
 
-/** Satu sumber riwayat untuk tab Catatan dan Riwayat. Kunci di bawah ['prospect', id] ikut disegarkan oleh semua aksi prospek. */
-export function useProspectHistory(prospectId: number, brandId?: number) {
-  return useQuery({
-    queryKey: ['prospect', prospectId, 'logs'],
-    queryFn: () => api.get<History>(`/prospects/${prospectId}/logs${brandId ? `?brandId=${brandId}` : ''}`),
+/**
+ * Riwayat berhalaman (30 per muat, terbaru dulu) dengan filter di server. Kunci di bawah ['prospect', id, 'logs']
+ * ikut disegarkan oleh semua aksi prospek.
+ */
+export function useProspectHistory(prospectId: number, brandId?: number, kind: HistoryKind = 'all') {
+  const query = useInfiniteQuery({
+    queryKey: ['prospect', prospectId, 'logs', kind],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ kind });
+      if (brandId) params.set('brandId', String(brandId));
+      if (pageParam) params.set('cursor', pageParam);
+      return api.get<HistoryPage>(`/prospects/${prospectId}/logs?${params}`);
+    },
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: Boolean(prospectId),
   });
+  const pages = query.data?.pages ?? [];
+  return {
+    ...query,
+    logs: pages.flatMap((page) => page?.logs ?? []),
+    legacyNote: pages[0]?.legacyNote ?? null,
+  };
+}
+
+function LoadMore({ history }: { history: ReturnType<typeof useProspectHistory> }) {
+  if (!history.hasNextPage) return null;
+  return (
+    <Button size="sm" variant="secondary" className="w-full" loading={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>
+      Muat lebih banyak
+    </Button>
+  );
 }
 
 const WIB = 'Asia/Jakarta';
@@ -40,7 +66,7 @@ const stamp = (log: { createdAt: string; user?: { name: string } | null }) => `$
  * catatan baru sehingga supervisor selalu bisa menelusuri apa yang dicatat, oleh siapa, dan kapan.
  */
 export function ProspectNotes({ prospectId, brandId, disabledReason }: { prospectId: number; brandId?: number; disabledReason?: string | null }) {
-  const history = useProspectHistory(prospectId, brandId);
+  const history = useProspectHistory(prospectId, brandId, 'notes');
   const [draft, setDraft] = useState('');
   const add = useMutation({
     mutationFn: (note: string) => api.post<ProspectLog>(`/prospects/${prospectId}/notes`, { note, brandId }),
@@ -49,8 +75,9 @@ export function ProspectNotes({ prospectId, brandId, disabledReason }: { prospec
       void queryClient.invalidateQueries({ queryKey: ['prospect', prospectId, 'logs'] });
     },
   });
-  const notes = (history.data?.logs ?? []).filter((log) => log.actionType === 'note_added');
-  const legacy = history.data?.legacyNote;
+  const notes = history.logs;
+  // Catatan awal adalah yang paling lama: tampil setelah semua catatan termuat.
+  const legacy = history.hasNextPage ? null : history.legacyNote;
 
   return <section className="space-y-3" aria-label="Catatan CS">
     <div className="space-y-2">
@@ -80,6 +107,7 @@ export function ProspectNotes({ prospectId, brandId, disabledReason }: { prospec
         </li>}
       </ol>
       : <p className="text-xs text-zinc-500">Belum ada catatan.</p>}
+    <LoadMore history={history} />
   </section>;
 }
 
@@ -159,12 +187,10 @@ export function mergeProfileEdits(logs: ProspectLog[]): Entry[] {
 
 /** Riwayat lengkap prospek, dikelompokkan per hari (WIB), terbaru di atas. Hanya-baca. */
 export function ProspectTimeline({ prospectId, brandId }: { prospectId: number; brandId?: number }) {
-  const history = useProspectHistory(prospectId, brandId);
   const [filter, setFilter] = useState<Filter>('all');
-  if (history.isLoading) return <p role="status" className="text-xs text-zinc-600">Memuat riwayat…</p>;
-  if (history.isError) return <p role="alert" className="text-xs text-rose-700">Riwayat tidak dapat dimuat. <button type="button" className="underline" onClick={() => void history.refetch()}>Coba lagi</button></p>;
-  const logs = (history.data?.logs ?? []).filter((log) => !isPlainChat(log)).filter((log) =>
-    filter === 'all' ? true : filter === 'notes' ? log.actionType === 'note_added' : log.actionType === 'profile_updated' || log.actionType === 'offer_outdated');
+  const history = useProspectHistory(prospectId, brandId, filter);
+  // Server sudah menyaring; saringan klien tetap menjaga data lama dari cache.
+  const logs = history.logs.filter((log) => !isPlainChat(log));
   const groups: Array<{ day: string; items: Entry[] }> = [];
   for (const log of mergeProfileEdits(logs)) {
     const day = dayLabel(log.createdAt);
@@ -177,7 +203,9 @@ export function ProspectTimeline({ prospectId, brandId }: { prospectId: number; 
       {FILTERS.map((item) => <button key={item.id} type="button" role="radio" aria-checked={filter === item.id} onClick={() => setFilter(item.id)}
         className={cn('rounded-full px-2.5 py-1 text-xs font-semibold transition', filter === item.id ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200')}>{item.label}</button>)}
     </div>
-    {groups.length === 0 && <p className="text-xs text-zinc-500">Belum ada riwayat{filter === 'all' ? '' : ' untuk filter ini'}.</p>}
+    {history.isLoading ? <p role="status" className="text-xs text-zinc-600">Memuat riwayat…</p>
+      : history.isError ? <p role="alert" className="text-xs text-rose-700">Riwayat tidak dapat dimuat. <button type="button" className="underline" onClick={() => void history.refetch()}>Coba lagi</button></p>
+      : groups.length === 0 && <p className="text-xs text-zinc-500">Belum ada riwayat{filter === 'all' ? '' : ' untuk filter ini'}.</p>}
     {groups.map((group) => <div key={group.day} className="space-y-2">
       <h4 className="text-xs font-semibold text-zinc-500">{group.day}</h4>
       <ol className="space-y-3">
@@ -194,5 +222,6 @@ export function ProspectTimeline({ prospectId, brandId }: { prospectId: number; 
         })}
       </ol>
     </div>)}
+    <LoadMore history={history} />
   </section>;
 }
