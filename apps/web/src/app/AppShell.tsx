@@ -88,7 +88,8 @@ const titles: Record<string, string> = {
  * Inbox punya pemilih brand di header percakapannya.
  */
 function followsActiveBrand(pathname: string) {
-  return pathname === '/pipeline' || pathname.startsWith('/prospects/');
+  // Profil prospek mengikuti brand milik prospek itu sendiri (namanya tampil di halaman), bukan brand aktif.
+  return pathname === '/pipeline';
 }
 
 /**

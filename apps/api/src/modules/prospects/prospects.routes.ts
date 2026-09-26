@@ -197,9 +197,11 @@ prospectsRouter.get('/:id', asyncHandler(async (req, res) => {
           phone: true,
         },
       },
-      // Pesan & log sengaja tidak dimuat di sini: web mengambilnya lewat /chat/prospects/:id/messages (berhalaman)
-      // dan /prospects/:id/logs. Dulu seluruh riwayat ikut termuat (≈900 KB untuk 1.700 pesan) tanpa dipakai.
-      customRequests: { where: { status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, take: 1, select: { id: true, status: true, quoteValidUntil: true } },
+      // Ringkasan booking di profil: mode, harga disepakati, dan tanggal berangkat layanan custom.
+      customRequests: {
+        where: { status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, take: 1,
+        select: { id: true, status: true, quoteValidUntil: true, mode: true, agreedPrice: true, departureDate: true, departureDateTo: true, basePackage: { select: { id: true, name: true, departureDate: true } } },
+      },
       payments: {
         select: {
           id: true, amount: true, bankName: true, referenceNo: true, mutationDate: true, status: true, notes: true, proofUrl: true,
