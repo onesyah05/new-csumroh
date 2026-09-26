@@ -38,6 +38,7 @@ vi.mock('../../db/prisma.js', () => {
   return { prisma: db };
 });
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: vi.fn() }));
+vi.mock('../capi/capi.service.js', () => ({ queueCapiForStatus: vi.fn() }));
 vi.mock('../notifications/notification.events.js', () => ({
   dispatch: (task: () => unknown) => void task(),
   notifyCustomSubmitted: async (input: any) => { state.notified.push(input.revision ? 'revision' : 'submitted'); },
