@@ -91,6 +91,15 @@ export function packageBookingValue(
   );
 }
 
+/**
+ * Kategori pembayaran: Lunas bila nominal menutup seluruh nilai deal, selain itu DP. Tanpa nilai deal
+ * (belum ada penawaran/paket) dianggap DP.
+ */
+export function paymentCategory(amount: number, dealValue: number): 'dp' | 'full' {
+  return dealValue > 0 && amount >= dealValue ? 'full' : 'dp';
+}
+export const PAYMENT_CATEGORY_LABEL = { dp: 'DP', full: 'Lunas' } as const;
+
 export function calculateDealValue(prices: RoomPrices, pax: PaxCounts) {
   return (['quad', 'triple', 'double', 'infant'] as const).reduce((total, room) => {
     const price = Math.max(0, prices[room] ?? 0);

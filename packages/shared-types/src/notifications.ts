@@ -52,7 +52,7 @@ export const notificationCatalog = [
   { type: 'custom.expiring', group: 'Layanan custom', label: 'Harga custom hampir kedaluwarsa', description: 'Kurang dari 6 jam sebelum harga tidak berlaku.', priority: 'urgent', roles: CS },
   { type: 'custom.updated', group: 'Layanan custom', label: 'Kebutuhan custom diubah CS', description: 'CS mengubah kebutuhan yang sedang dihitung.', priority: 'action', roles: ['product', 'superadmin'] },
   { type: 'custom.agreed', group: 'Layanan custom', label: 'Harga custom disepakati', description: 'CS menyepakati nilai deal dengan jamaah.', priority: 'info', roles: PRODUCT },
-  { type: 'custom.deal', group: 'Layanan custom', label: 'Layanan custom Deal', description: 'Pembayaran awal diverifikasi; siapkan pemesanan vendor.', priority: 'info', roles: PRODUCT },
+  { type: 'custom.deal', group: 'Layanan custom', label: 'Layanan custom Deal', description: 'Pembayaran diverifikasi; siapkan pemesanan vendor.', priority: 'info', roles: PRODUCT },
   // Paket
   { type: 'package.quota_low', group: 'Paket', label: 'Kuota paket menipis', description: 'Paket yang sedang Anda tawarkan tinggal sedikit atau habis.', priority: 'action', roles: CS },
   { type: 'package.quota_empty', group: 'Paket', label: 'Kuota paket habis', description: 'Tambah kuota atau nonaktifkan paket.', priority: 'action', roles: MANAGERS },

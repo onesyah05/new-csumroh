@@ -240,7 +240,7 @@
             "category": "promised_dp",
             "title": "Sudah Janji DP",
             "use_when": "Prospek mengatakan akan melakukan DP pada waktu tertentu tetapi belum masuk.",
-            "script": "Assalamu'alaikum. Mengonfirmasi pembayaran awal untuk *{{paket}}* sesuai invoice *{{nomor_invoice}}*.\n\nApakah jadi dilanjutkan hari ini?",
+            "script": "Assalamu'alaikum. Mengonfirmasi pembayaran untuk *{{paket}}* sesuai invoice *{{nomor_invoice}}*.\n\nApakah jadi dilanjutkan hari ini?",
             "next_stage_if_yes": "closing",
             "alternative_stage": "objection",
             "tags": [
@@ -509,7 +509,7 @@
             "category": "availability_update",
             "title": "Update Sisa Kuota",
             "use_when": "Prospek sebelumnya tertarik pada jadwal tertentu dan perubahan seat memang relevan.",
-            "script": "Assalamu'alaikum. Untuk keberangkatan *{{tanggal_keberangkatan}}*, sisa kuota paket saat ini {{kuota_paket}}.\n\nKalau masih berminat, saya siapkan invoice pembayaran awalnya?",
+            "script": "Assalamu'alaikum. Untuk keberangkatan *{{tanggal_keberangkatan}}*, sisa kuota paket saat ini {{kuota_paket}}.\n\nKalau masih berminat, saya siapkan invoice pembayarannya?",
             "next_stage_if_yes": "closing",
             "requires_verified_data": true,
             "tags": [

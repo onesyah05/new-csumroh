@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { businessDateKey, customMinDpTotal, isWonStatus, seatCountFor } from '@csumroh/shared-types';
+import { businessDateKey, customMinDpTotal, isWonStatus, paymentCategory, seatCountFor } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
@@ -61,7 +61,8 @@ export function FinanceVerifyModal({
 }: FinanceVerifyModalProps) {
   const alreadyWon = isWonStatus(prospect?.status);
   const invoiceAmount = Number(prospect?.invoiceAmount ?? 0);
-  const [paymentType, setPaymentType] = useState<'dp' | 'full'>('dp');
+  // Kategori mengikuti nominal vs nilai deal sampai Finance memilih sendiri.
+  const [paymentTypeChoice, setPaymentType] = useState<'dp' | 'full' | null>(null);
   const [approvedAmount, setApprovedAmount] = useState<number | null>(() => invoiceAmount || null);
   const [bankName, setBankName] = useState<string>('Bank Syariah Indonesia (BSI)');
   const [referenceNo, setReferenceNo] = useState('');
@@ -81,6 +82,7 @@ export function FinanceVerifyModal({
   const infants = prospect?.paxInfant ?? 0;
 
   const amount = approvedAmount ?? 0;
+  const paymentType = paymentTypeChoice ?? paymentCategory(amount, dealValue);
   const today = businessDateKey();
   const belowMinDp = minDp !== null && amount > 0 && amount < minDp;
   const differsFromInvoice = invoiceAmount > 0 && amount > 0 && amount !== invoiceAmount;
@@ -130,7 +132,7 @@ export function FinanceVerifyModal({
         open={open && !confirmFull}
         onClose={onClose}
         size="lg"
-        title="Verifikasi pembayaran awal"
+        title="Verifikasi pembayaran"
         description={<>Cocokkan bukti dengan mutasi bank. Setelah diverifikasi, <strong>{prospect?.name || 'jamaah'}</strong> resmi Deal.</>}
         footer={
           <>
@@ -164,8 +166,8 @@ export function FinanceVerifyModal({
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="panel-field">Jenis pembayaran awal
-              <Select aria-label="Jenis pembayaran awal" value={paymentType} onValueChange={value => setPaymentType(value as 'dp' | 'full')} options={[{ value: 'dp', label: 'DP' }, { value: 'full', label: 'Lunas (pembayaran awal)' }]} />
+            <label className="panel-field">Kategori pembayaran
+              <Select aria-label="Kategori pembayaran" value={paymentType} onValueChange={value => setPaymentType(value as 'dp' | 'full')} options={[{ value: 'dp', label: 'DP' }, { value: 'full', label: 'Lunas' }]} />
             </label>
             <div className="panel-field">
               <span>Nominal diterima</span>

@@ -77,7 +77,7 @@ describe('Menu Verifikasi Pembayaran', () => {
     );
     expect(await screen.findByText('Ibu Siti')).toBeTruthy();
     expect(screen.getByText('Pak Ahmad')).toBeTruthy();
-    expect(screen.getAllByText(/Pembayaran awal ·/).length).toBe(2);
+    expect(screen.getAllByText(/^Pembayaran DP · /).length).toBe(2);
     expect(screen.queryByText(/Sisa .* dari /)).toBeNull();
     expect(screen.queryByText(/Pelunasan ·/)).toBeNull();
     expect(calls.some((c) => c.url.includes('/verification/queue?brandId=all'))).toBe(true);
@@ -173,7 +173,7 @@ describe('Menu Verifikasi Pembayaran', () => {
     queue.submitted[0] = { ...queue.submitted[0]!, customMinDp: 12_000_000, customAgreedPrice: 80_000_000 } as any;
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Verifikasi' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Verifikasi pembayaran awal' });
+    const dialog = await screen.findByRole('dialog', { name: 'Verifikasi pembayaran' });
     expect(dialog.textContent).toMatch(/Nilai dealRp\s80\.000\.000/);
     expect(dialog.textContent).toContain('Bukti dari chat WhatsApp');
     const amount = screen.getByLabelText('Nominal diterima');

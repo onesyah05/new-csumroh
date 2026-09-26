@@ -330,7 +330,7 @@
             "category": "payment",
             "title": "Butuh Pembayaran Bertahap",
             "use_when": "Prospek tertarik tetapi pembayaran menjadi pertimbangan.",
-            "script": "Pembayaran awal bisa DP atau langsung lunas. Untuk *{{paket}}*, DP-nya *{{dp_per_orang}}* per orang.\n\nKetentuan pembayaran berikutnya dijelaskan tim administrasi {{travel}}. Mau saya siapkan invoice DP-nya?",
+            "script": "Pembayaran bisa DP atau langsung lunas. Untuk *{{paket}}*, DP-nya *{{dp_per_orang}}* per orang.\n\nKetentuan pembayaran berikutnya dijelaskan tim administrasi {{travel}}. Mau saya siapkan invoice DP-nya?",
             "next_stage": "closing",
             "tags": [
                 "payment",
@@ -341,8 +341,8 @@
             "id": "offer_payment_02",
             "category": "payment",
             "title": "Fokus DP",
-            "use_when": "Prospek sudah cocok paket tetapi sensitif pada pembayaran awal.",
-            "script": "Untuk mendaftar di paket ini, pembayaran awalnya DP *{{dp_per_orang}}* per orang, atau bisa langsung lunas.\n\nMau saya kirimkan invoicenya?",
+            "use_when": "Prospek sudah cocok paket tetapi sensitif pada besaran DP.",
+            "script": "Untuk mendaftar di paket ini, pembayarannya DP *{{dp_per_orang}}* per orang, atau bisa langsung lunas.\n\nMau saya kirimkan invoicenya?",
             "next_stage": "closing",
             "tags": [
                 "payment",
@@ -511,7 +511,7 @@
             "category": "transition",
             "title": "Transisi ke Pendaftaran",
             "use_when": "Prospek menunjukkan buying signal.",
-            "script": "Kalau paket ini sudah sesuai, saya siapkan invoice pembayaran awalnya?",
+            "script": "Kalau paket ini sudah sesuai, saya siapkan invoice pembayarannya?",
             "next_stage": "closing",
             "tags": [
                 "transition",

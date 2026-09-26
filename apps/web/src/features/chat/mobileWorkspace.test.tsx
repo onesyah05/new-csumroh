@@ -68,7 +68,7 @@ describe('Workspace mobile', () => {
     expect(renderHook(() => useConversationDraft('7:1:11')).result.current[0]).toBe('');
   });
   it('navigasi Finance memprioritaskan verifikasi; Tim LA tidak diberi akses chat/prospek', () => {
-    expect(mobileDestinations('finance').map(item => item.to)).toEqual(['/', '/inbox', '/verifikasi']);
+    expect(mobileDestinations('finance').map(item => item.to)).toEqual(['/verifikasi', '/inbox', '/pipeline']);
     expect(mobileDestinations('cs').map(item => item.to)).toEqual(['/', '/inbox', '/pipeline']);
     expect(mobileDestinations('product').map(item => item.to)).toEqual(['/layanan-custom', '/pengaturan/notifikasi']);
   });

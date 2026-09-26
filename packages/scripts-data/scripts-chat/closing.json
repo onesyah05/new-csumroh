@@ -2,7 +2,7 @@
     "id": "closing_script_bank",
     "nama": "Bank Script Closing",
     "deskripsi": "Kumpulan script chat untuk membantu CS mengarahkan prospek dari ketertarikan menuju keputusan dan komitmen nyata.",
-    "tujuan": "Membantu CS meminta keputusan dengan jelas, mengarahkan ke pembayaran awal (DP atau lunas) yang diverifikasi Finance, serta menggunakan urgency dan scarcity secara transparan dan amanah.",
+    "tujuan": "Membantu CS meminta keputusan dengan jelas, mengarahkan ke pembayaran (DP atau lunas) yang diverifikasi Finance, serta menggunakan urgency dan scarcity secara transparan dan amanah.",
     "guidelines": [
         "Closing dilakukan setelah prospek cukup memahami paket.",
         "Jangan menunggu prospek selalu meminta cara daftar terlebih dahulu.",
@@ -125,7 +125,7 @@
             "category": "dp",
             "title": "Closing DP Langsung",
             "use_when": "Prospek sudah cocok dengan paket dan jadwal.",
-            "script": "Alhamdulillah kalau rincian paketnya sudah cocok.\n\nLangkah berikutnya adalah pembayaran awal. Boleh saya siapkan invoice resminya sekarang?",
+            "script": "Alhamdulillah kalau rincian paketnya sudah cocok.\n\nLangkah berikutnya adalah pembayaran. Boleh saya siapkan invoice resminya sekarang?",
             "next_stage": "payment",
             "tags": [
                 "dp",
@@ -137,7 +137,7 @@
             "category": "dp",
             "title": "DP sebagai Langkah Berikutnya",
             "use_when": "Prospek membutuhkan arahan tentang langkah setelah memilih paket.",
-            "script": "Langkah berikutnya tinggal pembayaran awal, bisa DP atau langsung lunas.\n\nBoleh saya kirimkan invoice resmi beserta rekening {{travel}}?",
+            "script": "Langkah berikutnya tinggal pembayaran, bisa DP atau langsung lunas.\n\nBoleh saya kirimkan invoice resmi beserta rekening {{travel}}?",
             "next_stage": "payment",
             "tags": [
                 "dp",
@@ -149,7 +149,7 @@
             "category": "dp",
             "title": "Closing Ringan",
             "use_when": "CS ingin meminta komitmen tanpa terdengar terlalu mendesak.",
-            "script": "Kalau sudah mantap dengan paket ini, saya siapkan invoice pembayaran awalnya, ya.\n\nPendaftaran tercatat setelah pembayaran diverifikasi tim Finance.",
+            "script": "Kalau sudah mantap dengan paket ini, saya siapkan invoice pembayarannya, ya.\n\nPendaftaran tercatat setelah pembayaran diverifikasi tim Finance.",
             "next_stage": "payment",
             "tags": [
                 "dp",
@@ -186,7 +186,7 @@
             "category": "seat",
             "title": "Cek Kuota Sebelum Daftar",
             "use_when": "CS perlu memastikan ketersediaan alokasi seat sebelum meminta pembayaran.",
-            "script": "Saya cek dulu sisa kuota paketnya, ya.\n\nKalau masih cukup, kita lanjut ke invoice pembayaran awal.",
+            "script": "Saya cek dulu sisa kuota paketnya, ya.\n\nKalau masih cukup, kita lanjut ke invoice pembayaran.",
             "next_stage": "closing",
             "tags": [
                 "seat",
@@ -436,7 +436,7 @@
             "category": "after_objection",
             "title": "Kembali ke DP",
             "use_when": "Keberatan sudah diselesaikan dan prospek siap lanjut.",
-            "script": "Kalau bagian itu sudah jelas, kita lanjut ke invoice pembayaran awal?",
+            "script": "Kalau bagian itu sudah jelas, kita lanjut ke invoice pembayaran?",
             "next_stage": "payment",
             "tags": [
                 "TGJP",
@@ -449,7 +449,7 @@
             "title": "Prospek Tanya Cara Daftar",
             "use_when": "Prospek bertanya cara mendaftar.",
             "prospect_example": "Cara daftarnya gimana?",
-            "script": "Caranya:\n1. Saya kirim invoice pembayaran awal (DP atau lunas).\n2. Transfer ke rekening resmi {{travel}}, lalu kirim bukti transfernya di chat ini.\n3. Tim Finance memverifikasi, lalu pendaftaran tercatat.\n\nBoleh saya siapkan invoicenya?",
+            "script": "Caranya:\n1. Saya kirim invoice pembayaran (DP atau lunas).\n2. Transfer ke rekening resmi {{travel}}, lalu kirim bukti transfernya di chat ini.\n3. Tim Finance memverifikasi, lalu pendaftaran tercatat.\n\nBoleh saya siapkan invoicenya?",
             "next_stage": "payment",
             "tags": [
                 "high_intent",
@@ -488,7 +488,7 @@
             "title": "Prospek Bilang Mau Ambil",
             "use_when": "Prospek sudah menyatakan ingin mengambil paket.",
             "prospect_example": "Saya ambil yang ini aja.",
-            "script": "Alhamdulillah, siap diproses untuk *{{paket}}*.\n\nSaya siapkan invoice pembayaran awalnya, ya.",
+            "script": "Alhamdulillah, siap diproses untuk *{{paket}}*.\n\nSaya siapkan invoice pembayarannya, ya.",
             "next_stage": "payment",
             "tags": [
                 "high_intent",
@@ -500,7 +500,7 @@
             "category": "payment",
             "title": "Kirim Instruksi Pembayaran Resmi",
             "use_when": "Prospek sudah siap melakukan DP.",
-            "script": "Instruksi pembayaran awal:\n\nInvoice: *{{nomor_invoice}}*\nNominal: *{{nominal_pembayaran_awal}}*\nBatas pembayaran: {{batas_pembayaran}}\n\n{{bank}} a/n {{nama_rekening}}\n{{rekening}}\n\nSetelah transfer, kirim bukti transfernya di chat ini untuk diverifikasi tim Finance.",
+            "script": "Instruksi pembayaran:\n\nInvoice: *{{nomor_invoice}}*\nNominal: *{{nominal_pembayaran_awal}}*\nBatas pembayaran: {{batas_pembayaran}}\n\n{{bank}} a/n {{nama_rekening}}\n{{rekening}}\n\nSetelah transfer, kirim bukti transfernya di chat ini untuk diverifikasi tim Finance.",
             "next_stage": "payment_confirmation",
             "tags": [
                 "payment",

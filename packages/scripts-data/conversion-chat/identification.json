@@ -92,7 +92,7 @@
                 "Yang paling membuat Kakak khawatir soal perjalanan umroh apa?",
                 "Kalau boleh tahu, apa yang membuat Kakak masih ragu?",
                 "Pernah ada pengalaman kurang nyaman sebelumnya?",
-                "Kalau soal biaya, yang menjadi pertimbangan lebih ke total paket atau pembayaran awalnya?",
+                "Kalau soal biaya, yang menjadi pertimbangan lebih ke total paket atau DP-nya?",
                 "Untuk orang tua nanti ada kondisi khusus yang perlu kami perhatikan?"
             ],
             "output_tags": [
@@ -308,7 +308,7 @@
             "prioritas": "situasional",
             "contoh_pertanyaan": [
                 "Untuk pembayarannya lebih nyaman langsung atau bertahap?",
-                "Kalau paketnya sudah cocok, pembayaran awalnya ingin disiapkan kapan?"
+                "Kalau paketnya sudah cocok, pembayarannya ingin disiapkan kapan?"
             ],
             "output": [
                 "tunai",

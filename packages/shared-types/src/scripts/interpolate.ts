@@ -8,7 +8,7 @@ export const SCRIPT_VARIABLES = [
   // Paket aktif prospek
   'paket', 'tanggal_keberangkatan', 'durasi', 'maskapai', 'hotel', 'harga_mulai', 'harga_kamar', 'dp_per_orang',
   'fasilitas_termasuk', 'fasilitas_tidak_termasuk', 'kuota_paket', 'promo', 'batas_promo',
-  // Penawaran & invoice pembayaran awal
+  // Penawaran & invoice pembayaran
   'nilai_penawaran', 'nominal_pembayaran_awal', 'nomor_invoice', 'batas_pembayaran',
   // Profil prospek
   'jumlah_jamaah', 'bulan_target', 'budget', 'tanggal_followup', 'kota',

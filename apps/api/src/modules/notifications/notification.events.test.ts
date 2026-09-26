@@ -68,7 +68,7 @@ describe('pembayaran & kuota', () => {
     });
     expect(mocks.resolve).toHaveBeenCalledWith(expect.objectContaining({ types: ['payment.proof_new', 'payment.proof_stale'] }));
     expect(sent().map((n) => n.type)).toEqual(['payment.verified']);
-    expect(sent()[0].title).toBe('Deal! Pembayaran awal Ibu Aisyah diverifikasi');
+    expect(sent()[0].title).toBe('Deal! Pembayaran Ibu Aisyah diverifikasi');
   });
 
   it('kuota habis: hanya PIC CS brand yang sedang menawarkan paket dan Admin', async () => {

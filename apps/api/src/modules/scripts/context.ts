@@ -41,9 +41,9 @@ export const TOKEN_INFO: Record<string, { label: string; kind: TokenKind; fix: s
   promo: { label: 'promo', kind: 'fact', fix: 'Tidak ada promo yang masih berlaku' },
   batas_promo: { label: 'batas promo', kind: 'fact', fix: 'Tidak ada promo yang masih berlaku' },
   nilai_penawaran: { label: 'nilai penawaran', kind: 'fact', fix: 'Kirim penawaran resmi dulu' },
-  nominal_pembayaran_awal: { label: 'nominal invoice', kind: 'fact', fix: 'Kirim invoice pembayaran awal dulu' },
-  nomor_invoice: { label: 'nomor invoice', kind: 'fact', fix: 'Kirim invoice pembayaran awal dulu' },
-  batas_pembayaran: { label: 'batas pembayaran', kind: 'fact', fix: 'Kirim invoice pembayaran awal dulu' },
+  nominal_pembayaran_awal: { label: 'nominal invoice', kind: 'fact', fix: 'Kirim invoice pembayaran dulu' },
+  nomor_invoice: { label: 'nomor invoice', kind: 'fact', fix: 'Kirim invoice pembayaran dulu' },
+  batas_pembayaran: { label: 'batas pembayaran', kind: 'fact', fix: 'Kirim invoice pembayaran dulu' },
   ppiu: { label: 'nomor PPIU', kind: 'fact', fix: 'Admin perlu melengkapi nomor PPIU brand' },
   bank: { label: 'bank', kind: 'fact', fix: 'Admin perlu melengkapi rekening brand' },
   rekening: { label: 'nomor rekening', kind: 'fact', fix: 'Admin perlu melengkapi rekening brand' },
@@ -122,7 +122,7 @@ export function buildScriptContext(input: { csName: string; brand: Brand; pkg: P
     const followup = dateOnlyKey(prospect.nextFollowupDate);
     v.tanggal_followup = followup ? dateLong(new Date(`${followup}T00:00:00.000Z`)) : null;
     if (prospect.offerSentAt && Number(prospect.dealValue) > 0) v.nilai_penawaran = formatRupiah(Number(prospect.dealValue));
-    // Instruksi transfer hanya dari invoice pembayaran awal yang berlaku (bukan DP katalog × tebakan).
+    // Instruksi transfer hanya dari invoice pembayaran yang berlaku (bukan DP katalog × tebakan).
     const invoiceAmount = parseRupiahStrict(prospect.invoiceAmount);
     if (prospect.status === 'closing' && prospect.invoiceNumber && invoiceAmount && invoiceAmount > 0) {
       v.nomor_invoice = prospect.invoiceNumber;

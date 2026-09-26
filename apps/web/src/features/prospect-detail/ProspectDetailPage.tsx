@@ -303,7 +303,7 @@ export function ProspectDetailPage() {
                     <Badge value={p.status} />
                   </div>
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    Perpindahan status berjalan otomatis berdasarkan aksi (kirim chat, kualifikasi, penawaran resmi, invoice pembayaran awal, dan verifikasi Finance).
+                    Perpindahan status berjalan otomatis berdasarkan aksi (kirim chat, kualifikasi, penawaran resmi, invoice pembayaran, dan verifikasi Finance).
                   </p>
                 </div>
                 <Field label="Follow-up berikutnya">
@@ -371,7 +371,7 @@ type PaymentRecord = {
   status: 'verified' | 'reversed'; correctedAt: string | null; reversalReason: string | null; createdAt: string;
 };
 
-/** Pembayaran awal yang diverifikasi Finance (termasuk yang dibatalkan) dan penolakan bukti terakhir. */
+/** Pembayaran (DP/lunas) yang diverifikasi Finance (termasuk yang dibatalkan) dan penolakan bukti terakhir. */
 function PaymentsCard({ payments, rejection }: { payments: PaymentRecord[]; rejection: { reason: string; createdAt: string; rejectedBy?: { name: string } | null } | null }) {
   const day = (value: string) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date(value));
   return (

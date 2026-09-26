@@ -90,7 +90,7 @@ export const objectionInputSchema = z.object({
 
 export const paymentVerifySchema = z.object({
   paymentType: z.enum(['dp', 'full']).default('dp'),
-  // Bukti audit pembayaran awal saja; bukan ledger pembayaran lanjutan.
+  // Bukti audit pembayaran (DP/lunas) sebelum Deal; bukan ledger cicilan lanjutan.
   approvedAmount: z.number().positive(),
   bankName: z.string().trim().min(1).max(50),
   referenceNo: z.string().trim().max(100).optional().or(z.literal('')),

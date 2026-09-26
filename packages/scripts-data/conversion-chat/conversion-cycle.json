@@ -85,12 +85,12 @@
             "id": "closing",
             "urutan": 4,
             "nama": "Closing",
-            "tujuan": "Mengajak prospek yang sudah cocok untuk mendaftar melalui pembayaran awal sesuai invoice resmi.",
-            "primary_action": "Kirim invoice pembayaran awal (DP atau lunas), terima bukti transfer, lalu teruskan ke Finance untuk verifikasi.",
+            "tujuan": "Mengajak prospek yang sudah cocok untuk mendaftar melalui pembayaran (DP atau lunas) sesuai invoice resmi.",
+            "primary_action": "Kirim invoice pembayaran (DP atau lunas), terima bukti transfer, lalu teruskan ke Finance untuk verifikasi.",
             "fokus": [
                 "Konfirmasi kecocokan paket dan jadwal",
                 "Minta keputusan dengan satu ajakan yang jelas",
-                "Kirim invoice pembayaran awal dari CRM",
+                "Kirim invoice pembayaran dari CRM",
                 "Terima bukti transfer dan teruskan ke Finance",
                 "Sebut promo atau sisa kuota hanya bila datanya ada"
             ],
@@ -104,7 +104,7 @@
             "no_response_stage": "followup",
             "detail_ref": "closing.json",
             "script_ref": "scripts/closing.json",
-            "success_condition": "Pembayaran awal diverifikasi Finance."
+            "success_condition": "Pembayaran diverifikasi Finance."
         },
         {
             "id": "objection",
@@ -157,7 +157,7 @@
                 {
                     "status": "deal",
                     "nama": "Deal",
-                    "arti": "Pembayaran awal (DP atau lunas) sudah diverifikasi Finance."
+                    "arti": "Pembayaran (DP atau lunas) sudah diverifikasi Finance."
                 },
                 {
                     "status": "followup",
@@ -220,8 +220,8 @@
     ],
     "batas_peran": [
         "CS menangani prospek dari sapaan sampai Deal.",
-        "Finance hanya memverifikasi pembayaran awal (DP atau lunas).",
-        "Prospek menjadi Deal setelah pembayaran awal diverifikasi Finance.",
+        "Finance hanya memverifikasi pembayaran (DP atau lunas).",
+        "Prospek menjadi Deal setelah pembayaran diverifikasi Finance.",
         "Administrasi pembayaran berikutnya ditangani di luar CRM."
     ]
 }

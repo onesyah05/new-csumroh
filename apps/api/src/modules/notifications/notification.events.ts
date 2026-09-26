@@ -196,8 +196,8 @@ export async function notifyPaymentVerified(input: {
   await notify({
     type: 'payment.verified', priority: 'info', brandId: p.brandId, actorId: actor.id,
     userIds: await picOf({ userId: p.userId ?? null, brandId: p.brandId }),
-    title: `Deal! Pembayaran awal ${p.name} diverifikasi`,
-    body: `${input.paymentType === 'full' ? 'Pembayaran awal lunas' : 'Pembayaran awal DP'} · ${rupiah(input.amount)}. Penanganan CS selesai.`,
+    title: `Deal! Pembayaran ${p.name} diverifikasi`,
+    body: `${input.paymentType === 'full' ? 'Pembayaran lunas' : 'Pembayaran DP'} · ${rupiah(input.amount)}. Penanganan CS selesai.`,
     link: detailLink(p), entity: prospectEntity(p),
   });
 
@@ -299,7 +299,7 @@ export async function notifyWhatsappDisconnected(brandId: number) {
     userIds: await adminsOf(brandId),
     title: `WhatsApp ${await brandName(brandId)} terputus`,
     body: 'Perangkat tidak terhubung lebih dari 2 menit. Pesan jamaah dan balasan CS tertunda.',
-    link: `/devices/${brandId}`, entity: { type: 'brand', id: brandId }, activeKey: `wa.disconnected:b${brandId}`,
+    link: `/brands/${brandId}?tab=perangkat`, entity: { type: 'brand', id: brandId }, activeKey: `wa.disconnected:b${brandId}`,
   });
 }
 
@@ -314,7 +314,7 @@ async function notifyWhatsappReconnected(brandId: number) {
     type: 'wa.reconnected', priority: 'info', brandId,
     userIds: open.map((r) => r.userId),
     title: `WhatsApp ${await brandName(brandId)} tersambung lagi`,
-    link: `/devices/${brandId}`, entity: { type: 'brand', id: brandId },
+    link: `/brands/${brandId}?tab=perangkat`, entity: { type: 'brand', id: brandId },
   });
 }
 
@@ -324,7 +324,7 @@ export async function notifyCapiFailed(brandId: number, reason: string) {
     userIds: await adminsOf(brandId),
     title: `Event Meta CAPI gagal (${await brandName(brandId)})`,
     body: reason.length > 160 ? `${reason.slice(0, 159)}…` : reason,
-    link: '/meta-capi', entity: { type: 'brand', id: brandId }, activeKey: `capi.failed:b${brandId}`,
+    link: `/brands/${brandId}?tab=meta`, entity: { type: 'brand', id: brandId }, activeKey: `capi.failed:b${brandId}`,
   });
 }
 
@@ -386,14 +386,14 @@ export async function notifyCustomAgreed(input: { prospect: ProspectRef; actor: 
   });
 }
 
-/** Deal (pembayaran awal terverifikasi) untuk prospek layanan custom: Tim LA menyiapkan pemesanan vendor. */
+/** Deal (pembayaran terverifikasi) untuk prospek layanan custom: Tim LA menyiapkan pemesanan vendor. */
 export async function notifyCustomDeal(input: { prospect: ProspectRef; actor: Actor; requestId: number }) {
   const { prospect: p, actor } = input;
   return notify({
     type: 'custom.deal', priority: 'info', brandId: p.brandId, actorId: actor.id,
     userIds: await productUsers(),
     title: `Deal layanan custom: ${p.name}`,
-    body: `Pembayaran awal diverifikasi · ${await brandName(p.brandId)}. Siapkan pemesanan vendor.`,
+    body: `Pembayaran diverifikasi · ${await brandName(p.brandId)}. Siapkan pemesanan vendor.`,
     link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom.deal:r${input.requestId}`,
   });
 }

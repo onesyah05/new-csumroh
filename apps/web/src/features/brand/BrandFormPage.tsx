@@ -440,7 +440,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Rekening Resmi Bank
                 </h3>
-                <p className="text-xs text-zinc-500">Rekening tujuan pembayaran awal jamaah (DP atau lunas).</p>
+                <p className="text-xs text-zinc-500">Rekening tujuan pembayaran jamaah (DP atau lunas).</p>
               </div>
             </div>
 

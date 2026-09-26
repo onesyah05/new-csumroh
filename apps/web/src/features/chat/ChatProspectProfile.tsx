@@ -18,6 +18,7 @@ import {
   Pencil,
   Phone,
   Save,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Undo2,
@@ -62,6 +63,7 @@ import { PaymentProofModal } from './PaymentProofModal';
 import { FinanceVerifyModal } from './FinanceVerifyModal';
 import { PrivateProofThumb } from './PrivateProof';
 import { LostReasonModal } from './LostReasonModal';
+import { useSpamToggle } from './useSpamToggle';
 import { QualificationModal } from './QualificationModal';
 import { PicDialog, canEditProspect, readOnlyNote } from '../prospects/PicDialog';
 
@@ -185,6 +187,8 @@ export function ChatProspectProfile({
     },
     onError: (err: any) => onShowToast(err?.message || 'Paket gagal dihubungkan.'),
   });
+
+  const spamToggle = useSpamToggle(brandId, onShowToast);
 
   const claimPicMutation = useMutation({
     mutationFn: () => api.post(`/prospects/${prospectId}/claim`, { brandId }),
@@ -377,12 +381,27 @@ export function ChatProspectProfile({
                     <button type="button" onClick={() => openAction(setShowLostModal)} className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left font-medium text-rose-700 hover:bg-rose-50">
                       <Ban size={13} aria-hidden="true" />Tandai tidak jadi
                     </button>
+                    {!p.spamAt && (
+                      <button type="button" disabled={spamToggle.isPending} onClick={() => { if (locked) { onShowToast(readOnlyNote(user, p)); return; } spamToggle.mutate({ prospectId, spam: true }); }} className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left font-medium text-rose-700 hover:bg-rose-50">
+                        <ShieldAlert size={13} aria-hidden="true" />Tandai spam
+                      </button>
+                    )}
                   </>}
                 </div>
               )}
             </div>
           )}
         </div>
+        {p.spamAt && (
+          <div role="status" className="flex items-center justify-between gap-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-900">
+            <span><b className="font-semibold">Spam</b> · tidak masuk pipeline, laporan, dan Meta.</span>
+            {!locked && (
+              <button type="button" disabled={spamToggle.isPending} onClick={() => spamToggle.mutate({ prospectId, spam: false })} className="shrink-0 font-semibold underline-offset-2 hover:underline">
+                Bukan spam
+              </button>
+            )}
+          </div>
+        )}
         {proofRejected && (
           <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <b className="font-semibold">Bukti transfer ditolak Finance</b> · {sinceLabel(proofRejected.createdAt)} lalu{proofRejected.rejectedBy?.name ? ` oleh ${proofRejected.rejectedBy.name}` : ''}

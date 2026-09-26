@@ -43,7 +43,7 @@
                     "Wajar kalau harga menjadi pertimbangan."
                 ],
                 "gali": [
-                    "Yang terasa berat lebih ke total paketnya atau pembayaran awalnya?",
+                    "Yang terasa berat lebih ke total paketnya atau DP-nya?",
                     "Sedang membandingkan dengan paket lain juga?",
                     "Ada kisaran anggaran per orang yang ingin dijaga?"
                 ],
@@ -99,7 +99,7 @@
             "tgjp": {
                 "terima": [
                     "Saya paham.",
-                    "Pembayaran awal memang perlu disesuaikan dengan kondisi."
+                    "Besaran DP memang perlu disesuaikan dengan kondisi."
                 ],
                 "gali": [
                     "Yang menjadi kendala nominal DP-nya atau waktunya belum pas?",
@@ -123,8 +123,8 @@
                     }
                 ],
                 "pastikan": [
-                    "Kalau soal DP sudah jelas, siap lanjut ke invoice pembayaran awal?",
-                    "Selain pembayaran awal, ada kendala lain?"
+                    "Kalau soal DP sudah jelas, siap lanjut ke invoice pembayaran?",
+                    "Selain soal DP, ada kendala lain?"
                 ]
             },
             "next_stage_if_resolved": "closing",

@@ -11,6 +11,7 @@ import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatch, notifyCustomAgreed, notifyCustomQuoted, notifyCustomReturned, notifyCustomSubmitted, notifyCustomUpdated } from '../notifications/notification.events.js';
 import { assertCanActOnProspect } from '../prospects/pic.js';
+import { queueCapiForStatus } from '../capi/capi.service.js';
 import { activeCustomFor, describeCustom, describeQuote, isExpired, qualificationFromCustom, quoteValidUntil } from './custom.service.js';
 
 /**
@@ -122,6 +123,7 @@ async function syncProspect(tx: Prisma.TransactionClient, userId: number, prospe
   const merged = { ...prospect, ...pax(input), ...qualification };
   const promote = isQualificationComplete(merged) && ['new', 'contact', 'identifying'].includes(prospect.status);
   await tx.prospect.update({ where: { id: prospect.id }, data: { ...pax(input), ...qualification, ...(promote ? { status: 'qualified' } : {}) } });
+  if (promote) queueCapiForStatus(prospect.id, 'qualified');
   if (Object.keys(qualification).length || promote) {
     await tx.prospectLog.create({
       data: {

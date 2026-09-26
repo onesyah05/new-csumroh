@@ -145,7 +145,7 @@
             "category": "pain",
             "title": "Gali Kendala Harga",
             "use_when": "Prospek terlihat sensitif terhadap harga.",
-            "script": "Soal biaya, yang lebih menjadi pertimbangan total paketnya atau pembayaran awalnya?",
+            "script": "Soal biaya, yang lebih menjadi pertimbangan total paketnya atau DP-nya?",
             "output_tags": [
                 "budget",
                 "dp"
@@ -383,7 +383,7 @@
             "subcategory": "payment",
             "title": "Preferensi Pembayaran",
             "use_when": "Cara pembayaran mulai menjadi faktor penting.",
-            "script": "Untuk pembayaran awal, rencananya DP dulu atau langsung lunas?",
+            "script": "Untuk pembayarannya, rencananya DP dulu atau langsung lunas?",
             "output_field": "payment",
             "next_stage": "identification"
         },

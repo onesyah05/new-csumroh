@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * Layanan Custom: kebutuhan khusus jamaah → Tim LA menghitung harga → CS negosiasi → Deal lewat alur biasa
- * (penawaran, invoice pembayaran awal, verifikasi Finance).
+ * (penawaran, invoice pembayaran, verifikasi Finance).
  *
  * Aturan harga (keputusan holding):
  * - Tim LA mengisi harga ditawarkan & harga terendah PER JAMAAH untuk setiap tipe kamar yang dipilih

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Ban, CheckCircle2, Clock3, FileText, Inbox, MessageCircle, Search, ShieldCheck, Sparkles, Timer, XCircle } from 'lucide-react';
+import { PAYMENT_CATEGORY_LABEL, paymentCategory } from '@csumroh/shared-types';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { queryClient } from '../../app/query';
@@ -79,7 +80,9 @@ function BillSummary({ p }: { p: QueueProspect }) {
   return (
     <div className="min-w-0 text-xs">
       <p className="font-semibold text-zinc-900">
-        Pembayaran awal · {Number(p.invoiceAmount) > 0 ? rupiah(p.invoiceAmount) : 'nominal belum diisi'}
+        {Number(p.invoiceAmount) > 0
+          ? <>Pembayaran {PAYMENT_CATEGORY_LABEL[paymentCategory(Number(p.invoiceAmount), Number(p.customAgreedPrice ?? p.dealValue ?? 0))]} · {rupiah(p.invoiceAmount)}</>
+          : 'Pembayaran · nominal belum diisi'}
       </p>
       <p className="truncate text-zinc-500">
         {p.invoiceNumber ?? 'Tanpa nomor invoice'}
@@ -166,7 +169,7 @@ export function VerificationPage() {
         kicker="Finance"
         kickerIcon={<ShieldCheck size={13} />}
         title="Verifikasi Pembayaran"
-        subtitle="Verifikasi pembayaran awal (DP atau lunas) untuk menetapkan Deal."
+        subtitle="Verifikasi pembayaran DP atau lunas untuk menetapkan Deal."
         actions={
           <Select
             value={brandScope}

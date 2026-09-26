@@ -60,7 +60,7 @@ describe('Ringkasan CS', () => {
 });
 
 describe('Ringkasan Finance', () => {
-  it('Finance hanya mendapat tugas bukti pembayaran awal dan daftar terlama', async () => {
+  it('Finance hanya mendapat tugas bukti pembayaran dan daftar terlama', async () => {
     const at = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000);
     mocks.prospectFindMany
       .mockResolvedValueOnce([

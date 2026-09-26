@@ -103,7 +103,7 @@ export function CustomRequestsPage() {
   });
 
   return <div className="app-page">
-    <PageHeader title="Layanan custom" subtitle={canPrice ? 'Hitung harga kebutuhan khusus jamaah dari semua brand, atau kembalikan ke CS bila datanya kurang.' : 'Status permintaan layanan custom jamaah Anda.'} />
+    <PageHeader title={canPrice ? 'Layanan custom' : 'Status layanan custom'} subtitle={canPrice ? 'Hitung harga kebutuhan khusus jamaah dari semua brand, atau kembalikan ke CS bila datanya kurang.' : 'Status permintaan layanan custom jamaah Anda.'} />
     <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
       <section aria-label="Daftar permintaan" className={cn('surface overflow-hidden', selectedId && 'hidden lg:block')}>
         <div role="tablist" aria-label="Status permintaan" className="flex flex-wrap gap-1 border-b border-zinc-200 p-2" onKeyDown={(e) => onRovingKey(e, GROUPS.map((g) => g.id), group, setGroup)}>

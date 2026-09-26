@@ -186,7 +186,7 @@ it('bukti ditolak Finance: CS melihat alasannya sampai ada bukti baru', async ()
 it('modal pembayaran hanya tersedia sebelum Deal dan tidak menampilkan saldo', async () => {
   const props = { open: true, onClose: vi.fn(), prospect: { ...prospect(), invoiceAmount: 5000000 }, onShowToast: vi.fn() };
   const view = render(<FinanceVerifyModal {...props} />, { wrapper });
-  expect(screen.getByLabelText('Jenis pembayaran awal')).toBeTruthy();
+  expect(screen.getByLabelText('Kategori pembayaran')).toBeTruthy();
   expect(screen.queryByText(/Sisa tagihan|Kas terverifikasi|Sudah diverifikasi/)).toBeNull();
   view.rerender(<FinanceVerifyModal {...props} prospect={{ ...props.prospect, status: 'deal' }} />);
   expect(screen.queryByRole('dialog')).toBeNull();

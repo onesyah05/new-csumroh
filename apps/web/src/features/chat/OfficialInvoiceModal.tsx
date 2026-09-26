@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Copy, CreditCard } from 'lucide-react';
-import { formatRupiah, isWonStatus, parseRupiahStrict } from '@csumroh/shared-types';
+import { formatRupiah, isWonStatus, packageBookingValue, parseRupiahStrict, PAYMENT_CATEGORY_LABEL, paymentCategory } from '@csumroh/shared-types';
 import { waDate, waDateTime, waMessage, waTitle } from './waFormat';
 import { api } from '../../lib/api';
 import { deliverDraftText } from './draftText';
@@ -72,6 +72,11 @@ export function OfficialInvoiceModal({
   const [dpAmount, setDpAmount] = useState<number>(
     Number(prospect?.invoiceAmount) > 0 ? Number(prospect.invoiceAmount) : defaultAmount
   );
+  // Kategori invoice (judul pesan): Lunas bila nominal menutup nilai deal, selain itu DP.
+  const invoiceDealValue = custom ? customMax
+    : Number(prospect?.dealValue) > 0 ? Number(prospect.dealValue)
+      : selectedPackage ? packageBookingValue(selectedPackage, prospect ?? {}) : 0;
+  const invoiceCategory = paymentCategory(Number(dpAmount) || 0, invoiceDealValue);
 
   // Default jatuh tempo 24 jam dari sekarang dalam waktu lokal (format datetime-local, bukan UTC).
   const [dueDate, setDueDate] = useState<string>(() => {
@@ -115,19 +120,19 @@ export function OfficialInvoiceModal({
   const generatedScript = useMemo(() => {
     const departure = selectedPackage ? waDate(selectedPackage.departureDate) ?? (selectedPackage.departureInfo || null) : null;
     return waMessage(
-      ['*Invoice pembayaran awal*', `No. ${estimatedInvoiceNum}`],
+      [`*Invoice pembayaran ${PAYMENT_CATEGORY_LABEL[invoiceCategory]}*`, `No. ${estimatedInvoiceNum}`],
       [`Paket: ${custom ? (custom.mode === 'package' && custom.basePackage ? `${waTitle(custom.basePackage.name)} (disesuaikan)` : 'Umroh custom') : waTitle(selectedPackage?.name)}`, custom ? (custom.mode === 'package' ? waDate(custom.departureDate) && `Berangkat: ${waDate(custom.departureDate)}` : dateRange(custom.departureDate, custom.departureDateTo) && `Berangkat: ${dateRange(custom.departureDate, custom.departureDateTo)}`) : departure && `Berangkat: ${departure}`, `Jumlah: ${totalPax} jamaah`, custom && `Total biaya: ${formatRupiah(customMax)}`],
       [`Nominal: *${formatRupiah(dpAmount || 0)}*`, `Batas pembayaran: ${waDateTime(dueDate) ?? formattedDueDate}`],
       ['Transfer ke rekening resmi:', `${selectedBank.name} a/n ${selectedBank.holder}`, `*${selectedBank.number}*`],
       'Setelah transfer, kirim foto bukti transfernya di chat ini. Tim Finance akan memverifikasi, lalu pendaftaran tercatat.',
     );
-  }, [custom, customMax, estimatedInvoiceNum, selectedPackage, totalPax, dpAmount, dueDate, formattedDueDate, selectedBank]);
+  }, [custom, customMax, estimatedInvoiceNum, selectedPackage, totalPax, dpAmount, dueDate, formattedDueDate, selectedBank, invoiceCategory]);
 
   const invoiceMutation = useMutation({
     mutationFn: (sendViaWhatsApp: boolean) =>
       api.post(`/prospects/${prospect.id}/invoice`, {
         packageId: !custom && selectedPkgId ? Number(selectedPkgId) : undefined,
-        // Invoice pembayaran awal sebelum Deal.
+        // Invoice pembayaran (DP/lunas) sebelum Deal.
         invoiceAmount: Number(dpAmount),
         dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
         bankAccountName: `${selectedBank.name} - ${selectedBank.number} a/n ${selectedBank.holder}`,
@@ -163,7 +168,7 @@ export function OfficialInvoiceModal({
       open={open}
       onClose={onClose}
       size="lg"
-      title="Kirim invoice pembayaran awal"
+      title="Kirim invoice pembayaran"
       description={prospect?.name}
       footer={
         <>
@@ -194,7 +199,7 @@ export function OfficialInvoiceModal({
             <span className="mb-1 block text-xs font-semibold text-zinc-600">Nominal</span>
             <MoneyInput aria-label="Nominal tagihan" value={dpAmount || null} onChange={(value) => setDpAmount(value ?? 0)} />
             <span className={custom && outOfRange ? 'mt-1 block text-xs font-semibold text-rose-700' : 'mt-1 block text-xs text-zinc-500'}>
-              {rupiah(dpAmount)}{custom ? ` · DP minimal ${rupiah(customMin)}, maksimal ${rupiah(customMax)} (lunas)` : ''}
+              {rupiah(dpAmount)} · {PAYMENT_CATEGORY_LABEL[invoiceCategory]}{custom ? ` · DP minimal ${rupiah(customMin)}, maksimal ${rupiah(customMax)} (lunas)` : ''}
             </span>
           </label>
           <label className="block">
