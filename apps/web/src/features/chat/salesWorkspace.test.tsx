@@ -171,6 +171,18 @@ it.each(['deal', 'closed_won'])('prospek %s tidak menawarkan tindakan pembayaran
   expect(screen.queryByLabelText('Cari di semua skrip')).toBeNull();
 });
 
+it('bukti ditolak Finance: CS melihat alasannya sampai ada bukti baru', async () => {
+  const rejected = {
+    ...prospect(), status: 'closing', invoiceSentAt: '2026-09-20T00:00:00Z', paymentProofUrl: null,
+    proofRejections: [{ reason: 'Rekening tujuan salah', createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), rejectedBy: { name: 'Fina' } }],
+  };
+  vi.mocked(api.get).mockImplementation(async (url: string) => url.startsWith('/custom-requests') ? null as any : (url.startsWith('/scripts') ? scripts : rejected) as any);
+  render(<Workspace />, { wrapper });
+  const alert = await screen.findByText('Bukti transfer ditolak Finance');
+  expect(alert.parentElement!.textContent).toContain('2 jam lalu oleh Fina');
+  expect(alert.parentElement!.textContent).toContain('Alasan: Rekening tujuan salah');
+});
+
 it('modal pembayaran hanya tersedia sebelum Deal dan tidak menampilkan saldo', async () => {
   const props = { open: true, onClose: vi.fn(), prospect: { ...prospect(), invoiceAmount: 5000000 }, onShowToast: vi.fn() };
   const view = render(<FinanceVerifyModal {...props} />, { wrapper });

@@ -21,6 +21,8 @@ export function RejectProofDialog({ prospect, onDone, onClose }: {
     mutationFn: () => api.post(`/prospects/${prospect.id}/reject-proof`, { reason: reason.trim(), brandId: prospect.brandId }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
+      void queryClient.invalidateQueries({ queryKey: ['verification-history'] });
+      void queryClient.invalidateQueries({ queryKey: ['verification-summary'] });
       void queryClient.invalidateQueries({ queryKey: ['prospect', prospect.id] });
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
       onDone(`Bukti transfer ${prospect.name} ditolak. PIC sudah diberi tahu.`);

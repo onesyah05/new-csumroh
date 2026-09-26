@@ -331,6 +331,8 @@ export function ProspectDetailPage() {
               </div>
             </div>
 
+            <PaymentsCard payments={p.payments ?? []} rejection={p.paymentProofUrl ? null : p.proofRejections?.[0] ?? null} />
+
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 shadow-xs">
               <ShieldCheck size={18} className="text-zinc-700" />
               <h3 className="mt-3 text-xs sm:text-sm font-semibold text-zinc-950">Data Brand Terlindungi</h3>
@@ -361,6 +363,44 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="label">{label}</span>
       {children}
     </label>
+  );
+}
+
+type PaymentRecord = {
+  id: number; amount: string | number; bankName: string; referenceNo: string | null; mutationDate: string | null;
+  status: 'verified' | 'reversed'; correctedAt: string | null; reversalReason: string | null; createdAt: string;
+};
+
+/** Pembayaran awal yang diverifikasi Finance (termasuk yang dibatalkan) dan penolakan bukti terakhir. */
+function PaymentsCard({ payments, rejection }: { payments: PaymentRecord[]; rejection: { reason: string; createdAt: string; rejectedBy?: { name: string } | null } | null }) {
+  const day = (value: string) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date(value));
+  return (
+    <div className="surface p-5">
+      <h3 className="text-sm font-semibold text-zinc-950">Pembayaran</h3>
+      {payments.length === 0 && !rejection && <p className="mt-1 text-xs text-zinc-500">Belum ada pembayaran terverifikasi.</p>}
+      {rejection && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <b className="font-semibold">Bukti ditolak</b> {day(rejection.createdAt)}{rejection.rejectedBy?.name ? ` oleh ${rejection.rejectedBy.name}` : ''}: {rejection.reason}
+        </p>
+      )}
+      {payments.length > 0 && (
+        <ul className="mt-2 divide-y divide-zinc-100 text-xs">
+          {payments.map((pay) => (
+            <li key={pay.id} className="py-2">
+              <p className="flex items-center justify-between gap-2">
+                <b className={cn('font-semibold tabular-nums', pay.status === 'reversed' ? 'text-zinc-500 line-through' : 'text-zinc-950')}>{rupiah(pay.amount)}</b>
+                <span className={cn('rounded px-1.5 py-0.5 font-semibold', pay.status === 'reversed' ? 'bg-zinc-100 text-zinc-700' : 'bg-emerald-50 text-emerald-800')}>
+                  {pay.status === 'reversed' ? 'Dibatalkan' : 'Terverifikasi'}
+                </span>
+              </p>
+              <p className="text-zinc-600">{pay.bankName}{pay.referenceNo ? ` · ${pay.referenceNo}` : ''} · mutasi {pay.mutationDate ? day(pay.mutationDate) : '—'}</p>
+              <p className="text-zinc-500">Diverifikasi {day(pay.createdAt)}{pay.correctedAt ? ' · dikoreksi' : ''}</p>
+              {pay.status === 'reversed' && pay.reversalReason && <p className="text-zinc-700">Alasan batal: {pay.reversalReason}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

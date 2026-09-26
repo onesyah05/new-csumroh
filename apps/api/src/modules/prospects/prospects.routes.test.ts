@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 
 type Row = Record<string, any>;
 const mocks = vi.hoisted(() => ({
-  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[] },
+  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[], rejections: [] as Row[] },
   capi: vi.fn(),
   send: vi.fn(),
   conversations: vi.fn(),
@@ -101,6 +101,9 @@ const db = vi.hoisted(() => {
         rows.forEach((r) => Object.assign(r, data));
         return { count: rows.length };
       },
+    },
+    paymentProofRejection: {
+      create: async ({ data }: any) => { s().rejections.push(data); return data; },
     },
     prospectLog: {
       create: async ({ data }: any) => { s().logs.push(data); return { ...data, user: { name: 'CS Fitri' } }; },
@@ -194,6 +197,7 @@ beforeEach(() => {
   mocks.state.payments = [];
   mocks.state.logs = [];
   mocks.state.customRequests = [];
+  mocks.state.rejections = [];
   mocks.state.messages = [];
   mocks.state.users = [
     { id: 7, name: 'CS Fitri', role: 'cs', isActive: true, brandId: 1 },
@@ -314,6 +318,12 @@ describe('R03 sent means delivered by the gateway', () => {
 
 describe('R02 payment verification', () => {
   const body = { approvedAmount: 5_000_000, bankName: 'BSI', mutationDate: '2026-09-23' };
+
+  it('tanggal mutasi di masa depan ditolak', async () => {
+    const result = await invoke('post', '/:id/verify-payment', { body: { ...body, mutationDate: '2999-01-01' }, role: 'finance' });
+    expect(result.status).toBe(422);
+    expect(mocks.state.payments).toHaveLength(0);
+  });
 
   it('two identical concurrent approvals record one payment, one win, and consume seats once', async () => {
     const results = await Promise.all([
@@ -642,6 +652,8 @@ describe('Tolak bukti transfer', () => {
     expect(mocks.state.logs.at(-1)).toMatchObject({ actionType: 'payment_proof_rejected' });
     expect(mocks.state.logs.at(-1).description).toContain('Rekening tujuan salah');
     expect(mocks.notify.proofRejected).toHaveBeenCalledWith(expect.objectContaining({ reason: 'Rekening tujuan salah' }));
+    // Tercatat terstruktur untuk riwayat Finance & agar kiriman yang sama tidak jadi kandidat lagi.
+    expect(mocks.state.rejections).toEqual([expect.objectContaining({ prospectId: 1, kind: 'rejected', reason: 'Rekening tujuan salah', proofUrl, proofMessageId: 'WA-9', rejectedById: 20 })]);
   });
 
   it('bukti yang sudah dipakai pembayaran terverifikasi, atau tanpa bukti, tidak bisa ditolak', async () => {

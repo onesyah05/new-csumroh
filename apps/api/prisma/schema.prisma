@@ -66,25 +66,25 @@ enum CapiStatus {
 }
 
 model Brand {
-  id                Int              @id @default(autoincrement())
-  name              String           @db.VarChar(100)
-  code              String           @unique @db.VarChar(30)
-  logoUrl           String?          @map("logo_url") @db.VarChar(255)
-  ppiuNumber        String?          @map("ppiu_number") @db.VarChar(100)
-  bankName          String?          @map("bank_name") @db.VarChar(50)
-  bankAccountNumber String?          @map("bank_account_number") @db.VarChar(50)
-  bankAccountHolder String?          @map("bank_account_holder") @db.VarChar(100)
-  address           String?          @db.Text
-  gmapsUrl          String?          @map("gmaps_url") @db.Text
-  phone             String?          @db.VarChar(30)
-  metaPixelId       String?          @map("meta_pixel_id") @db.VarChar(50)
-  metaAccessToken   String?          @map("meta_access_token") @db.Text
-  facebookPageId    String?          @map("facebook_page_id") @db.VarChar(50)
-  metaWabaId        String?          @map("meta_waba_id") @db.VarChar(50)
-  metaTestEventCode String?          @map("meta_test_event_code") @db.VarChar(100)
-  metaVerifiedAt    DateTime?        @map("meta_verified_at")
-  metaLastError     String?          @map("meta_last_error") @db.Text
-  createdAt         DateTime         @default(now()) @map("created_at")
+  id                Int                     @id @default(autoincrement())
+  name              String                  @db.VarChar(100)
+  code              String                  @unique @db.VarChar(30)
+  logoUrl           String?                 @map("logo_url") @db.VarChar(255)
+  ppiuNumber        String?                 @map("ppiu_number") @db.VarChar(100)
+  bankName          String?                 @map("bank_name") @db.VarChar(50)
+  bankAccountNumber String?                 @map("bank_account_number") @db.VarChar(50)
+  bankAccountHolder String?                 @map("bank_account_holder") @db.VarChar(100)
+  address           String?                 @db.Text
+  gmapsUrl          String?                 @map("gmaps_url") @db.Text
+  phone             String?                 @db.VarChar(30)
+  metaPixelId       String?                 @map("meta_pixel_id") @db.VarChar(50)
+  metaAccessToken   String?                 @map("meta_access_token") @db.Text
+  facebookPageId    String?                 @map("facebook_page_id") @db.VarChar(50)
+  metaWabaId        String?                 @map("meta_waba_id") @db.VarChar(50)
+  metaTestEventCode String?                 @map("meta_test_event_code") @db.VarChar(100)
+  metaVerifiedAt    DateTime?               @map("meta_verified_at")
+  metaLastError     String?                 @map("meta_last_error") @db.Text
+  createdAt         DateTime                @default(now()) @map("created_at")
   users             User[]
   packages          Package[]
   prospects         Prospect[]
@@ -94,29 +94,31 @@ model Brand {
   userBrands        UserBrand[]
   payments          Payment[]
   customRequests    CustomRequest[]
+  proofRejections   PaymentProofRejection[]
 
   @@map("brands")
 }
 
 model User {
-  id            Int            @id @default(autoincrement())
-  brandId       Int?           @map("brand_id")
-  name          String         @db.VarChar(100)
-  email         String         @unique @db.VarChar(100)
-  password      String         @db.VarChar(255)
-  role          Role           @default(cs)
-  isActive      Boolean        @default(true) @map("is_active")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  brand         Brand?         @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  prospects     Prospect[]
-  prospectLogs  ProspectLog[]
-  refreshTokens RefreshToken[]
-  userBrands    UserBrand[]
+  id                      Int                      @id @default(autoincrement())
+  brandId                 Int?                     @map("brand_id")
+  name                    String                   @db.VarChar(100)
+  email                   String                   @unique @db.VarChar(100)
+  password                String                   @db.VarChar(255)
+  role                    Role                     @default(cs)
+  isActive                Boolean                  @default(true) @map("is_active")
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  brand                   Brand?                   @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  prospects               Prospect[]
+  prospectLogs            ProspectLog[]
+  refreshTokens           RefreshToken[]
+  userBrands              UserBrand[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
-  customRequestsCreated   CustomRequest[] @relation("CustomRequestCreatedBy")
-  customRequestsQuoted    CustomRequest[] @relation("CustomRequestQuotedBy")
-  customRequestsClaimed   CustomRequest[] @relation("CustomRequestClaimedBy")
+  customRequestsCreated   CustomRequest[]          @relation("CustomRequestCreatedBy")
+  customRequestsQuoted    CustomRequest[]          @relation("CustomRequestQuotedBy")
+  customRequestsClaimed   CustomRequest[]          @relation("CustomRequestClaimedBy")
+  proofRejections         PaymentProofRejection[]
 
   @@index([brandId, isActive])
   @@map("users")
@@ -136,34 +138,34 @@ model UserBrand {
 }
 
 model Package {
-  id                 Int        @id @default(autoincrement())
-  brandId            Int        @map("brand_id")
-  name               String     @db.VarChar(150)
-  price              String     @db.VarChar(50)
-  dp                 String     @db.VarChar(50)
-  priceQuad          String?    @map("price_quad") @db.VarChar(50)
-  priceTriple        String?    @map("price_triple") @db.VarChar(50)
-  priceDouble        String?    @map("price_double") @db.VarChar(50)
-  priceInfant        String?    @map("price_infant") @db.VarChar(50)
-  quotaRemaining     Int?       @map("quota_remaining")
-  departureDate      DateTime?  @map("departure_date") @db.Date
-  airline            String?    @db.VarChar(100)
-  hotelMakkah        String?    @map("hotel_makkah") @db.VarChar(100)
-  hotelMadinah       String?    @map("hotel_madinah") @db.VarChar(100)
-  departureInfo      String?    @map("departure_info") @db.VarChar(100)
-  duration           String?    @db.VarChar(50)
-  flightType         String?    @map("flight_type") @db.VarChar(50)
-  facilitiesIncluded String?    @map("facilities_included") @db.Text
-  facilitiesExcluded String?    @map("facilities_excluded") @db.Text
-  itinerary          String?    @db.Text
-  highlights         String?    @db.Text
-  flyerImage         String?    @map("flyer_image") @db.VarChar(255)
-  isPromo            Boolean    @default(false) @map("is_promo")
-  promoDiscount      String?    @map("promo_discount") @db.VarChar(50)
-  promoDeadline      DateTime?  @map("promo_deadline") @db.Date
-  isActive           Boolean    @default(true) @map("is_active")
-  createdAt          DateTime   @default(now()) @map("created_at")
-  brand              Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  id                 Int             @id @default(autoincrement())
+  brandId            Int             @map("brand_id")
+  name               String          @db.VarChar(150)
+  price              String          @db.VarChar(50)
+  dp                 String          @db.VarChar(50)
+  priceQuad          String?         @map("price_quad") @db.VarChar(50)
+  priceTriple        String?         @map("price_triple") @db.VarChar(50)
+  priceDouble        String?         @map("price_double") @db.VarChar(50)
+  priceInfant        String?         @map("price_infant") @db.VarChar(50)
+  quotaRemaining     Int?            @map("quota_remaining")
+  departureDate      DateTime?       @map("departure_date") @db.Date
+  airline            String?         @db.VarChar(100)
+  hotelMakkah        String?         @map("hotel_makkah") @db.VarChar(100)
+  hotelMadinah       String?         @map("hotel_madinah") @db.VarChar(100)
+  departureInfo      String?         @map("departure_info") @db.VarChar(100)
+  duration           String?         @db.VarChar(50)
+  flightType         String?         @map("flight_type") @db.VarChar(50)
+  facilitiesIncluded String?         @map("facilities_included") @db.Text
+  facilitiesExcluded String?         @map("facilities_excluded") @db.Text
+  itinerary          String?         @db.Text
+  highlights         String?         @db.Text
+  flyerImage         String?         @map("flyer_image") @db.VarChar(255)
+  isPromo            Boolean         @default(false) @map("is_promo")
+  promoDiscount      String?         @map("promo_discount") @db.VarChar(50)
+  promoDeadline      DateTime?       @map("promo_deadline") @db.Date
+  isActive           Boolean         @default(true) @map("is_active")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  brand              Brand           @relation(fields: [brandId], references: [id], onDelete: Cascade)
   prospects          Prospect[]
   customRequests     CustomRequest[]
 
@@ -172,72 +174,73 @@ model Package {
 }
 
 model Prospect {
-  id                 Int            @id @default(autoincrement())
-  brandId            Int            @map("brand_id")
-  userId             Int?           @map("user_id")
-  packageId          Int?           @map("package_id")
-  name               String         @db.VarChar(100)
-  phone              String?        @db.VarChar(30)
-  city               String?        @db.VarChar(100)
-  leadSource         String         @default("whatsapp") @map("lead_source") @db.VarChar(50)
-  currentStage       String         @default("greeting") @map("current_stage") @db.VarChar(50)
-  status             ProspectStatus @default(new)
-  targetMonth        String?        @map("target_month") @db.VarChar(50)
-  budgetRange        String?        @map("budget_range") @db.VarChar(50)
-  roomPreference     String?        @map("room_preference") @db.VarChar(50)
-  paxQuad            Int            @default(0) @map("pax_quad")
-  paxTriple          Int            @default(0) @map("pax_triple")
-  paxDouble          Int            @default(0) @map("pax_double")
-  paxInfant          Int            @default(0) @map("pax_infant")
-  specialNeeds       String?        @map("special_needs") @db.Text
-  decisionMaker      String?        @map("decision_maker") @db.VarChar(50)
-  passportStatus     String?        @map("passport_status") @db.VarChar(50)
-  vaccineStatus      String?        @map("vaccine_status") @db.VarChar(50)
-  dealValue          Decimal        @default(0) @map("deal_value") @db.Decimal(15, 2)
+  id                      Int                     @id @default(autoincrement())
+  brandId                 Int                     @map("brand_id")
+  userId                  Int?                    @map("user_id")
+  packageId               Int?                    @map("package_id")
+  name                    String                  @db.VarChar(100)
+  phone                   String?                 @db.VarChar(30)
+  city                    String?                 @db.VarChar(100)
+  leadSource              String                  @default("whatsapp") @map("lead_source") @db.VarChar(50)
+  currentStage            String                  @default("greeting") @map("current_stage") @db.VarChar(50)
+  status                  ProspectStatus          @default(new)
+  targetMonth             String?                 @map("target_month") @db.VarChar(50)
+  budgetRange             String?                 @map("budget_range") @db.VarChar(50)
+  roomPreference          String?                 @map("room_preference") @db.VarChar(50)
+  paxQuad                 Int                     @default(0) @map("pax_quad")
+  paxTriple               Int                     @default(0) @map("pax_triple")
+  paxDouble               Int                     @default(0) @map("pax_double")
+  paxInfant               Int                     @default(0) @map("pax_infant")
+  specialNeeds            String?                 @map("special_needs") @db.Text
+  decisionMaker           String?                 @map("decision_maker") @db.VarChar(50)
+  passportStatus          String?                 @map("passport_status") @db.VarChar(50)
+  vaccineStatus           String?                 @map("vaccine_status") @db.VarChar(50)
+  dealValue               Decimal                 @default(0) @map("deal_value") @db.Decimal(15, 2)
   // Kas terverifikasi kumulatif; hanya ditulis oleh verifikasi Finance (= SUM payments verified)
-  dpAmount           Decimal        @default(0) @map("dp_amount") @db.Decimal(15, 2)
+  dpAmount                Decimal                 @default(0) @map("dp_amount") @db.Decimal(15, 2)
   // Nominal tagihan invoice terakhir, terpisah dari uang yang benar-benar diterima
-  invoiceAmount      Decimal        @default(0) @map("invoice_amount") @db.Decimal(15, 2)
+  invoiceAmount           Decimal                 @default(0) @map("invoice_amount") @db.Decimal(15, 2)
   // Seat paket yang sudah dipotong dari kuota untuk booking ini
-  seatsReserved      Int            @default(0) @map("seats_reserved")
-  dpPaidAt           DateTime?      @map("dp_paid_at")
-  paymentStatus      PaymentStatus  @default(unpaid) @map("payment_status")
-  lostReason         String?        @map("lost_reason") @db.VarChar(100)
-  lostReasonDetail   String?        @map("lost_reason_detail") @db.Text
-  remoteJid          String?        @map("remote_jid") @db.VarChar(100)
-  metaReferralMarker String?        @map("meta_referral_marker") @db.Text
-  adId               String?        @map("ad_id") @db.VarChar(100)
-  campaignId         String?        @map("campaign_id") @db.VarChar(100)
-  adHeadline         String?        @map("ad_headline") @db.VarChar(255)
-  adSourceUrl        String?        @map("ad_source_url") @db.Text
-  closedWonCount     Int            @default(0) @map("closed_won_count")
-  photoUrl           String?        @map("photo_url") @db.Text
-  notes              String?        @db.Text
-  objectionCategory  String?        @map("objection_category") @db.VarChar(50)
-  objectionNotes     String?        @map("objection_notes") @db.Text
-  offerSentAt        DateTime?      @map("offer_sent_at")
-  offerMessageId     String?        @map("offer_message_id") @db.VarChar(100)
-  invoiceNumber      String?        @map("invoice_number") @db.VarChar(100)
-  invoiceDueAt       DateTime?      @map("invoice_due_at")
-  invoiceSentAt      DateTime?      @map("invoice_sent_at")
-  invoiceMessageId   String?        @map("invoice_message_id") @db.VarChar(100)
-  paymentProofUrl    String?        @map("payment_proof_url") @db.Text
+  seatsReserved           Int                     @default(0) @map("seats_reserved")
+  dpPaidAt                DateTime?               @map("dp_paid_at")
+  paymentStatus           PaymentStatus           @default(unpaid) @map("payment_status")
+  lostReason              String?                 @map("lost_reason") @db.VarChar(100)
+  lostReasonDetail        String?                 @map("lost_reason_detail") @db.Text
+  remoteJid               String?                 @map("remote_jid") @db.VarChar(100)
+  metaReferralMarker      String?                 @map("meta_referral_marker") @db.Text
+  adId                    String?                 @map("ad_id") @db.VarChar(100)
+  campaignId              String?                 @map("campaign_id") @db.VarChar(100)
+  adHeadline              String?                 @map("ad_headline") @db.VarChar(255)
+  adSourceUrl             String?                 @map("ad_source_url") @db.Text
+  closedWonCount          Int                     @default(0) @map("closed_won_count")
+  photoUrl                String?                 @map("photo_url") @db.Text
+  notes                   String?                 @db.Text
+  objectionCategory       String?                 @map("objection_category") @db.VarChar(50)
+  objectionNotes          String?                 @map("objection_notes") @db.Text
+  offerSentAt             DateTime?               @map("offer_sent_at")
+  offerMessageId          String?                 @map("offer_message_id") @db.VarChar(100)
+  invoiceNumber           String?                 @map("invoice_number") @db.VarChar(100)
+  invoiceDueAt            DateTime?               @map("invoice_due_at")
+  invoiceSentAt           DateTime?               @map("invoice_sent_at")
+  invoiceMessageId        String?                 @map("invoice_message_id") @db.VarChar(100)
+  paymentProofUrl         String?                 @map("payment_proof_url") @db.Text
   // Pesan WhatsApp asal bukti (bila diambil dari live chat) dan waktu bukti diajukan ke Finance
-  paymentProofMessageId String?     @map("payment_proof_message_id") @db.VarChar(100)
-  paymentProofSubmittedAt DateTime? @map("payment_proof_submitted_at")
-  verifiedByUserId   Int?           @map("verified_by_user_id")
-  nextFollowupDate   DateTime?      @map("next_followup_date") @db.Date
-  lastFollowupAt     DateTime?      @map("last_followup_at")
-  createdAt          DateTime       @default(now()) @map("created_at")
-  updatedAt          DateTime       @updatedAt @map("updated_at")
-  brand              Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  user               User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  package            Package?       @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  logs               ProspectLog[]
-  messages           ChatMessage[]
-  capiLogs           MetaCapiLog[]
-  payments           Payment[]
-  customRequests     CustomRequest[]
+  paymentProofMessageId   String?                 @map("payment_proof_message_id") @db.VarChar(100)
+  paymentProofSubmittedAt DateTime?               @map("payment_proof_submitted_at")
+  verifiedByUserId        Int?                    @map("verified_by_user_id")
+  nextFollowupDate        DateTime?               @map("next_followup_date") @db.Date
+  lastFollowupAt          DateTime?               @map("last_followup_at")
+  createdAt               DateTime                @default(now()) @map("created_at")
+  updatedAt               DateTime                @updatedAt @map("updated_at")
+  brand                   Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user                    User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  package                 Package?                @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  logs                    ProspectLog[]
+  messages                ChatMessage[]
+  capiLogs                MetaCapiLog[]
+  payments                Payment[]
+  customRequests          CustomRequest[]
+  proofRejections         PaymentProofRejection[]
 
   @@index([brandId, status])
   @@index([userId])
@@ -259,6 +262,11 @@ model Payment {
   proofUrl         String?             @map("proof_url") @db.Text
   proofMessageId   String?             @map("proof_message_id") @db.VarChar(100)
   verifiedByUserId Int?                @map("verified_by_user_id")
+  // Koreksi/pembatalan oleh Superadmin; nilai lama tercatat di log prospek.
+  correctedAt      DateTime?           @map("corrected_at")
+  reversedAt       DateTime?           @map("reversed_at")
+  reversedByUserId Int?                @map("reversed_by_user_id")
+  reversalReason   String?             @map("reversal_reason") @db.Text
   createdAt        DateTime            @default(now()) @map("created_at")
   brand            Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
   prospect         Prospect            @relation(fields: [prospectId], references: [id], onDelete: Cascade)
@@ -266,6 +274,26 @@ model Payment {
   @@unique([brandId, referenceNo])
   @@index([prospectId, createdAt])
   @@map("payments")
+}
+
+/// Bukti transfer yang ditolak Finance (`rejected`) atau kiriman chat yang ditandai bukan bukti (`dismissed`).
+model PaymentProofRejection {
+  id             Int      @id @default(autoincrement())
+  brandId        Int      @map("brand_id")
+  prospectId     Int      @map("prospect_id")
+  kind           String   @default("rejected") @db.VarChar(20)
+  proofUrl       String?  @map("proof_url") @db.Text
+  proofMessageId String?  @map("proof_message_id") @db.VarChar(100)
+  reason         String   @db.VarChar(500)
+  rejectedById   Int?     @map("rejected_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  brand          Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  prospect       Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  rejectedBy     User?    @relation(fields: [rejectedById], references: [id], onDelete: SetNull)
+
+  @@index([brandId, createdAt])
+  @@index([prospectId, createdAt])
+  @@map("payment_proof_rejections")
 }
 
 model ProspectLog {
@@ -318,12 +346,12 @@ model ChatMessage {
   reaction         String?   @db.VarChar(10)
   reactionUserId   Int?      @map("reaction_user_id")
 
-  quotedMessageId  String?   @map("quoted_message_id") @db.VarChar(100)
-  quotedText       String?   @map("quoted_text") @db.Text
-  quotedSender     String?   @map("quoted_sender") @db.VarChar(100)
-  createdAt        DateTime  @default(now()) @map("created_at")
-  brand            Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  prospect         Prospect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+  quotedMessageId String?   @map("quoted_message_id") @db.VarChar(100)
+  quotedText      String?   @map("quoted_text") @db.Text
+  quotedSender    String?   @map("quoted_sender") @db.VarChar(100)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  brand           Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  prospect        Prospect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
 
   @@unique([brandId, messageId])
   @@index([brandId, remoteJid])
@@ -422,76 +450,76 @@ model NotificationDedupe {
 /// Layanan Custom: kebutuhan khusus jamaah yang dihitung divisi Product. Harga ditawarkan & harga terendah adalah
 /// TOTAL untuk komposisi jamaah permintaan ini; DP minimal per jamaah. Rincian modal tetap di luar CRM.
 model CustomRequest {
-  id              Int                 @id @default(autoincrement())
-  brandId         Int                 @map("brand_id")
-  prospectId      Int                 @map("prospect_id")
-  createdById     Int?                @map("created_by_id")
-  basePackageId   Int?                @map("base_package_id")
-  status          CustomRequestStatus @default(submitted)
+  id                  Int                 @id @default(autoincrement())
+  brandId             Int                 @map("brand_id")
+  prospectId          Int                 @map("prospect_id")
+  createdById         Int?                @map("created_by_id")
+  basePackageId       Int?                @map("base_package_id")
+  status              CustomRequestStatus @default(submitted)
   /// package = berbasis paket katalog (tanggal & pesawat mengikuti paket); full = full custom.
-  mode            String              @default("full") @db.VarChar(10)
-  departureDate   DateTime?           @map("departure_date") @db.Date
+  mode                String              @default("full") @db.VarChar(10)
+  departureDate       DateTime?           @map("departure_date") @db.Date
   /// Full custom: akhir rentang tanggal berangkat (kosong = tanggal pasti).
-  departureDateTo DateTime?           @map("departure_date_to") @db.Date
-  departureNote   String?             @map("departure_note") @db.VarChar(100)
-  departureCity   String?             @map("departure_city") @db.VarChar(100)
-  airline         String?             @db.VarChar(100)
-  flightType      String?             @map("flight_type") @db.VarChar(20)
-  paxQuad         Int                 @default(0) @map("pax_quad")
-  paxTriple       Int                 @default(0) @map("pax_triple")
-  paxDouble       Int                 @default(0) @map("pax_double")
-  paxInfant       Int                 @default(0) @map("pax_infant")
-  hotelMakkah     String?             @map("hotel_makkah") @db.VarChar(150)
-  nightsMakkah    Int?                @map("nights_makkah")
-  hotelMadinah    String?             @map("hotel_madinah") @db.VarChar(150)
-  nightsMadinah   Int?                @map("nights_madinah")
-  extendNightsMakkah  Int?            @map("extend_nights_makkah")
-  extendNightsMadinah Int?            @map("extend_nights_madinah")
-  extraHotels     Json?               @map("extra_hotels")
-  route           String?             @db.VarChar(20)
-  equipment       Boolean?
-  fastTrain       Boolean?            @map("fast_train")
-  tourLeader      Boolean?            @map("tour_leader")
-  muthawif        Boolean?
+  departureDateTo     DateTime?           @map("departure_date_to") @db.Date
+  departureNote       String?             @map("departure_note") @db.VarChar(100)
+  departureCity       String?             @map("departure_city") @db.VarChar(100)
+  airline             String?             @db.VarChar(100)
+  flightType          String?             @map("flight_type") @db.VarChar(20)
+  paxQuad             Int                 @default(0) @map("pax_quad")
+  paxTriple           Int                 @default(0) @map("pax_triple")
+  paxDouble           Int                 @default(0) @map("pax_double")
+  paxInfant           Int                 @default(0) @map("pax_infant")
+  hotelMakkah         String?             @map("hotel_makkah") @db.VarChar(150)
+  nightsMakkah        Int?                @map("nights_makkah")
+  hotelMadinah        String?             @map("hotel_madinah") @db.VarChar(150)
+  nightsMadinah       Int?                @map("nights_madinah")
+  extendNightsMakkah  Int?                @map("extend_nights_makkah")
+  extendNightsMadinah Int?                @map("extend_nights_madinah")
+  extraHotels         Json?               @map("extra_hotels")
+  route               String?             @db.VarChar(20)
+  equipment           Boolean?
+  fastTrain           Boolean?            @map("fast_train")
+  tourLeader          Boolean?            @map("tour_leader")
+  muthawif            Boolean?
   /// Berbasis paket: layanan paket yang tidak diambil dan layanan tambahan (array teks).
-  servicesRemoved Json?               @map("services_removed")
-  servicesAdded   Json?               @map("services_added")
-  cityTour        String?             @map("city_tour") @db.Text
-  budgetPerPax    Decimal?            @map("budget_per_pax") @db.Decimal(15, 2)
-  specialNeeds    String?             @map("special_needs") @db.Text
-  notes           String?             @db.Text
+  servicesRemoved     Json?               @map("services_removed")
+  servicesAdded       Json?               @map("services_added")
+  cityTour            String?             @map("city_tour") @db.Text
+  budgetPerPax        Decimal?            @map("budget_per_pax") @db.Decimal(15, 2)
+  specialNeeds        String?             @map("special_needs") @db.Text
+  notes               String?             @db.Text
   /// Harga per jamaah per tipe kamar dari Tim LA ({quad, triple, double, infant}); offeredPrice/floorPrice = totalnya.
-  offeredPrices   Json?               @map("offered_prices")
-  floorPrices     Json?               @map("floor_prices")
-  offeredPrice    Decimal?            @map("offered_price") @db.Decimal(15, 2)
-  floorPrice      Decimal?            @map("floor_price") @db.Decimal(15, 2)
-  minDpPerPax     Decimal?            @map("min_dp_per_pax") @db.Decimal(15, 2)
+  offeredPrices       Json?               @map("offered_prices")
+  floorPrices         Json?               @map("floor_prices")
+  offeredPrice        Decimal?            @map("offered_price") @db.Decimal(15, 2)
+  floorPrice          Decimal?            @map("floor_price") @db.Decimal(15, 2)
+  minDpPerPax         Decimal?            @map("min_dp_per_pax") @db.Decimal(15, 2)
   /// DP minimal per bayi (kosong = sama dengan dewasa).
-  minDpInfant     Decimal?            @map("min_dp_infant") @db.Decimal(15, 2)
-  quoteValidUntil DateTime?           @map("quote_valid_until")
-  quoteNote       String?             @map("quote_note") @db.Text
-  quotedById      Int?                @map("quoted_by_id")
+  minDpInfant         Decimal?            @map("min_dp_infant") @db.Decimal(15, 2)
+  quoteValidUntil     DateTime?           @map("quote_valid_until")
+  quoteNote           String?             @map("quote_note") @db.Text
+  quotedById          Int?                @map("quoted_by_id")
   /// Anggota Tim LA yang sedang menghitung (mencegah kerja ganda); dikosongkan saat harga dikirim/dikembalikan.
-  claimedById     Int?                @map("claimed_by_id")
-  claimedAt       DateTime?           @map("claimed_at")
-  quotedAt        DateTime?           @map("quoted_at")
-  revisionNote    String?             @map("revision_note") @db.Text
+  claimedById         Int?                @map("claimed_by_id")
+  claimedAt           DateTime?           @map("claimed_at")
+  quotedAt            DateTime?           @map("quoted_at")
+  revisionNote        String?             @map("revision_note") @db.Text
   /// Alasan Tim LA mengembalikan permintaan ke CS (status needs_info).
-  returnNote      String?             @map("return_note") @db.Text
+  returnNote          String?             @map("return_note") @db.Text
   /// Saat permintaan masuk antrean Tim LA (kirim, kirim ulang, hitung ulang); dasar waktu tunggu.
-  queuedAt        DateTime?           @map("queued_at")
+  queuedAt            DateTime?           @map("queued_at")
   /// Berapa kali harga dihitung; > 1 = harga diperbarui.
-  quoteCount      Int                 @default(0) @map("quote_count")
-  agreedPrice     Decimal?            @map("agreed_price") @db.Decimal(15, 2)
-  agreedAt        DateTime?           @map("agreed_at")
-  createdAt       DateTime            @default(now()) @map("created_at")
-  updatedAt       DateTime            @updatedAt @map("updated_at")
-  brand           Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  prospect        Prospect            @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  basePackage     Package?            @relation(fields: [basePackageId], references: [id], onDelete: SetNull)
-  createdBy       User?               @relation("CustomRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  quotedBy        User?               @relation("CustomRequestQuotedBy", fields: [quotedById], references: [id], onDelete: SetNull)
-  claimedBy       User?               @relation("CustomRequestClaimedBy", fields: [claimedById], references: [id], onDelete: SetNull)
+  quoteCount          Int                 @default(0) @map("quote_count")
+  agreedPrice         Decimal?            @map("agreed_price") @db.Decimal(15, 2)
+  agreedAt            DateTime?           @map("agreed_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  brand               Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  prospect            Prospect            @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  basePackage         Package?            @relation(fields: [basePackageId], references: [id], onDelete: SetNull)
+  createdBy           User?               @relation("CustomRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  quotedBy            User?               @relation("CustomRequestQuotedBy", fields: [quotedById], references: [id], onDelete: SetNull)
+  claimedBy           User?               @relation("CustomRequestClaimedBy", fields: [claimedById], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([prospectId])

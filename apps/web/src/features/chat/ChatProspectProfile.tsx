@@ -42,7 +42,7 @@ import { ProspectNotes, ProspectTimeline } from '../prospects/ProspectHistory';
 import { ProspectPackageTab } from './ProspectPackageTab';
 import { CustomRequestPanel } from '../custom/CustomRequestPanel';
 import { CustomRequestForm } from '../custom/CustomRequestForm';
-import { customToInput, emptyCustomInput, useProspectCustom } from '../custom/customApi';
+import { customToInput, emptyCustomInput, sinceLabel, useProspectCustom } from '../custom/customApi';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { useAuth } from '../../app/auth';
@@ -239,6 +239,10 @@ export function ChatProspectProfile({
   if (prospectQuery.isError || !p) return <div className="p-4 space-y-3" role="alert"><p className="text-sm">Profil tidak dapat dimuat. Draft tetap tersedia.</p><Button variant="secondary" onClick={() => void prospectQuery.refetch()}>Coba lagi</Button></div>;
   const won = ['deal', 'closed_won'].includes(p.status);
   const financialRole = ['finance', 'admin', 'superadmin'].includes(user?.role || '');
+  // Penolakan Finance terakhir: tampil sampai ada bukti baru (alasan tidak hanya di notifikasi).
+  const lastRejection = p.proofRejections?.[0] as { reason: string; createdAt: string; rejectedBy?: { name: string } | null } | undefined;
+  const proofRejected = lastRejection && !p.paymentProofUrl && !won && !['lose', 'closed_lost'].includes(p.status)
+    && (!p.invoiceSentAt || new Date(lastRejection.createdAt) >= new Date(p.invoiceSentAt)) ? lastRejection : null;
   function openAction(setter: (open: boolean) => void) {
     if (locked) { onShowToast(`Ditangani ${p?.user?.name ?? 'CS lain'}; hanya PIC atau Admin yang dapat mengubah.`); return; }
     setter(true);
@@ -371,6 +375,12 @@ export function ChatProspectProfile({
             </div>
           )}
         </div>
+        {proofRejected && (
+          <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <b className="font-semibold">Bukti transfer ditolak Finance</b> · {sinceLabel(proofRejected.createdAt)} lalu{proofRejected.rejectedBy?.name ? ` oleh ${proofRejected.rejectedBy.name}` : ''}
+            <span className="mt-0.5 block">Alasan: {proofRejected.reason}. Minta bukti yang benar ke jamaah.</span>
+          </p>
+        )}
         {!lost && (
           <ol aria-label={`Tahap ${stageIndex} dari 5`} className="flex gap-1">
             {STAGES.map((stage, index) => (

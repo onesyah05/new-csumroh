@@ -202,8 +202,18 @@ prospectsRouter.get('/:id', asyncHandler(async (req, res) => {
       customRequests: { where: { status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, take: 1, select: { id: true, status: true, quoteValidUntil: true } },
       messages: { orderBy: { timestamp: 'asc' } },
       payments: {
-        select: { id: true, amount: true, bankName: true, referenceNo: true, mutationDate: true, status: true, createdAt: true },
+        select: {
+          id: true, amount: true, bankName: true, referenceNo: true, mutationDate: true, status: true, notes: true, proofUrl: true,
+          verifiedByUserId: true, correctedAt: true, reversedAt: true, reversalReason: true, createdAt: true,
+        },
         orderBy: { createdAt: 'asc' },
+      },
+      // Alasan penolakan terakhir untuk CS (ditampilkan selama belum ada bukti baru).
+      proofRejections: {
+        where: { kind: 'rejected' },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { reason: true, createdAt: true, rejectedBy: { select: { name: true } } },
       },
     },
   });
@@ -1174,6 +1184,12 @@ prospectsRouter.post('/:id/reject-proof', asyncHandler(async (req, res) => {
         description: `Alasan: ${reason} · Berkas: ${existing.paymentProofUrl} · Oleh: ${req.user!.name}`,
       },
     });
+    await tx.paymentProofRejection.create({
+      data: {
+        brandId, prospectId: id, kind: 'rejected', reason, rejectedById: req.user!.id,
+        proofUrl: existing.paymentProofUrl, proofMessageId: existing.paymentProofMessageId,
+      },
+    });
     return tx.prospect.findUniqueOrThrow({ where: { id }, include });
   });
 
@@ -1191,6 +1207,7 @@ prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
   const amount = Number(input.approvedAmount);
   const referenceNo = input.referenceNo?.trim() || null;
   const mutationDate = input.mutationDate || null;
+  if (mutationDate && mutationDate > businessDateKey()) throw new HttpError(422, 'Tanggal mutasi tidak boleh di masa depan.');
 
   if (isLostStatus(existing.status)) {
     throw new HttpError(409, 'Prospek berstatus batal (lose). Aktifkan kembali prospek sebelum mencatat pembayaran.');

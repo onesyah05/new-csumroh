@@ -100,7 +100,24 @@ export const paymentVerifySchema = z.object({
   idempotencyKey: z.string().trim().min(8).max(100).optional(),
 });
 
-export const PAYMENT_PROOF_PATH_PREFIX = '/api/v1/prospects/payment-proof-file/';
+/** Superadmin mengoreksi data pembayaran terverifikasi (salah ketik). Alasan wajib; nilai lama tercatat. */
+export const paymentCorrectionSchema = z.object({
+  amount: z.number().positive(),
+  bankName: z.string().trim().min(1).max(50),
+  referenceNo: z.string().trim().max(100).optional().or(z.literal('')),
+  mutationDate: z.string().date().optional().or(z.literal('')),
+  reason: z.string().trim().min(3, 'Alasan koreksi minimal 3 karakter').max(500),
+});
+
+/** Superadmin membatalkan verifikasi: Deal kembali ke Closing dan kuota seat dikembalikan. */
+export const paymentReversalSchema = z.object({
+  reason: z.string().trim().min(3, 'Alasan pembatalan minimal 3 karakter').max(500),
+});
+
+export const PAYMENT_HISTORY_STATUSES = ['all', 'verified', 'rejected', 'reversed'] as const;
+export type PaymentHistoryStatus = (typeof PAYMENT_HISTORY_STATUSES)[number];
+
+export const PAYMENT_PROOF_PATH_PREFIX ='/api/v1/prospects/payment-proof-file/';
 export const paymentProofSchema = z.object({
   // Hanya referensi berkas privat hasil endpoint upload; data URL / URL bebas ditolak.
   paymentProofUrl: z.string().max(300).regex(/^\/api\/v1\/prospects\/payment-proof-file\/[A-Za-z0-9._-]+$/, 'Bukti bayar harus diunggah melalui endpoint upload resmi.'),

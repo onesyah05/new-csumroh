@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { CheckCircle2, ShieldCheck, X } from 'lucide-react';
-import { isWonStatus } from '@csumroh/shared-types';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { businessDateKey, customMinDpTotal, isWonStatus, seatCountFor } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
 import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
+import { ConfirmDialog, Modal } from '../../components/ui/modal';
+import { MoneyInput } from '../custom/MoneyInput';
+import { useProspectCustom } from '../custom/customApi';
 import { PrivateProofPreview } from './PrivateProof';
-import { ModalFrame } from '../../components/ui/modal';
 
 interface FinanceVerifyModalProps {
   open: boolean;
@@ -22,7 +24,7 @@ const rupiah = (val: unknown) =>
     Number(val ?? 0)
   );
 
-const BANK_OPTIONS = [
+export const BANK_OPTIONS = [
   { value: 'Bank Syariah Indonesia (BSI)', label: 'Bank Syariah Indonesia (BSI)' },
   { value: 'Bank Mandiri', label: 'Bank Mandiri' },
   { value: 'Bank Central Asia (BCA)', label: 'Bank Central Asia (BCA)' },
@@ -31,12 +33,25 @@ const BANK_OPTIONS = [
   { value: 'Kas / Tunai', label: 'Kas / Tunai Kantor' },
 ];
 
-const todayWib = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
 const newKey = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+function Fact({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-zinc-500">{label}</dt>
+      <dd className="text-sm font-semibold tabular-nums text-zinc-950">{value}</dd>
+      {note && <dd className="text-xs text-zinc-500">{note}</dd>}
+    </div>
+  );
+}
+
+/**
+ * Finance mencocokkan bukti transfer dengan mutasi bank lalu menetapkan Deal. Patokan (tagihan, nilai deal,
+ * DP minimal layanan custom, jumlah jamaah) ditampilkan di atas agar selisih nominal langsung terlihat.
+ */
 export function FinanceVerifyModal({
   open,
   onClose,
@@ -45,19 +60,37 @@ export function FinanceVerifyModal({
   onShowToast,
 }: FinanceVerifyModalProps) {
   const alreadyWon = isWonStatus(prospect?.status);
+  const invoiceAmount = Number(prospect?.invoiceAmount ?? 0);
   const [paymentType, setPaymentType] = useState<'dp' | 'full'>('dp');
-  const [approvedAmount, setApprovedAmount] = useState<number>(() => Number(prospect?.invoiceAmount ?? 0));
+  const [approvedAmount, setApprovedAmount] = useState<number | null>(() => invoiceAmount || null);
   const [bankName, setBankName] = useState<string>('Bank Syariah Indonesia (BSI)');
   const [referenceNo, setReferenceNo] = useState('');
-  const [mutationDate, setMutationDate] = useState<string>(todayWib);
+  const [mutationDate, setMutationDate] = useState<string>(() => businessDateKey());
   const [notes, setNotes] = useState<string>('');
+  const [confirmFull, setConfirmFull] = useState(false);
   // Satu key per pembukaan form: klik ganda / retry jaringan tidak mencatat pembayaran dua kali.
   const [idempotencyKey] = useState(newKey);
+
+  // Antrean Finance sudah membawa patokan custom; dari Inbox/Pipeline diambil langsung.
+  const fromQueue = prospect?.customMinDp !== undefined;
+  const customQuery = useProspectCustom(fromQueue || !open ? 0 : Number(prospect?.id), brandId ?? prospect?.brandId);
+  const custom = customQuery.data?.status === 'agreed' ? customQuery.data : null;
+  const minDp: number | null = fromQueue ? prospect.customMinDp : custom ? customMinDpTotal(custom) : null;
+  const dealValue = Number((fromQueue ? prospect.customAgreedPrice : custom?.agreedPrice) ?? prospect?.dealValue ?? 0);
+  const adults = (prospect?.paxQuad ?? 0) + (prospect?.paxTriple ?? 0) + (prospect?.paxDouble ?? 0);
+  const infants = prospect?.paxInfant ?? 0;
+
+  const amount = approvedAmount ?? 0;
+  const today = businessDateKey();
+  const belowMinDp = minDp !== null && amount > 0 && amount < minDp;
+  const differsFromInvoice = invoiceAmount > 0 && amount > 0 && amount !== invoiceAmount;
+  const fullBelowDeal = paymentType === 'full' && dealValue > 0 && amount > 0 && amount < dealValue;
+  const futureDate = Boolean(mutationDate) && mutationDate > today;
 
   const verifyMutation = useMutation({
     mutationFn: () =>
       api.post<any>(`/prospects/${prospect.id}/verify-payment`, {
-        approvedAmount: Number(approvedAmount),
+        approvedAmount: amount,
         paymentType,
         bankName,
         referenceNo: referenceNo.trim() || undefined,
@@ -71,9 +104,10 @@ export function FinanceVerifyModal({
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       void queryClient.invalidateQueries({ queryKey: ['verification-queue'] });
+      void queryClient.invalidateQueries({ queryKey: ['verification-history'] });
+      void queryClient.invalidateQueries({ queryKey: ['verification-summary'] });
       if (data?.duplicate) {
         onShowToast('Mutasi ini sudah pernah dicatat; tidak ada pembayaran ganda.');
-
       } else {
         onShowToast('Pembayaran diverifikasi. Prospek resmi DEAL dan kuota seat terpotong.');
       }
@@ -86,156 +120,102 @@ export function FinanceVerifyModal({
 
   if (!open || alreadyWon) return null;
 
+  const canSubmit = amount > 0 && Boolean(mutationDate) && !futureDate && !belowMinDp && !verifyMutation.isPending;
+  const submit = () => (fullBelowDeal ? setConfirmFull(true) : verifyMutation.mutate());
+  const fromChat = Boolean(prospect?.paymentProofMessageId);
+
   return (
-    <ModalFrame open={open} onClose={onClose} title="Verifikasi pembayaran Finance">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 bg-emerald-600 text-white">
-          <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/20 text-white">
-              <ShieldCheck size={18} />
-            </span>
-            <div>
-              <h3 className="font-bold text-sm">Verifikasi pembayaran awal</h3>
-              <p className="text-xs text-emerald-100">Cocokkan bukti pembayaran awal untuk menetapkan Deal</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="thin-scrollbar flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-          {/* Customer & Package Summary */}
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 space-y-2">
-            <div className="flex items-center justify-between font-bold text-zinc-900">
-              <span>{prospect?.name || 'Jamaah'}</span>
-              <span className="text-emerald-700">{prospect?.phone}</span>
-            </div>
-            <p className="text-xs text-zinc-500">
-              Paket: {prospect?.package?.name || 'Paket Umroh'} · Invoice: {prospect?.invoiceNumber || '-'}
-              {Number(prospect?.invoiceAmount) > 0 ? ` (${rupiah(prospect.invoiceAmount)})` : ''}
+    <>
+      <Modal
+        open={open && !confirmFull}
+        onClose={onClose}
+        size="lg"
+        title="Verifikasi pembayaran awal"
+        description={<>Cocokkan bukti dengan mutasi bank. Setelah diverifikasi, <strong>{prospect?.name || 'jamaah'}</strong> resmi Deal.</>}
+        footer={
+          <>
+            <Button variant="secondary" onClick={onClose} disabled={verifyMutation.isPending}>Batal</Button>
+            <Button onClick={submit} disabled={!canSubmit} loading={verifyMutation.isPending} icon={<CheckCircle2 size={14} />}>
+              Verifikasi & tetapkan Deal
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-xs">
+          <section aria-label="Patokan pengecekan" className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+            <p className="mb-2 truncate text-xs text-zinc-600">
+              {prospect?.phone ? `${prospect.phone} · ` : ''}{prospect?.package?.name ?? (custom || minDp !== null ? 'Layanan custom' : 'Paket belum dipilih')} · {prospect?.invoiceNumber || 'Tanpa nomor invoice'}
             </p>
-          </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+              <Fact label="Tagihan invoice" value={invoiceAmount > 0 ? rupiah(invoiceAmount) : '—'} />
+              <Fact label="Nilai deal" value={dealValue > 0 ? rupiah(dealValue) : '—'} />
+              <Fact label="DP minimal" value={minDp !== null ? rupiah(minDp) : '—'} note={minDp !== null ? 'Layanan custom' : undefined} />
+              <Fact label="Jamaah" value={`${adults} dewasa${infants ? ` + ${infants} bayi` : ''}`} note={`${seatCountFor(prospect ?? {})} seat dipotong`} />
+            </dl>
+          </section>
 
-          {/* Payment Proof Preview if uploaded */}
           {prospect?.paymentProofUrl && (
             <div className="space-y-1.5">
-              <label className="font-bold text-xs text-zinc-500">
-                Bukti Transfer yang Diunggah CS:
-              </label>
-              <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-100 min-h-24 flex items-center justify-center p-2">
+              <p className="font-semibold text-zinc-700">{fromChat ? 'Bukti dari chat WhatsApp' : 'Bukti diunggah CS'}</p>
+              <div className="flex min-h-24 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 p-2">
                 <PrivateProofPreview url={prospect.paymentProofUrl} />
               </div>
             </div>
           )}
 
-          <label className="panel-field">Jenis pembayaran awal
-            <Select aria-label="Jenis pembayaran awal" value={paymentType} onValueChange={value => setPaymentType(value as 'dp' | 'full')} options={[{ value: 'dp', label: 'DP' }, { value: 'full', label: 'Lunas (pembayaran awal)' }]} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="panel-field">Jenis pembayaran awal
+              <Select aria-label="Jenis pembayaran awal" value={paymentType} onValueChange={value => setPaymentType(value as 'dp' | 'full')} options={[{ value: 'dp', label: 'DP' }, { value: 'full', label: 'Lunas (pembayaran awal)' }]} />
+            </label>
+            <div className="panel-field">
+              <span>Nominal diterima</span>
+              <MoneyInput aria-label="Nominal diterima" value={approvedAmount} onChange={setApprovedAmount} invalid={belowMinDp} />
+            </div>
+          </div>
+          {belowMinDp && (
+            <p role="alert" className="flex gap-1.5 text-rose-700"><AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
+              Di bawah DP minimal layanan custom ({rupiah(minDp)}). Tolak bukti bila transfer memang kurang.</p>
+          )}
+          {!belowMinDp && differsFromInvoice && (
+            <p className="flex gap-1.5 text-amber-800"><AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
+              {amount > invoiceAmount ? 'Lebih' : 'Kurang'} {rupiah(Math.abs(amount - invoiceAmount))} dari tagihan invoice. Pastikan sesuai mutasi.</p>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="panel-field">Bank tujuan mutasi
+              <Select aria-label="Bank tujuan mutasi" value={bankName} onValueChange={setBankName} options={BANK_OPTIONS} className="w-full" />
+            </label>
+            <label className="panel-field">Tanggal mutasi
+              <input type="date" max={today} value={mutationDate} onChange={(e) => setMutationDate(e.target.value)} className="field" aria-invalid={futureDate || undefined} />
+              {futureDate && <span role="alert" className="text-xs text-rose-700">Tanggal mutasi tidak boleh di masa depan.</span>}
+            </label>
+          </div>
+
+          <label className="panel-field">No. referensi mutasi (disarankan)
+            <input type="text" value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} placeholder="Contoh: FT2609231015XYZ" className="field font-mono" />
+            <span className="text-xs font-normal text-zinc-500">Unik per brand; mencegah satu mutasi dipakai dua booking.</span>
           </label>
-          {/* Approved Amount */}
-          <div className="space-y-1.5">
-            <label className="font-bold text-xs text-zinc-500">
-              Nominal pembayaran awal (Rp)
-            </label>
-            <input
-              type="number"
-              min="1000"
-              value={approvedAmount}
-              onChange={(e) => setApprovedAmount(Number(e.target.value))}
-              className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs font-bold text-emerald-700 focus:border-emerald-500 focus:outline-none"
-            />
-            <span className="text-xs text-zinc-500">
-              {rupiah(approvedAmount)}
-            </span>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {/* Bank Selection */}
-            <div className="space-y-1.5">
-              <label className="font-bold text-xs text-zinc-500">
-                Bank Tujuan Mutasi
-              </label>
-              <Select
-                value={bankName}
-                onValueChange={setBankName}
-                options={BANK_OPTIONS}
-                className="w-full"
-              />
-            </div>
+          <label className="panel-field">Catatan validasi (opsional)
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Contoh: mutasi masuk BSI 10:15 WIB a/n pengirim" className="field" />
+          </label>
 
-            {/* Mutation Date */}
-            <div className="space-y-1.5">
-              <label className="font-bold text-xs text-zinc-500">
-                Tanggal Mutasi
-              </label>
-              <input
-                type="date"
-                value={mutationDate}
-                onChange={(e) => setMutationDate(e.target.value)}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Reference number */}
-          <div className="space-y-1.5">
-            <label className="font-bold text-xs text-zinc-500">
-              No. Referensi Mutasi (disarankan)
-            </label>
-            <input
-              type="text"
-              value={referenceNo}
-              onChange={(e) => setReferenceNo(e.target.value)}
-              placeholder="Contoh: FT2609231015XYZ"
-              className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs font-mono focus:border-emerald-500 focus:outline-none"
-            />
-            <span className="text-xs text-zinc-500">Nomor unik per brand; mencegah satu mutasi dipakai dua booking.</span>
-          </div>
-
-          {/* Notes */}
-          <div className="space-y-1.5">
-            <label className="font-bold text-xs text-zinc-500">
-              Catatan Validasi Finance (Opsional)
-            </label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contoh: Mutasi klir di BSI jam 10:15 WIB a/n pengirim..."
-              className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-
-          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-2.5 text-xs text-emerald-900 leading-relaxed">
-            🎯 <strong>Dampak Verifikasi:</strong>
-            <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
-              <li>Status prospek berubah menjadi <strong>DEAL</strong> dan kuota seat paket dipotong</li>
-              <li>Event CAPI <strong>Purchase</strong> senilai deal dikirim ke Meta Ads</li>
-            </ul>
-          </div>
+          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-900">
+            Setelah diverifikasi: status menjadi <strong>Deal</strong>, kuota seat paket dipotong, dan event Purchase dikirim ke Meta Ads.
+          </p>
         </div>
+      </Modal>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-5 py-3.5 bg-zinc-50">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={verifyMutation.isPending}>
-            Batal
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => verifyMutation.mutate()}
-            disabled={verifyMutation.isPending || !approvedAmount || approvedAmount <= 0 || !mutationDate}
-            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-          >
-            <CheckCircle2 size={14} />
-            {verifyMutation.isPending ? 'Memvalidasi...' : 'Verifikasi & Tetapkan Deal'}
-          </Button>
-        </div>
-      </div>
-    </ModalFrame>
+      <ConfirmDialog
+        open={confirmFull}
+        onClose={() => setConfirmFull(false)}
+        tone="primary"
+        pending={verifyMutation.isPending}
+        onConfirm={() => verifyMutation.mutate()}
+        title="Lunas, tetapi di bawah nilai deal?"
+        confirmLabel="Ya, catat lunas"
+        description={`Nominal ${rupiah(amount)} kurang ${rupiah(dealValue - amount)} dari nilai deal ${rupiah(dealValue)}. Pilih DP bila jamaah belum melunasi.`}
+      />
+    </>
   );
 }
