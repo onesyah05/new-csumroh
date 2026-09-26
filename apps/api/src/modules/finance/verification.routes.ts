@@ -12,6 +12,7 @@ import { prisma } from '../../db/prisma.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
+import { csvCell } from '../../utils/csv.js';
 
 export const verificationRouter = Router();
 verificationRouter.use(authGuard, requireRole('finance', 'admin', 'superadmin'));
@@ -76,7 +77,7 @@ const assertNotFuture = (date?: string | null) => {
 /**
  * Antrean kerja Finance lintas brand.
  * - `submitted`: bukti sudah diajukan (upload CS atau diambil dari chat) dan belum dipakai
- *   oleh pembayaran terverifikasi mana pun; hanya pembayaran awal sebelum Deal.
+ *   oleh pembayaran terverifikasi mana pun; hanya pembayaran sebelum Deal.
  * - `candidates`: invoice sudah terkirim, belum ada bukti yang diajukan, dan jamaah mengirim
  *   gambar/PDF setelah invoice (atau setelah pembayaran terakhir). Tidak otomatis dianggap
  *   bukti karena jamaah juga mengirim KTP/paspor; Finance atau CS mengonfirmasi dengan satu klik.
@@ -283,7 +284,7 @@ async function loadHistory(req: Request) {
     ...payments.map((p): HistoryRow => ({
       key: `p${p.id}`, type: 'payment', id: p.id, status: p.status, at: p.createdAt, brand: p.brand, prospect: p.prospect,
       amount: Number(p.amount),
-      // Satu pembayaran awal per prospek: jenisnya mengikuti status bayar prospek.
+      // Satu pembayaran terverifikasi per prospek: jenisnya mengikuti status bayar prospek.
       paymentType: p.status === 'verified' ? (p.prospect.paymentStatus === 'paid_full' ? 'full' : 'dp') : null,
       bankName: p.bankName, referenceNo: p.referenceNo, mutationDate: p.mutationDate, notes: p.notes, proofUrl: p.proofUrl,
       actor: nameOf(p.verifiedByUserId), reason: p.reversalReason,
@@ -316,16 +317,6 @@ async function loadHistory(req: Request) {
 
 const STATUS_LABEL = { verified: 'Terverifikasi', reversed: 'Dibatalkan', rejected: 'Ditolak' } as const;
 const wibDateTime = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' });
-// Sel diawali = + - @ TAB CR dianggap formula oleh Excel/Sheets; nama kontak WhatsApp dikendalikan pihak luar,
-// jadi teks seperti itu diberi awalan ' (sama dengan web/src/lib/csv.ts). Angka asli tidak diubah.
-const FORMULA_PREFIX = /^[=+\-@\t\r]/;
-const csvCell = (value: unknown) => {
-  if (value === null || value === undefined) return '""';
-  const text = String(value);
-  const safe = typeof value !== 'number' && FORMULA_PREFIX.test(text) ? `'${text}` : text;
-  return `"${safe.replace(/"/g, '""')}"`;
-};
-
 /** Riwayat pembayaran terverifikasi, dibatalkan, dan bukti ditolak (terbaru di atas), atau CSV sesuai filter. */
 verificationRouter.get('/history', asyncHandler(async (req, res) => {
   const { input, rows, totals } = await loadHistory(req);

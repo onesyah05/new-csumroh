@@ -11,6 +11,7 @@ import { useAuth } from '../../app/auth';
 import { TodayTasks } from './TodayTasks';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
+import { TopAds } from './TopAds';
 
 type Trend = { value: number; previous: number };
 type Summary = {
@@ -105,6 +106,7 @@ export function DashboardPage() {
   const { brandId, query } = useBrandScope();
   const isHolding = isHoldingRole(user?.role);
   const isCs = user?.role === 'cs';
+  const isManager = user?.role === 'admin' || user?.role === 'superadmin';
   const [holdingScope, setHoldingScope] = useState('all');
   const [period, setPeriod] = useState('this_month');
 
@@ -115,7 +117,7 @@ export function DashboardPage() {
     enabled: user?.role !== 'finance' && (!!brandId || isHolding),
   });
 
-  if (user?.role === 'finance') return <div className="app-page space-y-5"><PageHeader title="Verifikasi pembayaran awal" subtitle="Verifikasi DP atau pembayaran lunas pertama untuk menetapkan Deal." /><TodayTasks scope="?brandId=all" /></div>;
+  if (user?.role === 'finance') return <div className="app-page space-y-5"><PageHeader title="Verifikasi pembayaran" subtitle="Verifikasi pembayaran DP atau lunas untuk menetapkan Deal." /><TodayTasks scope="?brandId=all" /></div>;
 
   if (!brandId && !isHolding) {
     return <PageError title="Belum ada brand aktif" description="Akun Anda belum dikaitkan dengan brand. Hubungi Administrator untuk penugasan brand." />;
@@ -260,6 +262,8 @@ export function DashboardPage() {
           )}
         </Panel>
       </div>
+
+      {isManager && <TopAds from={data.period.from} to={data.period.to} brandScope={isHolding ? holdingScope : String(brandId)} />}
 
       {data.scope.isHoldingView && data.brands.length > 1 && (
         <Panel title="Per brand" subtitle={`Kinerja ${rangeLabel}. Klik nama brand untuk melihat rinciannya.`}>
