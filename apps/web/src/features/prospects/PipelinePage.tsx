@@ -988,7 +988,7 @@ function PicControl({ prospect, canClaim, canAssign, canHandover, canTakeOver, o
           onClick={onTakeOver}
           title="Jamaah belum dibalas lebih dari 15 menit"
           aria-label={`Ambil alih ${prospect.name} dari ${prospect.user.name}`}
-          className="inline-flex min-h-6 shrink-0 items-center gap-1 rounded-md border border-zinc-900 bg-white px-2 py-0.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-100"
+          className="mobile-compact-control inline-flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-zinc-900 bg-white px-2 py-0.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-100"
         >
           <UserPlus2 size={12} />Ambil alih
         </button>
@@ -1001,7 +1001,7 @@ function PicControl({ prospect, canClaim, canAssign, canHandover, canTakeOver, o
         onClick={canAssign ? onAssign : onHandover}
         title={canAssign ? 'Ganti PIC' : 'Serahkan ke CS lain'}
         aria-label={`${canAssign ? 'Ganti PIC' : 'Serahkan PIC'} ${prospect.name} (saat ini ${prospect.user.name})`}
-        className="inline-flex min-h-6 max-w-[180px] items-center gap-1 truncate rounded-md px-1 text-xs text-zinc-700 hover:bg-zinc-100"
+        className="mobile-compact-control inline-flex min-h-6 min-w-0 max-w-[180px] items-center gap-1 rounded-md px-1 text-xs text-zinc-700 hover:bg-zinc-100"
       >
         <UserRound size={12} className="shrink-0" /><span className="truncate">{canHandover ? 'Anda' : prospect.user.name}</span>
       </button>
@@ -1013,19 +1013,19 @@ function PicControl({ prospect, canClaim, canAssign, canHandover, canTakeOver, o
   }
   if (canClaim) {
     return (
-      <button onClick={onClaim} className="inline-flex min-h-6 items-center gap-1 rounded-md border border-zinc-900 bg-white px-2 py-0.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-100">
+      <button onClick={onClaim} className="mobile-compact-control inline-flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-zinc-900 bg-white px-2 py-0.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-100">
         <UserPlus2 size={12} />Klaim
       </button>
     );
   }
   if (canAssign) {
     return (
-      <button onClick={onAssign} className="inline-flex items-center gap-1 rounded-md border border-dashed border-zinc-500 px-2 py-0.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-100">
+      <button onClick={onAssign} className="mobile-compact-control inline-flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-dashed border-zinc-500 px-2 py-0.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-100">
         <UserPlus2 size={12} />Tugaskan PIC
       </button>
     );
   }
-  return <span className="rounded-md border border-dashed border-zinc-400 px-1.5 py-0.5 text-xs font-semibold text-zinc-600">Belum ada PIC</span>;
+  return <span className="whitespace-nowrap rounded-md border border-dashed border-zinc-400 px-1.5 py-0.5 text-xs font-semibold text-zinc-600">Belum ada PIC</span>;
 }
 
 function ProspectCard({
@@ -1189,7 +1189,7 @@ function ProspectCard({
             draggable={false}
             aria-label={`Buka chat ${prospect.name}`}
             title="Buka chat WhatsApp"
-            className="rounded-md p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
+            className="inline-flex size-7 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
           >
             <MessageSquareText size={14} />
           </Link>
@@ -1198,7 +1198,7 @@ function ProspectCard({
               onClick={onLogFollowup}
               aria-label={`Catat follow-up ${prospect.name}`}
               title="Catat follow-up"
-              className="rounded-md p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
+              className="inline-flex size-7 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
             >
               <ClipboardList size={14} />
             </button>
