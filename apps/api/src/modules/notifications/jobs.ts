@@ -57,7 +57,7 @@ type Conversation = Awaited<ReturnType<typeof getLivechatConversationsForBrand>>
 export async function replySlaJob(now = new Date()) {
   const brands = await prisma.brand.findMany({ select: { id: true } });
   for (const brand of brands) {
-    const conversations = await getLivechatConversationsForBrand(brand.id, { requireConnected: false });
+    const conversations = await getLivechatConversationsForBrand(brand.id);
     await replySlaForBrand(brand.id, conversations, now);
   }
 }

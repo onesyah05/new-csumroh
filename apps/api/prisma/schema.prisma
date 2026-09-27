@@ -213,6 +213,8 @@ model Prospect {
   spamByUserId            Int?                    @map("spam_by_user_id")
   lostReasonDetail        String?                 @map("lost_reason_detail") @db.Text
   remoteJid               String?                 @map("remote_jid") @db.VarChar(100)
+  // Nomor WhatsApp (device) brand tempat percakapan ini berlangsung; kontak hanya tampil saat device ini tersambung.
+  devicePhone             String?                 @map("device_phone") @db.VarChar(30)
   metaReferralMarker      String?                 @map("meta_referral_marker") @db.Text
   adId                    String?                 @map("ad_id") @db.VarChar(100)
   campaignId              String?                 @map("campaign_id") @db.VarChar(100)
@@ -265,6 +267,7 @@ model Prospect {
   @@index([brandId, lastMessageAt])
   @@index([brandId, spamAt])
   @@index([brandId, conversationStatsAt])
+  @@index([brandId, devicePhone])
   @@map("prospects")
 }
 
