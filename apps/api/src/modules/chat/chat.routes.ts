@@ -14,6 +14,7 @@ import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from './outbound.js';
+import { adoptUnassignedProspects } from './device-scope.js';
 import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
 import { Prisma, type ChatMessage } from '@prisma/client';
 import { avatarNeedsRefresh } from '@csumroh/shared-types';
@@ -166,13 +167,11 @@ function messagePreview(message: ChatMessage) {
   };
 }
 
-export async function getLivechatConversationsForBrand(
-  brandId: number,
-  options?: { requireConnected?: boolean }
-) {
-  const requireConnected = options?.requireConnected ?? false;
+export async function getLivechatConversationsForBrand(brandId: number) {
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
-  if (requireConnected && session?.status !== 'connected') {
+  // Kontak hanya tampil selama device asalnya tersambung (lihat device-scope.ts).
+  const devicePhone = session?.status === 'connected' ? normalizePhoneIdentifier(session.phoneNumber) : '';
+  if (!devicePhone) {
     return [];
   }
   const brand = await prisma.brand.findUnique({
@@ -192,6 +191,7 @@ export async function getLivechatConversationsForBrand(
   const prospects = await prisma.prospect.findMany({
     where: {
       brandId,
+      devicePhone,
       lastMessageAt: { not: null },
       NOT: [
         { remoteJid: { contains: '@newsletter' } },
@@ -1014,6 +1014,8 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     normalizePhoneIdentifier(session?.phoneNumber),
     normalizePhoneIdentifier(brand?.phone),
   ].filter(Boolean));
+  // Percakapan diikat ke device yang menerimanya; bila berlanjut di nomor lain, ikut pindah ke nomor itu.
+  const devicePhone = normalizePhoneIdentifier(session?.phoneNumber) || undefined;
 
   let rawPhone = normalizePhoneIdentifier(input.phone);
   if (rawPhone && ownPhones.has(rawPhone)) {
@@ -1070,6 +1072,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
         name: isGroup ? 'Grup WhatsApp' : fallbackName,
         phone: isGroup ? null : (phone || null),
         remoteJid: isGroup ? remoteJid : phone ? `${phone}@s.whatsapp.net` : remoteJid,
+        devicePhone,
         leadSource: isGroup ? 'whatsapp_group' : (referralMarker ? 'meta_ads' : 'whatsapp'),
         metaReferralMarker: referralMarker?.ctwaClid,
         adId: referralMarker?.adId,
@@ -1103,6 +1106,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
         ...(!isGroup && !prospect.phone && phone ? { phone } : {}),
         ...(shouldUpdateJid ? { remoteJid: targetJid } : {}),
         ...(!isGroup && nameIsGeneric && validSenderName ? { name: validSenderName } : {}),
+        ...(devicePhone ? { devicePhone } : {}),
       },
       select: { id: true, name: true, phone: true, remoteJid: true, packageId: true, userId: true, notes: true, updatedAt: true }
     });
@@ -1345,6 +1349,7 @@ internalRouter.post('/wa/status', asyncHandler(async (req, res) => {
     update: { status: input.status, qrCode, phoneNumber, lastConnectedAt: input.status === 'connected' ? new Date() : undefined },
     create: { brandId: input.brandId, sessionName: `brand_${input.brandId}`, status: input.status, qrCode, phoneNumber: phoneNumber ?? null },
   });
+  if (input.status === 'connected') await adoptUnassignedProspects(input.brandId, session.phoneNumber);
   emitToBrand(input.brandId, input.status === 'qr_ready' ? 'wa:qr' : 'wa:status', session);
   void onWhatsappStatus(input.brandId, input.status);
   res.json({ success: true, data: session });

@@ -1,6 +1,7 @@
 import { businessDateKey, dateOnlyKey, isLostStatus, isWonStatus, lostStatuses, PIC_TAKEOVER_AFTER_MINUTES, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
+import { visibleProspectWhere } from '../chat/device-scope.js';
 
 /**
  * "Perlu dikerjakan sekarang" di Ringkasan, berbeda per role. Hitungan SLA memakai daftar percakapan yang
@@ -40,7 +41,7 @@ const isStaleWait = (c: Conversation, now: Date) => Boolean(c.awaitingSince) && 
 const STALE_HINT = `Belum dibalas lebih dari ${ACTIVE_WAIT_HOURS} jam: balas, tandai Batal, atau lepas PIC`;
 
 async function conversationsFor(brandIds: number[]) {
-  const lists = await Promise.all(brandIds.map((id) => getLivechatConversationsForBrand(id, { requireConnected: false })));
+  const lists = await Promise.all(brandIds.map((id) => getLivechatConversationsForBrand(id)));
   return lists.flat().filter((c) => !c.isGroup && !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && !c.spamAt && !isWonStatus(c.status) && !isLostStatus(c.status));
 }
 
@@ -136,6 +137,7 @@ export async function tasksForFinance(brandIds: number[], now = new Date()): Pro
 }
 
 export async function tasksForManager(brandIds: number[], now = new Date()): Promise<DashboardTasks> {
+  const deviceWhere = await visibleProspectWhere(brandIds);
   const [conversations, proofs, sessions, brands, incomplete, invalidPic] = await Promise.all([
     conversationsFor(brandIds),
     pendingProofs(brandIds),
@@ -152,7 +154,7 @@ export async function tasksForManager(brandIds: number[], now = new Date()): Pro
     // Data lama: PIC yang bukan CS aktif (mis. Super Admin, CS nonaktif) — tidak bisa dikerjakan sesuai aturan PIC.
     prisma.prospect.count({
       where: {
-        brandId: { in: brandIds }, userId: { not: null }, status: { notIn: CLOSED },
+        brandId: { in: brandIds }, userId: { not: null }, status: { notIn: CLOSED }, ...deviceWhere,
         user: { is: { OR: [{ role: { not: 'cs' } }, { isActive: false }] } },
       },
     }),

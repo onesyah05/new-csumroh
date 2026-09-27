@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../../db/prisma.js';
+import { activeDevicePhone } from '../chat/device-scope.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
@@ -277,6 +278,8 @@ contactsRouter.post('/', requireRole('superadmin', 'admin'), asyncHandler(async 
       city: input.city || null,
       remoteJid: `${phone}@s.whatsapp.net`,
       leadSource: 'whatsapp', // marked as whatsapp lead so it syncs with connected device
+      // Tanpa device tersambung: diikat saat device berikutnya tersambung (adoptUnassignedProspects).
+      devicePhone: await activeDevicePhone(brandId),
     },
     include: { user: { select: { id: true, name: true } } },
   });

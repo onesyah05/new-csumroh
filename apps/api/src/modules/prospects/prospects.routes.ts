@@ -45,6 +45,7 @@ import { queueCapiForStatus } from '../capi/capi.service.js';
 import { updateSpamAudienceMember } from '../ads/spam-audience.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
+import { activeDevicePhone } from '../chat/device-scope.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
 import { env } from '../../config/env.js';
 import {
@@ -122,7 +123,7 @@ prospectsRouter.get('/', asyncHandler(async (req, res) => {
   const filter = req.query.filter ? String(req.query.filter) : undefined;
 
   // STRICT RULE: Data pipeline HANYA menampilkan kontak yang ada di live chat WA
-  const livechatList = await getLivechatConversationsForBrand(brandId, { requireConnected: false });
+  const livechatList = await getLivechatConversationsForBrand(brandId);
   // Chat spam tidak ikut pipeline (tetap terlihat di Inbox dengan label Spam).
   let prospects = livechatList.filter((c) => !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && !c.spamAt);
 
@@ -233,6 +234,7 @@ prospectsRouter.post('/', asyncHandler(async (req, res) => {
       phone: input.phone,
       city: input.city,
       leadSource: input.leadSource,
+      devicePhone: await activeDevicePhone(brandId),
       packageId: input.packageId,
       notes: input.notes,
       nextFollowupDate: input.nextFollowupDate ? new Date(input.nextFollowupDate) : null,

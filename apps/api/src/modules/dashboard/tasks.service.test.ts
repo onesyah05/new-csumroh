@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../chat/chat.routes.js', () => ({ getLivechatConversationsForBrand: mocks.conversations }));
+vi.mock('../chat/device-scope.js', () => ({ visibleProspectWhere: vi.fn(async () => ({})) }));
 vi.mock('../../db/prisma.js', () => ({
   prisma: {
     prospect: { findMany: mocks.prospectFindMany, count: mocks.prospectCount },

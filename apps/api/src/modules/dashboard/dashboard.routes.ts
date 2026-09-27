@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { businessDateKey, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
+import { visibleProspectWhere } from '../chat/device-scope.js';
 import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/http.js';
 import { buildSummary, departures, parsePeriod, periodRange } from './summary.service.js';
@@ -29,9 +30,11 @@ dashboardRouter.get('/', asyncHandler(async (req, res) => {
   const ownerFilter = isCs ? { userId: req.user!.id } : {};
   const today = new Date(`${businessDateKey()}T00:00:00.000Z`);
 
+  // Ringkasan lead hanya dari kontak device yang sedang tersambung (sama dengan Inbox & Pipeline).
+  const deviceWhere = await visibleProspectWhere(brandIds);
   const [prospects, csUsers, packages] = await Promise.all([
     prisma.prospect.findMany({
-      where: { brandId: { in: brandIds }, ...ownerFilter, spamAt: null },
+      where: { brandId: { in: brandIds }, ...ownerFilter, spamAt: null, ...deviceWhere },
       select: {
         id: true, brandId: true, userId: true, status: true, leadSource: true, dealValue: true,
         dpPaidAt: true, createdAt: true, offerSentAt: true, invoiceSentAt: true,
