@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import dns from 'node:dns';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -26,6 +27,10 @@ import { startScheduler } from './jobs/scheduler.js';
 import { ensureConversationStats } from './modules/chat/conversation-stats.js';
 
 import path from 'node:path';
+
+// Sebagian VPS tidak punya jalur keluar IPv6 walau graph.facebook.com mengiklankan AAAA: koneksi menggantung
+// sampai timeout dan event Meta gagal diam-diam. Utamakan IPv4 untuk semua koneksi keluar.
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 app.set('trust proxy', 1);

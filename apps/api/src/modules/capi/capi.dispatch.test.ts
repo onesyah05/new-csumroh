@@ -38,17 +38,17 @@ beforeEach(() => {
 });
 
 describe('Aturan event CAPI', () => {
-  it('Lead dikirim sekali saat prospek terkualifikasi atau tahap sesudahnya', async () => {
+  it('QualifiedLead dikirim sekali saat prospek terkualifikasi atau tahap sesudahnya', async () => {
     await dispatchCapiForStatus(5, 'qualified');
-    expect(mocks.sent).toEqual(['Lead']);
+    expect(mocks.sent).toEqual(['QualifiedLead']);
     mocks.prospect = { ...base, offerSentAt: new Date(), dealValue: 40_000_000 };
     await dispatchCapiForStatus(5, 'offer');
-    expect(mocks.sent).toEqual(['Lead', 'AddToCart']);
+    expect(mocks.sent).toEqual(['QualifiedLead', 'AddToCart']);
   });
 
-  it('chat pertama hanya Contact, bukan Lead', async () => {
+  it('chat pertama hanya LeadSubmitted, bukan QualifiedLead', async () => {
     await dispatchCapiForStatus(5, 'contact');
-    expect(mocks.sent).toEqual(['Contact']);
+    expect(mocks.sent).toEqual(['LeadSubmitted']);
   });
 
   it('prospek spam tidak pernah dikirim ke Meta', async () => {
