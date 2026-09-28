@@ -10,6 +10,7 @@ import { fetchAdSpend } from './ad-spend.js';
 import { fetchAdInsights } from '../ads/ad-insights.js';
 import { SpamAudienceError, syncSpamAudience } from '../ads/spam-audience.js';
 import { normalizePhone } from '../capi/capi.payload.js';
+import { withAdsToken } from '../capi/meta-token.js';
 
 /**
  * Laporan manajemen (Superadmin & Admin): penjualan, kinerja CS, sumber lead, alasan batal, pembayaran, iklan Meta,
@@ -313,7 +314,7 @@ reportsRouter.get('/ads', asyncHandler(async (req, res) => {
   const [brands, leads, deals] = await Promise.all([
     prisma.brand.findMany({
       where: brandId ? { id: brandId } : {},
-      select: { id: true, name: true, metaAdAccountId: true, metaAccessToken: true },
+      select: { id: true, name: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true },
       orderBy: { name: 'asc' },
     }),
     prisma.prospect.groupBy({ by: ['brandId'], where: { ...brandWhere, leadSource: 'meta_ads', createdAt: range, ...notSpam }, _count: true }),
@@ -322,7 +323,7 @@ reportsRouter.get('/ads', asyncHandler(async (req, res) => {
       select: { brandId: true, prospect: { select: { dealValue: true } } },
     }),
   ]);
-  const spends = await Promise.all(brands.map((brand) => fetchAdSpend(brand, from, to)));
+  const spends = await Promise.all(brands.map((brand) => fetchAdSpend(withAdsToken(brand), from, to)));
 
   const rows = brands.map((brand, index) => {
     const ad = spends[index]!;
@@ -398,12 +399,12 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
   const { format, from, to, range, brandId, brandWhere } = parseRange(req);
   const brands = await prisma.brand.findMany({
     where: brandId ? { id: brandId } : {},
-    select: { id: true, name: true, metaAdAccountId: true, metaAccessToken: true },
+    select: { id: true, name: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true },
     orderBy: { name: 'asc' },
   });
   const brandIds = brands.map((b) => b.id);
   const [insights, leads, payments] = await Promise.all([
-    Promise.all(brands.map((brand) => fetchAdInsights(brand, from, to))),
+    Promise.all(brands.map((brand) => fetchAdInsights(withAdsToken(brand), from, to))),
     prospectAdIds(brandIds, range),
     prisma.payment.findMany({ where: { ...brandWhere, status: 'verified', createdAt: range }, select: { prospectId: true, prospect: { select: { dealValue: true } } } }),
   ]);
@@ -478,12 +479,12 @@ reportsRouter.get('/spam-audience', asyncHandler(async (req, res) => {
     return;
   }
   const [brand, count] = await Promise.all([
-    prisma.brand.findUniqueOrThrow({ where: { id: brandId }, select: { metaSpamAudienceId: true, metaSpamSyncedAt: true, metaAdAccountId: true, metaAccessToken: true } }),
+    prisma.brand.findUniqueOrThrow({ where: { id: brandId }, select: { metaSpamAudienceId: true, metaSpamSyncedAt: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true } }),
     prisma.prospect.count({ where }),
   ]);
   res.json({
     success: true,
-    data: { count, audienceId: brand.metaSpamAudienceId, syncedAt: brand.metaSpamSyncedAt, ready: Boolean(brand.metaAdAccountId && brand.metaAccessToken) },
+    data: { count, audienceId: brand.metaSpamAudienceId, syncedAt: brand.metaSpamSyncedAt, ready: Boolean(brand.metaAdAccountId && (brand.metaAdsAccessToken || brand.metaAccessToken)) },
   });
 }));
 

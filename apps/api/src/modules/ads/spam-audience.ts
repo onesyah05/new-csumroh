@@ -1,6 +1,6 @@
 import { env } from '../../config/env.js';
 import { prisma } from '../../db/prisma.js';
-import { decryptMetaToken } from '../capi/meta-token.js';
+import { decryptMetaToken, withAdsToken } from '../capi/meta-token.js';
 import { normalizePhone, sha256 } from '../capi/capi.payload.js';
 
 /**
@@ -71,7 +71,7 @@ async function send(audienceId: string, token: string, hashes: string[], method:
 
 /** Unggah seluruh nomor spam brand (Meta mengabaikan duplikat). */
 export async function syncSpamAudience(brandId: number) {
-  const brand = await prisma.brand.findUniqueOrThrow({ where: { id: brandId }, select: { id: true, metaAdAccountId: true, metaAccessToken: true, metaSpamAudienceId: true } });
+  const brand = withAdsToken(await prisma.brand.findUniqueOrThrow({ where: { id: brandId }, select: { id: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true, metaSpamAudienceId: true } }));
   assertConfigured(brand);
   const token = decryptMetaToken(brand.metaAccessToken);
   const audienceId = await ensureAudience(brand, token);
@@ -86,7 +86,8 @@ export async function syncSpamAudience(brandId: number) {
 /** Tambah/hapus satu nomor saat CS menandai (atau membatalkan) spam; hanya bila audiens sudah pernah dibuat. */
 export async function updateSpamAudienceMember(brandId: number, phone: string | null, spam: boolean) {
   if (!phone) return;
-  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { id: true, metaAdAccountId: true, metaAccessToken: true, metaSpamAudienceId: true } });
+  const row = await prisma.brand.findUnique({ where: { id: brandId }, select: { id: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true, metaSpamAudienceId: true } });
+  const brand = row ? withAdsToken(row) : null;
   if (!brand?.metaSpamAudienceId || !brand.metaAccessToken || !brand.metaAdAccountId) return;
   const hashes = hashPhones([phone]);
   if (!hashes.length) return;

@@ -15,7 +15,7 @@ vi.mock('../../db/prisma.js', () => ({
     prospect: { findMany: async () => mocks.spam },
   },
 }));
-vi.mock('../capi/meta-token.js', () => ({ decryptMetaToken: () => 'TOKEN' }));
+vi.mock('../capi/meta-token.js', () => ({ decryptMetaToken: () => 'TOKEN', withAdsToken: (b: any) => ({ ...b, metaAccessToken: b.metaAdsAccessToken || b.metaAccessToken }) }));
 
 import { hashPhones, SpamAudienceError, syncSpamAudience, updateSpamAudienceMember } from './spam-audience.js';
 import { sha256 } from '../capi/capi.payload.js';

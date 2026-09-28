@@ -82,6 +82,8 @@ model Brand {
   facebookPageId     String?                 @map("facebook_page_id") @db.VarChar(50)
   metaWabaId         String?                 @map("meta_waba_id") @db.VarChar(50)
   metaAdAccountId    String?                 @map("meta_ad_account_id") @db.VarChar(50)
+  // Token baca iklan (ads_read) untuk Laporan & audiens spam. Token CAPI dari Events Manager hanya boleh kirim event.
+  metaAdsAccessToken String?                 @map("meta_ads_access_token") @db.Text
   metaSpamAudienceId String?                 @map("meta_spam_audience_id") @db.VarChar(50)
   metaSpamSyncedAt   DateTime?               @map("meta_spam_synced_at")
   metaTestEventCode  String?                 @map("meta_test_event_code") @db.VarChar(100)
