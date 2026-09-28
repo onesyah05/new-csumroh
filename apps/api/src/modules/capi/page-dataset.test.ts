@@ -11,7 +11,7 @@ vi.mock('./meta-token.js', () => ({ decryptMetaToken: () => 'TOKEN', encryptMeta
 
 import { capiRouter } from './capi.routes.js';
 
-function pageDataset() {
+function ownerDataset() {
   const layer = (capiRouter as any).stack.find((l: any) => l.route?.path === '/page-dataset');
   return new Promise<any>((resolve, reject) => {
     const res = { json: (body: any) => resolve(body.data), status: () => res };
@@ -19,26 +19,37 @@ function pageDataset() {
   });
 }
 
+const reply = (status: number, body: string) => ({ status, text: async () => body });
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.brand.mockResolvedValue({ facebookPageId: '101', metaAccessToken: 'enc', metaPixelId: '640' });
+  mocks.brand.mockResolvedValue({ facebookPageId: '101', metaWabaId: '170', metaAccessToken: 'enc', metaPixelId: '640' });
 });
 
-describe('Dataset milik Facebook Page', () => {
-  it('meminta dataset Page ke Meta tanpa menyimpan apa pun', async () => {
-    const fetchMock = vi.fn(async () => ({ status: 200, text: async () => '{"id":"999"}' }));
+describe('Dataset milik aset pengirim pesan (CTWA)', () => {
+  it('mengutamakan dataset milik WhatsApp Business Account, tanpa menyimpan apa pun', async () => {
+    const fetchMock = vi.fn(async () => reply(200, '{"id":"999"}'));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(pageDataset()).resolves.toEqual({ datasetId: '999', currentDatasetId: '640', same: false });
-    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toMatch(/\/101\/dataset$/);
+    await expect(ownerDataset()).resolves.toEqual({ datasetId: '999', owner: 'WhatsApp Business Account', currentDatasetId: '640', same: false });
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toMatch(/\/170\/dataset$/);
   });
 
-  it('pesan penolakan Meta diteruskan apa adanya', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 403, text: async () => '{"error":{"message":"(#200) Permissions error"}}' })));
-    await expect(pageDataset()).rejects.toThrow(/Permissions error.*page_events/);
+  it('bila WABA ditolak, mencoba dataset milik Facebook Page', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(reply(403, '{"error":{"message":"(#200) missing whatsapp_business_manage_events"}}'))
+      .mockResolvedValueOnce(reply(200, '{"id":"888"}'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(ownerDataset()).resolves.toMatchObject({ datasetId: '888', owner: 'Facebook Page' });
+    expect(String((fetchMock.mock.calls[1] as unknown[])[0])).toMatch(/\/101\/dataset$/);
   });
 
-  it('butuh Page ID dan token tersimpan', async () => {
-    mocks.brand.mockResolvedValue({ facebookPageId: null, metaAccessToken: 'enc', metaPixelId: '640' });
-    await expect(pageDataset()).rejects.toThrow(/Facebook Page ID/);
+  it('semua ditolak: pesan Meta dan izin yang dibutuhkan ditampilkan', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => reply(403, '{"error":{"message":"(#200) Permissions error"}}')));
+    await expect(ownerDataset()).rejects.toThrow(/whatsapp_business_manage_events.*Permissions error.*page_events/);
+  });
+
+  it('butuh token serta WABA ID atau Page ID', async () => {
+    mocks.brand.mockResolvedValue({ facebookPageId: null, metaWabaId: null, metaAccessToken: 'enc', metaPixelId: '640' });
+    await expect(ownerDataset()).rejects.toThrow(/WABA ID atau Facebook Page ID/);
   });
 });

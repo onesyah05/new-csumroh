@@ -118,36 +118,50 @@ capiRouter.post('/verify', asyncHandler(async (req, res) => {
 }));
 
 /**
- * Event CTWA harus dikirim ke dataset yang tertaut ke Facebook Page pemasang iklan (subcode 2804131). Tautan itu
- * tidak bisa dibuat dari Business Settings; Dataset API mengembalikan dataset milik Page (dibuat bila belum ada).
+ * Event CTWA harus dikirim ke dataset yang tertaut ke aset pengirim pesan (subcode 2804131). Tautan itu tidak bisa
+ * dibuat dari Business Settings; Dataset API mengembalikan dataset milik WhatsApp Business Account (jalur resmi CTWA,
+ * izin whatsapp_business_manage_events) atau milik Facebook Page (izin page_events), dan membuatnya bila belum ada.
  * Tidak menyimpan apa pun: Admin memutuskan sendiri apakah ID itu dipakai.
  */
+async function requestOwnerDataset(ownerId: string, token: string) {
+  try {
+    const response = await fetch(`https://graph.facebook.com/${env.META_GRAPH_API_VERSION}/${encodeURIComponent(ownerId)}/dataset`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const text = (await response.text()).slice(0, 5000);
+    const body = (() => { try { return JSON.parse(text) as { id?: string; error?: { message?: string; error_user_msg?: string } }; } catch { return {}; } })();
+    if (response.status < 400 && body.id) return { datasetId: body.id };
+    return { error: `${response.status}: ${body.error?.error_user_msg || body.error?.message || text || 'tanpa respons'}` };
+  } catch (error) {
+    return { error: `jaringan: ${error instanceof Error ? error.message : 'gagal'}` };
+  }
+}
+
 capiRouter.post('/page-dataset', asyncHandler(async (req, res) => {
   const input = z.object({ brandId: z.number().int().positive().optional() }).parse(req.body);
   const brandId = scopedBrandId(req, input.brandId);
-  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { facebookPageId: true, metaAccessToken: true, metaPixelId: true } });
+  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { facebookPageId: true, metaWabaId: true, metaAccessToken: true, metaPixelId: true } });
   if (!brand) throw new HttpError(404, 'Brand tidak ditemukan.');
-  if (!brand.facebookPageId || !brand.metaAccessToken) throw new HttpError(422, 'Simpan Facebook Page ID dan access token terlebih dahulu.');
-
-  let responseStatus: number | undefined;
-  let responseText = '';
-  try {
-    const response = await fetch(`https://graph.facebook.com/${env.META_GRAPH_API_VERSION}/${encodeURIComponent(brand.facebookPageId)}/dataset`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${decryptMetaToken(brand.metaAccessToken)}` },
-      signal: AbortSignal.timeout(15_000),
-    });
-    responseStatus = response.status;
-    responseText = (await response.text()).slice(0, 5000);
-  } catch (error) {
-    throw new HttpError(502, `Tidak dapat menghubungi Meta: ${error instanceof Error ? error.message : 'jaringan'}`);
+  if (!brand.metaAccessToken || (!brand.metaWabaId && !brand.facebookPageId)) {
+    throw new HttpError(422, 'Simpan access token serta WABA ID atau Facebook Page ID terlebih dahulu.');
   }
-  const body = (() => { try { return JSON.parse(responseText) as { id?: string; error?: { message?: string; error_user_msg?: string } }; } catch { return {}; } })();
-  if (!responseStatus || responseStatus >= 400 || !body.id) {
-    const reason = body.error?.error_user_msg || body.error?.message || responseText || 'Tanpa respons';
-    throw new HttpError(422, `Meta menolak (${responseStatus ?? 'jaringan'}): ${reason}. Pastikan token punya izin page_events dan akses penuh ke Page.`);
+  const token = decryptMetaToken(brand.metaAccessToken);
+  const owners = [
+    ...(brand.metaWabaId ? [{ id: brand.metaWabaId, label: 'WhatsApp Business Account', permission: 'whatsapp_business_manage_events' }] : []),
+    ...(brand.facebookPageId ? [{ id: brand.facebookPageId, label: 'Facebook Page', permission: 'page_events' }] : []),
+  ];
+  const failures: string[] = [];
+  for (const owner of owners) {
+    const result = await requestOwnerDataset(owner.id, token);
+    if (result.datasetId) {
+      res.json({ success: true, data: { datasetId: result.datasetId, owner: owner.label, currentDatasetId: brand.metaPixelId, same: result.datasetId === brand.metaPixelId } });
+      return;
+    }
+    failures.push(`${owner.label} (butuh izin ${owner.permission}) ditolak ${result.error}`);
   }
-  res.json({ success: true, data: { datasetId: body.id, currentDatasetId: brand.metaPixelId, same: body.id === brand.metaPixelId } });
+  throw new HttpError(422, `Meta menolak: ${failures.join(' · ')}`);
 }));
 
 capiRouter.get('/logs', asyncHandler(async (req, res) => {

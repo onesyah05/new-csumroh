@@ -214,11 +214,11 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
   });
 
   // Dataset milik Facebook Page (wajib untuk event CTWA). Hasilnya ditinjau Admin sebelum menggantikan Dataset ID.
-  const [pageDataset, setPageDataset] = useState<{ datasetId: string; currentDatasetId: string | null; same: boolean } | null>(null);
+  const [pageDataset, setPageDataset] = useState<{ datasetId: string; owner: string; currentDatasetId: string | null; same: boolean } | null>(null);
   const pageDatasetMutation = useMutation({
-    mutationFn: () => api.post<{ datasetId: string; currentDatasetId: string | null; same: boolean }>('/meta/page-dataset', { brandId: currentBrandId }),
+    mutationFn: () => api.post<{ datasetId: string; owner: string; currentDatasetId: string | null; same: boolean }>('/meta/page-dataset', { brandId: currentBrandId }),
     onSuccess: (data) => {
-      if (data.same) showToast('Dataset ID sudah benar: dataset ini milik Page yang tersimpan.');
+      if (data.same) showToast(`Dataset ID sudah benar: dataset ini milik ${data.owner} yang tersimpan.`);
       else setPageDataset(data);
     },
     onError: (error) => showToast(error.message),
@@ -476,7 +476,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       onClick={() => pageDatasetMutation.mutate()}
                     >
                       <Link2 size={12} />
-                      {pageDatasetMutation.isPending ? 'Menghubungi Meta…' : 'Pakai dataset milik Facebook Page (wajib untuk iklan CTWA)'}
+                      {pageDatasetMutation.isPending ? 'Menghubungi Meta…' : 'Ambil dataset milik WhatsApp/Page (wajib untuk iklan CTWA)'}
                     </button>
                   </div>
 
@@ -1046,8 +1046,8 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
         pending={useDatasetMutation.isPending}
         error={useDatasetMutation.error?.message ?? null}
         tone="primary"
-        title="Ganti Dataset ID dengan dataset milik Page?"
-        description={`Meta mengembalikan dataset ${pageDataset?.datasetId ?? ''} yang tertaut ke Facebook Page ini. Dataset saat ini (${pageDataset?.currentDatasetId || 'kosong'}) belum tertaut ke Page, sehingga event dari iklan Click-to-WhatsApp ditolak. Event berikutnya dikirim ke dataset ini.`}
+        title="Ganti Dataset ID dengan dataset untuk iklan CTWA?"
+        description={`Meta mengembalikan dataset ${pageDataset?.datasetId ?? ''} yang tertaut ke ${pageDataset?.owner ?? 'aset'} brand ini. Dataset saat ini (${pageDataset?.currentDatasetId || 'kosong'}) belum tertaut ke aset pengirim pesan, sehingga event dari iklan Click-to-WhatsApp ditolak. Event berikutnya dikirim ke dataset ini.`}
         confirmLabel="Pakai dataset ini"
       />
 
