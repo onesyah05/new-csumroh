@@ -5,6 +5,8 @@ import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { decryptMetaToken, encryptMetaToken, maskMetaToken } from './meta-token.js';
+import { clearAdInsightsCache } from '../ads/ad-insights.js';
+import { clearAdSpendCache } from '../reports/ad-spend.js';
 import { buildCapiPayload, CAPI_EVENT_NAMES } from './capi.payload.js';
 
 export const capiRouter = Router();
@@ -20,6 +22,9 @@ const settingsSchema = z.object({
   adAccountId: z.string().trim().max(60).transform((value) => value.replace(/^act_/i, '')).pipe(metaId).default(''),
   accessToken: z.string().trim().max(4096).optional(),
   clearAccessToken: z.boolean().optional(),
+  // Token System User ber-izin ads_read untuk Laporan & audiens spam (opsional).
+  adsAccessToken: z.string().trim().max(4096).optional(),
+  clearAdsAccessToken: z.boolean().optional(),
   testEventCode: z.string().trim().max(100),
 });
 
@@ -28,6 +33,7 @@ function settingsResponse(brand: {
   name: string;
   metaPixelId: string | null;
   metaAccessToken: string | null;
+  metaAdsAccessToken: string | null;
   facebookPageId: string | null;
   metaWabaId: string | null;
   metaAdAccountId: string | null;
@@ -48,6 +54,7 @@ function settingsResponse(brand: {
     testEventCode: brand.metaTestEventCode ?? '',
     accessTokenConfigured: Boolean(brand.metaAccessToken),
     maskedAccessToken: maskMetaToken(brand.metaAccessToken),
+    adsAccessTokenConfigured: Boolean(brand.metaAdsAccessToken),
     connectionConfigured,
     ctwaReady,
     verifiedAt: brand.metaVerifiedAt,
@@ -65,12 +72,15 @@ capiRouter.get('/settings', asyncHandler(async (req, res) => {
 capiRouter.put('/settings', asyncHandler(async (req, res) => {
   const input = settingsSchema.parse(req.body);
   const brandId = scopedBrandId(req, input.brandId);
-  const current = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true } });
+  const current = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true, metaAdsAccessToken: true } });
   if (!current) throw new HttpError(404, 'Brand tidak ditemukan.');
 
   let metaAccessToken = current.metaAccessToken;
   if (input.clearAccessToken) metaAccessToken = null;
   else if (input.accessToken) metaAccessToken = encryptMetaToken(input.accessToken);
+  let metaAdsAccessToken = current.metaAdsAccessToken;
+  if (input.clearAdsAccessToken) metaAdsAccessToken = null;
+  else if (input.adsAccessToken) metaAdsAccessToken = encryptMetaToken(input.adsAccessToken);
 
   const brand = await prisma.brand.update({
     where: { id: brandId },
@@ -81,10 +91,14 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
       metaAdAccountId: input.adAccountId || null,
       metaTestEventCode: input.testEventCode || null,
       metaAccessToken,
+      metaAdsAccessToken,
       metaVerifiedAt: null,
       metaLastError: null,
     },
   });
+  // Laporan iklan di-cache per ad account: token/ad account baru harus langsung terpakai.
+  clearAdInsightsCache();
+  clearAdSpendCache();
   res.json({ success: true, data: settingsResponse(brand) });
 }));
 

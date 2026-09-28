@@ -19,6 +19,12 @@ const httpsUrlSchema = z.union([
   z.literal('').transform(() => null),
 ]).optional().nullable();
 
+/** Token Meta & error Meta tidak pernah dikirim ke browser, walau terenkripsi. */
+function withoutSecrets<T extends { metaAccessToken?: unknown; metaAdsAccessToken?: unknown; metaLastError?: unknown }>(brand: T) {
+  const { metaAccessToken: _capi, metaAdsAccessToken: _ads, metaLastError: _error, ...rest } = brand;
+  return rest;
+}
+
 export const catalogRouter = Router();
 catalogRouter.use(authGuard);
 
@@ -39,7 +45,7 @@ catalogRouter.get('/brands', asyncHandler(async (req, res) => {
     : await prisma.brand.findMany({ where: { id: { in: allowedBrandIds.length > 0 ? allowedBrandIds : [-1] } }, include: { _count: { select: { users: true, prospects: true, packages: true } }, whatsappSession: true } });
   // QR pairing hanya untuk pengelola perangkat; siapa pun yang memindainya dapat menautkan sesi WA brand.
   const canPairDevice = req.user!.role === 'superadmin' || req.user!.role === 'admin';
-  const data = rows.map(({ metaAccessToken: _secret, metaLastError: _privateError, whatsappSession, ...brand }) => ({
+  const data = rows.map((row) => withoutSecrets(row)).map(({ whatsappSession, ...brand }) => ({
     ...brand,
     whatsappSession: whatsappSession && !canPairDevice ? { ...whatsappSession, qrCode: null } : whatsappSession,
   }));
@@ -90,7 +96,7 @@ catalogRouter.get('/brands/:id', asyncHandler(async (req, res) => {
     },
   });
   if (!brand) throw new HttpError(404, 'Brand tidak ditemukan.');
-  const { metaAccessToken: _secret, metaLastError: _privateError, whatsappSession, ...rest } = brand;
+  const { whatsappSession, ...rest } = withoutSecrets(brand);
   const canPairDevice = req.user!.role === 'superadmin' || req.user!.role === 'admin';
   const data = { ...rest, whatsappSession: whatsappSession && !canPairDevice ? { ...whatsappSession, qrCode: null } : whatsappSession };
   res.json({ success: true, data });
@@ -166,7 +172,7 @@ catalogRouter.post('/brands', requireRole('superadmin'), asyncHandler(async (req
     gmapsUrl: httpsUrlSchema,
     phone: z.string().max(30).optional().nullable()
   }).parse(req.body);
-  const data = await prisma.brand.create({ data: input as any });
+  const data = withoutSecrets(await prisma.brand.create({ data: input as any }));
   res.status(201).json({ success: true, data });
 }));
 
@@ -194,7 +200,7 @@ catalogRouter.patch('/brands/:id', requireRole('superadmin'), asyncHandler(async
     fs.promises.unlink(oldFile).catch(() => {});
   }
 
-  const data = await prisma.brand.update({ where: { id }, data: input as any });
+  const data = withoutSecrets(await prisma.brand.update({ where: { id }, data: input as any }));
   res.json({ success: true, data });
 }));
 

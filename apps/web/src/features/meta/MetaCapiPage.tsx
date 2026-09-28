@@ -53,6 +53,7 @@ interface MetaSettings {
   testEventCode: string;
   accessTokenConfigured: boolean;
   maskedAccessToken?: string;
+  adsAccessTokenConfigured?: boolean;
   connectionConfigured: boolean;
   ctwaReady: boolean;
   verifiedAt: string | null;
@@ -87,6 +88,7 @@ const emptyForm = {
   whatsappBusinessAccountId: '',
   adAccountId: '',
   accessToken: '',
+  adsAccessToken: '',
   testEventCode: '',
 };
 
@@ -178,6 +180,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
       whatsappBusinessAccountId: settingsQuery.data.whatsappBusinessAccountId ?? '',
       adAccountId: settingsQuery.data.adAccountId ?? '',
       accessToken: '',
+      adsAccessToken: '',
       testEventCode: settingsQuery.data.testEventCode ?? '',
     });
     setTestEventCodeInput(settingsQuery.data.testEventCode ?? '');
@@ -190,11 +193,12 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
         brandId: currentBrandId,
         ...form,
         accessToken: form.accessToken || undefined,
+        adsAccessToken: form.adsAccessToken || undefined,
         clearAccessToken,
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['meta-settings', currentBrandId], data);
-      setForm((cur) => ({ ...cur, accessToken: '' }));
+      setForm((cur) => ({ ...cur, accessToken: '', adsAccessToken: '' }));
       void queryClient.invalidateQueries({ queryKey: ['brands'] });
       showToast('Konfigurasi Meta CAPI berhasil disimpan.');
     },
@@ -492,7 +496,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       placeholder="Contoh: 1234567890 (tanpa act_)"
                       aria-describedby="meta-ad-account-hint"
                     />
-                    <p id="meta-ad-account-hint" className="text-xs text-zinc-500">Untuk biaya iklan di Laporan. Token perlu izin ads_read.</p>
+                    <p id="meta-ad-account-hint" className="text-xs text-zinc-500">Untuk biaya & kreatif iklan di Laporan. Butuh Token Laporan Iklan (ads_read) di bawah.</p>
                   </div>
 
                   <div className="space-y-1.5">
@@ -517,7 +521,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                   <KeyRound size={16} className="text-zinc-600" />
                   <div>
                     <h3 className="text-xs font-extrabold text-zinc-700">
-                      System User Access Token
+                      Access Token Meta
                     </h3>
                   </div>
                 </div>
@@ -525,7 +529,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <label htmlFor="meta-token" className="label font-semibold">
-                      Access Token Permanen (EAAB...) <span className="text-rose-500">*</span>
+                      Token CAPI · kirim event <span className="text-rose-500">*</span>
                     </label>
                     {settings?.accessTokenConfigured && (
                       <span className="font-mono text-xs text-emerald-600 font-semibold flex items-center gap-1">
@@ -546,7 +550,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                         placeholder={
                           settings?.accessTokenConfigured
                             ? 'Token sudah tersimpan aman. Ketik baru jika ingin mengganti.'
-                            : 'Tempel EAAB... access token dari Meta Business Manager'
+                            : 'Tempel token dari Events Manager → dataset → Settings → Generate access token'
                         }
                       />
                       <button
@@ -571,6 +575,36 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       </Button>
                     )}
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <label htmlFor="meta-ads-token" className="label font-semibold">
+                      Token Laporan Iklan · ads_read (Opsional)
+                    </label>
+                    {settings?.adsAccessTokenConfigured && (
+                      <span className="font-mono text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                        <CheckCircle2 size={12} />
+                        Token tersimpan terenkripsi
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    id="meta-ads-token"
+                    type={showPassword ? 'text' : 'password'}
+                    className="field font-mono text-xs"
+                    value={form.adsAccessToken}
+                    onChange={(e) => setForm({ ...form, adsAccessToken: e.target.value.trim() })}
+                    aria-describedby="meta-ads-token-hint"
+                    placeholder={
+                      settings?.adsAccessTokenConfigured
+                        ? 'Token sudah tersimpan aman. Ketik baru jika ingin mengganti.'
+                        : 'Token System User dengan izin ads_read (dan ads_management untuk audiens spam)'
+                    }
+                  />
+                  <p id="meta-ads-token-hint" className="text-xs text-zinc-500">
+                    Untuk nama, biaya, dan gambar iklan di Laporan serta audiens spam. Token CAPI dari Events Manager tidak bisa membaca data iklan. Kosong = memakai token CAPI.
+                  </p>
                 </div>
               </div>
 

@@ -29,3 +29,11 @@ export function maskMetaToken(value: string | null) {
   if (!value) return null;
   return '••••••••••••••••';
 }
+
+/**
+ * Token untuk membaca & mengelola iklan (Laporan, audiens spam): token ads_read khusus bila diisi, selain itu token
+ * CAPI. Token CAPI dari Events Manager hanya boleh mengirim event, tidak boleh membaca ad account.
+ */
+export function withAdsToken<T extends { metaAccessToken: string | null; metaAdsAccessToken?: string | null }>(brand: T) {
+  return { ...brand, metaAccessToken: brand.metaAdsAccessToken || brand.metaAccessToken };
+}
