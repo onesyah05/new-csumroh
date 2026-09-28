@@ -92,6 +92,7 @@ model Brand {
   packages           Package[]
   prospects          Prospect[]
   whatsappSession    WhatsappSession?
+  whatsappContacts   WhatsappContact[]
   chatMessages       ChatMessage[]
   capiLogs           MetaCapiLog[]
   userBrands         UserBrand[]
@@ -347,6 +348,21 @@ model WhatsappSession {
   brand           Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_sessions")
+}
+
+/// Nama kontak WhatsApp (nama buku kontak / nama profil) per device. Kontak sering tiba sebelum chat-nya
+/// tersimpan; disimpan di sini agar nama tetap terpasang saat prospeknya dibuat belakangan.
+model WhatsappContact {
+  id          Int      @id @default(autoincrement())
+  brandId     Int      @map("brand_id")
+  devicePhone String   @map("device_phone") @db.VarChar(30)
+  phone       String   @db.VarChar(30)
+  name        String   @db.VarChar(100)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, devicePhone, phone])
+  @@map("whatsapp_contacts")
 }
 
 model ChatMessage {

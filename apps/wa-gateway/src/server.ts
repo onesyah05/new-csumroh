@@ -112,14 +112,14 @@ async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promi
   }
 }
 
-async function syncContacts(brandId: number, contacts: HistoryContact[], lidPnMap: Map<string, string>) {
+async function syncContacts(brandId: number, contacts: HistoryContact[], lidPnMap: Map<string, string>, devicePhone?: string) {
   const normalized = contacts
     .map((contact) => toGatewayContact(brandId, contact, lidPnMap))
     .filter((contact): contact is NonNullable<typeof contact> => Boolean(contact));
   if (!normalized.length) return;
   logger.info({ brandId, received: contacts.length, imported: normalized.length }, 'Importing WhatsApp contacts');
   for (let index = 0; index < normalized.length; index += 100) {
-    await notify('/contacts/sync', { brandId, contacts: normalized.slice(index, index + 100) });
+    await notify('/contacts/sync', { brandId, devicePhone, contacts: normalized.slice(index, index + 100) });
   }
 }
 
@@ -151,6 +151,9 @@ async function startSession(brandId: number) {
     shouldSyncHistoryMessage: () => true,
   });
   sessions.set(brandId, socket);
+  // Nomor akun yang benar-benar menerima event ini. API memakainya untuk memisahkan kontak & riwayat per device,
+  // tanpa bergantung pada status sesi di database (bisa sesaat kosong saat sambung ulang).
+  const devicePhone = () => socket.user?.id?.split(':')[0]?.split('@')[0] || undefined;
   socket.ev.on('creds.update', saveCreds);
   socket.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (generations.get(brandId) !== generation) return;
@@ -202,10 +205,10 @@ async function startSession(brandId: number) {
     const skipped = messages.length - history.length;
     logger.info({ brandId, received: messages.length, imported: history.length, skipped }, 'Importing WhatsApp history');
     for (let index = 0; index < history.length; index += 50) {
-      await notify('/messages/history', { brandId, messages: history.slice(index, index + 50) });
+      await notify('/messages/history', { brandId, devicePhone: devicePhone(), messages: history.slice(index, index + 50) });
     }
     // Sync contacts AFTER history messages so existing prospects get updated with WhatsApp username / contact name
-    await syncContacts(brandId, contacts, lidPnMap);
+    await syncContacts(brandId, contacts, lidPnMap, devicePhone());
   });
   socket.ev.on('messages.upsert', async ({ messages }) => {
     for (const message of messages) {
@@ -215,7 +218,7 @@ async function startSession(brandId: number) {
           const mediaUrl = await downloadAndSaveMedia(socket, message);
           if (mediaUrl) payload.mediaUrl = mediaUrl;
         }
-        await notify('/messages/incoming', payload);
+        await notify('/messages/incoming', { ...payload, devicePhone: devicePhone() });
       }
     }
   });
@@ -226,6 +229,7 @@ async function startSession(brandId: number) {
       if (isRead) {
         await notify('/chats/read', {
           brandId,
+          devicePhone: devicePhone(),
           remoteJid: update.id,
         });
       }
@@ -288,11 +292,11 @@ async function startSession(brandId: number) {
   });
   socket.ev.on('contacts.upsert', async (contacts) => {
     addLidMappings(lidPnMap, [], contacts);
-    await syncContacts(brandId, contacts, lidPnMap);
+    await syncContacts(brandId, contacts, lidPnMap, devicePhone());
   });
   socket.ev.on('contacts.update', async (contacts) => {
     addLidMappings(lidPnMap, [], contacts);
-    await syncContacts(brandId, contacts, lidPnMap);
+    await syncContacts(brandId, contacts, lidPnMap, devicePhone());
   });
   return socket;
 }
