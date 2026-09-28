@@ -987,6 +987,8 @@ const gatewayMessageSchema = z.object({
   isFromMe: z.boolean().optional().default(false),
   status: z.string().max(30).optional().default('delivered'),
   referral: z.unknown().optional(),
+  // Nomor akun WhatsApp yang menerima/mengirim pesan (dari gateway).
+  devicePhone: z.string().max(40).optional(),
 });
 
 type GatewayMessageInput = z.infer<typeof gatewayMessageSchema>;
@@ -1016,12 +1018,14 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
 
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
   const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { phone: true } });
+  // Percakapan diikat ke device yang menerimanya. Sumber utama: nomor akun dari gateway (pasti benar walau status sesi
+  // di database sesaat kosong saat sambung ulang); status sesi hanya cadangan untuk gateway versi lama.
+  const devicePhone = normalizePhoneIdentifier(input.devicePhone) || normalizePhoneIdentifier(session?.phoneNumber) || undefined;
   const ownPhones = new Set([
+    devicePhone,
     normalizePhoneIdentifier(session?.phoneNumber),
     normalizePhoneIdentifier(brand?.phone),
   ].filter(Boolean));
-  // Percakapan diikat ke device yang menerimanya; bila berlanjut di nomor lain, ikut pindah ke nomor itu.
-  const devicePhone = normalizePhoneIdentifier(session?.phoneNumber) || undefined;
 
   let rawPhone = normalizePhoneIdentifier(input.phone);
   if (rawPhone && ownPhones.has(rawPhone)) {
@@ -1064,7 +1068,13 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   let referralCaptured = false;
 
   // Pesan keluar membawa pushName akun WhatsApp brand sendiri, bukan nama kontak: jangan dipakai sebagai nama prospek.
-  const validSenderName = isFromMe ? undefined : senderName?.trim();
+  const senderContactName = isFromMe ? undefined : senderName?.trim();
+  // Nama pengirim pesan masuk; bila tidak ada (pesan keluar / riwayat tanpa pushName), nama kontak WhatsApp tersimpan
+  // untuk device ini. Dicari hanya saat nama prospek memang perlu diisi.
+  const knownName = async () => senderContactName || (!isGroup && devicePhone && aliases.length
+    ? (await prisma.whatsappContact.findFirst({ where: { brandId, devicePhone, phone: { in: aliases } }, select: { name: true } }))?.name
+    : undefined);
+  const validSenderName = !prospect || isGenericContactName(prospect.name, prospect.phone) ? await knownName() : undefined;
   const fallbackName = isGroup
     ? (validSenderName || 'Grup WhatsApp')
     : (validSenderName || (phone ? `+${phone}` : 'Kontak WhatsApp'));
@@ -1216,13 +1226,14 @@ internalRouter.post('/messages/status', asyncHandler(async (req, res) => {
 internalRouter.post('/chats/read', asyncHandler(async (req, res) => {
   const input = z.object({
     brandId: z.coerce.number().int().positive(),
+    devicePhone: z.string().max(40).optional(),
     remoteJid: z.string().min(3).max(100),
   }).parse(req.body);
 
   const cleanPhone = normalizePhoneIdentifier(input.remoteJid);
   const aliases = cleanPhone ? phoneAliases(cleanPhone) : [];
   // Status baca datang dari device yang sedang tersambung: percakapan device lain tidak ikut berubah.
-  const devicePhone = await activeDevicePhone(input.brandId);
+  const devicePhone = normalizePhoneIdentifier(input.devicePhone) || await activeDevicePhone(input.brandId);
 
   const prospects = await prisma.prospect.findMany({
     where: {
@@ -1292,11 +1303,11 @@ internalRouter.post('/messages/incoming', asyncHandler(async (req, res) => {
 }));
 
 internalRouter.post('/messages/history', asyncHandler(async (req, res) => {
-  const input = z.object({ brandId: z.coerce.number().int().positive(), messages: z.array(gatewayMessageSchema).max(100) }).parse(req.body);
+  const input = z.object({ brandId: z.coerce.number().int().positive(), devicePhone: z.string().max(40).optional(), messages: z.array(gatewayMessageSchema).max(100) }).parse(req.body);
   const messages = [];
   for (const item of input.messages) {
     if (item.brandId !== input.brandId) throw new HttpError(400, 'Brand histori pesan tidak konsisten.');
-    const result = await ingestGatewayMessage(item, { realtime: false });
+    const result = await ingestGatewayMessage({ ...item, devicePhone: item.devicePhone ?? input.devicePhone }, { realtime: false });
     if (result) messages.push(result);
   }
   const latest = messages.sort((a, b) => b.timestamp - a.timestamp)[0];
@@ -1314,15 +1325,24 @@ const gatewayContactSchema = z.object({
 internalRouter.post('/contacts/sync', asyncHandler(async (req, res) => {
   const input = z.object({
     brandId: z.coerce.number().int().positive(),
+    devicePhone: z.string().max(40).optional(),
     contacts: z.array(gatewayContactSchema).max(100),
   }).parse(req.body);
   let imported = 0;
   invalidateLidPhoneMap(input.brandId);
-  const devicePhone = await activeDevicePhone(input.brandId);
+  const devicePhone = normalizePhoneIdentifier(input.devicePhone) || await activeDevicePhone(input.brandId);
   for (const contact of input.contacts) {
     if (contact.brandId !== input.brandId) throw new HttpError(400, 'Brand kontak tidak konsisten.');
     const phone = normalizePhoneIdentifier(contact.phone);
     if (!phone) continue;
+    // Kontak sering tiba sebelum chat-nya tersimpan: namanya disimpan agar dipakai saat prospek dibuat belakangan.
+    if (devicePhone && contact.name && !isGenericContactName(contact.name, phone)) {
+      await prisma.whatsappContact.upsert({
+        where: { brandId_devicePhone_phone: { brandId: input.brandId, devicePhone, phone } },
+        update: { name: contact.name },
+        create: { brandId: input.brandId, devicePhone, phone, name: contact.name },
+      });
+    }
     const aliases = phoneAliases(phone);
     const candidates = await prisma.prospect.findMany({
       where: { brandId: input.brandId, ...(devicePhone ? { devicePhone } : {}), OR: [{ remoteJid: contact.remoteJid }, { phone: { in: aliases } }] },

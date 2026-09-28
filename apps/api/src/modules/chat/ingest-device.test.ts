@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   prospectCreate: vi.fn(),
   prospectUpdate: vi.fn(),
   messageUpsert: vi.fn(),
+  contactFindFirst: vi.fn(),
 }));
 
 vi.mock('../../db/prisma.js', () => ({
@@ -13,6 +14,7 @@ vi.mock('../../db/prisma.js', () => ({
     brand: { findUnique: async () => ({ phone: null }) },
     prospect: { findMany: mocks.prospectFindMany, create: mocks.prospectCreate, update: mocks.prospectUpdate },
     chatMessage: { findUnique: async () => null, findFirst: async () => null, upsert: mocks.messageUpsert },
+    whatsappContact: { findFirst: mocks.contactFindFirst },
   },
 }));
 vi.mock('./conversation-stats.js', () => ({ ensureConversationStats: vi.fn(), loadConversationWindows: vi.fn(), scheduleConversationStats: vi.fn(), summarizeMessages: vi.fn() }));
@@ -42,6 +44,7 @@ beforeEach(() => {
   mocks.prospectFindMany.mockResolvedValue([]);
   mocks.prospectCreate.mockImplementation(async ({ data }: any) => ({ id: 9, userId: null, ...data }));
   mocks.messageUpsert.mockImplementation(async ({ create }: any) => ({ id: 1, ...create }));
+  mocks.contactFindFirst.mockResolvedValue(null);
 });
 
 const base = { brandId: 1, messageId: 'M1', remoteJid: '62811@s.whatsapp.net', phone: '62811', text: 'halo', timestamp: 1_790_000_000 };
@@ -50,6 +53,19 @@ describe('Pesan WhatsApp masuk', () => {
   it('nama akun brand pada pesan keluar tidak menjadi nama kontak', async () => {
     await incoming({ ...base, isFromMe: true, senderName: 'Hana Tours Travel' });
     expect(mocks.prospectCreate.mock.calls[0]![0].data.name).toBe('+62811');
+  });
+
+  it('tanpa pushName, nama kontak WhatsApp tersimpan untuk device itu yang dipakai', async () => {
+    mocks.contactFindFirst.mockResolvedValue({ name: 'Haikal Shahab' });
+    await incoming({ ...base, isFromMe: true, senderName: 'Hana Tours Travel' });
+    expect(mocks.contactFindFirst.mock.calls[0]![0].where.devicePhone).toBe('628222');
+    expect(mocks.prospectCreate.mock.calls[0]![0].data.name).toBe('Haikal Shahab');
+  });
+
+  it('nomor device dari gateway lebih diutamakan daripada status sesi di database', async () => {
+    await incoming({ ...base, senderName: 'Haikal', devicePhone: '628333:12@s.whatsapp.net' });
+    expect(mocks.prospectFindMany.mock.calls[0]![0].where.devicePhone).toBe('628333');
+    expect(mocks.messageUpsert.mock.calls[0]![0].create.devicePhone).toBe('628333');
   });
 
   it('nama pengirim pesan masuk dipakai sebagai nama kontak', async () => {
