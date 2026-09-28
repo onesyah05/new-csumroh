@@ -247,7 +247,9 @@ capiRouter.post('/test-event', asyncHandler(async (req, res) => {
   }
 
   res.json({
-    success: status === 'success',
+    // Permintaan uji tetap sukses walau Meta menolak: jawaban Meta (data.status/responseBody) ditampilkan di kotak hasil,
+    // bukan dibuang menjadi pesan umum "Permintaan gagal".
+    success: true,
     data: {
       eventId,
       status,
