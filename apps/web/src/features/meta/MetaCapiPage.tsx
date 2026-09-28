@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Link2,
   Layers,
   Lock,
   Play,
@@ -209,6 +210,27 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['meta-settings', currentBrandId] });
       showToast('Verifikasi koneksi Meta Graph API berhasil!');
+    },
+  });
+
+  // Dataset milik Facebook Page (wajib untuk event CTWA). Hasilnya ditinjau Admin sebelum menggantikan Dataset ID.
+  const [pageDataset, setPageDataset] = useState<{ datasetId: string; currentDatasetId: string | null; same: boolean } | null>(null);
+  const pageDatasetMutation = useMutation({
+    mutationFn: () => api.post<{ datasetId: string; currentDatasetId: string | null; same: boolean }>('/meta/page-dataset', { brandId: currentBrandId }),
+    onSuccess: (data) => {
+      if (data.same) showToast('Dataset ID sudah benar: dataset ini milik Page yang tersimpan.');
+      else setPageDataset(data);
+    },
+    onError: (error) => showToast(error.message),
+  });
+  const useDatasetMutation = useMutation<MetaSettings, Error, string>({
+    mutationFn: (datasetId) =>
+      api.put<MetaSettings>('/meta/settings', { brandId: currentBrandId, ...form, pixelId: datasetId, accessToken: undefined }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['meta-settings', currentBrandId], data);
+      setForm((cur) => ({ ...cur, pixelId: data.pixelId, accessToken: '' }));
+      setPageDataset(null);
+      showToast('Dataset milik Page dipakai. Klik Uji Coba Event untuk memastikan.');
     },
   });
 
@@ -447,6 +469,15 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       placeholder="Contoh: 123456789012345"
                       required
                     />
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-600 underline-offset-2 hover:text-zinc-950 hover:underline disabled:opacity-50"
+                      disabled={!settings?.ctwaReady || pageDatasetMutation.isPending}
+                      onClick={() => pageDatasetMutation.mutate()}
+                    >
+                      <Link2 size={12} />
+                      {pageDatasetMutation.isPending ? 'Menghubungi Meta…' : 'Pakai dataset milik Facebook Page (wajib untuk iklan CTWA)'}
+                    </button>
                   </div>
 
                   <div className="space-y-1.5">
@@ -1006,6 +1037,18 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
         title="Hapus access token?"
         description="Token Meta tersimpan untuk brand ini dihapus. Event konversi tidak terkirim sampai token baru dimasukkan."
         confirmLabel="Hapus token"
+      />
+
+      <ConfirmDialog
+        open={Boolean(pageDataset)}
+        onClose={() => setPageDataset(null)}
+        onConfirm={() => pageDataset && useDatasetMutation.mutate(pageDataset.datasetId)}
+        pending={useDatasetMutation.isPending}
+        error={useDatasetMutation.error?.message ?? null}
+        tone="primary"
+        title="Ganti Dataset ID dengan dataset milik Page?"
+        description={`Meta mengembalikan dataset ${pageDataset?.datasetId ?? ''} yang tertaut ke Facebook Page ini. Dataset saat ini (${pageDataset?.currentDatasetId || 'kosong'}) belum tertaut ke Page, sehingga event dari iklan Click-to-WhatsApp ditolak. Event berikutnya dikirim ke dataset ini.`}
+        confirmLabel="Pakai dataset ini"
       />
 
       {/* MODAL: TEST EVENT SANDBOX */}
