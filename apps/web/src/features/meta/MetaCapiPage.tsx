@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, type FormEvent } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   AlertCircle,
@@ -35,6 +35,7 @@ import { StatusBadge } from '../../components/ui/status-badge';
 import { PageError, PageLoading, SectionEmpty } from '../../components/ui/page-feedback';
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog, Modal } from '../../components/ui/modal';
+import { Pager } from '../../components/ui/pager';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface Brand {
@@ -70,6 +71,16 @@ interface MetaLog {
   payload?: string | null;
   createdAt: string;
   prospect: { id: number; name: string; phone?: string | null };
+  /** Iklan asal prospek (nama dari tabel iklan tersimpan). */
+  ad?: { adId: string; adName: string | null; campaignName: string | null } | null;
+}
+
+interface MetaLogPage {
+  items: MetaLog[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: { total: number; success: number; failed: number };
 }
 
 interface TestEventResponse {
@@ -133,11 +144,27 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
     enabled: Boolean(currentBrandId),
   });
 
+  // Search & Filter state for logs (diproses di server, per halaman)
+  const [logSearch, setLogSearch] = useState('');
+  const [logQ, setLogQ] = useState('');
+  const [logEventFilter, setLogEventFilter] = useState<string>('all');
+  const [logStatusFilter, setLogStatusFilter] = useState<string>('all');
+  const [logPage, setLogPage] = useState(1);
+  useEffect(() => {
+    const timer = setTimeout(() => setLogQ(logSearch.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [logSearch]);
+  useEffect(() => setLogPage(1), [currentBrandId, logQ, logEventFilter, logStatusFilter]);
+
   // Meta Logs Query
   const logsQuery = useQuery({
-    queryKey: ['meta-logs', currentBrandId],
-    queryFn: () => api.get<MetaLog[]>(`/meta/logs?brandId=${currentBrandId}`),
+    queryKey: ['meta-logs', currentBrandId, logQ, logEventFilter, logStatusFilter, logPage],
+    queryFn: () => {
+      const params = new URLSearchParams({ brandId: String(currentBrandId), search: logQ, event: logEventFilter, status: logStatusFilter, page: String(logPage), pageSize: '25' });
+      return api.get<MetaLogPage>(`/meta/logs?${params}`);
+    },
     enabled: Boolean(currentBrandId),
+    placeholderData: keepPreviousData,
     refetchInterval: 15000,
   });
 
@@ -147,11 +174,6 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
   // Form state
   const [form, setForm] = useState(emptyForm);
   const [showPassword, setShowPassword] = useState(false);
-
-  // Search & Filter state for logs
-  const [logSearch, setLogSearch] = useState('');
-  const [logEventFilter, setLogEventFilter] = useState<string>('all');
-  const [logStatusFilter, setLogStatusFilter] = useState<string>('all');
 
   // Modals state
   const [selectedLog, setSelectedLog] = useState<MetaLog | null>(null);
@@ -237,28 +259,9 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
   };
 
   const settings = settingsQuery.data;
-  const logs = logsQuery.data ?? [];
-
-  // Logs filtering
-  const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
-      const q = logSearch.trim().toLowerCase();
-      const matchSearch =
-        !q ||
-        log.eventName.toLowerCase().includes(q) ||
-        log.eventId.toLowerCase().includes(q) ||
-        log.prospect?.name?.toLowerCase().includes(q) ||
-        (log.prospect?.phone && log.prospect.phone.includes(q));
-
-      const matchEvent = logEventFilter === 'all' || log.eventName === logEventFilter;
-      const matchStatus = logStatusFilter === 'all' || log.status === logStatusFilter;
-
-      return matchSearch && matchEvent && matchStatus;
-    });
-  }, [logs, logSearch, logEventFilter, logStatusFilter]);
-
-  const successLogsCount = useMemo(() => logs.filter((l) => l.status === 'success').length, [logs]);
-  const failedLogsCount = useMemo(() => logs.filter((l) => l.status === 'failed').length, [logs]);
+  const logsPage = logsQuery.data;
+  const filteredLogs = logsPage?.items ?? [];
+  const logSummary = logsPage?.summary ?? { total: 0, success: 0, failed: 0 };
 
   if (brands.isLoading) return <PageLoading label="Memuat konfigurasi Meta CAPI…" />;
   if (brands.isError) return <PageError description={brands.error.message} onRetry={() => void brands.refetch()} />;
@@ -386,8 +389,8 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
         />
         <StatCard
           label="Event Audit Terkirim"
-          value={`${logs.length} Event`}
-          note={`${successLogsCount} berhasil · ${failedLogsCount} gagal`}
+          value={`${logSummary.total} Event`}
+          note={`${logSummary.success} berhasil · ${logSummary.failed} gagal`}
         />
       </StatGrid>
 
@@ -395,7 +398,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
       <div role="tablist" aria-label="Meta CAPI" className="scroll-row flex min-h-9 max-w-full w-fit items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
         {[
           { id: 'settings', label: 'Konfigurasi & token', icon: KeyRound },
-          { id: 'logs', label: `Log event (${logs.length})`, icon: Activity },
+          { id: 'logs', label: `Log event (${logSummary.total})`, icon: Activity },
           { id: 'funnel', label: 'Alur & atribusi', icon: Layers },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -738,6 +741,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                     <tr>
                       <th className="px-4 py-3">Event & Event ID</th>
                       <th className="px-4 py-3">Calon Jamaah</th>
+                      <th className="hidden px-4 py-3 md:table-cell">Iklan</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="hidden px-4 py-3 lg:table-cell">Respons Meta Graph</th>
                       <th className="px-4 py-3">Waktu</th>
@@ -765,6 +769,21 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                             <p className="font-bold text-xs text-zinc-900">{log.prospect?.name ?? '—'}</p>
                             {log.prospect?.phone && (
                               <p className="font-mono text-xs text-zinc-500 mt-0.5">{log.prospect.phone}</p>
+                            )}
+                          </td>
+
+                          <td className="hidden px-4 py-3.5 md:table-cell">
+                            {log.ad ? (
+                              <>
+                                <p className="max-w-[220px] truncate text-xs font-semibold text-zinc-900" title={log.ad.adName ?? log.ad.adId}>
+                                  {log.ad.adName ?? `Iklan ${log.ad.adId}`}
+                                </p>
+                                {log.ad.campaignName && (
+                                  <p className="mt-0.5 max-w-[220px] truncate text-xs text-zinc-500" title={log.ad.campaignName}>{log.ad.campaignName}</p>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-xs text-zinc-400">—</span>
                             )}
                           </td>
 
@@ -816,13 +835,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
               </div>
             )}
 
-            {/* Table Footer Count */}
-            {filteredLogs.length > 0 && (
-              <div className="border-t border-zinc-200 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-500">
-                Menampilkan <strong className="font-semibold text-zinc-900">{filteredLogs.length}</strong> dari{' '}
-                <strong className="font-semibold text-zinc-900">{logs.length}</strong> log audit event
-              </div>
-            )}
+            {logsPage && <Pager page={logsPage.page} pageSize={logsPage.pageSize} total={logsPage.total} onPage={setLogPage} label="log event" />}
           </div>
         </div>
       )}

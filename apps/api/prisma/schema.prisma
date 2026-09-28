@@ -95,6 +95,7 @@ model Brand {
   prospects          Prospect[]
   whatsappSession    WhatsappSession?
   whatsappContacts   WhatsappContact[]
+  metaAds            MetaAd[]
   chatMessages       ChatMessage[]
   capiLogs           MetaCapiLog[]
   userBrands         UserBrand[]
@@ -354,6 +355,22 @@ model WhatsappSession {
 
 /// Nama kontak WhatsApp (nama buku kontak / nama profil) per device. Kontak sering tiba sebelum chat-nya
 /// tersimpan; disimpan di sini agar nama tetap terpasang saat prospeknya dibuat belakangan.
+/// Nama iklan Meta per ID iklan (dari Insights / Graph API). Dipakai untuk menampilkan asal iklan prospek tanpa
+/// memanggil Meta setiap kali profil, Inbox, atau log dibuka.
+model MetaAd {
+  id           Int      @id @default(autoincrement())
+  brandId      Int      @map("brand_id")
+  adId         String   @map("ad_id") @db.VarChar(50)
+  adName       String   @map("ad_name") @db.VarChar(255)
+  campaignName String?  @map("campaign_name") @db.VarChar(255)
+  thumbnailUrl String?  @map("thumbnail_url") @db.VarChar(255)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  brand        Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, adId])
+  @@map("meta_ads")
+}
+
 model WhatsappContact {
   id          Int      @id @default(autoincrement())
   brandId     Int      @map("brand_id")

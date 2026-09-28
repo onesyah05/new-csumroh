@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../../config/env.js';
 import { decryptMetaToken } from '../capi/meta-token.js';
+import { rememberAds } from './meta-ads.js';
 
 /** Metrik per iklan dari Meta Insights (level ad) untuk rentang tanggal, ditambah thumbnail kreatif yang disalin lokal. */
 export type AdInsight = {
@@ -58,11 +59,13 @@ async function localThumbnails(adIds: string[], token: string) {
   for (let i = 0; i < missing.length; i += 50) {
     const ids = missing.slice(i, i + 50);
     try {
-      const params = new URLSearchParams({ ids: ids.join(','), fields: 'creative.thumbnail_width(480).thumbnail_height(480){thumbnail_url,image_url}' });
+      // Iklan gambar punya image_url; iklan video hanya punya poster di video_data.image_url. thumbnail_url (kecil)
+      // sebagai cadangan terakhir.
+      const params = new URLSearchParams({ ids: ids.join(','), fields: 'creative{image_url,thumbnail_url,object_story_spec{video_data{image_url}}}' });
       const body = await getJson(`https://graph.facebook.com/${env.META_GRAPH_API_VERSION}/?${params}`, token);
       await Promise.all(ids.map(async (id) => {
         const creative = body[id]?.creative;
-        const source = creative?.image_url ?? creative?.thumbnail_url;
+        const source = creative?.image_url ?? creative?.object_story_spec?.video_data?.image_url ?? creative?.thumbnail_url;
         if (!source) return;
         const image = await fetch(source, { signal: AbortSignal.timeout(15_000) });
         const type = image.headers.get('content-type') ?? '';
@@ -117,6 +120,8 @@ export async function fetchAdInsights(brand: BrandAdConfig, from: string, to: st
       })),
     };
     cache.set(key, { at: Date.now(), value });
+    // Nama iklan disimpan untuk profil prospek, Inbox, dan log (tanpa memanggil Meta lagi).
+    await rememberAds(brand.id, value.ads).catch((error) => console.error('Remember ad labels failed', (error as Error).message));
   } catch (error) {
     value = { status: 'error', message: (error as Error).name === 'TimeoutError' ? 'Meta tidak merespons. Coba lagi.' : (error as Error).message };
   }

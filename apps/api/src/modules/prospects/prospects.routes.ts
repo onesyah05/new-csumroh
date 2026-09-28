@@ -46,6 +46,7 @@ import { updateSpamAudienceMember } from '../ads/spam-audience.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
 import { activeDevicePhone } from '../chat/device-scope.js';
+import { ensureAdLabels } from '../ads/meta-ads.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
 import { env } from '../../config/env.js';
 import {
@@ -220,7 +221,9 @@ prospectsRouter.get('/:id', asyncHandler(async (req, res) => {
     },
   });
   if (!prospect) throw new HttpError(404, 'Prospek tidak ditemukan.');
-  res.json({ success: true, data: prospect });
+  // Iklan asal (nama & kampanye) untuk prospek dari Click-to-WhatsApp.
+  const ad = prospect.adId ? (await ensureAdLabels(prospect.brandId, [prospect.adId])).get(prospect.adId) ?? null : null;
+  res.json({ success: true, data: { ...prospect, ad } });
 }));
 
 prospectsRouter.post('/', asyncHandler(async (req, res) => {

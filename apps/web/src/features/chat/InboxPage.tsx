@@ -1401,7 +1401,7 @@ export function InboxPage() {
                       {selected.spamAt && <span className="inline-flex shrink-0 items-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700">Spam</span>}
                       {selected.leadSource === 'meta_ads' && (
                         <span
-                          title={[selected.adHeadline, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
+                          title={[selected.adName ?? selected.adHeadline, selected.adCampaignName, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
                           className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-950 px-2 py-0.5 text-[9px] font-bold text-white"
                         >
                           <Megaphone size={10} /><span className="hidden md:inline">Meta Ads</span><span className="sr-only md:hidden">Meta Ads</span>

@@ -26,6 +26,7 @@ const BrandFormPage = page(() => import('../features/brand/BrandFormPage'), 'Bra
 const StaffPage = page(() => import('../features/staff/StaffPage'), 'StaffPage');
 const VerificationPage = page(() => import('../features/finance/VerificationPage'), 'VerificationPage');
 const ReportsPage = page(() => import('../features/reports/ReportsPage'), 'ReportsPage');
+const AdLeadsPage = page(() => import('../features/reports/AdLeadsPage'), 'AdLeadsPage');
 const CustomRequestsPage = page(() => import('../features/custom/CustomRequestsPage'), 'CustomRequestsPage');
 const NotificationSettingsPage = page(() => import('../features/notifications/NotificationSettingsPage'), 'NotificationSettingsPage');
 const MorePage = page(() => import('./MorePage'), 'MorePage');
@@ -73,6 +74,7 @@ export function App() {
             <Route path="pipeline" element={<PipelinePage />} />
             <Route path="prospects/:id" element={<ProspectDetailPage />} />
             <Route path="laporan" element={managerOnly(<ReportsPage />)} />
+            <Route path="laporan/iklan/:adId" element={managerOnly(<AdLeadsPage />)} />
             <Route path="verifikasi" element={canVerifyPayments ? <VerificationPage /> : <Navigate to="/" replace />} />
             <Route path="packages" element={<PackagesPage />} />
             <Route path="packages/new" element={canEditPackages ? <PackageFormPage /> : <Navigate to="/packages" replace />} />
