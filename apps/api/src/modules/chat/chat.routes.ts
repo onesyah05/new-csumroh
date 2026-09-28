@@ -13,8 +13,8 @@ import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
-import { normalizePhoneIdentifier, sendTextToProspect } from './outbound.js';
-import { adoptUnassignedProspects } from './device-scope.js';
+import { normalizePhoneIdentifier, sendingDevicePhone, sendTextToProspect } from './outbound.js';
+import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
 import { Prisma, type ChatMessage } from '@prisma/client';
 import { avatarNeedsRefresh } from '@csumroh/shared-types';
@@ -366,7 +366,7 @@ chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {
 
   const { lidToPhone } = await buildLidPhoneMap(brandId, ownPhones);
 
-  const target = await prisma.prospect.findFirst({ where: { id: Number(req.params.id), brandId }, select: { id: true, phone: true, remoteJid: true } });
+  const target = await prisma.prospect.findFirst({ where: { id: Number(req.params.id), brandId }, select: { id: true, phone: true, remoteJid: true, devicePhone: true } });
   if (!target) throw new HttpError(404, 'Percakapan tidak ditemukan.');
 
   if (target.remoteJid && target.remoteJid.endsWith('@g.us')) {
@@ -385,7 +385,8 @@ chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {
     return;
   }
 
-  const prospects = await prisma.prospect.findMany({ where: { brandId }, select: { id: true, phone: true, remoteJid: true } });
+  // Alias nomor yang sama hanya dalam device yang sama: riwayat device lain tidak ikut tercampur.
+  const prospects = await prisma.prospect.findMany({ where: { brandId, devicePhone: target.devicePhone }, select: { id: true, phone: true, remoteJid: true } });
   const key = conversationKey({ ...target, name: '' }, lidToPhone, ownPhones);
   const aliases = prospects.filter((item) => conversationKey({ ...item, name: '' }, lidToPhone, ownPhones) === key);
   const ids = aliases.map((item) => item.id);
@@ -401,6 +402,7 @@ chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {
     where: {
       brandId,
       messageType: { notIn: ['protocolMessage', 'reactionMessage'] },
+      ...(target.devicePhone ? { devicePhone: target.devicePhone } : {}),
       OR: [
         { prospectId: { in: ids } },
         ...(phones.length ? [{ phone: { in: phones } }] : []),
@@ -418,7 +420,7 @@ chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
   const target = await prisma.prospect.findFirst({
     where: { id: Number(req.params.id), brandId },
-    select: { id: true, phone: true, remoteJid: true },
+    select: { id: true, phone: true, remoteJid: true, devicePhone: true },
   });
   if (!target) {
     res.json({ success: true });
@@ -430,6 +432,7 @@ chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
   const relatedProspects = await prisma.prospect.findMany({
     where: {
       brandId,
+      devicePhone: target.devicePhone,
       OR: [
         { id: target.id },
         ...(target.remoteJid ? [{ remoteJid: target.remoteJid }] : []),
@@ -498,9 +501,10 @@ chatRouter.post('/prospects/:id/history-sync', asyncHandler(async (req, res) => 
     res.json({ success: true, data: { requested: false, reason: 'Perangkat WhatsApp tidak terhubung.' } });
     return;
   }
-  const target = await prisma.prospect.findFirst({ where: { id: Number(req.params.id), brandId }, select: { id: true, phone: true, remoteJid: true } });
+  const target = await prisma.prospect.findFirst({ where: { id: Number(req.params.id), brandId }, select: { id: true, phone: true, remoteJid: true, devicePhone: true } });
   if (!target) throw new HttpError(404, 'Percakapan tidak ditemukan.');
-  const prospects = await prisma.prospect.findMany({ where: { brandId }, select: { id: true, phone: true, remoteJid: true } });
+  // Alias nomor yang sama hanya dalam device yang sama: riwayat device lain tidak ikut tercampur.
+  const prospects = await prisma.prospect.findMany({ where: { brandId, devicePhone: target.devicePhone }, select: { id: true, phone: true, remoteJid: true } });
   const key = conversationKey({ ...target, name: '' });
   const aliases = prospects.filter((item) => conversationKey({ ...item, name: '' }) === key);
   const oldest = await prisma.chatMessage.findFirst({
@@ -583,6 +587,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   if (session?.status !== 'connected') {
     throw new HttpError(400, 'Perangkat WhatsApp tidak terhubung.');
   }
+  const devicePhone = sendingDevicePhone(prospect, session);
 
   // Resolve media file and base64Data (supports client-uploaded base64 or verified catalog package flyer)
   let resolvedBase64 = input.base64Data || '';
@@ -680,6 +685,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
         messageId: gatewayResult.data?.messageId ?? `local-${randomUUID()}`,
         remoteJid,
         phone,
+        devicePhone,
         senderName: req.user!.name,
         isFromMe: true,
         messageText: input.caption || resolvedFileName,
@@ -1041,9 +1047,11 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   const referralMarker = normalizeReferralMarker(referral);
   const aliases = phoneAliases(phone);
 
+  // Beda device, beda percakapan: orang yang sama di nomor brand lain adalah prospek & riwayat terpisah.
   const candidates = await prisma.prospect.findMany({
     where: {
       brandId,
+      ...(devicePhone ? { devicePhone } : {}),
       OR: [
         { remoteJid },
         ...(!isGroup && aliases.length ? [{ phone: { in: aliases } }] : []),
@@ -1055,7 +1063,8 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   let prospect = candidates.length ? chooseCanonicalProspect(candidates) : null;
   let referralCaptured = false;
 
-  const validSenderName = senderName?.trim();
+  // Pesan keluar membawa pushName akun WhatsApp brand sendiri, bukan nama kontak: jangan dipakai sebagai nama prospek.
+  const validSenderName = isFromMe ? undefined : senderName?.trim();
   const fallbackName = isGroup
     ? (validSenderName || 'Grup WhatsApp')
     : (validSenderName || (phone ? `+${phone}` : 'Kontak WhatsApp'));
@@ -1106,7 +1115,6 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
         ...(!isGroup && !prospect.phone && phone ? { phone } : {}),
         ...(shouldUpdateJid ? { remoteJid: targetJid } : {}),
         ...(!isGroup && nameIsGeneric && validSenderName ? { name: validSenderName } : {}),
-        ...(devicePhone ? { devicePhone } : {}),
       },
       select: { id: true, name: true, phone: true, remoteJid: true, packageId: true, userId: true, notes: true, updatedAt: true }
     });
@@ -1124,6 +1132,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       prospectId: prospect.id,
       remoteJid,
       phone: phone || (input.phone || ''),
+      ...(devicePhone ? { devicePhone } : {}),
       senderName,
       isFromMe,
       messageText: text,
@@ -1139,6 +1148,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       messageId,
       remoteJid,
       phone: phone || (input.phone || ''),
+      devicePhone,
       senderName,
       isFromMe,
       messageText: text,
@@ -1211,10 +1221,13 @@ internalRouter.post('/chats/read', asyncHandler(async (req, res) => {
 
   const cleanPhone = normalizePhoneIdentifier(input.remoteJid);
   const aliases = cleanPhone ? phoneAliases(cleanPhone) : [];
+  // Status baca datang dari device yang sedang tersambung: percakapan device lain tidak ikut berubah.
+  const devicePhone = await activeDevicePhone(input.brandId);
 
   const prospects = await prisma.prospect.findMany({
     where: {
       brandId: input.brandId,
+      ...(devicePhone ? { devicePhone } : {}),
       OR: [
         { remoteJid: input.remoteJid },
         ...(aliases.length ? [{ phone: { in: aliases } }] : []),
@@ -1227,6 +1240,7 @@ internalRouter.post('/chats/read', asyncHandler(async (req, res) => {
   const updated = await prisma.chatMessage.updateMany({
     where: {
       brandId: input.brandId,
+      ...(devicePhone ? { devicePhone } : {}),
       OR: [
         ...(prospectIds.length ? [{ prospectId: { in: prospectIds } }] : []),
         { remoteJid: input.remoteJid },
@@ -1304,13 +1318,14 @@ internalRouter.post('/contacts/sync', asyncHandler(async (req, res) => {
   }).parse(req.body);
   let imported = 0;
   invalidateLidPhoneMap(input.brandId);
+  const devicePhone = await activeDevicePhone(input.brandId);
   for (const contact of input.contacts) {
     if (contact.brandId !== input.brandId) throw new HttpError(400, 'Brand kontak tidak konsisten.');
     const phone = normalizePhoneIdentifier(contact.phone);
     if (!phone) continue;
     const aliases = phoneAliases(phone);
     const candidates = await prisma.prospect.findMany({
-      where: { brandId: input.brandId, OR: [{ remoteJid: contact.remoteJid }, { phone: { in: aliases } }] },
+      where: { brandId: input.brandId, ...(devicePhone ? { devicePhone } : {}), OR: [{ remoteJid: contact.remoteJid }, { phone: { in: aliases } }] },
       select: { id: true, name: true, phone: true, remoteJid: true, packageId: true, userId: true, notes: true, updatedAt: true },
     });
     const existing = candidates.length ? chooseCanonicalProspect(candidates) : null;
