@@ -177,8 +177,8 @@ export function nextTgjpStep(current: TgjpStep): TgjpStep | null {
 
 export const capiEventForStatus = (status: ProspectStatus) =>
   ({
-    new: 'Contact',
-    contact: 'Contact',
+    new: 'LeadSubmitted',
+    contact: 'LeadSubmitted',
     offer: 'AddToCart',
     offered: 'AddToCart',
     closing: 'InitiateCheckout',

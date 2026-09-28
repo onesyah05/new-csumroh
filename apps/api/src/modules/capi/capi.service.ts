@@ -14,7 +14,7 @@ function businessEventTime(
     : eventName === 'InitiateCheckout' ? prospect.invoiceSentAt
     : eventName === 'AddToCart' ? prospect.offerSentAt
     : null;
-  return at ?? (eventName === 'Contact' ? prospect.createdAt : prospect.updatedAt);
+  return at ?? (eventName === 'LeadSubmitted' ? prospect.createdAt : prospect.updatedAt);
 }
 
 type DispatchResult = { status: 'sent' | 'failed' | 'skipped'; reason?: string; eventId?: string };
@@ -44,7 +44,7 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
 
   const config = prospect.brand;
   if (!prospect.phone) return saveFailure({ brandId: prospect.brandId, prospectId, eventName, eventId, reason: 'Nomor telepon prospek belum tersedia.' });
-  const configResult = validateMetaConfig({ pixelId: config.metaPixelId, accessToken: config.metaAccessToken, pageId: config.facebookPageId, wabaId: config.metaWabaId });
+  const configResult = validateMetaConfig({ pixelId: config.metaPixelId, accessToken: config.metaAccessToken, pageId: config.facebookPageId });
   if (!configResult.valid) return saveFailure({ brandId: prospect.brandId, prospectId, eventName, eventId, reason: configResult.reason });
 
   // Nilai hanya dari snapshot transaksi: dealValue = total booking (ditetapkan penawaran resmi /
@@ -63,6 +63,8 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
     ctwaClid: prospect.metaReferralMarker,
     pageId: config.facebookPageId!,
     whatsappBusinessAccountId: config.metaWabaId,
+    name: prospect.name,
+    city: prospect.city,
     value: valueResult.value,
     testEventCode: config.metaTestEventCode,
   });
@@ -98,13 +100,13 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
 }
 
 /**
- * Lead = prospek terkualifikasi. Dikirim sekali saat pertama kali mencapai Terkualifikasi atau tahap sesudahnya
+ * QualifiedLead = prospek terkualifikasi. Dikirim sekali saat pertama kali mencapai Terkualifikasi atau tahap sesudahnya
  * (event_id tetap, jadi tidak ganda), agar kampanye bisa dioptimalkan ke lead berkualitas, bukan sekadar chat masuk.
  */
 const QUALIFIED_OR_LATER = new Set<string>(['qualified', 'offer', 'offered', 'objection', 'followup', 'closing', 'deal', 'closed_won']);
 
 export async function dispatchCapiForStatus(prospectId: number, status: ProspectStatus) {
-  if (QUALIFIED_OR_LATER.has(status)) await dispatchCapiEvent(prospectId, 'Lead');
+  if (QUALIFIED_OR_LATER.has(status)) await dispatchCapiEvent(prospectId, 'QualifiedLead');
   const eventName = capiEventForStatus(status);
   if (!eventName) return { status: 'skipped', reason: 'STATUS_HAS_NO_META_EVENT' } as DispatchResult;
   return dispatchCapiEvent(prospectId, eventName as CapiEventName);

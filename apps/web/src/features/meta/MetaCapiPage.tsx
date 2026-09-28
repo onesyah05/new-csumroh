@@ -78,6 +78,7 @@ interface TestEventResponse {
   responseBody?: string;
   payload?: unknown;
   testEventCode?: string | null;
+  sourceProspect?: { id: number; name: string } | null;
 }
 
 const emptyForm = {
@@ -153,7 +154,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
   // Modals state
   const [selectedLog, setSelectedLog] = useState<MetaLog | null>(null);
   const [testModalOpen, setTestModalOpen] = useState(false);
-  const [testEventName, setTestEventName] = useState<'Contact' | 'Lead' | 'AddToCart' | 'InitiateCheckout' | 'Purchase'>('Contact');
+  const [testEventName, setTestEventName] = useState<'LeadSubmitted' | 'QualifiedLead' | 'AddToCart' | 'InitiateCheckout' | 'Purchase'>('Purchase');
   const [testEventCodeInput, setTestEventCodeInput] = useState('');
   const [testResult, setTestResult] = useState<TestEventResponse | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -223,6 +224,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
       void queryClient.invalidateQueries({ queryKey: ['meta-logs', currentBrandId] });
       showToast(res.status === 'success' ? 'Event uji coba berhasil dikirim ke Meta!' : 'Event uji coba gagal diproses Meta.');
     },
+    onError: (error) => showToast(error.message),
   });
 
   const handleSubmit = (e: FormEvent) => {
@@ -369,7 +371,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
         <StatCard
           label="Tracking CTWA"
           value={settings?.ctwaReady ? 'Aktif' : 'Belum Lengkap'}
-          note={settings?.ctwaReady ? 'Page ID & WABA ID sinkron' : 'Lengkapi Page & WABA ID'}
+          note={settings?.ctwaReady ? 'Page ID tersimpan' : 'Lengkapi Facebook Page ID'}
           valueColor={settings?.ctwaReady ? 'text-emerald-700' : 'text-amber-700'}
         />
         <StatCard
@@ -464,7 +466,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
 
                   <div className="space-y-1.5">
                     <label htmlFor="meta-waba" className="label text-xs font-semibold">
-                      WhatsApp Business Account (WABA) ID
+                      WhatsApp Business Account (WABA) ID (Opsional)
                     </label>
                     <input
                       id="meta-waba"
@@ -632,7 +634,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
 
               {/* Event Filter Pills */}
               <div className="scroll-row flex min-h-9 max-w-full items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
-                {['all', 'Contact', 'Lead', 'AddToCart', 'InitiateCheckout', 'Purchase'].map((ev) => (
+                {['all', 'LeadSubmitted', 'QualifiedLead', 'AddToCart', 'InitiateCheckout', 'Purchase'].map((ev) => (
                   <button
                     key={ev}
                     type="button"
@@ -807,13 +809,13 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
               {[
                 {
                   step: '01',
-                  event: 'Contact',
+                  event: 'LeadSubmitted',
                   trigger: 'Prospek Baru Masuk',
                   desc: 'Prospek mengirim pesan pertama via iklan CTWA. Server mengunci nomor HP dan ctwa_clid.',
                 },
                 {
                   step: '02',
-                  event: 'Lead',
+                  event: 'QualifiedLead',
                   trigger: 'Terkualifikasi',
                   desc: 'Bulan keberangkatan dan jumlah jamaah terisi. Dikirim sekali; chat spam tidak pernah dikirim.',
                 },
@@ -1012,7 +1014,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
         onClose={() => setTestModalOpen(false)}
         size="lg"
         title="Kirim event uji coba Meta CAPI"
-        description="Sandbox: periksa apakah Pixel dan Events Manager menerima payload dengan benar."
+        description="Memakai klik iklan asli terakhir di brand ini dan Test Event Code, jadi tidak dihitung sebagai konversi nyata."
         footer={
           <>
             <Button variant="secondary" size="sm" onClick={() => setTestModalOpen(false)}>Tutup</Button>
@@ -1037,8 +1039,8 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                   value={testEventName}
                   onValueChange={(val) => setTestEventName(val as typeof testEventName)}
                   options={[
-                    { value: 'Contact', label: 'Contact (Prospek Baru)' },
-                    { value: 'Lead', label: 'Lead (Terkualifikasi)' },
+                    { value: 'LeadSubmitted', label: 'LeadSubmitted (Prospek Baru)' },
+                    { value: 'QualifiedLead', label: 'QualifiedLead (Terkualifikasi)' },
                     { value: 'AddToCart', label: 'AddToCart (Penawaran Program)' },
                     { value: 'InitiateCheckout', label: 'InitiateCheckout (Booking / DP)' },
                     { value: 'Purchase', label: 'Purchase (Deal)' },
@@ -1079,6 +1081,9 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                     </span>
                   </div>
                   <p className="font-mono text-xs text-zinc-600">Event ID: {testResult.eventId}</p>
+                  {testResult.sourceProspect && (
+                    <p className="text-xs text-zinc-600">Memakai klik iklan asli dari prospek {testResult.sourceProspect.name}.</p>
+                  )}
                   {testResult.responseBody && (
                     <pre className="mt-1.5 max-h-28 overflow-y-auto rounded-lg bg-black/10 p-2 font-mono text-xs">
                       {testResult.responseBody}

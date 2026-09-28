@@ -5,7 +5,7 @@ import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { decryptMetaToken, encryptMetaToken, maskMetaToken } from './meta-token.js';
-import { buildCapiPayload, type CapiEventName } from './capi.payload.js';
+import { buildCapiPayload, CAPI_EVENT_NAMES } from './capi.payload.js';
 
 export const capiRouter = Router();
 capiRouter.use(authGuard, requireRole('superadmin', 'admin'));
@@ -36,7 +36,8 @@ function settingsResponse(brand: {
   metaLastError: string | null;
 }) {
   const connectionConfigured = Boolean(brand.metaPixelId && brand.metaAccessToken);
-  const ctwaReady = Boolean(connectionConfigured && brand.facebookPageId && brand.metaWabaId);
+  // WABA opsional (nomor WhatsApp Business biasa); Page ID wajib agar Meta bisa mencocokkan klik iklan.
+  const ctwaReady = Boolean(connectionConfigured && brand.facebookPageId);
   return {
     brandId: brand.id,
     brandName: brand.name,
@@ -108,7 +109,7 @@ capiRouter.post('/verify', asyncHandler(async (req, res) => {
     const graph = JSON.parse(responseText) as { id?: string; name?: string };
     const verifiedAt = new Date();
     await prisma.brand.update({ where: { id: brandId }, data: { metaVerifiedAt: verifiedAt, metaLastError: null } });
-    res.json({ success: true, data: { connected: true, pixelId: graph.id ?? brand.metaPixelId, pixelName: graph.name ?? null, verifiedAt, ctwaReady: Boolean(brand.facebookPageId && brand.metaWabaId) } });
+    res.json({ success: true, data: { connected: true, pixelId: graph.id ?? brand.metaPixelId, pixelName: graph.name ?? null, verifiedAt, ctwaReady: Boolean(brand.facebookPageId) } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Koneksi ke Meta gagal.';
     await prisma.brand.update({ where: { id: brandId }, data: { metaVerifiedAt: null, metaLastError: message.slice(0, 5000) } });
@@ -140,30 +141,41 @@ capiRouter.get('/logs', asyncHandler(async (req, res) => {
 capiRouter.post('/test-event', asyncHandler(async (req, res) => {
   const input = z.object({
     brandId: z.number().int().positive().optional(),
-    eventName: z.enum(['Contact', 'Lead', 'AddToCart', 'InitiateCheckout', 'Purchase']).default('Contact'),
+    eventName: z.enum(CAPI_EVENT_NAMES).default('LeadSubmitted'),
     testEventCode: z.string().trim().max(100).optional(),
   }).parse(req.body);
 
   const brandId = scopedBrandId(req, input.brandId);
   const brand = await prisma.brand.findUnique({ where: { id: brandId } });
   if (!brand) throw new HttpError(404, 'Brand tidak ditemukan.');
-  if (!brand.metaPixelId || !brand.metaAccessToken) {
-    throw new HttpError(422, 'Simpan Pixel/Dataset ID dan access token terlebih dahulu.');
+  if (!brand.metaPixelId || !brand.metaAccessToken || !brand.facebookPageId) {
+    throw new HttpError(422, 'Simpan Pixel/Dataset ID, Facebook Page ID, dan access token terlebih dahulu.');
   }
 
-  // Payload sintetis wajib memakai test_event_code agar tidak tercatat sebagai konversi nyata.
+  // Event uji wajib memakai test_event_code agar tidak tercatat sebagai konversi nyata.
   const effectiveTestCode = input.testEventCode || brand.metaTestEventCode || undefined;
   if (!effectiveTestCode) {
     throw new HttpError(422, 'Test Event Code wajib diisi (dari Events Manager > Test Events) sebelum mengirim event uji.');
   }
+  // Meta menolak ctwa_clid karangan (subcode 2804087), jadi uji memakai klik iklan asli terakhir di brand ini.
+  const source = await prisma.prospect.findFirst({
+    where: { brandId, metaReferralMarker: { not: null }, phone: { not: null }, spamAt: null },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, name: true, phone: true, city: true, metaReferralMarker: true },
+  });
+  if (!source?.metaReferralMarker || !source.phone) {
+    throw new HttpError(422, 'Belum ada chat dari iklan Click-to-WhatsApp di brand ini. Klik iklan Anda sekali dari HP lain dan kirim pesan, lalu ulangi uji coba.');
+  }
   const eventId = `test_${Date.now()}_${input.eventName.toLowerCase()}`;
   const payload = buildCapiPayload({
-    eventName: input.eventName as CapiEventName,
+    eventName: input.eventName,
     eventId,
-    phone: '081234567890',
-    ctwaClid: `test_ctwa_${Date.now()}`,
-    pageId: brand.facebookPageId || '1234567890',
+    phone: source.phone,
+    ctwaClid: source.metaReferralMarker,
+    pageId: brand.facebookPageId,
     whatsappBusinessAccountId: brand.metaWabaId || undefined,
+    name: source.name,
+    city: source.city,
     value: input.eventName === 'Purchase' ? 25000000 : input.eventName === 'InitiateCheckout' ? 5000000 : undefined,
     testEventCode: effectiveTestCode,
   });
@@ -196,6 +208,7 @@ capiRouter.post('/test-event', asyncHandler(async (req, res) => {
       responseBody,
       payload,
       testEventCode: effectiveTestCode ?? null,
+      sourceProspect: { id: source.id, name: source.name },
     },
   });
 }));

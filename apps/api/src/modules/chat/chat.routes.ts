@@ -1164,7 +1164,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       dispatch(() => notifyInboundMessage(ref, { text, messageType }));
     }
   }
-  if (options.realtime && referralCaptured) void dispatchCapiEvent(prospect.id, 'Contact').catch((error) => console.error('CAPI Contact dispatch failed', error));
+  if (options.realtime && referralCaptured) void dispatchCapiEvent(prospect.id, 'LeadSubmitted').catch((error) => console.error('CAPI LeadSubmitted dispatch failed', error));
   return message;
 }
 
