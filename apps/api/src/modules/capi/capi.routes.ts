@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
@@ -7,6 +8,7 @@ import { asyncHandler, HttpError } from '../../utils/http.js';
 import { decryptMetaToken, encryptMetaToken, maskMetaToken } from './meta-token.js';
 import { clearAdInsightsCache } from '../ads/ad-insights.js';
 import { clearAdSpendCache } from '../reports/ad-spend.js';
+import { adLabels } from '../ads/meta-ads.js';
 import { buildCapiPayload, CAPI_EVENT_NAMES } from './capi.payload.js';
 
 export const capiRouter = Router();
@@ -131,25 +133,68 @@ capiRouter.post('/verify', asyncHandler(async (req, res) => {
   }
 }));
 
+/** Log event per halaman; pencarian & filter di server agar event lama tetap bisa ditemukan. */
 capiRouter.get('/logs', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
-  const data = await prisma.metaCapiLog.findMany({
-    where: { brandId },
-    select: {
-      id: true,
-      eventName: true,
-      eventId: true,
-      status: true,
-      responseStatus: true,
-      responseBody: true,
-      payload: true,
-      createdAt: true,
-      prospect: { select: { id: true, name: true, phone: true } },
+  const query = z.object({
+    search: z.string().trim().max(100).default(''),
+    event: z.enum(['all', ...CAPI_EVENT_NAMES]).default('all'),
+    status: z.enum(['all', 'success', 'failed', 'pending']).default('all'),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(10).max(100).default(25),
+  }).parse(req.query);
+  const digits = query.search.replace(/\D/g, '');
+  const where: Prisma.MetaCapiLogWhereInput = {
+    brandId,
+    ...(query.event !== 'all' ? { eventName: query.event } : {}),
+    ...(query.status !== 'all' ? { status: query.status } : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { eventId: { contains: query.search } },
+            { prospect: { name: { contains: query.search } } },
+            ...(digits.length >= 4 ? [{ prospect: { phone: { contains: digits } } }] : []),
+          ],
+        }
+      : {}),
+  };
+  const [total, grouped, items] = await Promise.all([
+    prisma.metaCapiLog.count({ where }),
+    // Ringkasan kartu "Event Audit Terkirim" dihitung dari seluruh log brand, bukan halaman ini saja.
+    prisma.metaCapiLog.groupBy({ by: ['status'], where: { brandId }, _count: { _all: true } }),
+    prisma.metaCapiLog.findMany({
+      where,
+      select: {
+        id: true,
+        eventName: true,
+        eventId: true,
+        status: true,
+        responseStatus: true,
+        responseBody: true,
+        payload: true,
+        createdAt: true,
+        prospect: { select: { id: true, name: true, phone: true, adId: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    }),
+  ]);
+  const ads = await adLabels(items.map((log) => log.prospect?.adId));
+  const count = (status: string) => grouped.find((row) => row.status === status)?._count._all ?? 0;
+  res.json({
+    success: true,
+    data: {
+      items: items.map((log) => ({
+        ...log,
+        ad: log.prospect?.adId ? { adId: log.prospect.adId, adName: ads.get(log.prospect.adId)?.adName ?? null, campaignName: ads.get(log.prospect.adId)?.campaignName ?? null } : null,
+      })),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+      summary: { total: grouped.reduce((sum, row) => sum + row._count._all, 0), success: count('success'), failed: count('failed') },
     },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
   });
-  res.json({ success: true, data });
 }));
 
 capiRouter.post('/test-event', asyncHandler(async (req, res) => {

@@ -185,7 +185,7 @@ export function ReportsPage() {
             {tab === 'cs' && <CsView data={report.data} />}
             {tab === 'sources' && <SourcesView data={report.data} />}
             {tab === 'ads' && <AdsView data={report.data} />}
-            {tab === 'creatives' && <CreativesView data={report.data} />}
+            {tab === 'creatives' && <CreativesView data={report.data} query={query} />}
             {tab === 'lost' && <LostView data={report.data} />}
             {tab === 'payments' && <PaymentsView data={report.data} />}
           </div>

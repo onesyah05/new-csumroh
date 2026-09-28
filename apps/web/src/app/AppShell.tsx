@@ -196,6 +196,9 @@ export function AppShell() {
     if (p === '/staff') {
       return [{ label: 'Staf' }];
     }
+    if (p.startsWith('/laporan/iklan/')) {
+      return [{ to: '/laporan?tab=creatives', label: 'Laporan' }, { label: 'Prospek dari iklan' }];
+    }
     if (p === '/meta-capi') {
       return [{ label: 'Meta Conversions API' }];
     }

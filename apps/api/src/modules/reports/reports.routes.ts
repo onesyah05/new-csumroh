@@ -11,6 +11,7 @@ import { fetchAdInsights } from '../ads/ad-insights.js';
 import { SpamAudienceError, syncSpamAudience } from '../ads/spam-audience.js';
 import { normalizePhone } from '../capi/capi.payload.js';
 import { withAdsToken } from '../capi/meta-token.js';
+import { adLabels, ensureAdLabels } from '../ads/meta-ads.js';
 
 /**
  * Laporan manajemen (Superadmin & Admin): penjualan, kinerja CS, sumber lead, alasan batal, pembayaran, iklan Meta,
@@ -449,6 +450,12 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
     row.deals += 1;
     row.dealValue += num(payment.prospect.dealValue);
   }
+  // Iklan tanpa biaya di periode ini tidak ada di Insights: pakai nama yang pernah tersimpan.
+  const stored = await adLabels([...rows.values()].filter((r) => !r.campaignName).map((r) => r.adId));
+  for (const row of rows.values()) {
+    const label = stored.get(row.adId);
+    if (label && !row.campaignName) Object.assign(row, { adName: label.adName, campaignName: label.campaignName ?? '', thumbnailUrl: row.thumbnailUrl ?? label.thumbnailUrl });
+  }
   const per = (spend: number | null, count: number) => (spend !== null && count ? Math.round(spend / count) : null);
   const list = [...rows.values()].map((r) => ({
     ...r,
@@ -462,6 +469,64 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
   send(res, format, 'kreatif-iklan', { rows: list, brands: brandStatus }, {
     header: ['Brand', 'Kampanye', 'Iklan', 'ID iklan', 'Biaya', 'Impresi', 'CTR (%)', 'Percakapan (Meta)', 'Lead', 'Spam', 'Spam (%)', 'Terkualifikasi', 'Deal', 'Nilai deal', 'Biaya per lead', 'Biaya per lead terkualifikasi', 'Biaya per deal', 'ROAS'],
     rows: list.map((r) => [r.brand, r.campaignName, r.adName, r.adId, r.spend ?? '', r.impressions, r.ctr ?? '', r.conversations, r.leads, r.spam, r.spamRate, r.qualified, r.deals, r.dealValue, r.costPerLead ?? '', r.costPerQualified ?? '', r.costPerDeal ?? '', r.roas ?? '']),
+  });
+}));
+
+/**
+ * Daftar prospek dari satu iklan (halaman khusus dari angka Lead di Kreatif iklan). Kriterianya sama persis dengan
+ * hitungan Lead/Spam di tabel: prospek dibuat dalam periode dan pesan berreferral pertamanya dari iklan ini.
+ */
+reportsRouter.get('/creatives/:adId/prospects', asyncHandler(async (req, res) => {
+  const { range, brandId } = parseRange(req);
+  const adId = z.string().regex(/^\d{5,30}$/, 'ID iklan tidak valid.').parse(req.params.adId);
+  const query = z.object({
+    search: z.string().trim().max(100).default(''),
+    spam: z.enum(['exclude', 'only', 'all']).default('exclude'),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(10).max(100).default(25),
+  }).parse(req.query);
+  const brands = await prisma.brand.findMany({ where: brandId ? { id: brandId } : {}, select: { id: true } });
+  const matches = (await prospectAdIds(brands.map((b) => b.id), range)).filter((row) => row.ad_id === adId);
+  const ids = matches.map((row) => Number(row.prospect_id));
+  const leadCount = matches.filter((row) => !Number(row.spam)).length;
+
+  const digits = query.search.replace(/\D/g, '');
+  const where: Prisma.ProspectWhereInput = {
+    id: { in: ids.length ? ids : [-1] },
+    ...(query.spam === 'exclude' ? { spamAt: null } : query.spam === 'only' ? { spamAt: { not: null } } : {}),
+    ...(query.search ? { OR: [{ name: { contains: query.search } }, ...(digits.length >= 4 ? [{ phone: { contains: digits } }] : [])] } : {}),
+  };
+  const [total, prospects] = await Promise.all([
+    prisma.prospect.count({ where }),
+    prisma.prospect.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: {
+        id: true, brandId: true, name: true, phone: true, status: true, spamAt: true, dealValue: true, createdAt: true,
+        user: { select: { id: true, name: true } },
+        brand: { select: { name: true } },
+      },
+    }),
+  ]);
+  const ownerBrand = brandId ?? prospects[0]?.brandId ?? brands[0]?.id;
+  const label = ownerBrand ? (await ensureAdLabels(ownerBrand, [adId])).get(adId) : undefined;
+
+  res.json({
+    success: true,
+    data: {
+      ad: { adId, adName: label?.adName ?? `Iklan ${adId}`, campaignName: label?.campaignName ?? null, thumbnailUrl: label?.thumbnailUrl ?? null },
+      summary: { leads: leadCount, spam: matches.length - leadCount },
+      items: prospects.map((p) => ({
+        id: p.id, brandId: p.brandId, brand: p.brand.name, name: p.name, phone: p.phone,
+        status: p.status, statusLabel: STATUS_LABEL[stageKey(p.status)] ?? p.status,
+        spam: Boolean(p.spamAt), dealValue: num(p.dealValue), createdAt: p.createdAt, pic: p.user,
+      })),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    },
   });
 }));
 

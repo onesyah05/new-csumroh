@@ -15,6 +15,7 @@ import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
 import { normalizePhoneIdentifier, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
+import { adLabels } from '../ads/meta-ads.js';
 import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
 import { Prisma, type ChatMessage } from '@prisma/client';
 import { avatarNeedsRefresh } from '@csumroh/shared-types';
@@ -207,6 +208,8 @@ export async function getLivechatConversationsForBrand(brandId: number) {
     orderBy: { updatedAt: 'desc' },
   });
 
+  // Nama iklan asal untuk badge "Meta Ads" (dari tabel tersimpan saja: daftar tidak boleh menunggu Meta).
+  const ads = await adLabels(prospects.map((prospect) => prospect.adId));
   const grouped = new Map<string, typeof prospects>();
   for (const prospect of prospects) {
     if (prospect.remoteJid && prospect.remoteJid.endsWith('@g.us')) {
@@ -272,6 +275,8 @@ export async function getLivechatConversationsForBrand(brandId: number) {
       // Pratinjau baris: hanya field yang dipakai daftar (bukan seluruh kolom pesan).
       messages: latest ? [messagePreview(latest)] : [],
       duplicateIds: group.map((item) => item.id),
+      adName: canonical.adId ? ads.get(canonical.adId)?.adName ?? null : null,
+      adCampaignName: canonical.adId ? ads.get(canonical.adId)?.campaignName ?? null : null,
       brand: brand!,
       // Ringkas: tanpa qrCode (QR penautan perangkat tidak boleh sampai ke CS) dan kolom lain yang tidak dipakai.
       session: session ? { status: session.status, phoneNumber: session.phoneNumber, sessionName: session.sessionName } : null,

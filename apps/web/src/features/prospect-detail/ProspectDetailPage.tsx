@@ -145,7 +145,9 @@ export function ProspectDetailPage() {
       : p.status === 'objection' ? `Keberatan: ${[objectionLabel(p.objectionCategory), p.objectionNotes].filter(Boolean).join(' · ')}`
         : NEXT_STEP[Math.min(stage, 4)];
 
-  const source = p.leadSource === 'meta_ads' && p.adHeadline ? `Meta Ads · ${p.adHeadline}` : SOURCE_LABEL[p.leadSource] ?? p.leadSource;
+  // Nama iklan (mis. "H062 | VID | DIRECT") lebih berguna daripada judul iklan; judul hanya cadangan.
+  const adLabel = p.ad?.adName ? [p.ad.adName, p.ad.campaignName].filter(Boolean).join(' — ') : p.adHeadline;
+  const source = p.leadSource === 'meta_ads' && adLabel ? `Meta Ads · ${adLabel}` : SOURCE_LABEL[p.leadSource] ?? p.leadSource;
   const phone = p.phone ? (String(p.phone).startsWith('+') ? p.phone : `+${p.phone}`) : 'Nomor belum ada';
   const inboxLink = `/inbox?brandId=${p.brandId}&prospectId=${p.id}${p.phone ? `&phone=${encodeURIComponent(p.phone)}` : ''}${p.remoteJid ? `&jid=${encodeURIComponent(p.remoteJid)}` : ''}`;
   const multiBrand = isHoldingRole(user?.role) || assignedBrandIds(user).length > 1;

@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ImageOff, Trophy } from 'lucide-react';
 import { resolveMediaUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { EmptyState } from '../../components/ui/page-feedback';
+import { Pager } from '../../components/ui/pager';
 import { rupiah } from '../finance/verificationApi';
 
 export type CreativeRow = {
@@ -15,6 +18,7 @@ export type CreativesReport = {
   brands: { brandId: number; brand: string; status: 'ok' | 'not_configured' | 'error'; message: string | null }[];
 };
 
+const PAGE_SIZE = 20;
 const num = (value: number) => new Intl.NumberFormat('id-ID').format(value);
 const money = (value: number | null) => (value === null ? '—' : rupiah(value));
 export const roasText = (value: number | null) => (value === null ? '—' : `${value.toLocaleString('id-ID', { maximumFractionDigits: 2 })}×`);
@@ -52,9 +56,12 @@ export function CreativeThumb({ row, size = 'md' }: { row: Pick<CreativeRow, 'th
 }
 
 /** Per iklan: metrik Meta (biaya, impresi, CTR, percakapan) + hasil CRM (lead, spam, terkualifikasi, deal, ROAS). */
-export function CreativesView({ data }: { data: CreativesReport }) {
+export function CreativesView({ data, query }: { data: CreativesReport; query: string }) {
   const issues = data.brands.filter((b) => b.status !== 'ok');
   const winning = winningAdIds(data.rows);
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [data]);
+  const rows = data.rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return (
     <div className="space-y-3">
       {issues.length > 0 && (
@@ -79,7 +86,7 @@ export function CreativesView({ data }: { data: CreativesReport }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {data.rows.map((r) => (
+                {rows.map((r) => (
                   <tr key={r.adId}>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-3">
@@ -97,7 +104,13 @@ export function CreativesView({ data }: { data: CreativesReport }) {
                     <td className="px-3 py-2.5 text-right tabular-nums">{num(r.impressions)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{r.ctr === null ? '—' : `${r.ctr.toLocaleString('id-ID')}%`}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{num(r.conversations)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{num(r.leads)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.leads + r.spam > 0 ? (
+                        <Link to={`/laporan/iklan/${r.adId}?${query}`} className="font-semibold text-zinc-950 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-950" title="Lihat daftar prospek dari iklan ini">
+                          {num(r.leads)}
+                        </Link>
+                      ) : num(r.leads)}
+                    </td>
                     <td className={cn('px-3 py-2.5 text-right tabular-nums', r.spamRate >= 30 && 'font-semibold text-rose-600')}>{num(r.spam)}{r.spam > 0 && <span className="ml-1 text-xs text-zinc-500">{r.spamRate}%</span>}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{num(r.qualified)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{num(r.deals)}</td>
@@ -111,11 +124,12 @@ export function CreativesView({ data }: { data: CreativesReport }) {
               </tbody>
             </table>
           </div>
+          <Pager page={page} pageSize={PAGE_SIZE} total={data.rows.length} onPage={setPage} label="iklan" />
         </section>
       )}
       <p className="text-xs text-zinc-500">
         Biaya, impresi, CTR, dan percakapan dari Meta (diperbarui tiap 15 menit). Lead, spam, dan deal dari chat yang masuk lewat iklan
-        tersebut. Nilai deal = harga paket atau harga custom yang disepakati. Winning = sudah deal dan ROAS di atas rata-rata semua iklan.
+        tersebut (klik angka Lead untuk melihat daftar prospeknya). Nilai deal = harga paket atau harga custom yang disepakati. Winning = sudah deal dan ROAS di atas rata-rata semua iklan.
       </p>
     </div>
   );
