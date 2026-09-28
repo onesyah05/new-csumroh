@@ -45,7 +45,7 @@ export async function assertCanActOnProspect(
  * Satu nomor WhatsApp bisa tersimpan sebagai beberapa record (jid lama, @lid, format 0/62).
  * Penugasan PIC diterapkan ke semuanya agar tidak ada duplikat dengan PIC berbeda.
  */
-export async function linkedProspectIds(db: Db, prospect: { id: number; brandId: number; phone?: string | null; remoteJid?: string | null }) {
+export async function linkedProspectIds(db: Db, prospect: { id: number; brandId: number; phone?: string | null; remoteJid?: string | null; devicePhone?: string | null }) {
   if (prospect.remoteJid?.endsWith('@g.us')) return [prospect.id];
   const phone = normalizePhoneIdentifier(prospect.phone) || normalizePhoneIdentifier(prospect.remoteJid);
   const aliases = phone ? [...new Set([phone, `+${phone}`, phone.startsWith('62') ? `0${phone.slice(2)}` : phone])] : [];
@@ -53,7 +53,8 @@ export async function linkedProspectIds(db: Db, prospect: { id: number; brandId:
   if (prospect.remoteJid) or.push({ remoteJid: prospect.remoteJid });
   if (aliases.length) or.push({ phone: { in: aliases } }, { remoteJid: `${phone}@s.whatsapp.net` });
   if (!or.length) return [prospect.id];
-  const rows = await db.prospect.findMany({ where: { brandId: prospect.brandId, OR: or }, select: { id: true } });
+  // Hanya dalam device yang sama: nomor jamaah yang sama di device lain adalah percakapan terpisah.
+  const rows = await db.prospect.findMany({ where: { brandId: prospect.brandId, ...(prospect.devicePhone !== undefined ? { devicePhone: prospect.devicePhone } : {}), OR: or }, select: { id: true } });
   return [...new Set([prospect.id, ...rows.map((r) => r.id)])];
 }
 

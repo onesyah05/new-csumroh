@@ -356,6 +356,8 @@ model ChatMessage {
   messageId        String    @map("message_id") @db.VarChar(100)
   remoteJid        String    @map("remote_jid") @db.VarChar(100)
   phone            String    @db.VarChar(30)
+  // Nomor WhatsApp (device) brand yang mengirim/menerima pesan ini; riwayat chat dipisah per device.
+  devicePhone      String?   @map("device_phone") @db.VarChar(30)
   senderName       String?   @map("sender_name") @db.VarChar(100)
   isFromMe         Boolean   @default(false) @map("is_from_me")
   messageType      String    @default("conversation") @map("message_type") @db.VarChar(30)
@@ -380,6 +382,7 @@ model ChatMessage {
   @@unique([brandId, messageId])
   @@index([brandId, remoteJid])
   @@index([prospectId, timestamp])
+  @@index([brandId, devicePhone])
   @@map("chat_messages")
 }
 

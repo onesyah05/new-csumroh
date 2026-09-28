@@ -18,6 +18,18 @@ export function normalizePhoneIdentifier(value?: string | null) {
   return digits;
 }
 
+/**
+ * Nomor device yang akan mengirim pesan. Kontak milik nomor brand lain tidak boleh dibalas dari device yang sedang
+ * aktif: jamaah akan menerima pesan dari nomor yang tidak pernah ia hubungi, dan riwayatnya tercampur.
+ */
+export function sendingDevicePhone(prospect: { devicePhone: string | null }, session: { phoneNumber: string | null } | null) {
+  const devicePhone = normalizePhoneIdentifier(session?.phoneNumber);
+  if (prospect.devicePhone && devicePhone && prospect.devicePhone !== devicePhone) {
+    throw new HttpError(409, `Kontak ini milik nomor WhatsApp +${prospect.devicePhone}. Sambungkan nomor itu untuk membalasnya.`);
+  }
+  return devicePhone || prospect.devicePhone || null;
+}
+
 export type OutboundTextInput = {
   user: SessionUser;
   brandId: number;
@@ -60,6 +72,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
   if (session?.status !== 'connected') {
     throw new HttpError(400, 'Perangkat WhatsApp tidak terhubung. Tidak dapat mengirim pesan.');
   }
+  const devicePhone = sendingDevicePhone(prospect, session);
 
   const phone = normalizePhoneIdentifier(prospect.phone);
   const isGroup = Boolean(prospect.remoteJid?.endsWith('@g.us'));
@@ -115,6 +128,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
         messageId: gatewayResult.data?.messageId ?? `local-${randomUUID()}`,
         remoteJid,
         phone,
+        devicePhone,
         senderName: user.name,
         isFromMe: true,
         messageText: input.text,

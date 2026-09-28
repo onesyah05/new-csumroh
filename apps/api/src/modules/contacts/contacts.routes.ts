@@ -264,8 +264,9 @@ contactsRouter.post('/', requireRole('superadmin', 'admin'), asyncHandler(async 
     include: { whatsappSession: true },
   });
 
+  const devicePhone = await activeDevicePhone(brandId);
   const existing = await prisma.prospect.findFirst({
-    where: { brandId, phone: { in: phoneAliases(phone) } },
+    where: { brandId, devicePhone, phone: { in: phoneAliases(phone) } },
     select: { id: true },
   });
   if (existing) throw new HttpError(409, 'Kontak dengan nomor WhatsApp tersebut sudah tersedia.');
@@ -279,7 +280,7 @@ contactsRouter.post('/', requireRole('superadmin', 'admin'), asyncHandler(async 
       remoteJid: `${phone}@s.whatsapp.net`,
       leadSource: 'whatsapp', // marked as whatsapp lead so it syncs with connected device
       // Tanpa device tersambung: diikat saat device berikutnya tersambung (adoptUnassignedProspects).
-      devicePhone: await activeDevicePhone(brandId),
+      devicePhone,
     },
     include: { user: { select: { id: true, name: true } } },
   });
