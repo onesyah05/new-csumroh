@@ -15,7 +15,8 @@ describe('Biaya iklan dari Meta Insights', () => {
     vi.stubGlobal('fetch', fetchMock);
     expect(await fetchAdSpend(brand, '2026-09-01', '2026-09-30')).toEqual({ status: 'ok', spend: 1250000.5, currency: 'IDR' });
     await fetchAdSpend(brand, '2026-09-01', '2026-09-30');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // Insights + zona waktu akun; panggilan kedua dari cache.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toContain('/act_123/insights?');
     expect(decodeURIComponent(url)).toContain('time_range={"since":"2026-09-01","until":"2026-09-30"}');
