@@ -104,7 +104,8 @@ whatsappRouter.get('/status', asyncHandler(async (req, res) => {
   });
 }));
 
-whatsappRouter.post('/start', requireRole('superadmin'), asyncHandler(async (req, res) => {
+// Menautkan dan memutus device: Super Admin dan Admin (router sudah membatasi ke kedua peran itu).
+whatsappRouter.post('/start', asyncHandler(async (req, res) => {
   const input = actionSchema.parse(req.body ?? {});
   const brand = await resolveBrand(req, input.brandId);
   await prisma.whatsappSession.upsert({
@@ -122,7 +123,7 @@ whatsappRouter.post('/start', requireRole('superadmin'), asyncHandler(async (req
   res.json({ success: true, data: session });
 }));
 
-whatsappRouter.post('/disconnect', requireRole('superadmin'), asyncHandler(async (req, res) => {
+whatsappRouter.post('/disconnect', asyncHandler(async (req, res) => {
   const input = actionSchema.parse(req.body ?? {});
   const brand = await resolveBrand(req, input.brandId);
   await gatewayRequest(`/sessions/${brand.id}/logout`, 'POST');

@@ -140,7 +140,7 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
           <p className="mt-1 text-xs leading-5 text-zinc-500">
             {canManage
               ? 'Gunakan WhatsApp utama: Perangkat tertaut → Tautkan perangkat → scan QR yang tampil.'
-              : 'Pengelolaan perangkat hanya dapat dilakukan oleh Super Admin. Admin brand memiliki akses pantau status saja.'}
+              : 'Pengelolaan perangkat hanya dapat dilakukan oleh Super Admin dan Admin.'}
           </p>
 
           {canManage && currentData.status !== 'connected' && (

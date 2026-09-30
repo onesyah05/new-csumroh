@@ -53,10 +53,10 @@ describe('WhatsAppDevicePanel', () => {
     ));
   });
 
-  it('keeps device controls read-only for a brand admin', async () => {
+  it('keeps device controls read-only for roles that cannot manage devices', async () => {
     render(<QueryClientProvider client={queryClient}><WhatsAppDevicePanel brandId={7} brandName="Azhan Travel" canManage={false} /></QueryClientProvider>);
 
-    expect(await screen.findByText(/akses pantau status saja/i)).toBeTruthy();
+    expect(await screen.findByText(/hanya dapat dilakukan oleh Super Admin dan Admin/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /buat qr baru/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /putuskan perangkat/i })).toBeNull();
     expect(screen.getByRole('button', { name: /perbarui status/i })).toBeTruthy();
