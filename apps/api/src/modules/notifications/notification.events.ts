@@ -1,4 +1,4 @@
-import { lostStatuses, wonStatuses } from '@csumroh/shared-types';
+import { lostStatuses, waDisconnectReasonText, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { emitToUser } from '../../realtime/socket.js';
 import { notify, resolveNotifications } from './notify.service.js';
@@ -291,14 +291,15 @@ export function onWhatsappStatus(brandId: number, status: string, graceMs = WA_D
  * timer di proses dan job terjadwal tidak mengirim dua kali untuk kejadian yang sama.
  */
 export async function notifyWhatsappDisconnected(brandId: number) {
-  const session = await prisma.whatsappSession.findUnique({ where: { brandId }, select: { status: true, updatedAt: true } }).catch(() => null);
+  const session = await prisma.whatsappSession.findUnique({ where: { brandId }, select: { status: true, updatedAt: true, disconnectReason: true } }).catch(() => null);
   if (!session || session.status === 'connected') return 0;
+  const reason = waDisconnectReasonText(session.disconnectReason);
   return notify({
     dedupeKey: `wa.disconnected:b${brandId}:${session.updatedAt.getTime()}`,
     type: 'wa.disconnected', priority: 'urgent', brandId,
     userIds: await adminsOf(brandId),
     title: `WhatsApp ${await brandName(brandId)} terputus`,
-    body: 'Perangkat tidak terhubung lebih dari 2 menit. Pesan jamaah dan balasan CS tertunda.',
+    body: `Perangkat tidak terhubung lebih dari 2 menit. Pesan jamaah dan balasan CS tertunda.${reason ? ` ${reason}` : ''}`,
     link: `/brands/${brandId}?tab=perangkat`, entity: { type: 'brand', id: brandId }, activeKey: `wa.disconnected:b${brandId}`,
   });
 }

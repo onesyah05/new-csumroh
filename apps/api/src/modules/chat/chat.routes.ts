@@ -16,6 +16,7 @@ import { attachReferralMarker, normalizeReferralMarker } from '../prospects/refe
 import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { adLabels } from '../ads/meta-ads.js';
+import { syncSessionWithGateway } from '../whatsapp/gateway-probe.js';
 import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
 import { Prisma, type ChatMessage } from '@prisma/client';
 import { avatarNeedsRefresh } from '@csumroh/shared-types';
@@ -613,9 +614,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   if (input.packageId && !linkedPackage) throw new HttpError(404, 'Paket tidak ditemukan di brand ini.');
 
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
-  if (session?.status !== 'connected') {
-    throw new HttpError(400, 'Perangkat WhatsApp tidak terhubung.');
-  }
+  // Status di database bisa tertinggal; gateway yang memutuskan (409 bila memang putus).
   const devicePhone = sendingDevicePhone(prospect, session);
 
   // Resolve media file and base64Data (supports client-uploaded base64 or verified catalog package flyer)
@@ -830,9 +829,7 @@ chatRouter.post('/messages/:id/react', asyncHandler(async (req, res) => {
   if (!remoteJid) throw new HttpError(422, 'Remote JID tidak valid.');
 
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
-  if (session?.status !== 'connected') {
-    throw new HttpError(400, 'Perangkat WhatsApp tidak terhubung.');
-  }
+  // Status di database bisa tertinggal; gateway yang memutuskan (409 bila memang putus).
   // Reaksi hanya lewat nomor yang menerima/mengirim pesan itu.
   sendingDevicePhone(message, session);
 
@@ -847,9 +844,7 @@ chatRouter.post('/messages/:id/react', asyncHandler(async (req, res) => {
     }),
   }).catch(() => null);
 
-  if (!gatewayResponse?.ok) {
-    throw new HttpError(502, 'Gagal mengirim reaction ke WhatsApp.');
-  }
+  if (!gatewayResponse?.ok) throw await gatewayFailure(brandId, gatewayResponse, 'Gagal mengirim reaction ke WhatsApp.');
 
   const updated = await prisma.chatMessage.update({
     where: { id },
@@ -900,7 +895,7 @@ chatRouter.delete('/messages/:id', asyncHandler(async (req, res) => {
   if (!remoteJid) throw new HttpError(422, 'Remote JID tidak valid.');
 
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
-  if (session?.status !== 'connected') throw new HttpError(400, 'Perangkat WhatsApp tidak terhubung.');
+  // Status di database bisa tertinggal; gateway yang memutuskan (409 bila memang putus).
   // Hanya nomor pengirimnya yang bisa menarik pesan.
   sendingDevicePhone(message, session);
 
@@ -971,44 +966,9 @@ chatRouter.get('/wa/status', asyncHandler(async (req, res) => {
   // Probe gateway paling sering sekali per STATUS_PROBE_MS per brand; di antaranya status dari database (yang
   // juga diperbarui gateway lewat webhook) sudah cukup untuk polling Inbox setiap tab.
   const probeDue = Date.now() - (statusProbedAt.get(brandId) ?? 0) >= STATUS_PROBE_MS;
-  if (probeDue) statusProbedAt.set(brandId, Date.now());
-  if (probeDue) try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1200);
-    const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/status`, {
-      method: 'GET',
-      headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
-      signal: controller.signal,
-    }).catch(() => null);
-    clearTimeout(timeout);
-
-    if (!response || !response.ok) {
-      if (data && (data.status === 'connected' || data.status === 'connecting')) {
-        data = await prisma.whatsappSession.update({
-          where: { brandId },
-          data: { status: 'disconnected', qrCode: null },
-        });
-      }
-    } else {
-      const body = (await response.json().catch(() => null)) as any;
-      const raw = body?.data?.status;
-      const gwStatus = (raw === 'connected' || raw === 'connecting' || raw === 'qr_ready' || raw === 'disconnected')
-        ? raw
-        : 'disconnected';
-      if (data && data.status !== gwStatus) {
-        data = await prisma.whatsappSession.update({
-          where: { brandId },
-          data: { status: gwStatus },
-        });
-      }
-    }
-  } catch {
-    if (data && (data.status === 'connected' || data.status === 'connecting')) {
-      data = await prisma.whatsappSession.update({
-        where: { brandId },
-        data: { status: 'disconnected', qrCode: null },
-      });
-    }
+  if (probeDue) {
+    statusProbedAt.set(brandId, Date.now());
+    data = await syncSessionWithGateway(brandId, data);
   }
 
   if (data && data.status !== statusBefore) void onWhatsappStatus(brandId, data.status);
@@ -1370,6 +1330,30 @@ internalRouter.post('/messages/reaction', asyncHandler(async (req, res) => {
   res.json({ success: true, data: { updated: updated.count } });
 }));
 
+/** Pengirim menarik pesannya ("hapus untuk semua") di WhatsApp: tandai terhapus seperti hapus dari CRM. */
+internalRouter.post('/messages/revoked', asyncHandler(async (req, res) => {
+  const input = z.object({ brandId: z.coerce.number().int().positive(), messageId: z.string().min(1).max(100) }).parse(req.body);
+  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { id: true, prospectId: true, isDeleted: true } });
+  if (message && !message.isDeleted) {
+    const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { isDeleted: true, deletedAt: new Date() } });
+    scheduleConversationStats([updated.prospectId]);
+    emitToBrand(input.brandId, 'message:deleted', { id: updated.id, messageId: updated.messageId, isDeleted: true, deletedAt: updated.deletedAt });
+  }
+  res.json({ success: true });
+}));
+
+/** Pengirim mengedit pesannya di WhatsApp: teks di CRM ikut berubah. */
+internalRouter.post('/messages/edited', asyncHandler(async (req, res) => {
+  const input = z.object({ brandId: z.coerce.number().int().positive(), messageId: z.string().min(1).max(100), text: z.string().max(65_000) }).parse(req.body);
+  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { id: true } });
+  if (message) {
+    const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { messageText: input.text } });
+    scheduleConversationStats([updated.prospectId]);
+    emitToBrand(input.brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText });
+  }
+  res.json({ success: true });
+}));
+
 internalRouter.post('/messages/incoming', asyncHandler(async (req, res) => {
   const input = gatewayMessageSchema.parse(req.body);
   const message = await ingestGatewayMessage(input, { realtime: true });
@@ -1453,13 +1437,16 @@ internalRouter.post('/wa/status', asyncHandler(async (req, res) => {
     status: z.enum(['disconnected', 'connecting', 'connected', 'qr_ready']),
     qrCode: z.string().max(1_000_000).nullable().optional(),
     phoneNumber: z.string().max(30).nullable().optional(),
+    reason: z.string().max(30).optional(),
   }).parse(req.body);
   const qrCode = input.status === 'qr_ready' ? input.qrCode ?? null : null;
   const phoneNumber = input.status === 'connected' ? input.phoneNumber ?? undefined : input.status === 'disconnected' ? null : undefined;
+  // Alasan dipertahankan selama mencoba menyambung ulang; hilang hanya saat benar-benar tersambung.
+  const disconnectReason = input.status === 'connected' ? null : input.status === 'disconnected' ? input.reason ?? 'connection_lost' : undefined;
   const session = await prisma.whatsappSession.upsert({
     where: { brandId: input.brandId },
-    update: { status: input.status, qrCode, phoneNumber, lastConnectedAt: input.status === 'connected' ? new Date() : undefined },
-    create: { brandId: input.brandId, sessionName: `brand_${input.brandId}`, status: input.status, qrCode, phoneNumber: phoneNumber ?? null },
+    update: { status: input.status, qrCode, phoneNumber, disconnectReason, lastConnectedAt: input.status === 'connected' ? new Date() : undefined },
+    create: { brandId: input.brandId, sessionName: `brand_${input.brandId}`, status: input.status, qrCode, phoneNumber: phoneNumber ?? null, disconnectReason: disconnectReason ?? null },
   });
   if (input.status === 'connected') await adoptUnassignedProspects(input.brandId, session.phoneNumber);
   emitToBrand(input.brandId, input.status === 'qr_ready' ? 'wa:qr' : 'wa:status', session);

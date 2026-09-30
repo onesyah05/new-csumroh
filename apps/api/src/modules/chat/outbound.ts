@@ -48,7 +48,7 @@ export function prospectChatJid(prospect: { phone: string | null; remoteJid: str
  */
 export async function gatewayFailure(brandId: number, response: Response | null, message: string) {
   if (!response || response.status === 409) {
-    await prisma.whatsappSession.updateMany({ where: { brandId }, data: { status: 'disconnected', qrCode: null } });
+    await prisma.whatsappSession.updateMany({ where: { brandId }, data: { status: 'disconnected', qrCode: null, disconnectReason: response ? 'connection_lost' : 'gateway_unreachable' } });
     emitToBrand(brandId, 'whatsapp:status', { brandId, status: 'disconnected' });
     void onWhatsappStatus(brandId, 'disconnected');
     return new HttpError(502, 'WhatsApp belum terhubung atau gateway tidak tersedia.');
@@ -97,9 +97,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
   }
 
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
-  if (session?.status !== 'connected') {
-    throw new HttpError(400, 'Perangkat WhatsApp tidak terhubung. Tidak dapat mengirim pesan.');
-  }
+  // Status di database bisa tertinggal (probe yang lambat); gateway yang memutuskan, dan menjawab 409 bila memang putus.
   const devicePhone = sendingDevicePhone(prospect, session);
 
   const phone = normalizePhoneIdentifier(prospect.phone);

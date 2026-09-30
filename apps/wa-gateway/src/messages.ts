@@ -1,4 +1,4 @@
-import { getContentType, isRealMessage, normalizeMessageContent, type WAMessage } from '@whiskeysockets/baileys';
+import { getContentType, isRealMessage, normalizeMessageContent, proto, type WAMessage } from '@whiskeysockets/baileys';
 import { extractMetaReferral } from './referral.js';
 
 export type HistoryContact = {
@@ -147,6 +147,24 @@ function textFromMessage(message: WAMessage) {
     return anyBody.listResponseMessage.title;
   }
   return '';
+}
+
+export type GatewayMessageChange = { kind: 'revoked'; messageId: string } | { kind: 'edited'; messageId: string; text: string };
+
+/**
+ * Pesan ditarik ("hapus untuk semua") atau diedit pengirimnya. WhatsApp mengirimnya sebagai protocolMessage yang
+ * merujuk ID pesan asli, bukan pesan baru.
+ */
+export function toMessageChange(message: WAMessage): GatewayMessageChange | null {
+  const protocol = normalizeMessageContent(message.message)?.protocolMessage;
+  const messageId = protocol?.key?.id;
+  if (!protocol || !messageId) return null;
+  if (protocol.type === proto.Message.ProtocolMessage.Type.REVOKE) return { kind: 'revoked', messageId };
+  if (protocol.type === proto.Message.ProtocolMessage.Type.MESSAGE_EDIT && protocol.editedMessage) {
+    const text = textFromMessage({ key: message.key, message: protocol.editedMessage } as WAMessage);
+    return text ? { kind: 'edited', messageId, text } : null;
+  }
+  return null;
 }
 
 function timestampFromMessage(message: WAMessage) {
