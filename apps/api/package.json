@@ -15,7 +15,8 @@
     "db:migrate:status": "prisma migrate status",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:roles": "tsx prisma/seed-roles.ts",
-    "db:clean-demo": "tsx prisma/clean-demo.ts"
+    "db:clean-demo": "tsx prisma/clean-demo.ts",
+    "db:backfill:contact": "tsx prisma/backfill-contact-status.ts"
   },
   "dependencies": {
     "@csumroh/shared-types": "workspace:*",

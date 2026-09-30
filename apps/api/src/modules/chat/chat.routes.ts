@@ -1114,7 +1114,9 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   const isNewProspect = !prospect;
   if (!prospect) {
     // Lead baru dari jamaah langsung punya PIC: CS aktif brand ini (termasuk CS multi-brand) dengan prospek terbuka paling sedikit.
-    autoAssigned = (isFromMe || isGroup) ? null : await pickAutoAssignee(brandId);
+    // Juga chat baru yang dimulai dari HP brand (pesan keluar realtime): tanpa ini lead itu tidak pernah punya PIC.
+    // Chat lama dari sinkron riwayat yang dimulai dari brand tidak dibagi otomatis; Admin menugaskannya manual.
+    autoAssigned = isGroup || (isFromMe && !options.realtime) ? null : await pickAutoAssignee(brandId);
     prospect = await prisma.prospect.create({
       data: {
         brandId,

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   prospectUpdateMany: vi.fn(),
   logCreate: vi.fn(),
   queueCapi: vi.fn(),
+  pickAssignee: vi.fn(async () => null as null | { id: number; name: string }),
 }));
 
 vi.mock('../../db/prisma.js', () => ({
@@ -28,7 +29,7 @@ vi.mock('../notifications/notification.events.js', () => ({
   dispatch: vi.fn(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn(),
   notifyLeadAssigned: vi.fn(), notifyLeadUnassigned: vi.fn(), notifyInboundMessage: vi.fn(),
 }));
-vi.mock('../prospects/pic.js', () => ({ pickAutoAssignee: async () => null }));
+vi.mock('../prospects/pic.js', () => ({ pickAutoAssignee: mocks.pickAssignee }));
 vi.mock('../capi/capi.service.js', () => ({ dispatchCapiEvent: vi.fn(async () => undefined), queueCapiForStatus: mocks.queueCapi }));
 vi.mock('../prospects/referral.service.js', () => ({ attachReferralMarker: vi.fn(async () => false), normalizeReferralMarker: () => null }));
 
@@ -36,8 +37,8 @@ import { env } from '../../config/env.js';
 import { internalRouter } from './chat.routes.js';
 import { gatewayFailure, prospectChatJid, sendingDevicePhone } from './outbound.js';
 
-function incoming(body: Record<string, unknown>) {
-  const layer = (internalRouter as any).stack.find((l: any) => l.route?.path === '/messages/incoming');
+function incoming(body: Record<string, unknown>, path = '/messages/incoming') {
+  const layer = (internalRouter as any).stack.find((l: any) => l.route?.path === path);
   return new Promise<any>((resolve, reject) => {
     const res = { status: () => res, json: (payload: any) => resolve(payload.data) };
     layer.route.stack.at(-1).handle({ body, get: () => env.WA_GATEWAY_SECRET }, res, reject);
@@ -104,6 +105,18 @@ describe('Pesan WhatsApp masuk', () => {
     expect(mocks.prospectFindMany.mock.calls[0]![0].where.devicePhone).toBe('628222');
     expect(mocks.prospectCreate.mock.calls[0]![0].data.devicePhone).toBe('628222');
     expect(mocks.messageUpsert.mock.calls[0]![0].create.devicePhone).toBe('628222');
+  });
+});
+
+describe('PIC otomatis untuk lead baru', () => {
+  it('chat baru yang dimulai dari HP brand (realtime) juga mendapat PIC', async () => {
+    await incoming({ ...base, isFromMe: true });
+    expect(mocks.pickAssignee).toHaveBeenCalledWith(1);
+  });
+
+  it('chat lama dari sinkron riwayat yang dimulai brand tidak dibagi otomatis', async () => {
+    await incoming({ brandId: 1, messages: [{ ...base, isFromMe: true }] }, '/messages/history');
+    expect(mocks.pickAssignee).not.toHaveBeenCalled();
   });
 });
 
