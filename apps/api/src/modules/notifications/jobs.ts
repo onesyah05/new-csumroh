@@ -4,7 +4,7 @@ import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { notifyWhatsappDisconnected } from './notification.events.js';
-import { notify, resolveNotifications } from './notify.service.js';
+import { notify, resolveNotifications, syncSummary } from './notify.service.js';
 import { adminsOf, csOfBrand, financeUsers, picOf } from './recipients.js';
 
 /**
@@ -66,6 +66,7 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
   const nowSec = now.getTime() / 1000;
   const eligible = conversations.filter((c) => !c.isGroup && !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && isOpenStatus(c.status));
   let takeoverOpen = 0;
+  const escalated: string[] = [];
 
   for (const c of eligible) {
     const since = c.awaitingSince;
@@ -98,35 +99,37 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
         dedupeKey: `reply.takeover_open:p${c.id}:${since}`,
       });
     }
-    if (waited >= SLA.escalationMinutes) {
-      await notify({
-        type: 'reply.escalation', priority: 'urgent', brandId,
-        userIds: await adminsOf(brandId),
-        title: `${c.name} belum dibalas ${waited} menit`,
-        body: `PIC ${picName}. Tugaskan ulang atau hubungi CS.`,
-        link: inboxLink(ref), entity: { type: 'prospect', id: c.id },
-        dedupeKey: `reply.escalation:p${c.id}:${since}`,
-      });
-    }
+    if (waited >= SLA.escalationMinutes) escalated.push(c.name);
   }
   // Tidak ada lagi jamaah yang bisa diambil alih: ringkasan brand untuk CS selesai.
   if (takeoverOpen === 0) await resolveNotifications({ entity: { type: 'brand', id: brandId }, types: ['reply.takeover_open'] });
 
-  // Lead yang masih tanpa PIC setelah 30 menit (event awal sudah dikirim saat lead masuk tanpa CS aktif).
-  for (const c of eligible) {
-    if (c.userId) continue;
-    const age = now.getTime() - new Date(c.createdAt).getTime();
-    if (age < SLA.unassignedLeadMinutes * MINUTE || age > 24 * HOUR) continue;
-    await notify({
-      type: 'lead.unassigned', priority: 'urgent', brandId,
-      userIds: await adminsOf(brandId),
-      title: `${c.name} belum punya PIC lebih dari ${SLA.unassignedLeadMinutes} menit`,
-      body: 'Tugaskan PIC atau minta CS mengklaim dari antrean.',
-      link: '/pipeline?pic=none', entity: { type: 'prospect', id: c.id },
-      activeKey: `lead.unassigned:p${c.id}`,
-      dedupeKey: `lead.unassigned:p${c.id}:${SLA.unassignedLeadMinutes}m`,
-    });
-  }
+  // Ringkasan per brand (angka = kondisi saat ini), bukan satu notifikasi per prospek.
+  const admins = await adminsOf(brandId);
+  const brand = await brandLabel(brandId);
+  await syncSummary({
+    type: 'reply.escalation', priority: 'urgent', brandId, userIds: admins,
+    activeKey: `reply.escalation:b${brandId}`, count: escalated.length,
+    title: `${brand}: ${escalated.length} jamaah belum dibalas lebih dari ${SLA.escalationMinutes} menit`,
+    body: `${escalated.slice(0, 3).join(', ')}${escalated.length > 3 ? `, dan ${escalated.length - 3} lainnya` : ''}. Tugaskan ulang atau hubungi CS.`,
+    link: '/pipeline?quick=reply',
+  });
+  // Lead tanpa PIC: yang masih terbuka, bukan spam, dan dari device yang sedang tersambung (daftar Inbox).
+  const unassigned = eligible.filter((c) => !c.userId && !c.spamAt);
+  await syncSummary({
+    type: 'lead.unassigned', priority: 'action', brandId, userIds: admins,
+    activeKey: `lead.unassigned:b${brandId}`, count: unassigned.length,
+    title: `${brand}: ${unassigned.length} lead belum punya PIC`,
+    body: (await csOfBrand(brandId)).length
+      ? 'Tugaskan PIC atau minta CS mengklaim dari antrean.'
+      : 'Brand ini belum punya CS aktif, jadi lead baru tidak mendapat PIC. Tambahkan CS di menu Staf.',
+    link: '/pipeline?pic=none',
+  });
+}
+
+async function brandLabel(brandId: number) {
+  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { name: true } }).catch(() => null);
+  return brand?.name ?? `Brand ${brandId}`;
 }
 
 // ── Perangkat WA & gateway ──────────────────────────────────────────────────────

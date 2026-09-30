@@ -1,5 +1,5 @@
 import { Prisma, type NotificationPriority } from '@prisma/client';
-import { effectiveNotificationPreference, type NotificationType } from '@csumroh/shared-types';
+import { effectiveNotificationPreference, notificationEntry, type NotificationType } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { emitToUser } from '../../realtime/socket.js';
@@ -85,9 +85,19 @@ async function writeFor(userId: number, input: NotifyInput) {
  * Tidak pernah melempar error: kegagalan notifikasi tidak boleh menggagalkan tindakan bisnis,
  * sehingga pemanggil boleh memanggilnya setelah transaksi selesai tanpa try/catch.
  */
+/** User yang mematikan tipe ini di Pengaturan Notifikasi (tipe Mendesak tidak bisa dimatikan). */
+async function withoutMuted(type: string, userIds: number[]) {
+  if (!userIds.length || notificationEntry(type)?.priority === 'urgent') return userIds;
+  const muted = await prisma.notificationPreference.findMany({ where: { type, muted: true, userId: { in: userIds } }, select: { userId: true } });
+  const mutedIds = new Set(muted.map((row) => row.userId));
+  return userIds.filter((id) => !mutedIds.has(id));
+}
+
 export async function notify(input: NotifyInput): Promise<number> {
   if (!env.NOTIFICATIONS_ENABLED) return 0;
-  const userIds = [...new Set(input.userIds)].filter((id) => id && id !== input.actorId);
+  const recipients = [...new Set(input.userIds)].filter((id) => id && id !== input.actorId);
+  // Preferensi tidak terbaca: tetap kirim (lebih baik tidak dimatikan daripada hilang).
+  const userIds = await withoutMuted(input.type, recipients).catch(() => recipients);
   if (!userIds.length) return 0;
   try {
     if (input.dedupeKey) {
@@ -114,6 +124,69 @@ export async function notify(input: NotifyInput): Promise<number> {
     return delivered;
   } catch (error) {
     console.error(`Notifikasi ${input.type} gagal dikirim`, error);
+    return 0;
+  }
+}
+
+/**
+ * Ringkasan per brand yang angkanya = kondisi saat ini, bukan tumpukan kejadian. Baris tetap satu per penerima:
+ * dibaca tidak menutupnya (lihat notifications.routes), jadi angka yang sama tidak memunculkan notifikasi baru.
+ */
+export const SUMMARY_TYPES = ['lead.unassigned', 'reply.escalation'] as const satisfies readonly NotificationType[];
+
+export type SummaryInput = {
+  type: (typeof SUMMARY_TYPES)[number];
+  priority: NotificationPriority;
+  brandId: number;
+  userIds: number[];
+  /** Kunci baris, mis. "lead.unassigned:b2". */
+  activeKey: string;
+  count: number;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+};
+
+/**
+ * Samakan baris ringkasan dengan jumlah saat ini. Jumlah naik = belum dibaca lagi dan toast; turun = angka
+ * diperbarui diam-diam; 0 = selesai (keluar dari "Perlu tindakan").
+ */
+export async function syncSummary(input: SummaryInput): Promise<number> {
+  if (!env.NOTIFICATIONS_ENABLED) return 0;
+  try {
+    if (input.count <= 0) {
+      const open = await prisma.notification.findMany({ where: { activeKey: input.activeKey, resolvedAt: null }, select: { id: true, userId: true } });
+      if (!open.length) return 0;
+      await prisma.notification.updateMany({ where: { id: { in: open.map((row) => row.id) } }, data: { resolvedAt: new Date(), activeKey: null } });
+      for (const row of open) emitToUser(row.userId, 'notification:updated', { ids: [row.id], resolved: true });
+      return 0;
+    }
+    const userIds = await withoutMuted(input.type, [...new Set(input.userIds)].filter(Boolean));
+    let changed = 0;
+    for (const userId of userIds) {
+      const existing = await prisma.notification.findUnique({ where: { userId_activeKey: { userId, activeKey: input.activeKey } } });
+      if (existing && existing.count === input.count && existing.title === clip(input.title, 200)) continue;
+      const increased = !existing || input.count > existing.count;
+      const data = {
+        type: input.type, priority: input.priority, brandId: input.brandId,
+        title: clip(input.title, 200)!, body: clip(input.body, 500), link: safeLink(input.link),
+        entityType: 'brand', entityId: input.brandId, count: input.count,
+      };
+      const row = existing
+        ? await prisma.notification.update({ where: { id: existing.id }, data: { ...data, ...(increased ? { readAt: null } : {}) } })
+        : await prisma.notification.create({ data: { ...data, userId, activeKey: input.activeKey } });
+      changed++;
+      const stored = await prisma.notificationPreference.findUnique({ where: { userId_type: { userId, type: input.type } }, select: { toast: true, sound: true } });
+      const preference = effectiveNotificationPreference(input.type, stored);
+      emitToUser(userId, 'notification:new', {
+        ...toPayload(row),
+        toast: increased && (input.priority === 'urgent' || preference.toast),
+        sound: increased && preference.sound,
+      });
+    }
+    return changed;
+  } catch (error) {
+    console.error(`Ringkasan ${input.type} gagal diperbarui`, error);
     return 0;
   }
 }

@@ -11,7 +11,7 @@ vi.mock('../../db/prisma.js', () => ({
   },
 }));
 
-import { financeOrAdmins, productOrSuperadmins } from './recipients.js';
+import { adminsOf, financeOrAdmins, productOrSuperadmins } from './recipients.js';
 
 beforeEach(() => { users.list = []; });
 
@@ -21,6 +21,15 @@ describe('penerima cadangan', () => {
     expect(await financeOrAdmins(1)).toEqual([3]);
     users.list = users.list.filter((u) => u.role !== 'finance');
     expect((await financeOrAdmins(1)).sort()).toEqual([1, 4]);
+  });
+
+  it('Admin brand lain tidak menerima notifikasi brand yang tidak ia pegang', async () => {
+    // Brand 1 tanpa Admin terkait; Admin id 5 hanya memegang brand 2.
+    users.list = [{ id: 1, role: 'superadmin', brandId: null }, { id: 5, role: 'admin', brandId: 2 }];
+    expect(await adminsOf(1)).toEqual([1]);
+    // Tanpa Superadmin sama sekali: cadangan ke semua Admin agar tidak hilang.
+    users.list = [{ id: 5, role: 'admin', brandId: 2 }];
+    expect(await adminsOf(1)).toEqual([5]);
   });
 
   it('layanan custom: ke Tim LA; tanpa Tim LA aktif ke Superadmin', async () => {

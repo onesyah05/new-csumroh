@@ -42,16 +42,6 @@ export async function notifyLeadAssigned(p: ProspectRef, assigneeId: number) {
   });
 }
 
-export async function notifyLeadUnassigned(p: ProspectRef) {
-  return notify({
-    type: 'lead.unassigned', priority: 'urgent', brandId: p.brandId,
-    userIds: await adminsOf(p.brandId),
-    title: `Lead baru tanpa PIC: ${p.name}`,
-    body: `${await brandName(p.brandId)}: tidak ada CS aktif yang menerima lead ini. Tugaskan PIC.`,
-    link: '/pipeline?pic=none', entity: prospectEntity(p), activeKey: `lead.unassigned:p${p.id}`,
-  });
-}
-
 const MEDIA_LABELS: Record<string, string> = {
   imageMessage: 'Mengirim gambar', videoMessage: 'Mengirim video', audioMessage: 'Mengirim pesan suara',
   documentMessage: 'Mengirim dokumen', stickerMessage: 'Mengirim stiker', locationMessage: 'Mengirim lokasi', contactMessage: 'Mengirim kontak',

@@ -8,8 +8,8 @@ import { useNotificationTitle } from './NotificationBell';
 import { NotificationSettingsPage } from './NotificationSettingsPage';
 
 const preferences = [
-  { type: 'message.inbound', group: 'Lead & chat', label: 'Pesan baru dari jamaah', description: 'Pesan jamaah.', priority: 'info', toast: false, sound: false, locked: false },
-  { type: 'pic.taken_over', group: 'PIC', label: 'Prospek saya diambil alih', description: 'Diambil alih.', priority: 'urgent', toast: true, sound: false, locked: true },
+  { type: 'message.inbound', group: 'Lead & chat', label: 'Pesan baru dari jamaah', description: 'Pesan jamaah.', priority: 'info', toast: false, sound: false, muted: false, locked: false },
+  { type: 'pic.taken_over', group: 'PIC', label: 'Prospek saya diambil alih', description: 'Diambil alih.', priority: 'urgent', toast: true, sound: false, muted: false, locked: true },
 ];
 
 let calls: { url: string; init?: RequestInit }[] = [];
@@ -61,8 +61,22 @@ describe('Pengaturan notifikasi', () => {
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Tampilkan toast: Pesan baru dari jamaah' }).getAttribute('aria-checked')).toBe('true'));
     await waitFor(() => {
       const put = calls.find((c) => c.init?.method === 'PUT');
-      expect(put && JSON.parse(String(put.init?.body))).toEqual({ items: [{ type: 'message.inbound', toast: true, sound: false }] });
+      expect(put && JSON.parse(String(put.init?.body))).toEqual({ items: [{ type: 'message.inbound', toast: true, sound: false, muted: false }] });
     });
+  });
+});
+
+describe('Matikan notifikasi', () => {
+  it('jenis biasa bisa dimatikan; toast & suara ikut nonaktif; mendesak tidak bisa', async () => {
+    renderPage();
+    const active = await screen.findByRole('switch', { name: 'Aktifkan notifikasi: Pesan baru dari jamaah' });
+    fireEvent.click(active);
+    await waitFor(() => {
+      const put = calls.find((c) => c.init?.method === 'PUT');
+      expect(put && JSON.parse(String(put.init?.body)).items[0]).toMatchObject({ type: 'message.inbound', muted: true });
+    });
+    await waitFor(() => expect((screen.getByRole('switch', { name: 'Tampilkan toast: Pesan baru dari jamaah' }) as HTMLButtonElement).disabled).toBe(true));
+    expect((screen.getByRole('switch', { name: 'Aktifkan notifikasi: Prospek saya diambil alih' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

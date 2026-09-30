@@ -24,7 +24,10 @@ function invoke(method: string, route: string, opts: { id?: string; query?: any;
   });
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.updateMany.mockResolvedValue({ count: 0 });
+});
 
 describe('notifications API', () => {
   it('daftar hanya milik user yang login, dengan cursor halaman berikutnya', async () => {
@@ -36,16 +39,26 @@ describe('notifications API', () => {
     expect(result.data.nextCursor).toBe(2);
   });
 
-  it('tandai dibaca: notifikasi user lain = 404, baris ringkasan ditutup', async () => {
-    mocks.updateMany.mockResolvedValueOnce({ count: 0 });
+  it('tandai dibaca: notifikasi user lain = 404; baris biasa ditutup, ringkasan per brand tetap terbuka', async () => {
     expect((await invoke('post', '/:id/read', { id: '9' })).status).toBe(404);
-    expect(mocks.updateMany.mock.calls[0][0].where).toEqual({ id: 9, userId: 5 });
+    expect(mocks.updateMany.mock.calls[0][0].where).toMatchObject({ id: 9, userId: 5 });
 
     mocks.updateMany.mockResolvedValueOnce({ count: 1 });
     const ok = await invoke('post', '/:id/read', { id: '9' });
     expect(ok.status).toBe(200);
-    expect(mocks.updateMany.mock.calls[1][0].data.activeKey).toBeNull();
+    const [plain, summary] = mocks.updateMany.mock.calls.slice(2).map(([arg]: any) => arg);
+    expect(plain.data.activeKey).toBeNull();
+    expect(summary.where.type).toEqual({ in: ['lead.unassigned', 'reply.escalation'] });
+    expect(summary.data.activeKey).toBeUndefined();
     expect(mocks.emitToUser).toHaveBeenCalledWith(5, 'notification:read', { ids: [9] });
+  });
+
+  it('filter brand: daftar dan hitungan hanya brand yang dipilih', async () => {
+    mocks.findMany.mockResolvedValue([]);
+    await invoke('get', '/', { query: { filter: 'action', brandId: '2' } });
+    expect(mocks.findMany.mock.calls[0][0].where).toMatchObject({ userId: 5, brandId: 2 });
+    await invoke('get', '/unread-count', { query: { brandId: '2' } });
+    expect(mocks.count.mock.calls[0][0].where).toMatchObject({ userId: 5, brandId: 2 });
   });
 
   it('hitungan belum dibaca tidak menghitung notifikasi yang sudah selesai', async () => {
@@ -72,7 +85,10 @@ describe('preferensi notifikasi', () => {
     expect((await invoke('put', '/preferences', { body: { items: [{ type: 'wa.disconnected', toast: false, sound: false }] } })).status).toBe(422);
     await invoke('put', '/preferences', { body: { items: [{ type: 'pic.taken_over', toast: false, sound: true }, { type: 'lead.assigned', toast: false, sound: false }] } });
     const upserts = mocks.upsert.mock.calls.map(([arg]: any) => [arg.where.userId_type.type, arg.update]);
-    expect(upserts).toEqual([['pic.taken_over', { toast: true, sound: true }], ['lead.assigned', { toast: false, sound: false }]]);
+    expect(upserts).toEqual([['pic.taken_over', { toast: true, sound: true, muted: false }], ['lead.assigned', { toast: false, sound: false }]]);
+    mocks.upsert.mockClear();
+    await invoke('put', '/preferences', { body: { items: [{ type: 'lead.assigned', toast: true, sound: false, muted: true }] } });
+    expect(mocks.upsert.mock.calls[0][0].update).toEqual({ toast: true, sound: false, muted: true });
   });
 });
 

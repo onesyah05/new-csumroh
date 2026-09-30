@@ -52,6 +52,36 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('Filter brand di lonceng', () => {
+  it('tampil bila notifikasi datang dari lebih dari satu brand; memilih brand memfilter daftar', async () => {
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/notifications/brands')) {
+        return json([{ id: 1, name: 'Hana Tours & Travel', code: 'HANA', actionable: 1 }, { id: 2, name: 'Nava Tours & Travel', code: 'NAVA', actionable: 0 }]);
+      }
+      return base(input, init);
+    });
+    renderBell();
+    fireEvent.click(await screen.findByRole('button', { name: /^Notifikasi, 1/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'NAVA' }));
+    await waitFor(() => {
+      const calls = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
+      expect(calls.some((u) => u.includes('/notifications?filter=action') && u.includes('brandId=2'))).toBe(true);
+    });
+    expect(screen.getByRole('button', { name: 'Perlu tindakan' })).toBeTruthy();
+  });
+
+  it('satu brand saja: filter tidak ditampilkan', async () => {
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes('/notifications/brands') ? json([{ id: 1, name: 'Hana', code: 'HANA', actionable: 1 }]) : base(input, init));
+    renderBell();
+    fireEvent.click(await screen.findByRole('button', { name: /^Notifikasi, 1/ }));
+    await screen.findByRole('dialog', { name: 'Notifikasi' });
+    expect(screen.queryByRole('group', { name: 'Filter brand' })).toBeNull();
+  });
+});
+
 describe('Lonceng notifikasi', () => {
   it('menampilkan jumlah belum dibaca dan mendesak pada label tombol', async () => {
     renderBell();

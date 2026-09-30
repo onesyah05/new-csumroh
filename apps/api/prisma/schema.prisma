@@ -500,6 +500,8 @@ model NotificationPreference {
   type   String  @db.VarChar(50)
   toast  Boolean @default(true)
   sound  Boolean @default(false)
+  // Dimatikan: tipe ini tidak dicatat sama sekali untuk user ini (tidak berlaku untuk tipe Mendesak).
+  muted  Boolean @default(false)
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, type])

@@ -27,15 +27,16 @@ export async function financeUsers() {
 }
 
 /**
- * Admin yang terkait brand (brand utama atau penugasan) ditambah semua Superadmin.
- * Bila tidak ada Admin yang terkait, semua Admin aktif menerima agar notifikasi tidak hilang.
+ * Admin yang terkait brand (brand utama atau penugasan) ditambah semua Superadmin. Admin brand lain tidak ikut
+ * menerima: notifikasi brand yang tidak ia pegang hanya menjadi kebisingan. Hanya bila tidak ada Admin terkait
+ * maupun Superadmin, semua Admin aktif menerima agar notifikasi tidak hilang.
  */
 export async function adminsOf(brandId: number) {
   const [linked, superadmins] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true, role: 'admin', ...brandAccess(brandId) }, select: { id: true } }),
     prisma.user.findMany({ where: { isActive: true, role: 'superadmin' }, select: { id: true } }),
   ]);
-  const admins = linked.length
+  const admins = linked.length || superadmins.length
     ? linked
     : await prisma.user.findMany({ where: { isActive: true, role: 'admin' }, select: { id: true } });
   return [...admins, ...superadmins].map((u) => u.id);
