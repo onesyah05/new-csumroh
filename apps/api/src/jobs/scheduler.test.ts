@@ -23,6 +23,7 @@ vi.mock('../modules/notifications/jobs.js', async () => {
   };
 });
 vi.mock('../modules/notifications/notification.events.js', () => ({ notifyWhatsappDisconnected: vi.fn() }));
+vi.mock('../modules/capi/capi.service.js', () => ({ capiSyncJob: async () => { mocks.runs.push('capi-sync'); } }));
 vi.mock('../modules/chat/chat.routes.js', () => ({ getLivechatConversationsForBrand: vi.fn() }));
 vi.mock('../db/prisma.js', () => ({ prisma: {} }));
 
