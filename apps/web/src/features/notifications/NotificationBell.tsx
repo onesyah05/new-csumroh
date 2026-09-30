@@ -26,6 +26,7 @@ type Filter = 'action' | 'all';
 type Counts = { actionable: number; urgent: number; info: number };
 type BrandFacet = { id: number; name: string; code: string | null; actionable: number };
 type BrandFilter = 'all' | number;
+const SUMMARY_TYPES = new Set(['lead.unassigned', 'reply.escalation']);
 
 export const notificationKeys = {
   all: ['notifications'] as const,
@@ -340,7 +341,8 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className={cn('block text-sm', unread ? 'font-semibold text-zinc-950' : 'text-zinc-700')}>
-                                {item.title}{item.count > 1 && <span className="font-normal text-zinc-600"> ({item.count})</span>}
+                                {/* Ringkasan per brand sudah menyebut jumlahnya di judul. */}
+                                {item.title}{item.count > 1 && !SUMMARY_TYPES.has(item.type) && <span className="font-normal text-zinc-600"> ({item.count})</span>}
                               </span>
                               {item.body && <span className="mt-0.5 line-clamp-2 block text-xs text-zinc-600">{item.body}</span>}
                               <span className="mt-1 block text-xs text-zinc-500">

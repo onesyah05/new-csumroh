@@ -300,6 +300,8 @@ export async function morningDigestJob(now = new Date()) {
     select: { id: true, name: true, _count: { select: { users: { where: { role: 'cs', isActive: true } } } }, userBrands: { where: { user: { role: 'cs', isActive: true } }, select: { userId: true } } },
   });
   for (const brand of brands) {
+    // Pengingat kemarin ditutup dulu: satu baris per brand, bukan menumpuk tiap hari. Sudah ada CS = selesai.
+    await resolveNotifications({ entity: { type: 'brand', id: brand.id }, types: ['brand.no_active_cs'] });
     if (brand._count.users > 0 || brand.userBrands.length > 0) continue;
     await notify({
       type: 'brand.no_active_cs', priority: 'action', brandId: brand.id, userIds: await adminsOf(brand.id),
