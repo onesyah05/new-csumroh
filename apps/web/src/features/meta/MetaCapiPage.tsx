@@ -425,7 +425,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
 
       {/* TAB 1: SETTINGS */}
       {activeTab === 'settings' && (
-        <div className="max-w-4xl">
+        <div className="max-w-4xl space-y-6">
           <Card className="p-6 space-y-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Section 1: Kredensial Meta & Dataset */}
