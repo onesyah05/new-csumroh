@@ -10,6 +10,7 @@ import { queryClient } from '../../app/query';
 
 export type NotificationItem = {
   id: number;
+  brandId?: number | null;
   type: string;
   priority: 'info' | 'action' | 'urgent';
   title: string;
@@ -110,6 +111,12 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
   const brandOptions = Array.isArray(brands.data) ? brands.data : [];
   const showBrandFilter = brandOptions.length > 1;
   const activeBrand = showBrandFilter && brand !== 'all' ? brand : 'all';
+  // Label brand hanya berguna bila notifikasi datang dari beberapa brand dan sedang melihat semuanya.
+  const brandLabel = (brandId?: number | null) => {
+    if (!showBrandFilter || activeBrand !== 'all' || !brandId) return null;
+    const match = brandOptions.find((b) => b.id === brandId);
+    return match ? match.code || match.name : null;
+  };
   const brandQuery = activeBrand === 'all' ? '' : `&brandId=${activeBrand}`;
   const list = useInfiniteQuery({
     queryKey: notificationKeys.list(filter, activeBrand),
@@ -247,7 +254,8 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
             placement === 'sidebar' ? 'left-[84px] top-4' : 'right-2 top-16 sm:right-4',
           )}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
+          {/* Bagian atas tidak ikut menyusut: panel dibatasi tingginya, hanya daftar yang boleh menggulir. */}
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
             <h2 className="text-sm font-bold">Notifikasi</h2>
             <div className="flex items-center gap-1">
               <button
@@ -272,22 +280,22 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
               </button>
             </div>
           </div>
-          <div role="group" aria-label="Tampilkan" className="flex gap-1 border-b border-zinc-100 px-4 py-2">
+          <div role="group" aria-label="Tampilkan" className="flex shrink-0 gap-1 px-4 pt-2.5">
             {([['action', `Perlu tindakan${tabActionable ? ` (${tabBadge})` : ''}`], ['all', 'Semua']] as const).map(([id, text]) => (
               <button
                 key={id}
                 type="button"
                 aria-pressed={filter === id}
                 onClick={() => setFilter(id)}
-                className={cn('min-h-7 rounded-full px-3 text-xs font-semibold', filter === id ? 'bg-zinc-950 text-white' : 'text-zinc-600 hover:bg-zinc-100')}
+                className={cn('min-h-7 rounded-full px-3 text-xs font-semibold focus-visible:ring-inset focus-visible:ring-offset-0', filter === id ? 'bg-zinc-950 text-white' : 'text-zinc-600 hover:bg-zinc-100')}
               >
                 {text}
               </button>
             ))}
           </div>
 
-          {showBrandFilter && (
-            <div role="group" aria-label="Filter brand" className="thin-scrollbar flex gap-1 overflow-x-auto border-b border-zinc-100 px-4 py-2">
+          {showBrandFilter ? (
+            <div role="group" aria-label="Filter brand" className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-zinc-100 px-4 pb-2.5 pt-2 [scrollbar-width:none]">
               {[{ id: 'all' as const, label: 'Semua brand', count: actionable }, ...brandOptions.map((b) => ({ id: b.id, label: b.code || b.name, count: b.actionable }))].map((option) => (
                 <button
                   key={option.id}
@@ -296,15 +304,17 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
                   onClick={() => setBrand(option.id)}
                   title={option.id === 'all' ? 'Semua brand' : brandOptions.find((b) => b.id === option.id)?.name}
                   className={cn(
-                    'inline-flex min-h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold',
-                    activeBrand === option.id ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50',
+                    'inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold focus-visible:ring-inset focus-visible:ring-offset-0',
+                    activeBrand === option.id ? 'border-zinc-950 bg-zinc-100 text-zinc-950' : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50',
                   )}
                 >
                   {option.label}
-                  {option.count > 0 && <span className={cn('tabular-nums', activeBrand === option.id ? 'text-white/80' : 'text-zinc-500')}>{option.count > 99 ? '99+' : option.count}</span>}
+                  {option.count > 0 && <span className="rounded-full bg-zinc-950 px-1.5 text-[11px] leading-4 text-white tabular-nums">{option.count > 99 ? '99+' : option.count}</span>}
                 </button>
               ))}
             </div>
+          ) : (
+            <div className="shrink-0 border-b border-zinc-100 pt-2.5" />
           )}
 
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -340,13 +350,17 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
                               {item.priority === 'urgent' ? <AlertTriangle size={14} /> : <Bell size={14} />}
                             </span>
                             <span className="min-w-0 flex-1">
-                              <span className={cn('block text-sm', unread ? 'font-semibold text-zinc-950' : 'text-zinc-700')}>
+                              <span className={cn('block text-sm leading-5', unread ? 'font-semibold text-zinc-950' : 'text-zinc-700')}>
                                 {/* Ringkasan per brand sudah menyebut jumlahnya di judul. */}
                                 {item.title}{item.count > 1 && !SUMMARY_TYPES.has(item.type) && <span className="font-normal text-zinc-600"> ({item.count})</span>}
                               </span>
                               {item.body && <span className="mt-0.5 line-clamp-2 block text-xs text-zinc-600">{item.body}</span>}
-                              <span className="mt-1 block text-xs text-zinc-500">
-                                {relativeTime(item.updatedAt)}{item.resolvedAt ? ' · selesai' : ''}
+                              <span className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
+                                {/* Nama brand sebagai label, bukan bagian judul (ringkasan per brand). */}
+                                {brandLabel(item.brandId) && (
+                                  <span className="rounded border border-zinc-200 px-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">{brandLabel(item.brandId)}</span>
+                                )}
+                                <span>{relativeTime(item.updatedAt)}{item.resolvedAt ? ' · selesai' : ''}</span>
                               </span>
                             </span>
                           </button>

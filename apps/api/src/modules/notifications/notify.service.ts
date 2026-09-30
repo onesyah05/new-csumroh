@@ -30,6 +30,7 @@ export type NotifyInput = {
 
 export type NotificationPayload = {
   id: number;
+  brandId: number | null;
   type: string;
   priority: NotificationPriority;
   title: string;
@@ -219,8 +220,8 @@ export async function resolveNotifications(input: { entity?: NotificationEntity;
 }
 
 export function toPayload(row: {
-  id: number; type: string; priority: NotificationPriority; title: string; body: string | null;
+  id: number; brandId?: number | null; type: string; priority: NotificationPriority; title: string; body: string | null;
   link: string | null; count: number; createdAt: Date;
 }): NotificationPayload {
-  return { id: row.id, type: row.type, priority: row.priority, title: row.title, body: row.body, link: row.link, count: row.count, createdAt: row.createdAt };
+  return { id: row.id, brandId: row.brandId ?? null, type: row.type, priority: row.priority, title: row.title, body: row.body, link: row.link, count: row.count, createdAt: row.createdAt };
 }

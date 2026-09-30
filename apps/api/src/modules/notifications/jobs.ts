@@ -110,7 +110,8 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
   await syncSummary({
     type: 'reply.escalation', priority: 'urgent', brandId, userIds: admins,
     activeKey: `reply.escalation:b${brandId}`, count: escalated.length,
-    title: `${brand}: ${escalated.length} jamaah belum dibalas lebih dari ${SLA.escalationMinutes} menit`,
+    // Nama brand tampil sebagai label di lonceng (dan ada filter brand), jadi judul cukup jumlahnya.
+    title: `${escalated.length} jamaah belum dibalas lebih dari ${SLA.escalationMinutes} menit`,
     body: `${escalated.slice(0, 3).join(', ')}${escalated.length > 3 ? `, dan ${escalated.length - 3} lainnya` : ''}. Tugaskan ulang atau hubungi CS.`,
     link: '/pipeline?quick=reply',
   });
@@ -119,10 +120,10 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
   await syncSummary({
     type: 'lead.unassigned', priority: 'action', brandId, userIds: admins,
     activeKey: `lead.unassigned:b${brandId}`, count: unassigned.length,
-    title: `${brand}: ${unassigned.length} lead belum punya PIC`,
+    title: `${unassigned.length} lead belum punya PIC`,
     body: (await csOfBrand(brandId)).length
-      ? 'Tugaskan PIC atau minta CS mengklaim dari antrean.'
-      : 'Brand ini belum punya CS aktif, jadi lead baru tidak mendapat PIC. Tambahkan CS di menu Staf.',
+      ? 'CS bisa mengklaim sendiri dari antrean "Belum ada PIC" di Pipeline.'
+      : `${brand} belum punya CS aktif. Tambahkan CS di menu Staf agar lead bisa diklaim.`,
     link: '/pipeline?pic=none',
   });
 }

@@ -63,7 +63,7 @@ describe('SLA balasan', () => {
   it('30 menit: eskalasi ke Admin sebagai satu ringkasan per brand (jumlah saat ini)', async () => {
     await replySlaForBrand(1, [conversation({ awaitingSince: minutesAgo(35) }), conversation({ id: 2, name: 'Pak Umar', awaitingSince: minutesAgo(50) })], NOW);
     expect(sent().map((n) => n.type)).toEqual(['reply.takeover_open', 'reply.takeover_open']);
-    expect(summaries()['reply.escalation']).toMatchObject({ userIds: [41], activeKey: 'reply.escalation:b1', count: 2, title: 'Hana: 2 jamaah belum dibalas lebih dari 30 menit' });
+    expect(summaries()['reply.escalation']).toMatchObject({ userIds: [41], activeKey: 'reply.escalation:b1', count: 2, title: '2 jamaah belum dibalas lebih dari 30 menit' });
   });
 
   it('episode lebih dari 3 jam, grup, Deal, atau sudah dibalas diabaikan; ringkasan brand ditutup', async () => {
@@ -88,7 +88,7 @@ describe('SLA balasan', () => {
       conversation({ id: 8, userId: null, status: 'lose' }),
     ], NOW);
     expect(sent()).toEqual([]);
-    expect(summaries()['lead.unassigned']).toMatchObject({ priority: 'action', userIds: [41], activeKey: 'lead.unassigned:b1', count: 2, title: 'Hana: 2 lead belum punya PIC' });
+    expect(summaries()['lead.unassigned']).toMatchObject({ priority: 'action', userIds: [41], activeKey: 'lead.unassigned:b1', count: 2, title: '2 lead belum punya PIC' });
   });
 });
 
