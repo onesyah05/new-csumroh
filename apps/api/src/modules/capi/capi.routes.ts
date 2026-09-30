@@ -9,7 +9,8 @@ import { decryptMetaToken, encryptMetaToken, maskMetaToken } from './meta-token.
 import { clearAdInsightsCache } from '../ads/ad-insights.js';
 import { clearAdSpendCache } from '../reports/ad-spend.js';
 import { adLabels } from '../ads/meta-ads.js';
-import { buildCapiPayload, CAPI_EVENT_NAMES } from './capi.payload.js';
+import { buildCapiPayload, CAPI_EVENT_NAMES, type CapiEventName } from './capi.payload.js';
+import { CAPI_MAX_EVENT_AGE_MS, dispatchCapiEvent } from './capi.service.js';
 
 export const capiRouter = Router();
 capiRouter.use(authGuard, requireRole('superadmin', 'admin'));
@@ -195,6 +196,35 @@ capiRouter.get('/logs', asyncHandler(async (req, res) => {
       summary: { total: grouped.reduce((sum, row) => sum + row._count._all, 0), success: count('success'), failed: count('failed') },
     },
   });
+}));
+
+/** Kirim ulang satu event gagal (mis. setelah konfigurasi Meta dibetulkan), tanpa menunggu retry otomatis. */
+capiRouter.post('/logs/:id/resend', asyncHandler(async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const log = await prisma.metaCapiLog.findUnique({ where: { id }, select: { brandId: true, prospectId: true, eventName: true, status: true } });
+  if (!log) throw new HttpError(404, 'Log event tidak ditemukan.');
+  scopedBrandId(req, log.brandId);
+  if (log.status === 'success') throw new HttpError(409, 'Event ini sudah diterima Meta.');
+  const result = await dispatchCapiEvent(log.prospectId, log.eventName as CapiEventName, { notify: false });
+  res.json({ success: true, data: result });
+}));
+
+/** Kirim ulang semua event gagal brand yang masih dalam jendela 7 hari Meta. */
+capiRouter.post('/logs/resend-failed', asyncHandler(async (req, res) => {
+  const input = z.object({ brandId: z.number().int().positive().optional() }).parse(req.body ?? {});
+  const brandId = scopedBrandId(req, input.brandId);
+  const logs = await prisma.metaCapiLog.findMany({
+    where: { brandId, status: 'failed', eventId: { startsWith: 'csumroh_' }, createdAt: { gte: new Date(Date.now() - CAPI_MAX_EVENT_AGE_MS) } },
+    select: { prospectId: true, eventName: true },
+    orderBy: { createdAt: 'asc' },
+    take: 100,
+  });
+  const counts = { sent: 0, failed: 0, skipped: 0 };
+  for (const log of logs) {
+    const result = await dispatchCapiEvent(log.prospectId, log.eventName as CapiEventName, { notify: false });
+    counts[result.status] += 1;
+  }
+  res.json({ success: true, data: { total: logs.length, ...counts } });
 }));
 
 capiRouter.post('/test-event', asyncHandler(async (req, res) => {

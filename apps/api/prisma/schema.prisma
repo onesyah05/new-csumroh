@@ -431,12 +431,16 @@ model MetaCapiLog {
   responseStatus Int?       @map("response_status")
   responseBody   String?    @map("response_body") @db.Text
   status         CapiStatus @default(success)
+  // Jumlah percobaan kirim ke Meta; retry otomatis berjeda makin panjang dan berhenti di batas tertentu.
+  attempts       Int        @default(1)
   createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @default(now()) @updatedAt @map("updated_at")
   brand          Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
   prospect       Prospect   @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
   @@unique([brandId, eventId])
   @@index([brandId, createdAt])
+  @@index([status, createdAt])
   @@map("meta_capi_logs")
 }
 

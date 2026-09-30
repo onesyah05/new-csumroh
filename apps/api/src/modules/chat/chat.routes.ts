@@ -1043,6 +1043,26 @@ const gatewayMessageSchema = z.object({
 
 type GatewayMessageInput = z.infer<typeof gatewayMessageSchema>;
 
+/**
+ * Prospek Baru yang sudah dibalas (dari HP maupun CRM) berpindah ke Terhubung. Bersyarat status 'new' agar balasan
+ * berikutnya atau tahap yang sudah lebih jauh tidak tersentuh.
+ */
+async function promoteRepliedProspect(prospectId: number, brandId: number, realtime: boolean) {
+  const promoted = await prisma.prospect.updateMany({ where: { id: prospectId, status: 'new' }, data: { status: 'contact' } });
+  if (!promoted.count) return;
+  await prisma.prospectLog.create({
+    data: {
+      prospectId,
+      userId: null,
+      actionType: 'status_changed',
+      title: 'Status otomatis menjadi Terhubung (contact)',
+      description: 'Dibalas langsung dari WhatsApp di HP',
+    },
+  });
+  if (realtime) emitToBrand(brandId, 'prospect:updated', { id: prospectId, status: 'contact' });
+  queueCapiForStatus(prospectId, 'contact');
+}
+
 async function ingestGatewayMessage(input: GatewayMessageInput, options: { realtime: boolean }) {
   const { brandId, messageId, remoteJid, senderName, text, timestamp, messageType, mediaUrl, isFromMe, referral } = input;
   if (
@@ -1223,6 +1243,8 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   });
 
   scheduleConversationStats([message.prospectId, previousOwner?.prospectId]);
+  // Dibalas langsung dari HP WhatsApp: sama seperti balasan dari CRM, prospek Baru menjadi Terhubung.
+  if (isFromMe && !isGroup) await promoteRepliedProspect(prospect.id, brandId, options.realtime);
   if (options.realtime) emitToBrand(brandId, 'message:new', message);
   if (options.realtime) {
     const ref = { id: prospect.id, brandId, name: prospect.name, userId: prospect.userId };

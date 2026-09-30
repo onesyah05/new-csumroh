@@ -362,7 +362,7 @@ function AdsView({ data }: { data: AdsReport }) {
           { label: 'Brand', cell: (r) => (
             <span className="flex flex-col">
               <span className="font-medium">{r.brand}</span>
-              {r.status !== 'ok' || r.message ? <span className={cn('text-xs', r.status === 'error' || r.message ? 'text-rose-600' : 'text-zinc-500')}>{r.status === 'not_configured' ? 'Ad account belum diatur' : r.message}</span> : null}
+              {r.status !== 'ok' || r.message ? <span className={cn('text-xs', r.status === 'error' ? 'text-rose-600' : r.message ? 'text-amber-700' : 'text-zinc-500')}>{r.status === 'not_configured' ? 'Ad account belum diatur' : r.message}</span> : null}
             </span>
           ) },
           { label: 'Biaya iklan', cell: (r) => money(r.spend), align: 'right' },

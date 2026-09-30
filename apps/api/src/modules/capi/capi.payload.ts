@@ -30,7 +30,8 @@ export type CapiPayloadInput = {
   eventName: CapiEventName;
   eventId: string;
   eventTime?: number;
-  phone: string;
+  /** Opsional: kontak @lid tidak punya nomor; untuk business_messaging klik iklan dikenali dari ctwa_clid + page_id. */
+  phone?: string | null;
   ctwaClid: string;
   pageId: string;
   whatsappBusinessAccountId?: string | null;
@@ -67,9 +68,9 @@ export function normalizeCity(city?: string | null) {
 }
 
 export function buildCapiPayload(input: CapiPayloadInput) {
-  const phone = normalizePhone(input.phone);
+  const phone = input.phone ? normalizePhone(input.phone) : '';
   const userData: Record<string, string | string[]> = {
-    ph: [sha256(phone)],
+    ...(phone ? { ph: [sha256(phone)] } : {}),
     // Penanda klik iklan dikirim apa adanya: di-hash membuat Meta tidak bisa mencocokkan ke iklan.
     ctwa_clid: input.ctwaClid,
     page_id: input.pageId,

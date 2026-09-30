@@ -206,6 +206,39 @@ describe('Laporan kreatif iklan', () => {
   });
 });
 
+describe('Kreatif iklan selaras dengan Iklan Meta', () => {
+  it('lead & deal Meta Ads tanpa ID iklan masuk baris "tidak teridentifikasi", bukan hilang', async () => {
+    mocks.brandFindMany.mockResolvedValueOnce([{ id: 1, name: 'Hana', metaAdAccountId: null, metaAccessToken: 'x' }]);
+    mocks.fetchAdInsights.mockResolvedValueOnce({ status: 'not_configured' });
+    mocks.queryRaw
+      .mockResolvedValueOnce([
+        { prospect_id: 1, brand_id: 1, status: 'new', spam: 0, ad_id: null },
+        { prospect_id: 2, brand_id: 1, status: 'new', spam: 0, ad_id: 'A1' },
+      ])
+      .mockResolvedValueOnce([{ prospect_id: 1, brand_id: 1, status: 'deal', spam: 0, ad_id: null }]);
+    mocks.paymentFindMany.mockResolvedValueOnce([
+      { prospectId: 1, prospect: { dealValue: 30_000_000 } },
+      // Bukan prospek Meta Ads: tidak dihitung, sama seperti tab Iklan Meta.
+      { prospectId: 99, prospect: { dealValue: 50_000_000 } },
+    ]);
+    const { rows } = await get('/creatives');
+    const unknown = rows.find((r: any) => r.adId === 'tanpa-id');
+    expect(unknown).toMatchObject({ adName: 'Iklan tidak teridentifikasi', leads: 1, deals: 1, dealValue: 30_000_000 });
+    expect(rows.reduce((sum: number, r: any) => sum + r.leads, 0)).toBe(2);
+    expect(rows.reduce((sum: number, r: any) => sum + r.deals, 0)).toBe(1);
+  });
+
+  it('peringatan bila zona waktu ad account bukan WIB', async () => {
+    mocks.brandFindMany.mockResolvedValueOnce([{ id: 1, name: 'Hana', metaAdAccountId: '111', metaAccessToken: 'x' }]);
+    mocks.prospectGroupBy.mockResolvedValueOnce([]);
+    mocks.paymentFindMany.mockResolvedValueOnce([]);
+    mocks.fetchAdSpend.mockResolvedValueOnce({ status: 'ok', spend: 1_000_000, currency: 'IDR', timezone: 'America/Los_Angeles' });
+    const data = await get('/ads');
+    expect(data.rows[0].message).toContain('America/Los_Angeles');
+    expect(data.rows[0].spend).toBe(1_000_000);
+  });
+});
+
 describe('Audiens spam', () => {
   it('ringkasan jumlah nomor spam dan CSV nomor untuk unggah manual', async () => {
     mocks.prospectCount.mockResolvedValueOnce(3);

@@ -7,13 +7,17 @@ const mocks = vi.hoisted(() => ({
   messageUpsert: vi.fn(),
   contactFindFirst: vi.fn(),
   sessionUpdateMany: vi.fn(),
+  prospectUpdateMany: vi.fn(),
+  logCreate: vi.fn(),
+  queueCapi: vi.fn(),
 }));
 
 vi.mock('../../db/prisma.js', () => ({
   prisma: {
     whatsappSession: { findUnique: async () => ({ brandId: 1, status: 'connected', phoneNumber: '628222' }), updateMany: mocks.sessionUpdateMany },
     brand: { findUnique: async () => ({ phone: null }) },
-    prospect: { findMany: mocks.prospectFindMany, create: mocks.prospectCreate, update: mocks.prospectUpdate },
+    prospect: { findMany: mocks.prospectFindMany, create: mocks.prospectCreate, update: mocks.prospectUpdate, updateMany: mocks.prospectUpdateMany },
+    prospectLog: { create: mocks.logCreate },
     chatMessage: { findUnique: async () => null, findFirst: async () => null, upsert: mocks.messageUpsert },
     whatsappContact: { findFirst: mocks.contactFindFirst },
   },
@@ -25,7 +29,7 @@ vi.mock('../notifications/notification.events.js', () => ({
   notifyLeadAssigned: vi.fn(), notifyLeadUnassigned: vi.fn(), notifyInboundMessage: vi.fn(),
 }));
 vi.mock('../prospects/pic.js', () => ({ pickAutoAssignee: async () => null }));
-vi.mock('../capi/capi.service.js', () => ({ dispatchCapiEvent: vi.fn(async () => undefined), queueCapiForStatus: vi.fn() }));
+vi.mock('../capi/capi.service.js', () => ({ dispatchCapiEvent: vi.fn(async () => undefined), queueCapiForStatus: mocks.queueCapi }));
 vi.mock('../prospects/referral.service.js', () => ({ attachReferralMarker: vi.fn(async () => false), normalizeReferralMarker: () => null }));
 
 import { env } from '../../config/env.js';
@@ -46,6 +50,7 @@ beforeEach(() => {
   mocks.prospectCreate.mockImplementation(async ({ data }: any) => ({ id: 9, userId: null, ...data }));
   mocks.messageUpsert.mockImplementation(async ({ create }: any) => ({ id: 1, ...create }));
   mocks.contactFindFirst.mockResolvedValue(null);
+  mocks.prospectUpdateMany.mockResolvedValue({ count: 0 });
 });
 
 const base = { brandId: 1, messageId: 'M1', remoteJid: '62811@s.whatsapp.net', phone: '62811', text: 'halo', timestamp: 1_790_000_000 };
@@ -74,6 +79,19 @@ describe('Pesan WhatsApp masuk', () => {
     await incoming({ ...base, senderName: 'Haikal', devicePhone: '628333:12@s.whatsapp.net' });
     expect(mocks.prospectFindMany.mock.calls[0]![0].where.devicePhone).toBe('628333');
     expect(mocks.messageUpsert.mock.calls[0]![0].create.devicePhone).toBe('628333');
+  });
+
+  it('balasan dari HP menaikkan prospek Baru ke Terhubung dan mengantre event Meta', async () => {
+    mocks.prospectUpdateMany.mockResolvedValue({ count: 1 });
+    await incoming({ ...base, isFromMe: true });
+    expect(mocks.prospectUpdateMany.mock.calls[0]![0]).toEqual({ where: { id: 9, status: 'new' }, data: { status: 'contact' } });
+    expect(mocks.logCreate).toHaveBeenCalled();
+    expect(mocks.queueCapi).toHaveBeenCalledWith(9, 'contact');
+  });
+
+  it('pesan masuk dari jamaah tidak mengubah status', async () => {
+    await incoming({ ...base, senderName: 'Haikal' });
+    expect(mocks.prospectUpdateMany).not.toHaveBeenCalled();
   });
 
   it('nama pengirim pesan masuk dipakai sebagai nama kontak', async () => {

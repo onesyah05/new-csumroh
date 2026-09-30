@@ -2,7 +2,7 @@ import { env } from '../../config/env.js';
 import { decryptMetaToken } from '../capi/meta-token.js';
 
 export type AdSpend =
-  | { status: 'ok'; spend: number; currency: string }
+  | { status: 'ok'; spend: number; currency: string; timezone?: string }
   | { status: 'not_configured' }
   | { status: 'error'; message: string };
 
@@ -12,8 +12,25 @@ type BrandAdConfig = { id: number; metaAdAccountId: string | null; metaAccessTok
 const CACHE_MS = 10 * 60_000;
 const cache = new Map<string, { at: number; value: AdSpend }>();
 
+// Zona waktu ad account jarang berubah: cukup diambil sekali per proses.
+const timezones = new Map<string, string>();
+
 export function clearAdSpendCache() {
   cache.clear();
+  timezones.clear();
+}
+
+/** Insights menghitung tanggal menurut zona waktu ad account, bukan WIB; dipakai untuk peringatan di laporan. */
+async function accountTimezone(accountId: string, token: string) {
+  const known = timezones.get(accountId);
+  if (known) return known;
+  const response = await fetch(`https://graph.facebook.com/${env.META_GRAPH_API_VERSION}/act_${encodeURIComponent(accountId)}?fields=timezone_name`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => null);
+  const body = await response?.json().catch(() => null) as { timezone_name?: string } | null;
+  if (body?.timezone_name) timezones.set(accountId, body.timezone_name);
+  return body?.timezone_name;
 }
 
 function metaErrorMessage(error: { code?: number; message?: string } | undefined) {
@@ -52,7 +69,8 @@ export async function fetchAdSpend(brand: BrandAdConfig, from: string, to: strin
     } else {
       // Tanpa tayangan pada rentang itu Meta mengembalikan data kosong: biaya 0.
       const row = body.data?.[0];
-      value = { status: 'ok', spend: Number(row?.spend ?? 0) || 0, currency: row?.account_currency ?? 'IDR' };
+      const timezone = await accountTimezone(brand.metaAdAccountId, decryptMetaToken(brand.metaAccessToken));
+      value = { status: 'ok', spend: Number(row?.spend ?? 0) || 0, currency: row?.account_currency ?? 'IDR', ...(timezone ? { timezone } : {}) };
     }
   } catch (error) {
     value = { status: 'error', message: (error as Error).name === 'TimeoutError' ? 'Meta tidak merespons. Coba lagi.' : 'Gagal menghubungi Meta.' };

@@ -337,7 +337,10 @@ reportsRouter.get('/ads', asyncHandler(async (req, res) => {
       brandId: brand.id,
       brand: brand.name,
       status: ad.status,
-      message: ad.status === 'error' ? ad.message : ad.status === 'ok' && ad.currency !== 'IDR' ? `Mata uang ad account ${ad.currency}, bukan IDR.` : null,
+      message: ad.status === 'error' ? ad.message
+        : ad.status === 'ok' && ad.currency !== 'IDR' ? `Mata uang ad account ${ad.currency}, bukan IDR.`
+        : ad.status === 'ok' && ad.timezone && ad.timezone !== 'Asia/Jakarta' ? `Zona waktu ad account ${ad.timezone}: biaya per tanggal mengikuti zona itu, bukan WIB.`
+        : null,
       spend,
       leads: leadCount,
       deals: myDeals.length,
@@ -372,17 +375,23 @@ reportsRouter.get('/ads', asyncHandler(async (req, res) => {
 // ── 7. Kreatif iklan (per iklan: metrik Meta + hasil CRM sampai ROAS) ─────────────────────────────────────
 type AdOutcome = { prospect_id: number; brand_id: number; status: string; spam: number | bigint; ad_id: string | null };
 
-/** ID iklan dari pesan pertama berreferral (Click-to-WhatsApp) per prospek. */
+/** Baris Kreatif untuk lead Meta Ads yang ID iklannya tidak terbaca, agar totalnya sama dengan tab Iklan Meta. */
+export const UNKNOWN_AD = 'tanpa-id';
+
+/**
+ * Lead Meta Ads (definisi yang sama dengan tab Iklan Meta: lead_source = meta_ads) beserta ID iklannya: dari kolom
+ * prospek, atau dari pesan berreferral pertama untuk data lama. ad_id null = iklan tidak teridentifikasi.
+ */
 async function prospectAdIds(brandIds: number[], created?: { gte: Date; lte: Date }, prospectIds?: number[]) {
   if (!brandIds.length || (prospectIds && !prospectIds.length)) return [] as AdOutcome[];
   return prisma.$queryRaw<AdOutcome[]>`
     SELECT p.id AS prospect_id, p.brand_id, p.status, (p.spam_at IS NOT NULL) AS spam,
-      JSON_UNQUOTE(JSON_EXTRACT(m.meta_referral_data, '$.adId')) AS ad_id
+      COALESCE(NULLIF(p.ad_id, ''), (
+        SELECT JSON_UNQUOTE(JSON_EXTRACT(cm.meta_referral_data, '$.adId')) FROM chat_messages cm
+        WHERE cm.prospect_id = p.id AND cm.meta_referral_data IS NOT NULL ORDER BY cm.id LIMIT 1
+      )) AS ad_id
     FROM prospects p
-    JOIN chat_messages m ON m.id = (
-      SELECT MIN(cm.id) FROM chat_messages cm WHERE cm.prospect_id = p.id AND cm.meta_referral_data IS NOT NULL
-    )
-    WHERE p.brand_id IN (${Prisma.join(brandIds)})
+    WHERE p.brand_id IN (${Prisma.join(brandIds)}) AND p.lead_source = 'meta_ads'
       ${created ? Prisma.sql`AND p.created_at BETWEEN ${created.gte} AND ${created.lte}` : Prisma.empty}
       ${prospectIds ? Prisma.sql`AND p.id IN (${Prisma.join(prospectIds)})` : Prisma.empty}`;
 }
@@ -437,21 +446,22 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
     return { brandId: brand.id, brand: brand.name, status: result.status, message: result.status === 'error' ? result.message : null };
   });
   for (const lead of leads) {
-    if (!lead.ad_id) continue;
-    const row = rowFor(lead.ad_id, brandName.get(Number(lead.brand_id)) ?? '');
+    const row = rowFor(lead.ad_id || UNKNOWN_AD, brandName.get(Number(lead.brand_id)) ?? '');
     if (Number(lead.spam)) { row.spam += 1; continue; }
     row.leads += 1;
     if (QUALIFIED_STAGES.has(stageKey(lead.status))) row.qualified += 1;
   }
   for (const payment of payments) {
-    const adId = adOfProspect.get(payment.prospectId);
-    if (!adId) continue;
-    const row = rowFor(adId, '');
+    // Hanya prospek Meta Ads (sama dengan tab Iklan Meta); yang ID iklannya tak terbaca masuk baris "tidak teridentifikasi".
+    if (!adOfProspect.has(payment.prospectId)) continue;
+    const row = rowFor(adOfProspect.get(payment.prospectId) || UNKNOWN_AD, '');
     row.deals += 1;
     row.dealValue += num(payment.prospect.dealValue);
   }
   // Iklan tanpa biaya di periode ini tidak ada di Insights: pakai nama yang pernah tersimpan.
-  const stored = await adLabels([...rows.values()].filter((r) => !r.campaignName).map((r) => r.adId));
+  const unknown = rows.get(UNKNOWN_AD);
+  if (unknown) unknown.adName = 'Iklan tidak teridentifikasi';
+  const stored = await adLabels([...rows.values()].filter((r) => !r.campaignName && r.adId !== UNKNOWN_AD).map((r) => r.adId));
   for (const row of rows.values()) {
     const label = stored.get(row.adId);
     if (label && !row.campaignName) Object.assign(row, { adName: label.adName, campaignName: label.campaignName ?? '', thumbnailUrl: row.thumbnailUrl ?? label.thumbnailUrl });
@@ -474,11 +484,13 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
 
 /**
  * Daftar prospek dari satu iklan (halaman khusus dari angka Lead di Kreatif iklan). Kriterianya sama persis dengan
- * hitungan Lead/Spam di tabel: prospek dibuat dalam periode dan pesan berreferral pertamanya dari iklan ini.
+ * hitungan Lead/Spam di tabel: lead Meta Ads yang dibuat dalam periode dan berasal dari iklan ini ("tanpa-id" = iklan
+ * tidak teridentifikasi).
  */
 reportsRouter.get('/creatives/:adId/prospects', asyncHandler(async (req, res) => {
   const { range, brandId } = parseRange(req);
-  const adId = z.string().regex(/^\d{5,30}$/, 'ID iklan tidak valid.').parse(req.params.adId);
+  const adId = z.string().regex(/^(\d{5,30}|tanpa-id)$/, 'ID iklan tidak valid.').parse(req.params.adId);
+  const isUnknown = adId === UNKNOWN_AD;
   const query = z.object({
     search: z.string().trim().max(100).default(''),
     spam: z.enum(['exclude', 'only', 'all']).default('exclude'),
@@ -486,7 +498,7 @@ reportsRouter.get('/creatives/:adId/prospects', asyncHandler(async (req, res) =>
     pageSize: z.coerce.number().int().min(10).max(100).default(25),
   }).parse(req.query);
   const brands = await prisma.brand.findMany({ where: brandId ? { id: brandId } : {}, select: { id: true } });
-  const matches = (await prospectAdIds(brands.map((b) => b.id), range)).filter((row) => row.ad_id === adId);
+  const matches = (await prospectAdIds(brands.map((b) => b.id), range)).filter((row) => (isUnknown ? !row.ad_id : row.ad_id === adId));
   const ids = matches.map((row) => Number(row.prospect_id));
   const leadCount = matches.filter((row) => !Number(row.spam)).length;
 
@@ -511,12 +523,12 @@ reportsRouter.get('/creatives/:adId/prospects', asyncHandler(async (req, res) =>
     }),
   ]);
   const ownerBrand = brandId ?? prospects[0]?.brandId ?? brands[0]?.id;
-  const label = ownerBrand ? (await ensureAdLabels(ownerBrand, [adId])).get(adId) : undefined;
+  const label = ownerBrand && !isUnknown ? (await ensureAdLabels(ownerBrand, [adId])).get(adId) : undefined;
 
   res.json({
     success: true,
     data: {
-      ad: { adId, adName: label?.adName ?? `Iklan ${adId}`, campaignName: label?.campaignName ?? null, thumbnailUrl: label?.thumbnailUrl ?? null },
+      ad: { adId, adName: label?.adName ?? (isUnknown ? 'Iklan tidak teridentifikasi' : `Iklan ${adId}`), campaignName: label?.campaignName ?? null, thumbnailUrl: label?.thumbnailUrl ?? null },
       summary: { leads: leadCount, spam: matches.length - leadCount },
       items: prospects.map((p) => ({
         id: p.id, brandId: p.brandId, brand: p.brand.name, name: p.name, phone: p.phone,

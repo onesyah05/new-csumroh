@@ -1034,7 +1034,8 @@ prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
   });
 
   emitToBrand(brandId, 'prospect:updated', updated);
-  if (promote) queueCapiForStatus(id, 'closing');
+  // Juga saat prospek sudah di Closing lebih dulu: InitiateCheckout yang tertunda karena tagihan belum ada kini bisa terkirim.
+  if (promote || updated.status === 'closing') queueCapiForStatus(id, 'closing');
   res.json({ success: true, data: { ...updated, delivery: { sent, messageId: sentMessageId } } });
 }));
 

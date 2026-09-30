@@ -13,6 +13,7 @@ import {
   SLA,
   whatsappDisconnectedJob,
 } from '../modules/notifications/jobs.js';
+import { capiSyncJob } from '../modules/capi/capi.service.js';
 
 const TICK_MS = 60_000;
 
@@ -25,6 +26,8 @@ const minuteJobs: Job[] = [
   { name: 'gateway-health', run: (now) => gatewayHealthJob(now) },
   { name: 'proof-stale', run: proofStaleJob },
   { name: 'custom-expiring', run: customExpiringJob },
+  // Retry + backfill event Meta CAPI; job sendiri hanya bekerja tiap 5 menit.
+  { name: 'capi-sync', run: capiSyncJob },
 ];
 
 /** Job harian: jalan sekali per tanggal WIB setelah jamnya tiba (juga menyusul bila API baru hidup). */

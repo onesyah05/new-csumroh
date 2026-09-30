@@ -253,6 +253,24 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
     onError: (error) => showToast(error.message),
   });
 
+  // Event gagal juga dicoba ulang otomatis (berjeda); tombol ini untuk langsung setelah konfigurasi Meta dibetulkan.
+  const resendMutation = useMutation<{ status: string; reason?: string }, Error, number>({
+    mutationFn: (logId) => api.post(`/meta/logs/${logId}/resend`),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: ['meta-logs', currentBrandId] });
+      showToast(res.status === 'sent' ? 'Event berhasil diterima Meta.' : res.status === 'skipped' ? 'Event tidak dikirim: sudah terkirim atau lebih dari 7 hari.' : 'Meta masih menolak event ini. Lihat Detail.');
+    },
+    onError: (error) => showToast(error.message),
+  });
+  const resendAllMutation = useMutation<{ total: number; sent: number; failed: number; skipped: number }, Error, void>({
+    mutationFn: () => api.post('/meta/logs/resend-failed', { brandId: currentBrandId }),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: ['meta-logs', currentBrandId] });
+      showToast(res.total ? `${res.sent} dari ${res.total} event berhasil dikirim ulang${res.failed ? `, ${res.failed} masih ditolak Meta` : ''}.` : 'Tidak ada event gagal dalam 7 hari terakhir.');
+    },
+    onError: (error) => showToast(error.message),
+  });
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     saveMutation.mutate(false);
@@ -512,8 +530,10 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       className="field font-mono"
                       value={form.testEventCode}
                       onChange={(e) => setForm({ ...form, testEventCode: e.target.value.trim().toUpperCase() })}
-                      placeholder="TEST12345 (Kosongkan di mode live)"
+                      placeholder="TEST12345"
+                      aria-describedby="meta-test-code-hint"
                     />
+                    <p id="meta-test-code-hint" className="text-xs text-zinc-500">Hanya untuk tombol Uji Coba Event. Event dari prospek sungguhan tidak pernah memakai kode ini.</p>
                   </div>
                 </div>
               </div>
@@ -706,11 +726,24 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
               </div>
             </div>
 
+            {logSummary.failed > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                className="ml-auto"
+                onClick={() => resendAllMutation.mutate()}
+                loading={resendAllMutation.isPending}
+                icon={<Send size={13} />}
+              >
+                Kirim ulang yang gagal
+              </Button>
+            )}
             <Button
               type="button"
               variant="secondary"
               size="md"
-              className="ml-auto"
+              className={logSummary.failed > 0 ? '' : 'ml-auto'}
               onClick={() => void logsQuery.refetch()}
               loading={logsQuery.isFetching}
               icon={<RefreshCw size={13} />}
@@ -817,6 +850,19 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                           </td>
 
                           <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                            {isFailed && (
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="mr-1.5"
+                                onClick={() => resendMutation.mutate(log.id)}
+                                loading={resendMutation.isPending && resendMutation.variables === log.id}
+                                icon={<Send size={12} />}
+                              >
+                                Kirim ulang
+                              </Button>
+                            )}
                             <Button
                               type="button"
                               variant="secondary"
