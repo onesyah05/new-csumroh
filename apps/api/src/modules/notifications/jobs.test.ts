@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(async () => 1),
   resolve: vi.fn(async () => 0),
+  summary: vi.fn(async () => 1),
   prospectFindMany: vi.fn(),
   userFindMany: vi.fn(async () => [] as { id: number }[]),
   brandFindMany: vi.fn(async () => [] as unknown[]),
@@ -10,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   deleteMany: vi.fn(async () => ({ count: 1 })),
 }));
 
-vi.mock('./notify.service.js', () => ({ notify: mocks.notify, resolveNotifications: mocks.resolve }));
+vi.mock('./notify.service.js', () => ({ notify: mocks.notify, resolveNotifications: mocks.resolve, syncSummary: mocks.summary }));
 vi.mock('./notification.events.js', () => ({ notifyWhatsappDisconnected: vi.fn() }));
 vi.mock('../chat/chat.routes.js', () => ({ getLivechatConversationsForBrand: vi.fn() }));
 vi.mock('./recipients.js', () => ({
@@ -23,7 +24,7 @@ vi.mock('../../db/prisma.js', () => ({
   prisma: {
     prospect: { findMany: mocks.prospectFindMany },
     user: { findMany: mocks.userFindMany },
-    brand: { findMany: mocks.brandFindMany },
+    brand: { findMany: mocks.brandFindMany, findUnique: async () => ({ name: 'Hana' }) },
     prospectLog: { findMany: mocks.logFindMany },
     notification: { deleteMany: mocks.deleteMany },
     notificationDedupe: { deleteMany: mocks.deleteMany },
@@ -35,6 +36,7 @@ import { gatewayHealthJob, morningDigestJob, proofStaleJob, replySlaForBrand, re
 const NOW = new Date('2026-09-24T03:00:00Z'); // 10.00 WIB
 const minutesAgo = (m: number) => NOW.getTime() / 1000 - m * 60;
 const sent = () => mocks.notify.mock.calls.map(([arg]: any) => arg);
+const summaries = () => Object.fromEntries(mocks.summary.mock.calls.map(([arg]: any) => [arg.type, arg]));
 const conversation = (overrides: Record<string, unknown>) => ({
   id: 1, name: 'Ibu Aisyah', status: 'contact', userId: 21, user: { name: 'Fitri' }, isGroup: false, isOwn: false,
   remoteJid: '62811@s.whatsapp.net', awaitingSince: null, createdAt: new Date(NOW.getTime() - 5 * 3600_000), ...overrides,
@@ -58,9 +60,10 @@ describe('SLA balasan', () => {
     expect(mocks.resolve).not.toHaveBeenCalled();
   });
 
-  it('30 menit: eskalasi ke Admin', async () => {
-    await replySlaForBrand(1, [conversation({ awaitingSince: minutesAgo(35) })], NOW);
-    expect(sent().map((n) => [n.type, n.userIds])).toEqual([['reply.takeover_open', [22, 23]], ['reply.escalation', [41]]]);
+  it('30 menit: eskalasi ke Admin sebagai satu ringkasan per brand (jumlah saat ini)', async () => {
+    await replySlaForBrand(1, [conversation({ awaitingSince: minutesAgo(35) }), conversation({ id: 2, name: 'Pak Umar', awaitingSince: minutesAgo(50) })], NOW);
+    expect(sent().map((n) => n.type)).toEqual(['reply.takeover_open', 'reply.takeover_open']);
+    expect(summaries()['reply.escalation']).toMatchObject({ userIds: [41], activeKey: 'reply.escalation:b1', count: 2, title: 'Hana: 2 jamaah belum dibalas lebih dari 30 menit' });
   });
 
   it('episode lebih dari 3 jam, grup, Deal, atau sudah dibalas diabaikan; ringkasan brand ditutup', async () => {
@@ -72,14 +75,20 @@ describe('SLA balasan', () => {
     ], NOW);
     expect(mocks.notify).not.toHaveBeenCalled();
     expect(mocks.resolve).toHaveBeenCalledWith({ entity: { type: 'brand', id: 1 }, types: ['reply.takeover_open'] });
+    // Jumlah 0 = ringkasan eskalasi & lead tanpa PIC selesai.
+    expect(summaries()['reply.escalation'].count).toBe(0);
+    expect(summaries()['lead.unassigned'].count).toBe(0);
   });
 
-  it('lead tanpa PIC lebih dari 30 menit dilaporkan ke Admin', async () => {
+  it('lead tanpa PIC: satu ringkasan per brand berisi jumlah saat ini, tanpa spam dan lead tertutup', async () => {
     await replySlaForBrand(1, [
-      conversation({ id: 5, userId: null, createdAt: new Date(NOW.getTime() - 40 * 60_000) }),
-      conversation({ id: 6, userId: null, createdAt: new Date(NOW.getTime() - 10 * 60_000) }),
+      conversation({ id: 5, userId: null }),
+      conversation({ id: 6, userId: null }),
+      conversation({ id: 7, userId: null, spamAt: new Date() }),
+      conversation({ id: 8, userId: null, status: 'lose' }),
     ], NOW);
-    expect(sent()).toEqual([expect.objectContaining({ type: 'lead.unassigned', userIds: [41], dedupeKey: 'lead.unassigned:p5:30m' })]);
+    expect(sent()).toEqual([]);
+    expect(summaries()['lead.unassigned']).toMatchObject({ priority: 'action', userIds: [41], activeKey: 'lead.unassigned:b1', count: 2, title: 'Hana: 2 lead belum punya PIC' });
   });
 });
 

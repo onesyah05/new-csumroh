@@ -27,7 +27,6 @@ import {
   dispatch,
   notifyInboundMessage,
   notifyLeadAssigned,
-  notifyLeadUnassigned,
   notifyPicChange,
   onWhatsappStatus,
   resolveReplyNotifications,
@@ -1213,7 +1212,8 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       // Dibalas langsung dari HP perangkat: pengingat balasan selesai seperti balasan dari aplikasi.
       dispatch(() => resolveReplyNotifications(ref.id));
     } else if (isNewProspect) {
-      dispatch(() => (assignee ? notifyLeadAssigned(ref, assignee.id) : notifyLeadUnassigned(ref)));
+      // Lead tanpa PIC tidak diberi notifikasi per lead: ringkasan per brand diperbarui job SLA tiap menit.
+      if (assignee) dispatch(() => notifyLeadAssigned(ref, assignee.id));
     } else if (!alreadyStored) {
       dispatch(() => notifyInboundMessage(ref, { text, messageType }));
     }

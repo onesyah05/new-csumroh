@@ -9,19 +9,21 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   dedupe: vi.fn(),
   preference: vi.fn(async () => null as null | { toast: boolean; sound: boolean }),
+  muted: vi.fn(async () => [] as { userId: number }[]),
+  findUnique: vi.fn(async () => null as any),
   emitToUser: vi.fn(),
 }));
 
 vi.mock('../../db/prisma.js', () => ({
   prisma: {
-    notification: { create: mocks.create, upsert: mocks.upsert, update: mocks.update, findMany: mocks.findMany, updateMany: mocks.updateMany },
+    notification: { create: mocks.create, upsert: mocks.upsert, update: mocks.update, findMany: mocks.findMany, updateMany: mocks.updateMany, findUnique: mocks.findUnique },
     notificationDedupe: { create: mocks.dedupe },
-    notificationPreference: { findUnique: mocks.preference },
+    notificationPreference: { findUnique: mocks.preference, findMany: mocks.muted },
   },
 }));
 vi.mock('../../realtime/socket.js', () => ({ emitToUser: mocks.emitToUser }));
 
-import { notify, resolveNotifications, safeLink } from './notify.service.js';
+import { notify, resolveNotifications, safeLink, syncSummary } from './notify.service.js';
 
 const row = (id: number, extra: Record<string, unknown> = {}) => ({
   id, type: 'payment.proof_new', priority: 'action', title: 'T', body: null, link: '/verifikasi', count: 1, createdAt: new Date(), ...extra,
@@ -102,5 +104,44 @@ describe('preferensi pada event realtime', () => {
     mocks.preference.mockResolvedValueOnce({ toast: false, sound: false });
     await notify({ type: 'pic.taken_over', priority: 'urgent', userIds: [3], title: 'Diambil alih' });
     expect(mocks.emitToUser.mock.calls.at(-1)![2]).toMatchObject({ toast: true });
+  });
+});
+
+describe('ringkasan per brand', () => {
+  const summary = (count: number) => ({
+    type: 'lead.unassigned' as const, priority: 'action' as const, brandId: 2, userIds: [3],
+    activeKey: 'lead.unassigned:b2', count, title: `Nava: ${count} lead belum punya PIC`,
+  });
+
+  it('baru: dibuat dan toast', async () => {
+    await syncSummary(summary(5));
+    expect(mocks.create.mock.calls[0][0].data).toMatchObject({ userId: 3, activeKey: 'lead.unassigned:b2', count: 5, entityType: 'brand' });
+    expect(mocks.emitToUser).toHaveBeenCalledWith(3, 'notification:new', expect.objectContaining({ toast: true }));
+  });
+
+  it('angka sama: tidak ada apa-apa; naik: belum dibaca lagi + toast; turun: diam-diam', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 9, count: 5, title: 'Nava: 5 lead belum punya PIC' });
+    await syncSummary(summary(5));
+    expect(mocks.update).not.toHaveBeenCalled();
+    mocks.update.mockImplementation(async ({ data }: any) => row(9, data));
+    await syncSummary(summary(7));
+    expect(mocks.update.mock.calls[0][0].data).toMatchObject({ count: 7, readAt: null });
+    expect(mocks.emitToUser).toHaveBeenLastCalledWith(3, 'notification:new', expect.objectContaining({ toast: true }));
+    mocks.findUnique.mockResolvedValue({ id: 9, count: 7, title: 'Nava: 7 lead belum punya PIC' });
+    await syncSummary(summary(4));
+    expect(mocks.update.mock.calls[1][0].data.readAt).toBeUndefined();
+    expect(mocks.emitToUser).toHaveBeenLastCalledWith(3, 'notification:new', expect.objectContaining({ toast: false, sound: false }));
+  });
+
+  it('nol: ringkasan selesai', async () => {
+    mocks.findMany.mockResolvedValueOnce([{ id: 9, userId: 3 }]);
+    await syncSummary(summary(0));
+    expect(mocks.updateMany.mock.calls[0][0].data).toMatchObject({ activeKey: null });
+  });
+
+  it('user yang mematikan tipe ini tidak menerima', async () => {
+    mocks.muted.mockResolvedValueOnce([{ userId: 3 }]);
+    await syncSummary(summary(5));
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });

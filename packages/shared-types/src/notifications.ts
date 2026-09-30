@@ -25,8 +25,8 @@ export const notificationCatalog = [
   { type: 'message.inbound', group: 'Lead & chat', label: 'Pesan baru dari jamaah', description: 'Pesan jamaah yang Anda tangani (digabung per percakapan).', priority: 'info', roles: CS },
   { type: 'reply.sla_warning', group: 'Lead & chat', label: 'Jamaah menunggu 10 menit', description: 'Balas sebelum 15 menit agar prospek tidak bisa diambil alih.', priority: 'urgent', roles: CS },
   { type: 'reply.takeover_open', group: 'Lead & chat', label: 'Prospek bisa diambil alih', description: 'Jamaah CS lain belum dibalas lebih dari 15 menit.', priority: 'action', roles: CS },
-  { type: 'lead.unassigned', group: 'Lead & chat', label: 'Lead tanpa PIC', description: 'Lead baru tanpa CS aktif, atau belum punya PIC lebih dari 30 menit.', priority: 'urgent', roles: MANAGERS },
-  { type: 'reply.escalation', group: 'Lead & chat', label: 'Jamaah belum dibalas 30 menit', description: 'Eskalasi ke Admin untuk ditugaskan ulang.', priority: 'urgent', roles: MANAGERS },
+  { type: 'lead.unassigned', group: 'Lead & chat', label: 'Lead tanpa PIC', description: 'Ringkasan per brand: jumlah lead yang saat ini belum punya PIC. Muncul lagi hanya bila jumlahnya bertambah.', priority: 'action', roles: MANAGERS },
+  { type: 'reply.escalation', group: 'Lead & chat', label: 'Jamaah belum dibalas 30 menit', description: 'Ringkasan per brand: jumlah jamaah yang saat ini menunggu balasan lebih dari 30 menit.', priority: 'urgent', roles: MANAGERS },
   // PIC
   { type: 'pic.assigned', group: 'PIC', label: 'Ditugaskan sebagai PIC', description: 'Admin menugaskan prospek kepada Anda.', priority: 'action', roles: CS },
   { type: 'pic.handover_received', group: 'PIC', label: 'Menerima serah terima', description: 'CS lain menyerahkan prospek kepada Anda.', priority: 'action', roles: CS },
@@ -61,8 +61,8 @@ export const notificationCatalog = [
   { type: 'wa.reconnected', group: 'Sistem & perangkat', label: 'WhatsApp tersambung lagi', description: 'Perangkat yang tadi terputus sudah tersambung.', priority: 'info', roles: MANAGERS },
   { type: 'brand.no_active_cs', group: 'Sistem & perangkat', label: 'Brand tanpa CS aktif (08.00)', description: 'Lead baru tidak akan punya PIC.', priority: 'action', roles: MANAGERS },
   { type: 'capi.failed', group: 'Sistem & perangkat', label: 'Meta CAPI gagal', description: 'Event konversi gagal dikirim ke Meta (digabung per brand).', priority: 'info', roles: MANAGERS },
-  { type: 'system.gateway_down', group: 'Sistem & perangkat', label: 'Gateway WhatsApp mati', description: 'Semua brand tidak bisa menerima/mengirim pesan.', priority: 'urgent', roles: ['superadmin'] },
-  { type: 'system.gateway_up', group: 'Sistem & perangkat', label: 'Gateway WhatsApp pulih', description: 'Gateway kembali merespons.', priority: 'info', roles: ['superadmin'] },
+  { type: 'system.gateway_down', group: 'Sistem & perangkat', label: 'Gateway WhatsApp mati', description: 'Semua brand tidak bisa menerima/mengirim pesan.', priority: 'urgent', roles: MANAGERS },
+  { type: 'system.gateway_up', group: 'Sistem & perangkat', label: 'Gateway WhatsApp pulih', description: 'Gateway kembali merespons.', priority: 'info', roles: MANAGERS },
 ] as const satisfies readonly Entry[];
 
 export type NotificationType = (typeof notificationCatalog)[number]['type'];
@@ -81,10 +81,12 @@ export function notificationTypesForRole(role: string) {
 
 /**
  * Preferensi efektif. Default: toast untuk Tindakan dan Mendesak, tidak untuk Info; suara mati.
- * Notifikasi Mendesak selalu tampil sebagai toast.
+ * Notifikasi Mendesak selalu tampil sebagai toast dan tidak bisa dimatikan. Tipe lain bisa dimatikan (muted):
+ * tidak dicatat di lonceng sama sekali.
  */
-export function effectiveNotificationPreference(type: string, stored?: { toast: boolean; sound: boolean } | null) {
+export function effectiveNotificationPreference(type: string, stored?: { toast: boolean; sound: boolean; muted?: boolean } | null) {
   const priority = notificationEntry(type)?.priority ?? 'info';
-  const toast = priority === 'urgent' ? true : stored?.toast ?? priority !== 'info';
-  return { toast, sound: stored?.sound ?? false, locked: priority === 'urgent' };
+  const locked = priority === 'urgent';
+  const toast = locked ? true : stored?.toast ?? priority !== 'info';
+  return { toast, sound: stored?.sound ?? false, muted: locked ? false : stored?.muted ?? false, locked };
 }

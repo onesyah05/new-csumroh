@@ -24,11 +24,14 @@ export type NotificationItem = {
 type Page = { items: NotificationItem[]; nextCursor: number | null };
 type Filter = 'action' | 'all';
 type Counts = { actionable: number; urgent: number; info: number };
+type BrandFacet = { id: number; name: string; code: string | null; actionable: number };
+type BrandFilter = 'all' | number;
 
 export const notificationKeys = {
   all: ['notifications'] as const,
   count: ['notifications', 'count'] as const,
-  list: (filter: Filter) => ['notifications', 'list', filter] as const,
+  list: (filter: Filter, brand: BrandFilter = 'all') => ['notifications', 'list', filter, brand] as const,
+  brands: ['notifications', 'brands'] as const,
 };
 
 function relativeTime(iso: string) {
@@ -94,22 +97,29 @@ function groupItems(items: NotificationItem[], filter: Filter) {
 export function NotificationBell({ placement, className }: { placement: 'sidebar' | 'header'; className?: string }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('action');
+  // Filter brand untuk user yang menerima notifikasi dari lebih dari satu brand (Admin/CS multi-brand).
+  const [brand, setBrand] = useState<BrandFilter>('all');
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const navigate = useNavigate();
 
   const { actionable, urgent, info } = useNotificationCounts();
+  const brands = useQuery({ queryKey: notificationKeys.brands, queryFn: () => api.get<BrandFacet[]>('/notifications/brands'), enabled: open, staleTime: 30_000 });
+  const brandOptions = Array.isArray(brands.data) ? brands.data : [];
+  const showBrandFilter = brandOptions.length > 1;
+  const activeBrand = showBrandFilter && brand !== 'all' ? brand : 'all';
+  const brandQuery = activeBrand === 'all' ? '' : `&brandId=${activeBrand}`;
   const list = useInfiniteQuery({
-    queryKey: notificationKeys.list(filter),
-    queryFn: ({ pageParam }) => api.get<Page>(`/notifications?filter=${filter}&limit=20${pageParam ? `&cursor=${pageParam}` : ''}`),
+    queryKey: notificationKeys.list(filter, activeBrand),
+    queryFn: ({ pageParam }) => api.get<Page>(`/notifications?filter=${filter}&limit=20${brandQuery}${pageParam ? `&cursor=${pageParam}` : ''}`),
     initialPageParam: 0,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: open,
   });
   const refresh = () => void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
   const markRead = useMutation({ mutationFn: (id: number) => api.post(`/notifications/${id}/read`), onSettled: refresh });
-  const markAll = useMutation({ mutationFn: () => api.post('/notifications/read-all'), onSettled: refresh });
+  const markAll = useMutation({ mutationFn: () => api.post('/notifications/read-all', activeBrand === 'all' ? undefined : { brandId: activeBrand }), onSettled: refresh });
 
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   const groups = groupItems(items, filter);
@@ -155,6 +165,9 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
     ? `Notifikasi, ${actionable} perlu tindakan${urgent ? `, ${urgent} mendesak` : ''}`
     : info ? 'Notifikasi, ada info baru' : 'Notifikasi';
   const badgeText = actionable > 99 ? '99+' : String(actionable);
+  // Angka tab "Perlu tindakan" mengikuti brand yang dipilih.
+  const tabActionable = activeBrand === 'all' ? actionable : brandOptions.find((b) => b.id === activeBrand)?.actionable ?? 0;
+  const tabBadge = tabActionable > 99 ? '99+' : String(tabActionable);
 
   return (
     <div className={cn('relative', className)}>
@@ -259,7 +272,7 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
             </div>
           </div>
           <div role="group" aria-label="Tampilkan" className="flex gap-1 border-b border-zinc-100 px-4 py-2">
-            {([['action', `Perlu tindakan${actionable ? ` (${badgeText})` : ''}`], ['all', 'Semua']] as const).map(([id, text]) => (
+            {([['action', `Perlu tindakan${tabActionable ? ` (${tabBadge})` : ''}`], ['all', 'Semua']] as const).map(([id, text]) => (
               <button
                 key={id}
                 type="button"
@@ -272,6 +285,27 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
             ))}
           </div>
 
+          {showBrandFilter && (
+            <div role="group" aria-label="Filter brand" className="thin-scrollbar flex gap-1 overflow-x-auto border-b border-zinc-100 px-4 py-2">
+              {[{ id: 'all' as const, label: 'Semua brand', count: actionable }, ...brandOptions.map((b) => ({ id: b.id, label: b.code || b.name, count: b.actionable }))].map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={activeBrand === option.id}
+                  onClick={() => setBrand(option.id)}
+                  title={option.id === 'all' ? 'Semua brand' : brandOptions.find((b) => b.id === option.id)?.name}
+                  className={cn(
+                    'inline-flex min-h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold',
+                    activeBrand === option.id ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50',
+                  )}
+                >
+                  {option.label}
+                  {option.count > 0 && <span className={cn('tabular-nums', activeBrand === option.id ? 'text-white/80' : 'text-zinc-500')}>{option.count > 99 ? '99+' : option.count}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="min-h-0 flex-1 overflow-y-auto">
             {list.isLoading ? (
               <p className="px-4 py-8 text-center text-xs text-zinc-600">Memuat notifikasi…</p>
@@ -280,6 +314,7 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
             ) : items.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-zinc-600">
                 {filter === 'action' ? 'Tidak ada yang perlu ditindaklanjuti.' : 'Belum ada notifikasi.'}
+                {activeBrand !== 'all' && ' (brand ini)'}
               </p>
             ) : (
               groups.map((group) => (
