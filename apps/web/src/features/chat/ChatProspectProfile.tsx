@@ -80,6 +80,7 @@ interface ChatProspectProfileProps {
   query?: string;
   activeBrand?: any;
   packages: any[];
+  packagesLoading?: boolean;
   onInsertText: (text: string) => void;
   onSendFlyer: (pkg: any) => void;
   onOpenPackagePicker: () => void;
@@ -100,6 +101,7 @@ export function ChatProspectProfile({
   query = '',
   activeBrand,
   packages,
+  packagesLoading = false,
   onInsertText,
   onSendFlyer,
   onOpenPackagePicker,
@@ -441,6 +443,8 @@ export function ChatProspectProfile({
         {activeTab === 'package' && !custom && !customFailed && (<>
           <ProspectPackageTab
             packages={packages}
+            packagesLoading={packagesLoading}
+            brandName={activeBrand?.name}
             selected={selectedPackage}
             qualification={{ targetMonth: form.targetMonth, budgetRange: form.budgetRange, passportStatus: form.passportStatus, ...formPax }}
             locked={won || locked}

@@ -14,6 +14,8 @@ interface ChatSidePanelProps {
   isOpen: boolean; activeTab: ChatSidePanelTab; onChangeTab(tab: ChatSidePanelTab): void; onClose(): void;
   prospectId: number; prospectName?: string; phone?: string | null; packageId?: number | null;
   packageName?: string; brandId?: number; query?: string; activeBrand?: any; packages: any[];
+  /** Daftar paket brand aktif masih dimuat (mis. baru ganti brand). */
+  packagesLoading?: boolean;
   onInsertText(text: string): void; onSendFlyer(pkg: any): void; onOpenPackagePicker(): void;
   onPreviewImage?(url: string): void; onShowToast(message: string): void; connected?: boolean;
 }

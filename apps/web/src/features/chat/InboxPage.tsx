@@ -540,8 +540,8 @@ export function InboxPage() {
       void queryClient.invalidateQueries({ queryKey: ['messages', selectedId, brandId] });
       showToast(data?.isStarred ? 'Pesan diberi bintang' : 'Bintang pesan dihapus');
     },
-    onError: () => {
-      showToast('Gagal mengubah status bintang pesan');
+    onError: (err: any) => {
+      showToast(err?.message || 'Gagal mengubah status bintang pesan');
     },
   });
 
@@ -664,11 +664,14 @@ export function InboxPage() {
       return next;
     }, { state: mobile ? { inboxList: true } : null });
     setSelectedId(id);
-    void api.post(`/chat/prospects/${id}/read${query}`).catch(() => null);
-    queryClient.setQueryData<any[]>(['conversations', brandId], (old) => {
-      if (!old) return old;
-      return old.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c));
-    });
+    // Pemantau (bukan PIC) tidak menghapus tanda belum dibaca milik PIC; server yang memutuskan.
+    void api.post<{ observerOnly?: boolean }>(`/chat/prospects/${id}/read${query}`).then((result) => {
+      if (result?.observerOnly) return;
+      queryClient.setQueryData<any[]>(['conversations', brandId], (old) => {
+        if (!old) return old;
+        return old.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c));
+      });
+    }).catch(() => null);
   }
 
   function adjustTextareaHeight(element: HTMLTextAreaElement | null) {
@@ -1809,7 +1812,8 @@ export function InboxPage() {
                                           )
                                         )}
 
-                                        {!isMessageDeleted && item.isFromMe && canSend && (
+                                        {/* WhatsApp hanya menarik pesan ±2 hari terakhir (batas yang sama di server). */}
+                                        {!isMessageDeleted && item.isFromMe && canSend && Date.now() / 1000 - item.timestamp <= 2 * 24 * 60 * 60 && (
                                           <>
                                             <DropdownMenu.Separator className="my-1 h-px bg-[#e9edef]" />
                                             <DropdownMenu.Item
@@ -2562,6 +2566,7 @@ export function InboxPage() {
             query={query}
             activeBrand={activeBrand}
             packages={packages.data ?? []}
+            packagesLoading={packages.isPending}
             onInsertText={handleInsertDirectText}
             onSendFlyer={(pkg) => openSendFlyerModal(pkg)}
             onOpenPackagePicker={() => setShowPackagePickerModal(true)}

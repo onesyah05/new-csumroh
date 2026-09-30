@@ -96,10 +96,13 @@ function PackageDetails({ pkg }: { pkg: Pkg }) {
  * jamaah ini, dan bahan jualan. Aksi utama (penawaran) ada di "Langkah berikutnya", bukan di tab ini.
  */
 export function ProspectPackageTab({
-  packages, selected, qualification, locked, saving, connected,
+  packages, packagesLoading = false, brandName, selected, qualification, locked, saving, connected,
   onSelect, onSendFlyer, onInsertSummary, onInsertItinerary, onOpenGallery, onOpenQualification, onPreviewImage, footer,
 }: {
   packages: Pkg[];
+  /** Paket brand aktif masih dimuat (mis. baru ganti brand): jangan tampilkan "tidak ada paket". */
+  packagesLoading?: boolean;
+  brandName?: string;
   selected: Pkg | null;
   /** Isian kualifikasi saat ini (termasuk draft) untuk kecocokan dan estimasi. */
   qualification: Qualification;
@@ -168,7 +171,15 @@ export function ProspectPackageTab({
           </button>
         </div>
         <ul className="divide-y divide-zinc-100">
-          {choices.length === 0 && <li className="px-4 py-3 text-xs text-zinc-600">Tidak ada paket yang cocok dengan pencarian.</li>}
+          {choices.length === 0 && (
+            <li className="px-4 py-3 text-xs text-zinc-600" role="status">
+              {packagesLoading
+                ? 'Memuat paket…'
+                : search.trim()
+                  ? 'Tidak ada paket yang cocok dengan pencarian.'
+                  : `Belum ada paket aktif yang belum berangkat${brandName ? ` di ${brandName}` : ''}.`}
+            </li>
+          )}
           {choices.map(({ pkg, fit: rowFit }) => {
             const from = packageFromPrice(pkg);
             const current = pkg.id === selected?.id;
