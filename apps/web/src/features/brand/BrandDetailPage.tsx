@@ -84,6 +84,8 @@ export function BrandDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const canManage = user?.role === 'superadmin';
+  // Admin ikut menautkan/memutus device WhatsApp; ubah data brand tetap khusus Super Admin.
+  const canManageDevice = canManage || user?.role === 'admin';
 
   const [copiedBank, setCopiedBank] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -228,7 +230,7 @@ export function BrandDetailPage() {
 
       {tab === 'perangkat' && (
         <div role="tabpanel" id="brand-panel-perangkat" aria-labelledby="brand-tab-perangkat">
-          <WhatsAppDevicePanel brandId={brand.id} brandName={brand.name} canManage={canManage} />
+          <WhatsAppDevicePanel brandId={brand.id} brandName={brand.name} canManage={canManageDevice} />
         </div>
       )}
       {tab === 'meta' && (
