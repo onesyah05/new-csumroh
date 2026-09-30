@@ -440,9 +440,19 @@ app.post('/sessions/:brandId/resolve-lids', async (req, res, next) => {
     next(error);
   }
 });
+/** JID tujuan kirim: nomor polos jadi JID, @lid dipetakan ke nomor HP bila gateway sudah tahu pasangannya. */
+function resolveTargetJid(brandId: number, jid: string) {
+  if (!jid.includes('@')) return `${jid.replace(/\D/g, '')}@s.whatsapp.net`;
+  if (jid.endsWith('@lid')) {
+    const clean = normalizePhone(lidPnMaps.get(brandId)?.get(jid) ?? '');
+    if (clean) return `${clean}@s.whatsapp.net`;
+  }
+  return jid;
+}
+
 app.post('/sessions/:brandId/messages', async (req, res, next) => {
   try {
-    const brandId = Number(req.params.brandId);
+    const brandId = brandIdSchema.parse(req.params.brandId);
     const input = z.object({
       jid: z.string().min(5),
       text: z.string().min(1).max(4000),
@@ -456,17 +466,7 @@ app.post('/sessions/:brandId/messages', async (req, res, next) => {
       return;
     }
 
-    let targetJid = input.jid;
-    if (!targetJid.includes('@')) {
-      targetJid = `${targetJid.replace(/\D/g, '')}@s.whatsapp.net`;
-    }
-    if (targetJid.endsWith('@lid')) {
-      const pn = lidPnMaps.get(brandId)?.get(targetJid);
-      if (pn) {
-        const clean = normalizePhone(pn);
-        if (clean) targetJid = `${clean}@s.whatsapp.net`;
-      }
-    }
+    const targetJid = resolveTargetJid(brandId, input.jid);
 
     const options: any = {};
     if (input.quotedMessageId) {
@@ -500,6 +500,8 @@ app.post('/sessions/:brandId/media', async (req, res, next) => {
       mediaType: z.enum(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage']),
       caption: z.string().max(4000).optional(),
       quotedMessageId: z.string().optional(),
+      quotedText: z.string().optional(),
+      isQuotedFromMe: z.boolean().optional(),
     }).parse(req.body);
 
     const socket = sessions.get(brandId);
@@ -508,17 +510,7 @@ app.post('/sessions/:brandId/media', async (req, res, next) => {
       return;
     }
 
-    let targetJid = input.jid;
-    if (!targetJid.includes('@')) {
-      targetJid = `${targetJid.replace(/\D/g, '')}@s.whatsapp.net`;
-    }
-    if (targetJid.endsWith('@lid')) {
-      const pn = lidPnMaps.get(brandId)?.get(targetJid);
-      if (pn) {
-        const clean = normalizePhone(pn);
-        if (clean) targetJid = `${clean}@s.whatsapp.net`;
-      }
-    }
+    const targetJid = resolveTargetJid(brandId, input.jid);
 
     const options: any = {};
     if (input.quotedMessageId) {
@@ -526,7 +518,10 @@ app.post('/sessions/:brandId/media', async (req, res, next) => {
         key: {
           remoteJid: targetJid,
           id: input.quotedMessageId,
-          fromMe: false,
+          fromMe: input.isQuotedFromMe ?? false,
+        },
+        message: {
+          conversation: input.quotedText || '',
         },
       };
     }
@@ -583,10 +578,7 @@ app.post('/sessions/:brandId/delete', async (req, res, next) => {
       return;
     }
 
-    let targetJid = input.jid;
-    if (!targetJid.includes('@')) {
-      targetJid = `${targetJid.replace(/\D/g, '')}@s.whatsapp.net`;
-    }
+    const targetJid = resolveTargetJid(brandId, input.jid);
 
     await socket.sendMessage(targetJid, {
       delete: {
@@ -619,10 +611,7 @@ app.post('/sessions/:brandId/react', async (req, res, next) => {
       return;
     }
 
-    let targetJid = input.jid;
-    if (!targetJid.includes('@')) {
-      targetJid = `${targetJid.replace(/\D/g, '')}@s.whatsapp.net`;
-    }
+    const targetJid = resolveTargetJid(brandId, input.jid);
 
     await socket.sendMessage(targetJid, {
       react: {
@@ -656,17 +645,7 @@ app.post('/sessions/:brandId/read', async (req, res, next) => {
       return;
     }
 
-    let targetJid = input.jid;
-    if (!targetJid.includes('@')) {
-      targetJid = `${targetJid.replace(/\D/g, '')}@s.whatsapp.net`;
-    }
-    if (targetJid.endsWith('@lid')) {
-      const pn = lidPnMaps.get(brandId)?.get(targetJid);
-      if (pn) {
-        const clean = normalizePhone(pn);
-        if (clean) targetJid = `${clean}@s.whatsapp.net`;
-      }
-    }
+    const targetJid = resolveTargetJid(brandId, input.jid);
 
     // 1. Send read receipts for individual messages to WhatsApp server (sender gets blue ticks)
     if (input.messageIds && input.messageIds.length > 0) {

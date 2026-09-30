@@ -13,7 +13,7 @@ import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
-import { normalizePhoneIdentifier, sendingDevicePhone, sendTextToProspect } from './outbound.js';
+import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { adLabels } from '../ads/meta-ads.js';
 import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
@@ -34,6 +34,11 @@ import {
 
 export const chatRouter = Router();
 chatRouter.use(authGuard);
+
+/** Batas "hapus untuk semua" di WhatsApp (±2 hari); lewat dari itu jamaah tetap melihat pesannya. */
+const DELETE_FOR_EVERYONE_SECONDS = 2 * 24 * 60 * 60;
+const STATUS_PROBE_MS = 15_000;
+const statusProbedAt = new Map<number, number>();
 
 type ProspectIdentity = {
   id: number;
@@ -425,12 +430,18 @@ chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
   const target = await prisma.prospect.findFirst({
     where: { id: Number(req.params.id), brandId },
-    select: { id: true, phone: true, remoteJid: true, devicePhone: true },
+    select: { id: true, phone: true, remoteJid: true, devicePhone: true, userId: true },
   });
   if (!target) {
     res.json({ success: true });
     return;
   }
+  // Hanya penanggung jawab chat yang "membaca": PIC, atau CS/Admin pada chat tanpa PIC. Admin/Finance yang sekadar
+  // memantau chat milik PIC lain tidak menghapus tanda belum dibaca PIC dan tidak memberi centang biru ke jamaah.
+  const isAdmin = req.user!.role === 'superadmin' || req.user!.role === 'admin';
+  const handlesChat = target.userId
+    ? target.userId === req.user!.id
+    : req.user!.role === 'cs' || isAdmin;
 
   const cleanPhone = normalizePhoneIdentifier(target.phone);
   const aliases = cleanPhone ? phoneAliases(cleanPhone) : [];
@@ -450,6 +461,10 @@ chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
   // Chat dibuka pembaca: notifikasi "pesan baru" miliknya untuk percakapan ini selesai.
   for (const prospectId of prospectIds) {
     dispatch(() => resolveNotifications({ entity: { type: 'prospect', id: prospectId }, types: ['message.inbound'], userIds: [req.user!.id] }));
+  }
+  if (!handlesChat) {
+    res.json({ success: true, data: { markedRead: 0, observerOnly: true } });
+    return;
   }
 
   const unreadMessages = await prisma.chatMessage.findMany({
@@ -479,7 +494,10 @@ chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
     ? `${cleanPhone}@s.whatsapp.net`
     : target.remoteJid;
 
-  if (waJid) {
+  // Centang biru hanya lewat nomor yang memegang percakapan ini.
+  const activePhone = await activeDevicePhone(brandId);
+  const sameDevice = !target.devicePhone || !activePhone || target.devicePhone === activePhone;
+  if (waJid && sameDevice) {
     void fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/read`, {
       method: 'POST',
       headers: {
@@ -578,7 +596,8 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
 
   const brandId = scopedBrandId(req, requestedBrandId ?? prospect.brandId);
   if (prospect.brandId !== brandId) throw new HttpError(404, 'Percakapan / Prospek tidak ditemukan.');
-  if (!prospect.phone) throw new HttpError(422, 'Nomor WhatsApp prospek belum tersedia.');
+  const remoteJid = prospectChatJid(prospect);
+  if (!remoteJid) throw new HttpError(422, 'Nomor WhatsApp prospek belum tersedia.');
 
   const isAdmin = req.user!.role === 'superadmin' || req.user!.role === 'admin';
   const isPic = Boolean(prospect.userId && prospect.userId === req.user!.id);
@@ -587,6 +606,11 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   if (!isAdmin && !isPic && !(isUnassigned && req.user!.role === 'cs')) {
     throw new HttpError(403, 'Hanya Admin dan PIC yang dapat mengirim media.');
   }
+  // Paket yang ikut ditautkan harus milik brand percakapan ini.
+  const linkedPackage = input.packageId
+    ? await prisma.package.findFirst({ where: { id: input.packageId, brandId }, select: { id: true, flyerImage: true } })
+    : null;
+  if (input.packageId && !linkedPackage) throw new HttpError(404, 'Paket tidak ditemukan di brand ini.');
 
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
   if (session?.status !== 'connected') {
@@ -600,9 +624,9 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   let resolvedFileName = input.fileName;
   let resolvedLocalUrl: string | null = null;
 
-  if (!resolvedBase64 && input.packageId) {
+  if (!resolvedBase64 && linkedPackage) {
     // Flyer hanya dari paket brand yang sama dan hanya file hasil upload-flyer (R08).
-    const pkg = await prisma.package.findFirst({ where: { id: input.packageId, brandId } });
+    const pkg = linkedPackage;
     const flyerPath = await resolveFlyerFile(pkg?.flyerImage);
     if (pkg?.flyerImage && flyerPath) {
       const fileBuf = await fs.promises.readFile(flyerPath);
@@ -621,20 +645,30 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   }
 
   // If packageId is provided and prospect does not have an assigned package, link the package
-  if (input.packageId && !prospect.packageId) {
+  if (linkedPackage && !prospect.packageId) {
     await prisma.prospect.update({
       where: { id: prospect.id },
-      data: { packageId: input.packageId },
+      data: { packageId: linkedPackage.id },
     }).catch((err) => console.warn('Failed to auto-assign package to prospect:', err));
   }
 
   const phone = normalizePhoneIdentifier(prospect.phone);
-  const isGroup = Boolean(prospect.remoteJid?.endsWith('@g.us'));
-  const remoteJid = isGroup
-    ? prospect.remoteJid!
-    : phone
-    ? `${phone}@s.whatsapp.net`
-    : (prospect.remoteJid && !prospect.remoteJid.endsWith('@lid') ? prospect.remoteJid : `${phone}@s.whatsapp.net`);
+
+  // Kutipan: pesan yang dibalas bisa milik jamaah atau pesan kita sendiri.
+  let quotedText = input.quotedText;
+  let quotedSender = input.quotedSender;
+  let isQuotedFromMe = false;
+  if (input.quotedMessageId) {
+    const quoted = await prisma.chatMessage.findFirst({
+      where: { brandId, messageId: input.quotedMessageId },
+      select: { messageText: true, senderName: true, isFromMe: true },
+    });
+    if (quoted) {
+      quotedText = quotedText || quoted.messageText || '';
+      quotedSender = quotedSender || (quoted.isFromMe ? 'Anda' : (quoted.senderName || prospect.name || 'Jamaah'));
+      isQuotedFromMe = quoted.isFromMe;
+    }
+  }
 
   // Save media file locally to uploads/media/ if not already a local file
   if (!resolvedLocalUrl) {
@@ -666,18 +700,12 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
       mediaType: input.mediaType,
       caption: input.caption,
       quotedMessageId: input.quotedMessageId,
+      quotedText,
+      isQuotedFromMe,
     }),
   }).catch(() => null);
 
-  if (!gatewayResponse?.ok) {
-    await prisma.whatsappSession.updateMany({
-      where: { brandId },
-      data: { status: 'disconnected', qrCode: null },
-    });
-    emitToBrand(brandId, 'whatsapp:status', { brandId, status: 'disconnected' });
-    void onWhatsappStatus(brandId, 'disconnected');
-    throw new HttpError(502, 'Gagal mengirim media ke WhatsApp. Coba lagi.');
-  }
+  if (!gatewayResponse?.ok) throw await gatewayFailure(brandId, gatewayResponse, 'Gagal mengirim media ke WhatsApp. Coba lagi.');
   const gatewayResult = await gatewayResponse.json() as { data?: { messageId?: string; mediaUrl?: string } };
 
   const isNewClaim = !prospect.userId && req.user!.role === 'cs';
@@ -699,8 +727,8 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
         status: 'sent',
         timestamp: Math.floor(Date.now() / 1000),
         quotedMessageId: input.quotedMessageId,
-        quotedText: input.quotedText,
-        quotedSender: input.quotedSender,
+        quotedText,
+        quotedSender,
       },
     });
 
@@ -805,6 +833,8 @@ chatRouter.post('/messages/:id/react', asyncHandler(async (req, res) => {
   if (session?.status !== 'connected') {
     throw new HttpError(400, 'Perangkat WhatsApp tidak terhubung.');
   }
+  // Reaksi hanya lewat nomor yang menerima/mengirim pesan itu.
+  sendingDevicePhone(message, session);
 
   const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/react`, {
     method: 'POST',
@@ -860,29 +890,33 @@ chatRouter.delete('/messages/:id', asyncHandler(async (req, res) => {
   if (!isAdmin && !isPic) {
     throw new HttpError(403, 'Hanya Admin dan PIC yang dapat menghapus pesan.');
   }
+  if (message.isDeleted) throw new HttpError(409, 'Pesan sudah dihapus.');
+  // WhatsApp hanya menerima "hapus untuk semua" dalam ±2 hari sejak pesan dikirim.
+  if (Date.now() / 1000 - message.timestamp > DELETE_FOR_EVERYONE_SECONDS) {
+    throw new HttpError(422, 'Pesan lebih dari 2 hari tidak bisa lagi dihapus untuk semua orang di WhatsApp.');
+  }
+  if (message.messageId.startsWith('local-')) throw new HttpError(422, 'Pesan ini tidak tercatat di WhatsApp sehingga tidak bisa ditarik.');
+  const remoteJid = message.remoteJid || (message.phone ? `${message.phone.replace(/\D/g, '')}@s.whatsapp.net` : null);
+  if (!remoteJid) throw new HttpError(422, 'Remote JID tidak valid.');
+
+  const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
+  if (session?.status !== 'connected') throw new HttpError(400, 'Perangkat WhatsApp tidak terhubung.');
+  // Hanya nomor pengirimnya yang bisa menarik pesan.
+  sendingDevicePhone(message, session);
+
+  // Tarik di WhatsApp dulu; CRM baru menandai terhapus bila jamaah juga tidak lagi melihatnya.
+  const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/delete`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
+    body: JSON.stringify({ jid: remoteJid, messageId: message.messageId, isFromMe: message.isFromMe }),
+  }).catch(() => null);
+  if (!gatewayResponse?.ok) throw await gatewayFailure(brandId, gatewayResponse, 'Gagal menarik pesan di WhatsApp. Pesan tidak dihapus.');
 
   const updated = await prisma.chatMessage.update({
     where: { id },
     data: { isDeleted: true, deletedAt: new Date() },
   });
   scheduleConversationStats([updated.prospectId]);
-
-  // If outgoing message and WhatsApp is connected, attempt to revoke on WhatsApp
-  const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
-  if (session?.status === 'connected' && message.isFromMe) {
-    const remoteJid = message.remoteJid || (message.phone ? `${message.phone.replace(/\D/g, '')}@s.whatsapp.net` : null);
-    if (remoteJid) {
-      await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/delete`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
-        body: JSON.stringify({
-          jid: remoteJid,
-          messageId: message.messageId,
-          isFromMe: message.isFromMe,
-        }),
-      }).catch((error) => console.warn('WhatsApp gateway delete call failed', error));
-    }
-  }
 
   emitToBrand(brandId, 'message:deleted', {
     id: updated.id,
@@ -899,12 +933,20 @@ chatRouter.post('/messages/:id/star', asyncHandler(async (req, res) => {
 
   const message = await prisma.chatMessage.findUnique({
     where: { id },
+    include: { prospect: { select: { userId: true } } },
   });
   if (!message) throw new HttpError(404, 'Pesan tidak ditemukan.');
 
   const requestedBrandId = req.query?.brandId ? Number(req.query.brandId) : undefined;
   const brandId = scopedBrandId(req, requestedBrandId ?? message.brandId);
   if (message.brandId !== brandId) throw new HttpError(404, 'Pesan tidak ditemukan.');
+
+  // Sama seperti reaksi: Admin, PIC, atau CS pada percakapan yang belum ber-PIC.
+  const isAdmin = req.user!.role === 'superadmin' || req.user!.role === 'admin';
+  const isPic = Boolean(message.prospect?.userId && message.prospect.userId === req.user!.id);
+  if (!isAdmin && !isPic && !(!message.prospect?.userId && req.user!.role === 'cs')) {
+    throw new HttpError(403, 'Hanya Admin dan PIC yang dapat menandai pesan.');
+  }
 
   const nextStarred = !(message as any).isStarred;
   const updated = await prisma.chatMessage.update({
@@ -926,8 +968,11 @@ chatRouter.get('/wa/status', asyncHandler(async (req, res) => {
   let data = await prisma.whatsappSession.findUnique({ where: { brandId } });
   const statusBefore = data?.status;
 
-  // Probe live gateway status
-  try {
+  // Probe gateway paling sering sekali per STATUS_PROBE_MS per brand; di antaranya status dari database (yang
+  // juga diperbarui gateway lewat webhook) sudah cukup untuk polling Inbox setiap tab.
+  const probeDue = Date.now() - (statusProbedAt.get(brandId) ?? 0) >= STATUS_PROBE_MS;
+  if (probeDue) statusProbedAt.set(brandId, Date.now());
+  if (probeDue) try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1200);
     const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/status`, {
@@ -1076,8 +1121,10 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   const senderContactName = isFromMe ? undefined : senderName?.trim();
   // Nama pengirim pesan masuk; bila tidak ada (pesan keluar / riwayat tanpa pushName), nama kontak WhatsApp tersimpan
   // untuk device ini. Dicari hanya saat nama prospek memang perlu diisi.
-  const knownName = async () => senderContactName || (!isGroup && devicePhone && aliases.length
-    ? (await prisma.whatsappContact.findFirst({ where: { brandId, devicePhone, phone: { in: aliases } }, select: { name: true } }))?.name
+  // Kontak tersimpan dicari lewat nomor, atau lewat ID @lid bila WhatsApp menyembunyikan nomornya.
+  const contactKeys = [...aliases, ...(remoteJid.endsWith('@lid') ? [remoteJid] : [])];
+  const knownName = async () => senderContactName || (!isGroup && devicePhone && contactKeys.length
+    ? (await prisma.whatsappContact.findFirst({ where: { brandId, devicePhone, phone: { in: contactKeys } }, select: { name: true } }))?.name
     : undefined);
   const validSenderName = !prospect || isGenericContactName(prospect.name, prospect.phone) ? await knownName() : undefined;
   const fallbackName = isGroup
@@ -1339,18 +1386,22 @@ internalRouter.post('/contacts/sync', asyncHandler(async (req, res) => {
   for (const contact of input.contacts) {
     if (contact.brandId !== input.brandId) throw new HttpError(400, 'Brand kontak tidak konsisten.');
     const phone = normalizePhoneIdentifier(contact.phone);
-    if (!phone) continue;
+    // WhatsApp makin sering menyembunyikan nomor (alamat @lid). Kontak seperti itu tetap membawa nama profil:
+    // disimpan & dicocokkan lewat ID @lid-nya, bukan dibuang.
+    const lid = contact.remoteJid.endsWith('@lid') ? contact.remoteJid : '';
+    const contactKey = phone || lid;
+    if (!contactKey) continue;
     // Kontak sering tiba sebelum chat-nya tersimpan: namanya disimpan agar dipakai saat prospek dibuat belakangan.
     if (devicePhone && contact.name && !isGenericContactName(contact.name, phone)) {
       await prisma.whatsappContact.upsert({
-        where: { brandId_devicePhone_phone: { brandId: input.brandId, devicePhone, phone } },
+        where: { brandId_devicePhone_phone: { brandId: input.brandId, devicePhone, phone: contactKey } },
         update: { name: contact.name },
-        create: { brandId: input.brandId, devicePhone, phone, name: contact.name },
+        create: { brandId: input.brandId, devicePhone, phone: contactKey, name: contact.name },
       });
     }
-    const aliases = phoneAliases(phone);
+    const aliases = phone ? phoneAliases(phone) : [];
     const candidates = await prisma.prospect.findMany({
-      where: { brandId: input.brandId, ...(devicePhone ? { devicePhone } : {}), OR: [{ remoteJid: contact.remoteJid }, { phone: { in: aliases } }] },
+      where: { brandId: input.brandId, ...(devicePhone ? { devicePhone } : {}), OR: [{ remoteJid: contact.remoteJid }, ...(aliases.length ? [{ phone: { in: aliases } }] : [])] },
       select: { id: true, name: true, phone: true, remoteJid: true, packageId: true, userId: true, notes: true, updatedAt: true },
     });
     const existing = candidates.length ? chooseCanonicalProspect(candidates) : null;
@@ -1359,12 +1410,11 @@ internalRouter.post('/contacts/sync', asyncHandler(async (req, res) => {
       // Kontak buku telepon hanya dipakai untuk memperkaya nama prospek yang sudah ada riwayat chat-nya.
       continue;
     }
-    const displayName = contact.name || phone;
     const existingNameIsGeneric = isGenericContactName(existing.name, existing.phone);
     await prisma.prospect.update({
       where: { id: existing.id },
       data: {
-        ...(!existing.phone ? { phone } : {}),
+        ...(!existing.phone && phone ? { phone } : {}),
         ...((!existing.remoteJid || contact.remoteJid.endsWith('@lid')) ? { remoteJid: contact.remoteJid } : {}),
         ...(contact.name && (existingNameIsGeneric || !existing.name) ? { name: contact.name } : {}),
       },

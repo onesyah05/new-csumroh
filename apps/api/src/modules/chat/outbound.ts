@@ -30,6 +30,33 @@ export function sendingDevicePhone(prospect: { devicePhone: string | null }, ses
   return devicePhone || prospect.devicePhone || null;
 }
 
+/**
+ * JID tujuan kirim: grup apa adanya, nomor HP bila ada, selain itu ID @lid (kontak yang nomornya disembunyikan
+ * WhatsApp; gateway memetakannya ke nomor bila sudah tahu).
+ */
+export function prospectChatJid(prospect: { phone: string | null; remoteJid: string | null }) {
+  if (prospect.remoteJid?.endsWith('@g.us')) return prospect.remoteJid;
+  const phone = normalizePhoneIdentifier(prospect.phone) || normalizePhoneIdentifier(prospect.remoteJid);
+  if (phone) return `${phone}@s.whatsapp.net`;
+  if (prospect.remoteJid?.endsWith('@lid')) return prospect.remoteJid;
+  return null;
+}
+
+/**
+ * Error untuk kiriman yang ditolak gateway. Sesi hanya ditandai putus bila gateway tidak terjangkau atau
+ * melaporkan sesi tidak tersambung (409); kegagalan satu pesan (mis. nomor tidak valid) tidak memutus semua user.
+ */
+export async function gatewayFailure(brandId: number, response: Response | null, message: string) {
+  if (!response || response.status === 409) {
+    await prisma.whatsappSession.updateMany({ where: { brandId }, data: { status: 'disconnected', qrCode: null } });
+    emitToBrand(brandId, 'whatsapp:status', { brandId, status: 'disconnected' });
+    void onWhatsappStatus(brandId, 'disconnected');
+    return new HttpError(502, 'WhatsApp belum terhubung atau gateway tidak tersedia.');
+  }
+  console.warn('WhatsApp gateway menolak kiriman', brandId, response.status, await response.text().catch(() => ''));
+  return new HttpError(502, message);
+}
+
 export type OutboundTextInput = {
   user: SessionUser;
   brandId: number;
@@ -56,7 +83,8 @@ export async function sendTextToProspect(input: OutboundTextInput) {
     include: { user: { select: { id: true, name: true } } },
   });
   if (!prospect || prospect.brandId !== brandId) throw new HttpError(404, 'Percakapan / Prospek tidak ditemukan.');
-  if (!prospect.phone) throw new HttpError(422, 'Nomor WhatsApp prospek belum tersedia.');
+  const remoteJid = prospectChatJid(prospect);
+  if (!remoteJid) throw new HttpError(422, 'Nomor WhatsApp prospek belum tersedia.');
 
   const isAdmin = user.role === 'superadmin' || user.role === 'admin' || (Boolean(input.allowFinance) && user.role === 'finance');
   const isPic = Boolean(prospect.userId && prospect.userId === user.id);
@@ -75,12 +103,6 @@ export async function sendTextToProspect(input: OutboundTextInput) {
   const devicePhone = sendingDevicePhone(prospect, session);
 
   const phone = normalizePhoneIdentifier(prospect.phone);
-  const isGroup = Boolean(prospect.remoteJid?.endsWith('@g.us'));
-  const remoteJid = isGroup
-    ? prospect.remoteJid!
-    : phone
-    ? `${phone}@s.whatsapp.net`
-    : (prospect.remoteJid && !prospect.remoteJid.endsWith('@lid') ? prospect.remoteJid : `${phone}@s.whatsapp.net`);
 
   let quotedText = input.quotedText;
   let quotedSender = input.quotedSender;
@@ -107,15 +129,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
       isQuotedFromMe,
     }),
   }).catch(() => null);
-  if (!gatewayResponse?.ok) {
-    await prisma.whatsappSession.updateMany({
-      where: { brandId },
-      data: { status: 'disconnected', qrCode: null },
-    });
-    emitToBrand(brandId, 'whatsapp:status', { brandId, status: 'disconnected' });
-    void onWhatsappStatus(brandId, 'disconnected');
-    throw new HttpError(502, 'WhatsApp belum terhubung atau gateway tidak tersedia.');
-  }
+  if (!gatewayResponse?.ok) throw await gatewayFailure(brandId, gatewayResponse, 'WhatsApp menolak pesan ini. Coba lagi.');
   const gatewayResult = await gatewayResponse.json() as { data?: { messageId?: string } };
 
   const isNewClaim = !prospect.userId && user.role === 'cs';
