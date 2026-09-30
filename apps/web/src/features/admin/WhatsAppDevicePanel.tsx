@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { waDisconnectReasonText } from '@csumroh/shared-types';
 import {
   AlertCircle, CheckCircle2, Clock3, QrCode,
   RefreshCw, ShieldCheck, Smartphone, Unplug, Wifi, WifiOff
@@ -19,6 +20,7 @@ type WhatsAppSession = {
   qrCode: string | null;
   lastConnectedAt: string | null;
   updatedAt?: string;
+  disconnectReason?: string | null;
 };
 
 const statusCopy: Record<WhatsAppStatus, { label: string; description: string }> = {
@@ -137,6 +139,11 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
         {/* Panduan Langkah Scan Terstruktur */}
         <div className="border-t bg-zinc-50/70 p-5">
           <p className="text-sm font-semibold text-zinc-800">{copy.description}</p>
+          {currentData.status !== 'connected' && waDisconnectReasonText(currentData.disconnectReason) && (
+            <p className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
+              <span className="font-semibold">Penyebab terakhir:</span> {waDisconnectReasonText(currentData.disconnectReason)}
+            </p>
+          )}
           <p className="mt-1 text-xs leading-5 text-zinc-500">
             {canManage
               ? 'Gunakan WhatsApp utama: Perangkat tertaut → Tautkan perangkat → scan QR yang tampil.'

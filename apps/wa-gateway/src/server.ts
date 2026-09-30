@@ -10,7 +10,6 @@ import pino from 'pino';
 import QRCode from 'qrcode';
 import makeWASocket, {
   Browsers,
-  DisconnectReason,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
   downloadMediaMessage,
@@ -20,8 +19,10 @@ import makeWASocket, {
   type WAMessage,
 } from '@whiskeysockets/baileys';
 import { z } from 'zod';
-import { addLidMappings, normalizePhone, toGatewayContact, toGatewayMessage, type HistoryContact } from './messages.js';
+import { addLidMappings, normalizePhone, toGatewayContact, toGatewayMessage, toMessageChange, type HistoryContact } from './messages.js';
+import { classifyDisconnect, reconnectDelayMs } from './connection.js';
 import { acquireInstanceLock } from './instance-lock.js';
+import { Outbox, type OutboxItem, type SendResult } from './outbox.js';
 
 dotenv.config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
 
@@ -38,17 +39,49 @@ const sessions = new Map<number, WASocket>();
 const statuses = new Map<number, string>();
 const lidPnMaps = new Map<number, Map<string, string>>();
 const reconnectTimers = new Map<number, NodeJS.Timeout>();
+const reconnectAttempts = new Map<number, number>();
 const generations = new Map<number, number>();
 const manuallyStopped = new Set<number>();
 const sessionsRoot = path.resolve(process.cwd(), 'sessions');
 const brandIdSchema = z.coerce.number().int().positive();
 
+/** Galat 500 yang sama berulang untuk satu event = bug data, bukan API mati; setelah batas ini event dibuang. */
+const MAX_SERVER_ERRORS_PER_EVENT = 10;
+let headServerErrors = 0;
+
+async function deliverToApi(item: OutboxItem): Promise<SendResult> {
+  try {
+    const response = await fetch(`${env.API_INTERNAL_URL}/internal${item.pathname}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
+      body: JSON.stringify(item.payload),
+      // Impor riwayat 50 pesan bisa lama; timeout hanya untuk koneksi yang benar-benar menggantung.
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (response.ok) {
+      headServerErrors = 0;
+      return 'delivered';
+    }
+    // API sedang restart/di balik proxy (502–504), dibatasi (429), atau secret belum cocok (401): tunggu, jangan buang.
+    if ([401, 408, 429, 502, 503, 504].includes(response.status)) return 'retry';
+    if (response.status >= 500 && ++headServerErrors < MAX_SERVER_ERRORS_PER_EVENT) return 'retry';
+    headServerErrors = 0;
+    logger.error({ status: response.status, pathname: item.pathname, body: (await response.text().catch(() => '')).slice(0, 500) }, 'API rejected gateway event; dropped');
+    return 'drop';
+  } catch {
+    // API tidak terjangkau (restart saat deploy): event tetap di antrean.
+    return 'retry';
+  }
+}
+
+const outbox = new Outbox(path.resolve(process.cwd(), 'outbox'), deliverToApi);
+
+/** Semua event ke API lewat antrean di disk: tidak ada pesan yang hilang saat API restart atau error sementara. */
 async function notify(pathname: string, payload: unknown) {
   try {
-    const response = await fetch(`${env.API_INTERNAL_URL}/internal${pathname}`, { method:'POST', headers:{'content-type':'application/json','x-internal-secret':env.WA_GATEWAY_SECRET}, body:JSON.stringify(payload) });
-    if (!response.ok) logger.warn({ status: response.status, pathname }, 'API notification failed');
+    await outbox.enqueue({ pathname, payload });
   } catch (error) {
-    logger.warn({ error, pathname }, 'API notification unavailable');
+    logger.error({ error, pathname }, 'Failed to queue API notification');
   }
 }
 
@@ -69,6 +102,8 @@ function safeMediaExtension(fileName: string | undefined, mimeType = '') {
   return '.bin';
 }
 
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
+
 async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promise<string | null> {
   try {
     const content = normalizeMessageContent(message.message);
@@ -78,15 +113,14 @@ async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promi
       return null;
     }
 
-    const buffer = await downloadMediaMessage(
-      message,
-      'buffer',
-      {},
-      {
-        logger,
-        reuploadRequest: socket.updateMediaMessage,
-      }
-    );
+    // Unduhan yang menggantung tidak boleh menahan pesan-pesan berikutnya: setelah 30 dtk pesan diteruskan tanpa media.
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), MEDIA_DOWNLOAD_TIMEOUT_MS); });
+    const buffer = await Promise.race([
+      downloadMediaMessage(message, 'buffer', {}, { logger, reuploadRequest: socket.updateMediaMessage }),
+      timeout,
+    ]).finally(() => clearTimeout(timer));
+    if (buffer === null) logger.warn({ messageId: message.key.id }, 'Media download timed out');
 
     if (!buffer || !Buffer.isBuffer(buffer)) return null;
 
@@ -158,25 +192,30 @@ async function startSession(brandId: number) {
   socket.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (generations.get(brandId) !== generation) return;
     if (qr) { statuses.set(brandId,'qr_ready'); await notify('/wa/status',{brandId,status:'qr_ready',qrCode:await QRCode.toDataURL(qr)}); }
-    if (connection === 'open') { statuses.set(brandId,'connected'); await notify('/wa/status',{brandId,status:'connected',qrCode:null,phoneNumber:socket.user?.id.split(':')[0]}); }
+    if (connection === 'open') {
+      statuses.set(brandId, 'connected');
+      reconnectAttempts.delete(brandId);
+      await notify('/wa/status', { brandId, status: 'connected', qrCode: null, phoneNumber: socket.user?.id.split(':')[0] });
+    }
     if (connection === 'close') {
       sessions.delete(brandId);
       statuses.set(brandId, 'disconnected');
       const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
-      const isLoggedOut = code === DisconnectReason.loggedOut || code === 401;
-      // Sesi yang sama dibuka di tempat lain (mis. gateway kedua). Menyambung ulang otomatis akan
-      // memutus pihak lain, lalu diputus balik — putus-sambung tanpa henti. Berhenti dan minta tindakan.
-      const isReplaced = code === DisconnectReason.connectionReplaced;
-      if (isReplaced) {
-        logger.error({ brandId, code }, 'WhatsApp session replaced by another connection; auto-reconnect disabled. Pastikan hanya satu wa-gateway berjalan, lalu sambungkan ulang dari menu Perangkat.');
+      const { kind, permanent, clearCredentials } = classifyDisconnect(code);
+      if (permanent) {
+        logger.error({ brandId, code, kind }, 'WhatsApp session closed permanently; auto-reconnect disabled until the device is reconnected from the CRM.');
       }
-      if (isLoggedOut) {
-        logger.warn({ brandId, code }, 'Session logged out or device removed, clearing credentials');
+      if (clearCredentials) {
         await rm(path.join(sessionsRoot, `brand_${brandId}`), { recursive: true, force: true }).catch(() => null);
       }
-      await notify('/wa/status', { brandId, status: 'disconnected', qrCode: null });
-      if (!isLoggedOut && !isReplaced && !manuallyStopped.has(brandId)) {
-        const timer = setTimeout(() => void startSession(brandId), 2500);
+      await notify('/wa/status', { brandId, status: 'disconnected', qrCode: null, reason: kind });
+      if (!permanent && !manuallyStopped.has(brandId)) {
+        // Jeda berlipat: internet mati berjam-jam tidak membuat gateway membombardir server WhatsApp.
+        const attempt = reconnectAttempts.get(brandId) ?? 0;
+        reconnectAttempts.set(brandId, attempt + 1);
+        const delay = kind === 'restart' ? 1_000 : reconnectDelayMs(attempt);
+        logger.warn({ brandId, code, attempt: attempt + 1, delay }, 'WhatsApp connection closed; reconnecting');
+        const timer = setTimeout(() => void startSession(brandId), delay);
         reconnectTimers.set(brandId, timer);
       }
     }
@@ -212,6 +251,12 @@ async function startSession(brandId: number) {
   });
   socket.ev.on('messages.upsert', async ({ messages }) => {
     for (const message of messages) {
+      // Pesan ditarik/diedit pengirim: perbarui pesan asli di CRM, bukan pesan baru.
+      const change = toMessageChange(message);
+      if (change) {
+        await notify(change.kind === 'revoked' ? '/messages/revoked' : '/messages/edited', { brandId, ...change });
+        continue;
+      }
       const payload = toGatewayMessage(brandId, message, lidPnMap);
       if (payload) {
         if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'].includes(payload.messageType) && !payload.mediaUrl) {
@@ -315,8 +360,9 @@ async function stopSession(brandId: number) {
     socket.end(undefined);
   }
   statuses.set(brandId, 'disconnected');
+  reconnectAttempts.delete(brandId);
   await rm(path.join(sessionsRoot, `brand_${brandId}`), { recursive: true, force: true });
-  await notify('/wa/status', { brandId, status: 'disconnected', qrCode: null, phoneNumber: null });
+  await notify('/wa/status', { brandId, status: 'disconnected', qrCode: null, phoneNumber: null, reason: 'manual' });
 }
 
 async function restoreSessions() {
@@ -334,7 +380,7 @@ app.use(helmet());
 const origins=env.WEB_ORIGIN.split(',').map((item)=>item.trim());
 app.use(cors({origin(origin,callback){callback(null,!origin||origins.includes(origin));},credentials:true}));
 // Hanya dipanggil API (media base64 hingga ±40 MB); ditempatkan setelah pemeriksaan secret di bawah.
-app.get('/health', (_req, res) => res.json({ success: true, data: { service: 'wa-gateway', sessions: sessions.size } }));
+app.get('/health', (_req, res) => res.json({ success: true, data: { service: 'wa-gateway', sessions: sessions.size, queued: outbox.size } }));
 app.use((req, res, next) => {
   if (!secretMatches(req.get('x-internal-secret'))) {
     res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -349,6 +395,7 @@ app.post('/sessions/:brandId/start', async (req, res, next) => {
     if (statuses.get(brandId) !== 'connected') {
       await rm(path.join(sessionsRoot, `brand_${brandId}`), { recursive: true, force: true }).catch(() => null);
     }
+    reconnectAttempts.delete(brandId);
     await startSession(brandId);
     res.json({ success: true, data: { brandId, status: statuses.get(brandId) } });
   } catch (error) {
@@ -679,7 +726,11 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => pr
 // Hanya didengar di mesin yang sama dengan API (bawaan 127.0.0.1); set WA_GATEWAY_HOST bila API di host lain.
 const server = app.listen(env.WA_GATEWAY_PORT, env.WA_GATEWAY_HOST, () => {
   logger.info(`WA gateway ready on ${env.WA_GATEWAY_HOST}:${env.WA_GATEWAY_PORT}`);
-  void restoreSessions().catch((error) => logger.error(error, 'Failed to restore WhatsApp sessions'));
+  // Antrean dari proses sebelumnya dikirim dulu (urutan tetap), baru sesi WhatsApp dipulihkan.
+  void outbox.init()
+    .then(() => { if (outbox.size) logger.info({ pending: outbox.size }, 'Resuming queued API notifications'); })
+    .catch((error) => logger.error(error, 'Failed to load notification queue'))
+    .finally(() => void restoreSessions().catch((error) => logger.error(error, 'Failed to restore WhatsApp sessions')));
 });
 // Gagal mendapat port = jangan tetap hidup setengah jalan; keluar agar tidak ada sesi yatim.
 server.on('error', (error) => {

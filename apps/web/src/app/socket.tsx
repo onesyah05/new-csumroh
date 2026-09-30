@@ -121,6 +121,8 @@ export function SocketBridge() {
     socket.on('message:reaction', onMessageChanged);
     socket.on('message:deleted', onMessageChanged);
     socket.on('message:starred', onMessageChanged);
+    // Jamaah mengedit pesannya di WhatsApp.
+    socket.on('message:edited', onMessageChanged);
     socket.on('contacts:synced', refreshLists);
     socket.on('conversations:updated', refreshLists);
     const onFinanceProof = (data?: { prospectId?: number; name?: string }) => {

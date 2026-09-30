@@ -347,6 +347,8 @@ model WhatsappSession {
   status          WaStatus  @default(disconnected)
   qrCode          String?   @map("qr_code") @db.Text
   lastConnectedAt DateTime? @map("last_connected_at")
+  // Alasan putus terakhir (lihat WA_DISCONNECT_REASONS di shared-types); dikosongkan saat tersambung lagi.
+  disconnectReason String?  @map("disconnect_reason") @db.VarChar(30)
   updatedAt       DateTime  @updatedAt @map("updated_at")
   brand           Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
 

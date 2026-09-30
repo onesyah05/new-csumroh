@@ -5,7 +5,7 @@ import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { businessDateKey, isLostStatus, isTakeoverOpen, isWonStatus } from '@csumroh/shared-types';
+import { businessDateKey, isLostStatus, isTakeoverOpen, isWonStatus, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle,
@@ -283,7 +283,7 @@ export function InboxPage() {
 
   const sessionQuery = useQuery({
     queryKey: ['whatsapp-device', brandId],
-    queryFn: () => api.get<{ status: string; phoneNumber?: string | null }>(`/chat/wa/status${query}`),
+    queryFn: () => api.get<{ status: string; phoneNumber?: string | null; disconnectReason?: string | null }>(`/chat/wa/status${query}`),
     enabled: !!brandId,
     refetchInterval: (queryData) => {
       const status = queryData?.state?.data?.status;
@@ -1204,6 +1204,9 @@ export function InboxPage() {
               <div className="min-w-0">
                 <p className="font-semibold">WhatsApp terputus — mode baca</p>
                 <p className="text-amber-800">Riwayat tetap bisa dibaca; pesan baru belum masuk dan belum bisa dikirim.</p>
+                {waDisconnectReasonText(sessionQuery.data?.disconnectReason) && (
+                  <p className="mt-0.5 text-amber-800">{waDisconnectReasonText(sessionQuery.data?.disconnectReason)}</p>
+                )}
                 {canManageDevice && (
                   <Link to={`/devices/${brandId}`} className="mt-1 inline-flex items-center gap-1 font-semibold underline">
                     <Smartphone size={12} /> Hubungkan WA

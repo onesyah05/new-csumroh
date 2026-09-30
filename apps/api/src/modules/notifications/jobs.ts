@@ -148,7 +148,8 @@ let gatewayOutageSince: number | null = null;
 
 export async function gatewayHealthJob(now = new Date(), probe = defaultProbe) {
   const healthy = await probe();
-  const superadmins = async () => (await prisma.user.findMany({ where: { role: 'superadmin', isActive: true }, select: { id: true } })).map((u) => u.id);
+  // Admin ikut mengelola perangkat WhatsApp, jadi ikut diberi tahu saat gateway mati/hidup.
+  const superadmins = async () => (await prisma.user.findMany({ where: { role: { in: ['superadmin', 'admin'] }, isActive: true }, select: { id: true } })).map((u) => u.id);
   if (healthy) {
     gatewayFailures = 0;
     if (gatewayOutageSince !== null) {
