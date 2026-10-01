@@ -16,6 +16,7 @@ import {
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { useUiStore } from '../../app/store';
+import { assignedBrandIds, packageBrandsUnrestricted } from '../../lib/scope';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { Select } from '../../components/ui/select';
 import { PageHeader } from '../../components/ui/page-header';
@@ -173,13 +174,16 @@ export function PackageFormPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // Brands list (for superadmin selection)
+  // Brand tujuan: Superadmin semua brand; Admin brand tugasnya (aturan sama dengan API kelola paket).
   const brandsQuery = useQuery({
     queryKey: ['brands'],
     queryFn: () => api.get<Array<{ id: number; name: string; code: string }>>('/catalog/brands'),
-    enabled: isSuperadmin,
+    enabled: Boolean(user),
   });
-  const brands = brandsQuery.data || [];
+  const unrestricted = isSuperadmin || packageBrandsUnrestricted(user);
+  const assigned = assignedBrandIds(user);
+  const brands = (brandsQuery.data || []).filter((b) => unrestricted || assigned.includes(b.id));
+  const chooseBrand = brands.length > 1;
 
   // Form State
   const [form, setForm] = useState({
@@ -247,13 +251,12 @@ export function PackageFormPage() {
         isActive: p.isActive ?? true,
       });
     } else if (!isEdit) {
-      const defaultBrand = activeBrandId ? String(activeBrandId) : (brands[0]?.id ? String(brands[0].id) : '');
-      setForm((prev) => ({
-        ...prev,
-        brandId: isSuperadmin ? defaultBrand : String(user?.brandId ?? ''),
-      }));
+      // Default: brand yang sedang dipilih di halaman Paket bila boleh, selain itu brand pertama yang boleh.
+      const allowed = brands.map((b) => b.id);
+      const defaultBrand = activeBrandId && allowed.includes(activeBrandId) ? activeBrandId : (user?.brandId && allowed.includes(user.brandId) ? user.brandId : allowed[0]);
+      setForm((prev) => (prev.brandId && allowed.includes(Number(prev.brandId)) ? prev : { ...prev, brandId: defaultBrand ? String(defaultBrand) : '' }));
     }
-  }, [isEdit, packageQuery.data, isSuperadmin, activeBrandId, brands, user?.brandId]);
+  }, [isEdit, packageQuery.data, activeBrandId, brandsQuery.data, user?.brandId]);
 
   // Save mutation
   const saveMutation = useMutation({
@@ -288,7 +291,8 @@ export function PackageFormPage() {
         promoDiscount: form.isPromo ? form.promoDiscount.trim() || null : null,
         promoDeadline: form.isPromo && form.promoDeadline ? form.promoDeadline : null,
         isActive: Boolean(form.isActive),
-        ...(isSuperadmin && form.brandId ? { brandId: Number(form.brandId) } : {}),
+        // Brand dikirim saat membuat; saat edit hanya bila diubah (memindahkan paket antar brand).
+        ...(form.brandId && (!isEdit || Number(form.brandId) !== packageQuery.data?.brandId) ? { brandId: Number(form.brandId) } : {}),
       };
 
       if (isEdit && id) {
@@ -428,7 +432,7 @@ export function PackageFormPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {isSuperadmin && (
+                {chooseBrand && (
                   <div>
                     <label className="text-xs font-semibold text-zinc-700 block mb-1">
                       Brand Travel <span className="text-rose-500">*</span>

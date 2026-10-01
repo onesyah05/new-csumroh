@@ -31,3 +31,13 @@ export function useBrandScope() {
   const brandId = canAccessBrand(user, activeBrandId) ? activeBrandId : (fallback ?? (isHoldingRole(user?.role) ? activeBrandId : null));
   return { brandId, query: brandId ? `?brandId=${brandId}` : '' };
 }
+
+/**
+ * Paket: Superadmin & Finance melihat semua brand; Admin hanya brand tugasnya (yang juga boleh ia kelola),
+ * kecuali Admin tanpa penugasan sama sekali. Sama dengan aturan API /catalog/packages.
+ */
+export function packageBrandsUnrestricted(user?: SessionUser | null) {
+  if (!user) return false;
+  if (user.role === 'superadmin' || user.role === 'finance') return true;
+  return user.role === 'admin' && assignedBrandIds(user).length === 0;
+}
