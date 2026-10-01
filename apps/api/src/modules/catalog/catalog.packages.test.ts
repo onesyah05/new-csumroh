@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), findUnique: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn() }));
 
 vi.mock('../../db/prisma.js', () => ({
-  prisma: { package: { findMany: mocks.findMany, findUnique: mocks.findUnique } },
+  prisma: { package: { findMany: mocks.findMany, findUnique: mocks.findUnique, update: mocks.update, create: mocks.create } },
 }));
 vi.mock('../../middleware/auth.js', async () => {
   const actual = await vi.importActual<typeof import('../../middleware/auth.js')>('../../middleware/auth.js');
@@ -34,14 +34,33 @@ describe('Paket per brand', () => {
     expect(mocks.findMany.mock.calls[0][0].where.brandId).toBe(6);
   });
 
-  it('CS tidak bisa meminta paket brand yang tidak ia pegang; tanpa brandId tetap brand utama', async () => {
+  it('CS tidak bisa meminta paket brand yang tidak ia pegang; tanpa filter melihat semua brand tugasnya', async () => {
     await expect(call('/packages', csMulti, { brandId: '9' })).rejects.toMatchObject({ status: 403 });
     await call('/packages', csMulti);
-    expect(mocks.findMany.mock.calls[0][0].where.brandId).toBe(1);
+    expect(mocks.findMany.mock.calls[0][0].where.brandId).toEqual({ in: [1, 6] });
   });
 
   it('Admin lintas brand memakai brand yang diminta', async () => {
     await call('/packages', { id: 2, role: 'admin', brandId: 1 }, { brandId: '6' });
+    expect(mocks.findMany.mock.calls[0][0].where.brandId).toBe(6);
+  });
+
+  it('"Semua brand": Admin bertugas = brand tugasnya, Superadmin = semua; tanpa filter Admin tetap brand utamanya', async () => {
+    const admin = { id: 2, role: 'admin', brandId: 1, userBrands: [{ brand: { id: 6 } }] };
+    await call('/packages', admin, { brandId: 'all' });
+    expect(mocks.findMany.mock.calls[0][0].where.brandId).toEqual({ in: [1, 6] });
+    await call('/packages', { id: 1, role: 'superadmin', brandId: null }, { brandId: 'all' });
+    expect(mocks.findMany.mock.calls[1][0].where.brandId).toBeUndefined();
+    mocks.findMany.mockClear();
+    await call('/packages', admin);
+    expect(mocks.findMany.mock.calls[0][0].where.brandId).toBe(1);
+    // CS yang meminta "all" tetap dibatasi ke brand tugasnya.
+    await call('/packages', csMulti, { brandId: 'all' });
+    expect(mocks.findMany.mock.calls[1][0].where.brandId).toEqual({ in: [1, 6] });
+  });
+
+  it('CS dengan satu brand: brand itu saja', async () => {
+    await call('/packages', { id: 8, role: 'cs', brandId: null, userBrands: [{ brand: { id: 6 } }] });
     expect(mocks.findMany.mock.calls[0][0].where.brandId).toBe(6);
   });
 
@@ -57,5 +76,43 @@ describe('Paket per brand', () => {
     expect(await call('/packages/:id', csMulti, {}, { id: '3' })).toMatchObject({ id: 3 });
     mocks.findUnique.mockResolvedValueOnce({ id: 4, brandId: 9 });
     await expect(call('/packages/:id', csMulti, {}, { id: '4' })).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+function write(method: 'post' | 'patch' | 'delete', path: string, user: User, body: Record<string, unknown> = {}, params: Record<string, string> = {}) {
+  const layer = (catalogRouter as any).stack.find((l: any) => l.route?.path === path && l.route.methods[method]);
+  return new Promise<any>((resolve, reject) => {
+    const res = { json: (out: any) => resolve(out.data), status: () => res };
+    layer.route.stack.at(-1).handle({ body, params, query: {}, user }, res, (error: unknown) => (error ? reject(error) : resolve(undefined)));
+  });
+}
+
+describe('Admin multi-brand mengelola paket', () => {
+  const adminMulti: User = { id: 2, role: 'admin', brandId: 1, userBrands: [{ brand: { id: 6 } }] };
+  beforeEach(() => {
+    mocks.update.mockImplementation(async ({ data }: any) => ({ id: 3, ...data }));
+    mocks.create.mockImplementation(async ({ data }: any) => ({ id: 10, ...data }));
+  });
+
+  it('boleh mengedit dan menonaktifkan paket brand penugasannya, bukan hanya brand utama', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 3, brandId: 6, isActive: true });
+    await write('patch', '/packages/:id', adminMulti, { name: 'Umroh Syawal' }, { id: '3' });
+    await write('patch', '/packages/:id/toggle', adminMulti, {}, { id: '3' });
+    expect(mocks.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('paket brand yang tidak ditugaskan ditolak; memindahkan paket ke brand itu juga ditolak', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 4, brandId: 9, isActive: true });
+    await expect(write('patch', '/packages/:id', adminMulti, { name: 'X' }, { id: '4' })).rejects.toMatchObject({ status: 403 });
+    mocks.findUnique.mockResolvedValue({ id: 3, brandId: 6, isActive: true });
+    await expect(write('patch', '/packages/:id', adminMulti, { brandId: 9 }, { id: '3' })).rejects.toMatchObject({ status: 403 });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('membuat paket untuk brand penugasan; brand lain ditolak', async () => {
+    const body = { name: 'Umroh Ramadhan', price: 'Rp 30.000.000', dp: 'Rp 5.000.000' };
+    await write('post', '/packages', adminMulti, { ...body, brandId: 6 });
+    expect(mocks.create.mock.calls[0][0].data.brandId).toBe(6);
+    await expect(write('post', '/packages', adminMulti, { ...body, brandId: 9 })).rejects.toMatchObject({ status: 403 });
   });
 });

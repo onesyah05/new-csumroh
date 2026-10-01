@@ -237,6 +237,16 @@ const rupiahText = (required: string) => z.string().min(1, required).max(50)
 const optionalRupiahText = z.string().max(50).optional().nullable()
   .refine((value) => !value?.trim() || parseRupiahStrict(value) !== null, AMBIGUOUS_RUPIAH);
 
+/**
+ * Admin mengelola paket brand tugasnya (brand utama + penugasan), sama dengan brand yang bisa ia pilih di halaman
+ * Paket. Admin tanpa penugasan sama sekali tetap holding (semua brand). Superadmin selalu boleh.
+ */
+function assertCanManagePackages(user: { role: string; brandId: number | null; userBrands?: { brand?: { id: number } | null }[] }, brandId: number) {
+  if (user.role === 'superadmin') return;
+  const assigned = [user.brandId, ...(user.userBrands ?? []).map((ub) => ub.brand?.id)].filter((id): id is number => Boolean(id));
+  if (assigned.length && !assigned.includes(brandId)) throw new HttpError(403, 'Admin hanya dapat mengelola paket pada brand yang ditugaskan kepadanya.');
+}
+
 const packageInputSchema = z.object({
   brandId: z.number().int().positive().optional(),
   name: z.string().min(2, 'Nama paket minimal 2 karakter').max(150),
@@ -271,13 +281,28 @@ catalogRouter.get('/packages', asyncHandler(async (req, res) => {
   // Brand yang diminta dipakai untuk semua role (CS divalidasi ke brand yang ia pegang); tanpa permintaan,
   // non-superadmin memakai brand utamanya. Sebelumnya permintaan diabaikan, sehingga CS multi-brand dan
   // Admin/Finance lintas brand mendapat paket brand utama saat melayani brand lain.
-  const requested = req.query.brandId && req.query.brandId !== 'all' ? Number(req.query.brandId) : undefined;
-  const brandId = req.user!.role === 'superadmin'
-    ? requested
-    : requested ? scopedBrandId(req, requested) : req.user!.brandId ?? undefined;
+  // "all" = semua brand, hanya untuk peran holding (Superadmin/Admin/Finance) yang memang boleh melihat semuanya.
+  // Tanpa brandId: peran holding memakai brand utamanya (perilaku lama pemanggil seperti Inbox/Pipeline), staf
+  // lain melihat semua brand tugasnya (brand utama + penugasan).
+  const role = req.user!.role;
+  const isHolding = role === 'superadmin' || role === 'admin' || role === 'finance';
+  const wantsAll = req.query.brandId === 'all';
+  const requested = req.query.brandId && !wantsAll ? Number(req.query.brandId) : undefined;
+  const assigned = [...new Set([req.user!.brandId, ...(req.user!.userBrands ?? []).map((ub) => ub.brand?.id)].filter((id): id is number => Boolean(id)))];
+
+  // Admin yang punya penugasan brand: "semua" = semua brand tugasnya (sama dengan paket yang boleh ia kelola).
+  const unrestricted = role === 'superadmin' || role === 'finance' || (role === 'admin' && assigned.length === 0);
+  const assignedWhere = assigned.length === 1 ? assigned[0] : { in: assigned };
 
   const where: any = {};
-  if (brandId) where.brandId = brandId;
+  if (requested) where.brandId = role === 'superadmin' ? requested : scopedBrandId(req, requested);
+  else if (wantsAll) {
+    if (!unrestricted && assigned.length) where.brandId = assignedWhere;
+  } else if (isHolding) {
+    if (role !== 'superadmin' && req.user!.brandId) where.brandId = req.user!.brandId;
+  } else if (assigned.length) {
+    where.brandId = assignedWhere;
+  }
 
   // Search filter
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -407,6 +432,7 @@ catalogRouter.post('/packages/upload-flyer', requireRole('superadmin', 'admin'),
 catalogRouter.post('/packages', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
   const input = packageInputSchema.parse(req.body);
   const brandId = scopedBrandId(req, input.brandId);
+  assertCanManagePackages(req.user!, brandId);
 
   // Generate departure info string if date supplied and info empty
   let departureInfo = input.departureInfo;
@@ -434,12 +460,12 @@ catalogRouter.patch('/packages/:id', requireRole('superadmin', 'admin'), asyncHa
   const id = Number(req.params.id);
   const existing = await prisma.package.findUnique({ where: { id } });
   if (!existing) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
-  if (req.user!.role === 'admin' && existing.brandId !== req.user!.brandId) {
-    throw new HttpError(403, 'Admin hanya dapat mengelola paket pada brand sendiri.');
-  }
+  assertCanManagePackages(req.user!, existing.brandId);
 
   const schema = packageInputSchema.partial();
   const input = schema.parse(req.body);
+  // Memindahkan paket ke brand lain: brand tujuan juga harus brand yang boleh ia kelola.
+  if (input.brandId !== undefined && input.brandId !== existing.brandId) assertCanManagePackages(req.user!, input.brandId);
 
   let departureInfo = input.departureInfo;
   if (departureInfo === undefined && input.departureDate) {
@@ -478,9 +504,7 @@ catalogRouter.patch('/packages/:id/toggle', requireRole('superadmin', 'admin'), 
   const id = Number(req.params.id);
   const existing = await prisma.package.findUnique({ where: { id } });
   if (!existing) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
-  if (req.user!.role === 'admin' && existing.brandId !== req.user!.brandId) {
-    throw new HttpError(403, 'Admin hanya dapat mengelola paket pada brand sendiri.');
-  }
+  assertCanManagePackages(req.user!, existing.brandId);
 
   const data = await prisma.package.update({
     where: { id },
@@ -497,9 +521,7 @@ catalogRouter.delete('/packages/:id', requireRole('superadmin', 'admin'), asyncH
     include: { _count: { select: { prospects: true } } },
   });
   if (!existing) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
-  if (req.user!.role === 'admin' && existing.brandId !== req.user!.brandId) {
-    throw new HttpError(403, 'Admin hanya dapat mengelola paket pada brand sendiri.');
-  }
+  assertCanManagePackages(req.user!, existing.brandId);
 
   if (existing._count?.prospects > 0) {
     await prisma.package.update({
