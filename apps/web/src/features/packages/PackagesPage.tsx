@@ -21,6 +21,7 @@ import { api, resolveMediaUrl } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { useUiStore } from '../../app/store';
 import { Select } from '../../components/ui/select';
+import { assignedBrandIds, packageBrandsUnrestricted } from '../../lib/scope';
 import { PageHeader } from '../../components/ui/page-header';
 import { Button } from '../../components/ui/button';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
@@ -68,20 +69,22 @@ export function PackagesPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { activeBrandId, setActiveBrandId } = useUiStore();
-  const isSuperadmin = user?.role === 'superadmin';
   const canManage = user?.role === 'superadmin' || user?.role === 'admin';
 
-  // Brands list (for superadmin filter)
   const brandsQuery = useQuery({
     queryKey: ['brands'],
     queryFn: () => api.get<any[]>('/catalog/brands'),
-    enabled: isSuperadmin,
+    enabled: !!user,
   });
   const brands = brandsQuery.data ?? [];
+  // Brand yang bisa dipilih = brand yang paketnya boleh dilihat/dikelola (aturan sama dengan API).
+  const unrestricted = packageBrandsUnrestricted(user);
+  const assigned = assignedBrandIds(user);
+  const brandOptions = unrestricted ? brands : brands.filter((b) => assigned.includes(b.id));
 
-  // Selected brand for superadmin
-  const [filterBrandId, setFilterBrandId] = useState<number | null>(
-    isSuperadmin ? (activeBrandId ?? null) : null
+  // null = semua brand yang boleh dilihat. Brand aktif dari halaman lain dipakai hanya bila termasuk pilihan.
+  const [filterBrandId, setFilterBrandId] = useState<number | null>(() =>
+    activeBrandId && (unrestricted || assigned.includes(activeBrandId)) ? activeBrandId : null
   );
 
   // Filters state
@@ -98,7 +101,7 @@ export function PackagesPage() {
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<PackageItem | null>(null);
 
   // Query packages with filters
-  const effectiveBrandId = isSuperadmin ? (filterBrandId || undefined) : user?.brandId;
+  const effectiveBrandId: number | 'all' = filterBrandId ?? 'all';
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
     if (effectiveBrandId) params.set('brandId', String(effectiveBrandId));
@@ -169,14 +172,14 @@ export function PackagesPage() {
     onError: (e: any) => showToast(e?.message || 'Gagal menghapus paket.'),
   });
 
-  const hasActiveFilters = Boolean(search || monthFilter || quotaFilter || statusFilter || (isSuperadmin && filterBrandId));
+  const hasActiveFilters = Boolean(search || monthFilter || quotaFilter || statusFilter || filterBrandId);
 
   const resetFilters = () => {
     setSearch('');
     setMonthFilter('');
     setQuotaFilter('');
     setStatusFilter('');
-    if (isSuperadmin) setFilterBrandId(null);
+    setFilterBrandId(null);
     setPage(1);
   };
 
@@ -254,19 +257,19 @@ export function PackagesPage() {
           />
         </div>
 
-        {/* Brand Filter (Superadmin) */}
-        {isSuperadmin && brands.length > 1 && (
+        {/* Brand Filter */}
+        {brandOptions.length > 1 && (
           <Select
             value={filterBrandId ? String(filterBrandId) : 'all'}
             onValueChange={(val) => {
               const bId = val === 'all' ? null : Number(val);
               setFilterBrandId(bId);
-              setActiveBrandId(bId);
+              if (bId) setActiveBrandId(bId);
               setPage(1);
             }}
             options={[
-              { value: 'all', label: 'Semua Brand' },
-              ...brands.map((b) => ({
+              { value: 'all', label: unrestricted ? 'Semua Brand' : 'Semua brand saya' },
+              ...brandOptions.map((b) => ({
                 value: String(b.id),
                 label: b.name,
                 iconUrl: b.logoUrl,
