@@ -2,6 +2,29 @@
 # CS Umroh Copilot, CRM Enterprise & WhatsApp Shared Inbox
 ## React SPA + Node.js/TypeScript Edition (Multi-Brand)
 
+## Status per 2 Oktober 2026 (baca ini dulu)
+
+Dokumen di bawah adalah PRD **rencana migrasi** (September 2026) dan dipertahankan sebagai latar belakang. Migrasi sudah selesai: aplikasi React + Node.js ini yang dipakai operasional holding. Bila isi bagian 0–8 berbeda dengan keadaan sekarang, yang berlaku adalah ringkasan ini, `README.md`, dan `AGENTS-csumroh.md`.
+
+Perubahan utama terhadap isi PRD di bawah:
+
+| Topik | Di PRD (rencana) | Sekarang |
+| --- | --- | --- |
+| Role | Super Admin dan CS | `superadmin`, `admin`, `cs`, `finance`, `product` (Tim LA). Admin dan CS bisa memegang lebih dari satu brand; Admin dan Finance berperan holding. |
+| Pipeline | 8 tahap `new` → `identifying` → `offered` → … → `closed_won`/`closed_lost` | 9 kolom: Baru, Terhubung, Terkualifikasi, Ditawarkan, Keberatan, Follow-up, Tunggu Verifikasi, Deal, Batal. Status lama tetap di enum untuk data historis. |
+| Deal | Status diubah CS | Deal hanya setelah Finance memverifikasi pembayaran; verifikasi bisa dikoreksi dengan riwayat. |
+| PIC | Auto-takeover saat CS membalas | Lead baru dibagi otomatis ke CS dengan beban paling ringan; lead tanpa PIC diklaim sendiri; ambil alih hanya bila jamaah belum dibalas 15 menit; lead lama tidak dibagi otomatis. |
+| Variabel script | 19 variabel | Sekitar 30 token yang diisi server dari data brand, paket, dan prospek. Data kosong membuat script ditandai belum bisa dipakai, tidak diisi teks karangan. |
+| Meta CAPI | `Contact`/`AddToCart`/`InitiateCheckout`/`Purchase` | `LeadSubmitted`, `QualifiedLead`, `AddToCart`, `InitiateCheckout`, `Purchase` lewat `business_messaging` (CTWA), dengan kirim ulang otomatis. Detail di `README.md`. |
+| Skema database | Dipertahankan dari PHP | Berkembang lewat migrasi Prisma (`apps/api/prisma/migrations`): ledger pembayaran, layanan custom, notifikasi, kontak per perangkat, riwayat verifikasi, dll. `schema.prisma` adalah sumber kebenaran. |
+| Rollout | Bertahap per modul, PHP berjalan berdampingan | Seluruh modul (Inbox, Pipeline, profil prospek, admin, LMS) sudah berjalan di aplikasi ini. |
+
+Fitur yang belum ada di PRD ini: notifikasi in-app (lonceng, toast, suara, ringkasan per brand), verifikasi pembayaran Finance, Layanan custom (Tim LA), laporan iklan dan audiens spam, kontak per perangkat WhatsApp, antrean gateway tahan-restart, pencatatan stiker dan telepon/video call jamaah, PWA untuk HP.
+
+Pekerjaan yang masih terbuka dicatat di luar repo oleh pengelola proyek.
+
+---
+
 ## 0. Status Dokumen & Konteks Migrasi
 
 Dokumen ini adalah PRD untuk **rewrite arsitektur** dari sistem `csumroh-php` (PHP 8.3 native + Alpine.js/Tailwind CDN, tanpa build step) menjadi **React SPA (frontend) + Node.js/TypeScript (backend)** dengan real-time WebSocket dan fondasi API yang siap dipakai aplikasi mobile di masa depan.
@@ -143,7 +166,7 @@ Seluruh REQ di bawah **dipertahankan penuh** dari versi PHP, dengan catatan impl
 | WhatsApp Gateway | Node.js + `@whiskeysockets/baileys` | Proses terpisah (`apps/wa-gateway`), tetap Baileys (tidak ada alternatif resmi setara) |
 | Auth | JWT (access + refresh token) | Lihat Bagian 5.4 |
 | Testing | Vitest + React Testing Library | Wajib untuk business logic kritikal, lihat Bagian 6.4 |
-| Package Manager | pnpm (workspaces) | Monorepo, lihat AGENTS.md untuk struktur folder |
+| Package Manager | pnpm (workspaces) | Monorepo, lihat AGENTS-csumroh.md untuk struktur folder |
 
 ### 5.2 Skema Database
 Skema MySQL **dipertahankan dari versi PHP tanpa perubahan struktural** (`brands`, `users`, `packages`, `prospects`, `prospect_logs`, `whatsapp_sessions`, `chat_messages`, `meta_capi_logs`) — lihat AGENTS.md untuk DDL lengkap yang dipetakan ke `schema.prisma`. Satu tabel baru ditambahkan karena kebutuhan arsitektur (bukan fitur baru):
