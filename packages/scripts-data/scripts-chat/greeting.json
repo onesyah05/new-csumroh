@@ -13,10 +13,12 @@
         "Akhiri greeting dengan pertanyaan ringan yang membawa ke tahap Identification."
     ],
     "placeholders": [
+        "{{alamat_kantor}}",
         "{{bulan_target}}",
         "{{cs_name}}",
         "{{harga_mulai}}",
         "{{kota}}",
+        "{{link_maps}}",
         "{{paket}}",
         "{{ppiu}}",
         "{{tanggal_keberangkatan}}",
@@ -388,6 +390,19 @@
                 "legalitas",
                 "trust",
                 "comparison"
+            ]
+        },
+        {
+            "id": "greeting_alamat_kantor_01",
+            "category": "trust",
+            "title": "Prospek Tanya Alamat Kantor",
+            "use_when": "Prospek menanyakan lokasi kantor atau ingin datang langsung.",
+            "prospect_example": "Kantornya di mana?",
+            "script": "Kantor {{travel}} beralamat di:\n{{alamat_kantor}}\n\nLokasi di Google Maps:\n{{link_maps}}\n\nRencananya ingin datang ke kantor hari apa?",
+            "next_stage": "identification",
+            "tags": [
+                "trust",
+                "alamat"
             ]
         },
         {
