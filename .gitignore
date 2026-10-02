@@ -18,4 +18,6 @@ apps/api/storage/
 scratch/
 apps/api/scratch/
 .claude/
-docs/
+docs/*
+# Panduan deploy dipakai bersama tim, jadi ikut repo.
+!docs/deploy.md
