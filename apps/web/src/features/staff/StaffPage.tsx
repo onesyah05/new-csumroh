@@ -208,6 +208,7 @@ function StaffFormModal({
     }
   }, [open, editing?.id, defaultBrandId, brands]);
 
+  const brandFree = form.role === 'product' || form.role === 'superadmin';
   const save = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error('Nama lengkap wajib diisi.');
@@ -215,8 +216,8 @@ function StaffFormModal({
       if (!isEdit && form.password.length < 8) throw new Error('Kata sandi minimal 8 karakter.');
       if (isEdit && form.password && form.password.length < 8)
         throw new Error('Kata sandi baru minimal 8 karakter.');
-      // Tim LA melayani semua brand: tanpa akses brand.
-      if (form.role !== 'product' && form.brandIds.length === 0) throw new Error('Pilih minimal 1 brand yang dikaitkan.');
+      // Tim LA dan Superadmin melayani semua brand: tanpa akses brand.
+      if (!brandFree && form.brandIds.length === 0) throw new Error('Pilih minimal 1 brand yang dikaitkan.');
 
       if (isEdit && editing) {
         return api.patch<{ releasedProspects?: number }>(`/catalog/users/${editing.id}`, {
@@ -225,7 +226,7 @@ function StaffFormModal({
           ...(form.password ? { password: form.password } : {}),
           // Role hanya dikirim bila benar-benar diubah, dan tidak pernah untuk akun superadmin.
           ...(isSuperadmin && editing.role !== 'superadmin' && form.role !== editing.role ? { role: form.role } : {}),
-          brandIds: form.brandIds,
+          ...(editing.role === 'superadmin' ? {} : { brandIds: form.brandIds }),
         });
       } else {
         return api.post<{ releasedProspects?: number }>('/catalog/users', {
@@ -378,7 +379,9 @@ function StaffFormModal({
             )}
 
             {/* Akses Brand */}
-            {form.role === 'product' ? (
+            {form.role === 'superadmin' ? (
+              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">Superadmin mengakses semua brand; tidak perlu akses brand.</p>
+            ) : form.role === 'product' ? (
               <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">Tim LA melayani Layanan Custom semua brand; tidak perlu akses brand.</p>
             ) : <div className="space-y-1.5">
               <div className="flex items-center justify-between">
