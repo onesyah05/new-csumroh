@@ -154,12 +154,13 @@ export function SocketBridge() {
     const refreshNotifications = () => void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     // Server sudah menghitung preferensi penerima (toast/suara) untuk tiap notifikasi.
     const onNotification = (data?: {
-      id: number; priority: 'info' | 'action' | 'urgent'; title: string; body?: string | null; link?: string | null; toast?: boolean; sound?: boolean;
+      id: number; type?: string; priority: 'info' | 'action' | 'urgent'; title: string; body?: string | null; link?: string | null; toast?: boolean; sound?: boolean;
     }) => {
       refreshNotifications();
       // Antrean Layanan Custom (Tim LA) tidak menerima event brand; segarkan dari notifikasi.
       void queryClient.invalidateQueries({ queryKey: ['custom-requests'] });
-      if (!data || isViewing(data.link)) return;
+      // Telepon yang sedang berdering tetap berbunyi walau chat-nya sedang dibuka: CS perlu mengambil HP.
+      if (!data || (isViewing(data.link) && data.type !== 'call.incoming')) return;
       if (data.toast) pushNotificationToast(data, openNotificationPanel);
       if (data.sound) playNotificationSound({ urgent: data.priority === 'urgent' });
     };
