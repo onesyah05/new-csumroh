@@ -98,4 +98,4 @@ Lihat [`prd-csumroh.md`](./prd-csumroh.md) dan [`AGENTS-csumroh.md`](./AGENTS-cs
 
 ## Deploy
 
-Lihat [docs/deploy.md](docs/deploy.md).
+Panduan deploy produksi tidak disimpan di repo ini karena memuat detail infrastruktur. Minta ke pengelola server.
