@@ -20,13 +20,12 @@ export function waLine(label: string, value: unknown) {
   return text && text !== '-' ? `${label}: ${text}` : null;
 }
 
-/** Daftar berbutir dari teks multibaris; sisa item diringkas agar pesan tetap pendek di layar ponsel. */
-export function waBullets(text: string | null | undefined, limit = 6) {
-  const items = String(text ?? '').split('\n').map((line) => line.replace(/^[-•*\s]+/, '').trim()).filter(Boolean);
-  if (!items.length) return [];
-  const shown = items.slice(0, limit).map((item) => `• ${item}`);
-  if (items.length > limit) shown.push(`• dan ${items.length - limit} lainnya (lihat brosur)`);
-  return shown;
+/**
+ * Daftar berbutir dari teks multibaris, selalu lengkap. Fasilitas dan terutama biaya yang belum termasuk tidak boleh
+ * diringkas menjadi "dan N lainnya": jamaah tidak bisa melihat sisanya, dan brosur belum tentu memuatnya.
+ */
+export function waBullets(text: string | null | undefined) {
+  return String(text ?? '').split('\n').map((line) => line.replace(/^[-•*\s]+/, '').trim()).filter(Boolean).map((item) => `• ${item}`);
 }
 
 /** Tanggal kolom DATE (UTC midnight) → "10 April 2026". */

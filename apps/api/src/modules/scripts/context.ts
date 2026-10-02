@@ -58,12 +58,10 @@ export const TOKEN_INFO: Record<string, { label: string; kind: TokenKind; fix: s
 const dateLong = (value: Date) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(value);
 const dateTimeWib = (value: Date) =>
   `${new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).format(value)} WIB`;
-const bullets = (text: string | null, limit = 8) => {
+// Selalu lengkap (sama dengan waBullets di web): daftar biaya/fasilitas tidak diringkas "dan N lainnya".
+const bullets = (text: string | null) => {
   const items = String(text ?? '').split('\n').map((line) => line.replace(/^[-•*\s]+/, '').trim()).filter(Boolean);
-  if (!items.length) return null;
-  const shown = items.slice(0, limit).map((item) => `• ${item}`);
-  if (items.length > limit) shown.push(`• dan ${items.length - limit} lainnya (lihat brosur)`);
-  return shown.join('\n');
+  return items.length ? items.map((item) => `• ${item}`).join('\n') : null;
 };
 const clean = (value: string | null | undefined) => (value && value.trim() && value.trim() !== '-' ? value.trim() : null);
 
