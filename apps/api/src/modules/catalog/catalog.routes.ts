@@ -677,12 +677,22 @@ catalogRouter.put('/users/:id/brands', requireRole('superadmin', 'admin'), async
   res.json({ success: true, data: { ...updated, releasedProspects } });
 }));
 
+/** Akun sendiri dan Superadmin aktif terakhir tidak boleh dinonaktifkan/diturunkan: tidak ada yang bisa memulihkannya dari aplikasi. */
+async function assertNotLockingOut(actorId: number, target: { id: number; role: string; isActive: boolean }) {
+  if (target.id === actorId) throw new HttpError(400, 'Tidak dapat menonaktifkan atau menurunkan peran akun Anda sendiri.');
+  if (target.role !== 'superadmin' || !target.isActive) return;
+  const others = await prisma.user.count({ where: { role: 'superadmin', isActive: true, id: { not: target.id } } });
+  if (others === 0) throw new HttpError(409, 'Superadmin aktif terakhir tidak dapat dinonaktifkan atau diturunkan perannya.');
+}
+
 catalogRouter.patch('/users/:id/toggle', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
   const target = await prisma.user.findUnique({ where: { id: Number(req.params.id) } });
   if (!target) throw new HttpError(404, 'User tidak ditemukan.');
   if (req.user!.role === 'admin' && (target.brandId !== req.user!.brandId || target.role !== 'cs')) {
     throw new HttpError(403, 'Admin hanya dapat mengelola CS pada brand sendiri.');
   }
+  // Menonaktifkan akun sendiri atau Superadmin terakhir mengunci semua orang dari pengelolaan sistem.
+  if (target.isActive) await assertNotLockingOut(req.user!.id, target);
   const data = await prisma.user.update({
     where: { id: target.id },
     data: { isActive: !target.isActive },
@@ -726,6 +736,8 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
   if (target.role === 'superadmin' && req.user!.role !== 'superadmin') {
     throw new HttpError(403, 'Tidak diizinkan mengedit akun Superadmin.');
   }
+  // Menurunkan peran Superadmin (termasuk diri sendiri) tidak boleh menyisakan nol Superadmin aktif.
+  if (target.role === 'superadmin' && input.role) await assertNotLockingOut(req.user!.id, target);
 
   const updateData: any = {};
   if (input.name) updateData.name = input.name;
