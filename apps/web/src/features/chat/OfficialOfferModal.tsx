@@ -74,7 +74,7 @@ export function OfficialOfferModal({
       [`*${waTitle(pkg.name)}*`, departure && `Berangkat ${departure}`, waLine('Maskapai', pkg.airline), waLine('Hotel Makkah', pkg.hotelMakkah), waLine('Hotel Madinah', pkg.hotelMadinah)],
       ['*Rincian biaya*', ...rooms, dealValue > 0 ? `*Total: ${formatRupiah(dealValue)}*` : 'Total biaya kami konfirmasi setelah harga paket ditetapkan.'],
       waBullets(pkg.facilitiesIncluded).length > 0 && ['*Sudah termasuk*', ...waBullets(pkg.facilitiesIncluded)],
-      waBullets(pkg.facilitiesExcluded, 4).length > 0 && ['*Belum termasuk*', ...waBullets(pkg.facilitiesExcluded, 4)],
+      waBullets(pkg.facilitiesExcluded).length > 0 && ['*Belum termasuk*', ...waBullets(pkg.facilitiesExcluded)],
       customNote.trim() && `Catatan: ${customNote.trim()}`,
       'Apakah paket dan jadwal ini sudah sesuai?',
     );

@@ -29,7 +29,7 @@ export function formatWaPackageSummary(pkg: any, _brandName?: string): string {
     ],
     rooms.length > 0 && ['*Harga per orang*', ...rooms, dp && `DP ${dp} per orang`],
     waBullets(pkg.facilitiesIncluded).length > 0 && ['*Sudah termasuk*', ...waBullets(pkg.facilitiesIncluded)],
-    waBullets(pkg.facilitiesExcluded, 4).length > 0 && ['*Belum termasuk*', ...waBullets(pkg.facilitiesExcluded, 4)],
+    waBullets(pkg.facilitiesExcluded).length > 0 && ['*Belum termasuk*', ...waBullets(pkg.facilitiesExcluded)],
     [promo && `Promo: ${promo.text}${promo.until ? `, berlaku sampai ${promo.until}` : ''}`, quota > 0 && `Sisa kuota paket: ${quota} orang`],
     'Ada yang ingin ditanyakan dari paket ini?',
   );
@@ -37,7 +37,7 @@ export function formatWaPackageSummary(pkg: any, _brandName?: string): string {
 
 export function formatWaPackageItinerary(pkg: any, _brandName?: string): string {
   if (!pkg) return '';
-  const agenda = waBullets(pkg.itinerary, 30);
+  const agenda = waBullets(pkg.itinerary);
   return waMessage(
     [`*Agenda perjalanan ${waTitle(pkg.name)}*`, departure(pkg) && `Berangkat ${departure(pkg)}`],
     agenda.length ? agenda : 'Rincian agenda harian sedang disiapkan tim operasional.',
