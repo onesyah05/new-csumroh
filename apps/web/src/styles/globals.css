@@ -167,6 +167,14 @@
   button.mobile-compact-control,
   button.mobile-compact-control:has(> svg:only-child) { min-height: 36px; height: auto; padding-block: 6px; line-height: 1rem; }
   .mobile-compact-filters { gap: 8px; }
+  /* Baris tombol cepat di atas kolom pesan: ringkas (32px) agar tidak memakan tinggi layar chat; jarak 6px tetap. */
+  .quick-reply-row { scrollbar-width: none; padding-bottom: 0; }
+  .quick-reply-row::-webkit-scrollbar { display: none; }
+  /* Chip filter/tombol cepat yang rapat (baris di atas kolom pesan, filter panel notifikasi): 32px, jarak tetap. */
+  button.quick-reply-chip,
+  button.quick-reply-chip:has(> svg:only-child),
+  button.mobile-dense,
+  button.mobile-dense:has(> svg:only-child) { min-width: 0; min-height: 32px; height: 32px; padding-block: 0; line-height: 1rem; }
   .mobile-modal-frame { padding: 0; place-items: end center; }
   .mobile-modal-content { max-width: 100%; max-height: calc(var(--app-height, 100dvh) - env(safe-area-inset-top, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); border-radius: 16px 16px 0 0; }
   .mobile-modal-content:has(form), .mobile-modal-content:has(textarea) { height: var(--app-height, 100dvh); border-radius: 0; }

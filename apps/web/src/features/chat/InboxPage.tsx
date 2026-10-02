@@ -34,6 +34,10 @@ import {
   MessageSquareText,
   Megaphone,
   Mic,
+  Phone,
+  PhoneMissed,
+  Sticker,
+  Video,
   Paperclip,
   Plane,
   RefreshCw,
@@ -41,6 +45,7 @@ import {
   Send,
   ShieldAlert,
   ShieldCheck,
+  MapPin,
   Smartphone,
   Sparkles,
   Star,
@@ -78,6 +83,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxWorkFilters, type InboxWorkFilter } from './inboxFilters';
 import { useSpamToggle } from './useSpamToggle';
+import { waMessage } from './waFormat';
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog, ModalFrame } from '../../components/ui/modal';
 import { ImageLightbox } from '../../components/ui/image-lightbox';
@@ -389,6 +395,7 @@ export function InboxPage() {
     { id: 'bank', label: 'Rekening resmi', icon: CreditCard },
     { id: 'closing', label: 'Ajak mendaftar', icon: HandCoins },
     { id: 'ppiu', label: 'Legalitas PPIU', icon: ShieldCheck },
+    { id: 'address', label: 'Alamat kantor', icon: MapPin },
   ] as const;
   // Prospek yang sudah Deal atau batal tidak lagi diajak mendaftar/transfer (audit C08).
   const prospectClosed = Boolean(selected && (isWonStatus(selected.status) || isLostStatus(selected.status)));
@@ -434,6 +441,19 @@ export function InboxPage() {
         return;
       }
       text = `${travelName} adalah penyelenggara umroh berizin Kemenag (PPIU) dengan nomor izin *${ppiu}*.\n\nNomor ini bisa dicek di situs resmi Kementerian Agama.`;
+    } else if (type === 'address') {
+      // Alamat dan link Maps hanya dari data resmi brand; yang kosong tidak ditulis, keduanya kosong = tidak ada teks.
+      const address = activeBrand?.address?.trim();
+      const maps = activeBrand?.gmapsUrl?.trim();
+      if (!address && !maps) {
+        showToast('Alamat kantor brand belum diisi. Minta Admin melengkapinya di menu Brand.');
+        return;
+      }
+      text = waMessage(
+        address ? [`Kantor ${travelName} beralamat di:`, address] : `Lokasi kantor ${travelName}:`,
+        maps && [address ? 'Lokasi di Google Maps:' : null, maps],
+        'Rencananya ingin datang ke kantor hari apa?',
+      );
     }
 
     if (text) {
@@ -677,8 +697,11 @@ export function InboxPage() {
   function adjustTextareaHeight(element: HTMLTextAreaElement | null) {
     if (!element) return;
     element.style.height = 'auto';
-    const nextHeight = Math.min(element.scrollHeight, 140);
-    element.style.height = `${Math.max(nextHeight, 44)}px`;
+    // scrollHeight tidak termasuk border; tanpa tambahan ini teks terpotong 2px dan scrollbar muncul walau satu baris.
+    const border = element.offsetHeight - element.clientHeight;
+    const fullHeight = element.scrollHeight + border;
+    element.style.height = `${Math.max(Math.min(fullHeight, 144), 44)}px`;
+    element.style.overflowY = fullHeight > 144 ? 'auto' : 'hidden';
   }
 
   function handleComposerChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -1294,6 +1317,12 @@ export function InboxPage() {
                             <span className="inline-flex items-center gap-1"><FileText size={13} /> Dokumen</span>
                           ) : last?.messageType === 'audioMessage' ? (
                             <span className="inline-flex items-center gap-1"><Mic size={13} /> Pesan suara</span>
+                          ) : last?.messageType === 'stickerMessage' ? (
+                            <span className="inline-flex items-center gap-1"><Sticker size={13} /> Stiker</span>
+                          ) : last?.messageType === 'callLogMessage' ? (
+                            <span className={cn('inline-flex min-w-0 items-center gap-1', isMissedCall(last.messageText) && 'text-red-600')}>
+                              <CallIcon text={last.messageText} size={13} /> <span className="truncate">{last.messageText}</span>
+                            </span>
                           ) : (
                             <span className="truncate">{last?.messageText || 'Belum ada pesan'}</span>
                           )}
@@ -1953,6 +1982,38 @@ export function InboxPage() {
                                        </div>
                                      )}
 
+                                     {/* Stiker: gambar kecil tanpa bingkai, seperti di WhatsApp */}
+                                     {item.messageType === 'stickerMessage' && (
+                                       <div className="mb-1">
+                                         {item.mediaUrl ? (
+                                           <img
+                                             src={resolveMediaUrl(item.mediaUrl)}
+                                             alt="Stiker"
+                                             className="h-32 w-32 object-contain"
+                                             loading="lazy"
+                                           />
+                                         ) : (
+                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
+                                             <Sticker size={16} className="shrink-0 text-[#00a884]" />
+                                             <span className="font-semibold">Stiker</span>
+                                           </div>
+                                         )}
+                                       </div>
+                                     )}
+
+                                     {/* Riwayat telepon/video call WhatsApp (tidak bisa diangkat dari CRM) */}
+                                     {item.messageType === 'callLogMessage' && (
+                                       <div className="flex min-w-[200px] items-center gap-2.5 py-0.5">
+                                         <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-full', isMissedCall(item.messageText) ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-[#008069]')}>
+                                           <CallIcon text={item.messageText} size={18} />
+                                         </span>
+                                         <div className="min-w-0">
+                                           <p className={cn('text-sm font-semibold', isMissedCall(item.messageText) ? 'text-red-700' : 'text-[#111b21]')}>{item.messageText}</p>
+                                           {/masuk$/.test(item.messageText ?? '') && <p className="text-xs text-[#667781]">Angkat dari HP WhatsApp brand</p>}
+                                         </div>
+                                       </div>
+                                     )}
+
                                      {/* Video Media Preview */}
                                      {item.messageType === 'videoMessage' && (
                                        <div className="mb-1.5 overflow-hidden rounded-xl max-w-[280px]">
@@ -2035,7 +2096,7 @@ export function InboxPage() {
                                        </div>
                                      )}
 
-                                     {Boolean(item.messageText) &&
+                                     {Boolean(item.messageText) && item.messageType !== 'callLogMessage' &&
                                        !['[Gambar]', '[Video]', '[Audio]', '[Voice Note]', '[Dokumen]', '[Stiker]', '[Lokasi]'].includes(item.messageText!.trim()) && (
                                          <p className="text-base md:text-[14px] leading-relaxed whitespace-pre-wrap break-words text-[#111b21] mt-1">
                                            {item.messageText}
@@ -2131,11 +2192,12 @@ export function InboxPage() {
                 )}
               </div>
 
-              {/* Quick Reply Chips Bar */}
-              {selected && canSend && (
+              {/* Quick Reply Chips Bar — di HP disembunyikan saat CS sedang mengetik agar chat & kolom teks lebih lega. */}
+              {selected && canSend && !(mobile && message.trim()) && (
                 <div className="border-t border-[#e9edef] bg-[#f0f2f5] px-3 py-1.5 shrink-0">
-                  <div className="thin-scrollbar mx-auto flex max-w-3xl items-center gap-1.5 overflow-x-auto pb-0.5">
-                    <button type="button" onClick={() => setSidePanelTab('copilot')} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-950 px-3 py-2 text-xs font-semibold text-white md:hidden"><Sparkles size={14} aria-hidden="true" />Script</button>
+                  <div className="quick-reply-row thin-scrollbar mx-auto flex max-w-3xl items-center gap-1.5 overflow-x-auto pb-0.5">
+                    {/* Tinggi sama dengan tombol cepat lain agar baris rata dan ringkas; hitam = membuka panel, bukan mengisi pesan. */}
+                    <button type="button" onClick={() => setSidePanelTab('copilot')} className="quick-reply-chip inline-flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-950 bg-zinc-950 px-2.5 py-1 text-xs font-semibold text-white md:hidden"><Sparkles size={12} aria-hidden="true" />Script</button>
                     {visibleQuickReplies.map((chip) => {
                       const Icon = chip.icon;
                       return (
@@ -2143,7 +2205,7 @@ export function InboxPage() {
                           key={chip.id}
                           type="button"
                           onClick={() => handleInsertTemplate(chip.id)}
-                          className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#e9edef] bg-white px-2.5 py-1 text-xs font-semibold text-[#111b21] shadow-2xs transition hover:bg-[#f0f2f5] active:scale-95 cursor-pointer"
+                          className="quick-reply-chip shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#e9edef] bg-white px-2.5 py-1 text-xs font-semibold text-[#111b21] shadow-2xs transition hover:bg-[#f0f2f5] active:scale-95 cursor-pointer"
                         >
                           <Icon size={12} className="text-[#008069]" />
                           <span>{chip.label}</span>
@@ -2329,8 +2391,8 @@ export function InboxPage() {
                   )}
 
                   <div className="mx-auto flex max-w-3xl items-end gap-1.5 sm:gap-2">
-                    {/* Emoji Button & Picker Popover */}
-                    <div className="relative shrink-0" ref={emojiPickerContainerRef}>
+                    {/* Emoji Button & Picker Popover — hanya desktop; keyboard HP sudah punya emoji. */}
+                    {!mobile && <div className="relative shrink-0" ref={emojiPickerContainerRef}>
                       <button
                         type="button"
                         onClick={() => setShowEmojiPicker((v) => !v)}
@@ -2352,7 +2414,7 @@ export function InboxPage() {
                           />
                         </div>
                       )}
-                    </div>
+                    </div>}
 
                     {/* Attachment Button & Dropdown Menu (Flyer Paket, Foto & Video, Dokumen) */}
                     <DropdownMenu.Root>
@@ -2361,7 +2423,11 @@ export function InboxPage() {
                           type="button"
                           aria-label="Lampirkan Dokumen, Foto & Video, atau Flyer Paket"
                           title="Lampirkan berkas atau flyer"
-                          className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full text-[#54656f] hover:text-[#111b21] hover:bg-black/5 transition cursor-pointer"
+                          className={cn(
+                            'h-10 w-10 shrink-0 flex items-center justify-center rounded-full text-[#54656f] hover:text-[#111b21] hover:bg-black/5 transition cursor-pointer',
+                            // HP: tombol klip tampil di dalam kolom teks (sisi kanan), seperti WhatsApp.
+                            mobile && 'relative z-10 order-2 -ml-11 self-end',
+                          )}
                         >
                           <Paperclip size={20} />
                         </button>
@@ -2369,7 +2435,7 @@ export function InboxPage() {
                       <DropdownMenu.Portal>
                         <DropdownMenu.Content
                           side="top"
-                          align="start"
+                          align={mobile ? 'end' : 'start'}
                           sideOffset={14}
                           className="z-50 min-w-[230px] rounded-2xl bg-white p-2 shadow-2xl border border-zinc-200 animate-in fade-in slide-in-from-bottom-2 duration-150"
                         >
@@ -2451,12 +2517,18 @@ export function InboxPage() {
                       }}
                       placeholder={mediaPreview ? "Tambahkan keterangan (opsional)..." : "Ketik pesan..."}
                       aria-label="Tulis pesan WhatsApp"
-                      className="min-h-10 max-h-36 flex-1 resize-none rounded-lg bg-white px-4 py-2.5 text-sm text-[#111b21] placeholder:text-[#8696a0] border border-transparent focus:border-[#00a884]/30 outline-none leading-relaxed shadow-2xs"
+                      className={cn(
+                        // Fokus cukup garis hijau tipis ala WhatsApp; cincin hitam global (globals.css) dimatikan di sini.
+                        'min-h-10 max-h-36 min-w-0 flex-1 resize-none bg-white py-2.5 text-sm text-[#111b21] placeholder:text-[#8696a0] border border-transparent focus:border-[#00a884]/50 focus:ring-0 outline-none leading-relaxed shadow-2xs',
+                        // HP: 44px, sama dengan tombol lampiran dan kirim, agar ketiganya sejajar.
+                        mobile ? 'order-1 min-h-11 rounded-[22px] py-2 pl-4 pr-12' : 'rounded-lg px-4',
+                      )}
                     />
 
                     <button
                       type="submit"
                       disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia}
+                      style={mobile ? { order: 3 } : undefined}
                       aria-label="Kirim pesan WhatsApp"
                       title={mobile ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
                       className={cn(
@@ -2802,4 +2874,14 @@ export function InboxPage() {
 
     </div>
   );
+}
+
+/** Panggilan yang tidak tersambung (tak terjawab/ditolak) ditandai merah. */
+function isMissedCall(text?: string | null) {
+  return /tak terjawab|ditolak/.test(text ?? '');
+}
+
+function CallIcon({ text, size }: { text?: string | null; size: number }) {
+  if (isMissedCall(text)) return <PhoneMissed size={size} aria-hidden="true" />;
+  return /video/i.test(text ?? '') ? <Video size={size} aria-hidden="true" /> : <Phone size={size} aria-hidden="true" />;
 }
