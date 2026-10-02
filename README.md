@@ -70,13 +70,13 @@ Payload menggunakan `action_source: business_messaging`, `messaging_channel: wha
 
 1. Simpan konfigurasi, lalu gunakan **Tes koneksi** untuk memeriksa akses ke Pixel/Dataset. Hasil tes koneksi belum membuktikan bahwa event dapat diterima atau diatribusikan.
 2. Pastikan ada prospek non-spam dengan nomor telepon dan referral CTWA asli. Pengiriman event uji memakai referral prospek tersebut dan mewajibkan Test Event Code.
-3. Periksa respons pengiriman dan Test Events di Meta Events Manager, lalu hapus Test Event Code sebelum menerima konversi produksi. Event uji `Purchase` dan `InitiateCheckout` memakai nominal contoh.
+3. Periksa respons pengiriman dan Test Events di Meta Events Manager. Event uji `Purchase` dan `InitiateCheckout` memakai nominal contoh. Test Event Code hanya dipakai tombol event uji, jadi boleh tetap tersimpan.
 
 Event otomatis dicatat di `meta_capi_logs` dengan payload, HTTP status, respons Meta, serta status `pending`, `success`, atau `failed`. Status `success` berarti respons HTTP berhasil; atribusi iklan perlu diperiksa di Meta. Hasil tombol event uji ditampilkan langsung dan tidak disimpan sebagai log konversi otomatis.
 
 - **Deduplikasi:** `event_id` tetap per prospek dan jenis event, dengan unique constraint `(brandId, eventId)`. `Purchase` memakai sufiks berdasarkan `closedWonCount`. Event yang sudah berstatus `success` dilewati pada pemicu berikutnya.
-- **Mode uji:** event otomatis juga memakai Test Event Code jika masih tersimpan. Event otomatis yang sukses dalam mode ini tidak otomatis dikirim ulang sebagai event produksi setelah kode uji dihapus.
-- **Kegagalan:** pengiriman berjalan di proses API dengan timeout 15 detik, tanpa antrean persisten atau retry otomatis. Kegagalan dicatat dan memicu notifikasi; event gagal dapat dicoba lagi jika alur bisnis memicu event yang sama.
+- **Mode uji:** event otomatis tidak pernah memakai Test Event Code; kode itu hanya untuk tombol event uji.
+- **Kegagalan:** pengiriman berjalan di proses API dengan timeout 15 detik. Event gagal dicoba ulang otomatis tiap 5 menit dengan jeda berlipat (sampai 8 kali, selama event masih ≤ 7 hari), dan lead iklan 7 hari terakhir yang belum pernah terkirim dikirim menyusul. Job ini hanya berjalan bila `NODE_ENV=production`. Admin juga bisa menekan "Kirim ulang" di log event.
 - **Spam:** prospek yang sudah ditandai spam dilewati saat pengiriman. Event yang terkirim sebelum penandaan spam tidak dibatalkan.
 - **Waktu event:** penawaran, invoice, dan pembelian memakai timestamp bisnis bila tersedia; `LeadSubmitted` memakai waktu pembuatan prospek. `QualifiedLead` masih memakai `updatedAt`, sehingga pengiriman tertunda dapat memakai waktu edit terakhir.
 
@@ -95,3 +95,7 @@ pnpm build
 ```
 
 Lihat [`prd-csumroh.md`](./prd-csumroh.md) dan [`AGENTS-csumroh.md`](./AGENTS-csumroh.md) sebagai sumber requirement proyek.
+
+## Deploy
+
+Lihat [docs/deploy.md](docs/deploy.md).
