@@ -9,7 +9,10 @@ import {
  * Nilai yang tidak diketahui TIDAK diganti prosa rekaan: token dibiarkan, lalu dilaporkan sebagai data yang kurang
  * beserta cara melengkapinya. Fakta paket/transaksi hanya dari data server, bukan dari isian client.
  */
-type Brand = { name: string; ppiuNumber: string | null; bankName: string | null; bankAccountNumber: string | null; bankAccountHolder: string | null };
+type Brand = {
+  name: string; ppiuNumber: string | null; bankName: string | null; bankAccountNumber: string | null; bankAccountHolder: string | null;
+  address?: string | null; gmapsUrl?: string | null;
+};
 type Pkg = {
   id: number; name: string; isActive: boolean; departureDate: Date | null; departureInfo: string | null; duration: string | null;
   airline: string | null; hotelMakkah: string | null; hotelMadinah: string | null; price: string; dp: string;
@@ -48,6 +51,8 @@ export const TOKEN_INFO: Record<string, { label: string; kind: TokenKind; fix: s
   bank: { label: 'bank', kind: 'fact', fix: 'Admin perlu melengkapi rekening brand' },
   rekening: { label: 'nomor rekening', kind: 'fact', fix: 'Admin perlu melengkapi rekening brand' },
   nama_rekening: { label: 'nama pemilik rekening', kind: 'fact', fix: 'Admin perlu melengkapi rekening brand' },
+  alamat_kantor: { label: 'alamat kantor', kind: 'fact', fix: 'Admin perlu melengkapi alamat kantor brand' },
+  link_maps: { label: 'link Google Maps', kind: 'fact', fix: 'Admin perlu melengkapi link Google Maps brand' },
   jumlah_jamaah: { label: 'jumlah jamaah', kind: 'context', fix: 'Isi jumlah jamaah di tab Kualifikasi' },
   bulan_target: { label: 'bulan keberangkatan', kind: 'context', fix: 'Isi bulan keberangkatan di tab Kualifikasi' },
   budget: { label: 'budget', kind: 'context', fix: 'Isi budget di tab Kualifikasi' },
@@ -78,6 +83,8 @@ export function buildScriptContext(input: { csName: string; brand: Brand; pkg: P
   v.bank = clean(brand.bankName);
   v.rekening = clean(brand.bankAccountNumber);
   v.nama_rekening = clean(brand.bankAccountHolder);
+  v.alamat_kantor = clean(brand.address);
+  v.link_maps = clean(brand.gmapsUrl);
 
   // Paket: hanya fakta dari paket aktif yang belum berangkat.
   const pkgUsable = Boolean(pkg && pkg.isActive && !isPackageDeparted(pkg, now));

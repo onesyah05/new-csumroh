@@ -25,6 +25,8 @@ import { pickAutoAssignee } from '../prospects/pic.js';
 import { resolveNotifications } from '../notifications/notify.service.js';
 import {
   dispatch,
+  notifyCallEnded,
+  notifyIncomingCall,
   notifyInboundMessage,
   notifyLeadAssigned,
   notifyPicChange,
@@ -1022,7 +1024,7 @@ async function promoteRepliedProspect(prospectId: number, brandId: number, realt
   queueCapiForStatus(prospectId, 'contact');
 }
 
-async function ingestGatewayMessage(input: GatewayMessageInput, options: { realtime: boolean }) {
+async function ingestGatewayMessage(input: GatewayMessageInput, options: { realtime: boolean; notifyInbound?: boolean }) {
   const { brandId, messageId, remoteJid, senderName, text, timestamp, messageType, mediaUrl, isFromMe, referral } = input;
   if (
     !remoteJid ||
@@ -1216,7 +1218,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     } else if (isNewProspect) {
       // Lead tanpa PIC tidak diberi notifikasi per lead: ringkasan per brand diperbarui job SLA tiap menit.
       if (assignee) dispatch(() => notifyLeadAssigned(ref, assignee.id));
-    } else if (!alreadyStored) {
+    } else if (!alreadyStored && options.notifyInbound !== false) {
       dispatch(() => notifyInboundMessage(ref, { text, messageType }));
     }
   }
@@ -1353,6 +1355,65 @@ internalRouter.post('/messages/edited', asyncHandler(async (req, res) => {
     scheduleConversationStats([updated.prospectId]);
     emitToBrand(input.brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText });
   }
+  res.json({ success: true });
+}));
+
+/** Teks riwayat panggilan di chat; juga dipakai untuk mengetahui apakah panggilan sudah diangkat. */
+export function callLogText(isVideo: boolean, state: 'ringing' | 'answered' | 'rejected' | 'missed') {
+  const label = isVideo ? 'Panggilan video' : 'Panggilan suara';
+  return { ringing: `${label} masuk`, answered: `${label} diangkat di HP`, rejected: `${label} ditolak`, missed: `${label} tak terjawab` }[state];
+}
+
+/**
+ * Telepon/video call WhatsApp dari jamaah. CRM tidak bisa mengangkat panggilan: saat berdering CS diberi peringatan
+ * Mendesak, lalu riwayatnya tercatat di chat sebagai baris panggilan yang statusnya diperbarui.
+ */
+internalRouter.post('/calls/event', asyncHandler(async (req, res) => {
+  const input = z.object({
+    brandId: z.coerce.number().int().positive(),
+    callId: z.string().min(1).max(80),
+    remoteJid: z.string().min(3).max(100),
+    phone: z.string().max(30).optional().default(''),
+    isVideo: z.boolean().optional().default(false),
+    status: z.enum(['offer', 'accept', 'reject', 'timeout', 'terminate']),
+    timestamp: z.coerce.number().int().nonnegative(),
+    offline: z.boolean().optional().default(false),
+    devicePhone: z.string().max(40).optional(),
+  }).parse(req.body);
+  const messageId = `call-${input.callId}`;
+  const existing = await prisma.chatMessage.findUnique({
+    where: { brandId_messageId: { brandId: input.brandId, messageId } },
+    select: { id: true, prospectId: true, messageText: true },
+  });
+  const prospectRef = (id: number) => prisma.prospect.findUnique({ where: { id }, select: { id: true, brandId: true, name: true, userId: true } });
+
+  if (input.status === 'offer') {
+    if (existing) return res.json({ success: true });
+    // Panggilan yang terjadi saat gateway terputus sudah lewat: langsung dicatat tak terjawab, tanpa peringatan berdering.
+    const message = await ingestGatewayMessage({
+      brandId: input.brandId, messageId, remoteJid: input.remoteJid, phone: input.phone,
+      text: callLogText(input.isVideo, input.offline ? 'missed' : 'ringing'),
+      timestamp: input.timestamp, messageType: 'callLogMessage', isFromMe: false, status: 'delivered', devicePhone: input.devicePhone,
+    }, { realtime: true, notifyInbound: false });
+    const prospect = message?.prospectId ? await prospectRef(message.prospectId) : null;
+    if (prospect) {
+      const call = { callId: input.callId, isVideo: input.isVideo };
+      dispatch(() => (input.offline ? notifyCallEnded(prospect, { ...call, missed: true }) : notifyIncomingCall(prospect, call)));
+    }
+    return res.status(201).json({ success: true });
+  }
+
+  if (!existing) return res.json({ success: true });
+  const wasRinging = existing.messageText === callLogText(input.isVideo, 'ringing');
+  const wasAnswered = existing.messageText === callLogText(input.isVideo, 'answered');
+  // Sudah diangkat lalu ditutup = tetap "diangkat"; ditutup penelepon sebelum diangkat = tak terjawab.
+  const state = input.status === 'accept' ? 'answered' : input.status === 'reject' ? 'rejected' : wasAnswered ? 'answered' : 'missed';
+  if (!wasRinging) return res.json({ success: true });
+  const updated = await prisma.chatMessage.update({ where: { id: existing.id }, data: { messageText: callLogText(input.isVideo, state) } });
+  scheduleConversationStats([updated.prospectId]);
+  emitToBrand(input.brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText });
+  const prospect = existing.prospectId ? await prospectRef(existing.prospectId) : null;
+  if (prospect) dispatch(() => notifyCallEnded(prospect, { callId: input.callId, isVideo: input.isVideo, missed: state === 'missed' }));
   res.json({ success: true });
 }));
 

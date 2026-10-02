@@ -64,7 +64,40 @@ export async function notifyInboundMessage(p: ProspectRef, message: { text?: str
 export function resolveReplyNotifications(prospectId: number) {
   return resolveNotifications({
     entity: { type: 'prospect', id: prospectId },
-    types: ['message.inbound', 'lead.assigned', 'reply.sla_warning', 'reply.escalation'],
+    types: ['message.inbound', 'lead.assigned', 'reply.sla_warning', 'reply.escalation', 'call.missed'],
+  });
+}
+
+// ── Panggilan WhatsApp ──────────────────────────────────────────────────────────
+
+/** PIC prospek; lead tanpa PIC (atau PIC tidak aktif) diberitahukan ke semua CS brand agar ada yang mengangkat. */
+async function callRecipients(p: ProspectRef) {
+  const pic = await picOf({ userId: p.userId ?? null, brandId: p.brandId });
+  return pic.length ? pic : csOfBrand(p.brandId);
+}
+const callLabel = (isVideo: boolean) => (isVideo ? 'video call' : 'telepon');
+
+/** Panggilan sedang berdering di HP brand: Mendesak (toast + suara) agar CS yang tidak memegang HP tahu. */
+export async function notifyIncomingCall(p: ProspectRef, call: { callId: string; isVideo: boolean }) {
+  return notify({
+    type: 'call.incoming', priority: 'urgent', brandId: p.brandId,
+    userIds: await callRecipients(p),
+    title: `${p.name} sedang ${call.isVideo ? 'melakukan video call' : 'menelepon'}`,
+    body: 'Angkat dari HP WhatsApp brand. CRM tidak bisa mengangkat panggilan.',
+    link: inboxLink(p), entity: prospectEntity(p), activeKey: `call.incoming:p${p.id}`, dedupeKey: `call.incoming:${p.brandId}:${call.callId}`,
+  });
+}
+
+/** Panggilan berakhir: peringatan "berdering" selesai; bila tak diangkat, pengingat untuk menghubungi balik. */
+export async function notifyCallEnded(p: ProspectRef, call: { callId: string; isVideo: boolean; missed: boolean }) {
+  await resolveNotifications({ entity: prospectEntity(p), types: ['call.incoming'] });
+  if (!call.missed) return 0;
+  return notify({
+    type: 'call.missed', priority: 'action', brandId: p.brandId,
+    userIds: await callRecipients(p),
+    title: `Panggilan tak terjawab dari ${p.name}`,
+    body: `Jamaah mencoba ${callLabel(call.isVideo)}. Hubungi balik lewat chat.`,
+    link: inboxLink(p), entity: prospectEntity(p), activeKey: `call.missed:p${p.id}`, dedupeKey: `call.missed:${p.brandId}:${call.callId}`,
   });
 }
 

@@ -1,4 +1,4 @@
-import { getContentType, isRealMessage, normalizeMessageContent, proto, type WAMessage } from '@whiskeysockets/baileys';
+import { getContentType, isRealMessage, normalizeMessageContent, proto, type WACallEvent, type WAMessage } from '@whiskeysockets/baileys';
 import { extractMetaReferral } from './referral.js';
 
 export type HistoryContact = {
@@ -251,5 +251,43 @@ export function toGatewayMessage(
     isFromMe,
     status,
     referral: extractMetaReferral(message),
+  };
+}
+
+export type GatewayCallStatus = 'offer' | 'accept' | 'reject' | 'timeout' | 'terminate';
+export type GatewayCallPayload = {
+  brandId: number;
+  callId: string;
+  remoteJid: string;
+  phone: string;
+  isVideo: boolean;
+  status: GatewayCallStatus;
+  timestamp: number;
+  /** Panggilan terjadi saat gateway terputus: sudah lewat, tidak perlu peringatan "sedang berdering". */
+  offline: boolean;
+};
+
+const CALL_STATUSES = new Set<string>(['offer', 'accept', 'reject', 'timeout', 'terminate']);
+
+/**
+ * Panggilan WhatsApp masuk (suara/video) dari jamaah. CRM tidak bisa mengangkatnya; event ini hanya untuk
+ * memberi tahu CS dan mencatat riwayat. Panggilan grup dan status teknis (transport, latency) diabaikan.
+ */
+export function toGatewayCall(brandId: number, call: WACallEvent, lidPnMap: Map<string, string>, ownPhone?: string): GatewayCallPayload | null {
+  if (!call.id || !call.from || !CALL_STATUSES.has(call.status) || call.isGroup || call.groupJid) return null;
+  if (call.from.endsWith('@g.us')) return null;
+  const phone = [call.callerPn, call.from, lidPnMap.get(call.from)].map(normalizePhone).find(Boolean) ?? '';
+  // Panggilan keluar dari HP brand sendiri juga terlihat oleh perangkat tertaut: bukan panggilan jamaah.
+  if (ownPhone && phone && normalizePhone(ownPhone) === phone) return null;
+  const time = call.date instanceof Date && !Number.isNaN(call.date.getTime()) ? call.date.getTime() : Date.now();
+  return {
+    brandId,
+    callId: call.id,
+    remoteJid: call.from,
+    phone,
+    isVideo: Boolean(call.isVideo),
+    status: call.status as GatewayCallStatus,
+    timestamp: Math.floor(time / 1000),
+    offline: Boolean(call.offline),
   };
 }

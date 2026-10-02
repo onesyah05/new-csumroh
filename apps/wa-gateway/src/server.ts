@@ -19,7 +19,7 @@ import makeWASocket, {
   type WAMessage,
 } from '@whiskeysockets/baileys';
 import { z } from 'zod';
-import { addLidMappings, normalizePhone, toGatewayContact, toGatewayMessage, toMessageChange, type HistoryContact } from './messages.js';
+import { addLidMappings, normalizePhone, toGatewayCall, toGatewayContact, toGatewayMessage, toMessageChange, type HistoryContact } from './messages.js';
 import { classifyDisconnect, reconnectDelayMs } from './connection.js';
 import { acquireInstanceLock } from './instance-lock.js';
 import { Outbox, type OutboxItem, type SendResult } from './outbox.js';
@@ -103,13 +103,15 @@ function safeMediaExtension(fileName: string | undefined, mimeType = '') {
 }
 
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
+/** Pesan yang medianya diunduh ke server. Stiker (.webp) ikut agar CS melihat isinya, bukan hanya "[Stiker]". */
+const MEDIA_MESSAGE_TYPES = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
 
 async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promise<string | null> {
   try {
     const content = normalizeMessageContent(message.message);
     if (!content) return null;
     const messageType = getContentType(content);
-    if (!messageType || !['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'].includes(messageType)) {
+    if (!messageType || !MEDIA_MESSAGE_TYPES.includes(messageType)) {
       return null;
     }
 
@@ -126,6 +128,7 @@ async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promi
 
     let ext = '.bin';
     if (messageType === 'imageMessage') ext = '.jpg';
+    else if (messageType === 'stickerMessage') ext = '.webp';
     else if (messageType === 'videoMessage') ext = '.mp4';
     else if (messageType === 'audioMessage') ext = (content as any).audioMessage?.ptt ? '.ogg' : '.mp3';
     else if (messageType === 'documentMessage') {
@@ -259,7 +262,7 @@ async function startSession(brandId: number) {
       }
       const payload = toGatewayMessage(brandId, message, lidPnMap);
       if (payload) {
-        if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'].includes(payload.messageType) && !payload.mediaUrl) {
+        if (MEDIA_MESSAGE_TYPES.includes(payload.messageType) && !payload.mediaUrl) {
           const mediaUrl = await downloadAndSaveMedia(socket, message);
           if (mediaUrl) payload.mediaUrl = mediaUrl;
         }
@@ -322,6 +325,13 @@ async function startSession(brandId: number) {
           status: 'delivered',
         });
       }
+    }
+  });
+  // Telepon/video call dari jamaah: CS diberi tahu dan riwayatnya tercatat di chat (tidak ditolak otomatis).
+  socket.ev.on('call', async (calls) => {
+    for (const call of calls) {
+      const payload = toGatewayCall(brandId, call, lidPnMap, devicePhone());
+      if (payload) await notify('/calls/event', { ...payload, devicePhone: devicePhone() });
     }
   });
   socket.ev.on('messages.reaction', async (reactions) => {

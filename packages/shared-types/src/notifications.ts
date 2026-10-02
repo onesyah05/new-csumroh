@@ -23,6 +23,8 @@ export const notificationCatalog = [
   // Lead & chat
   { type: 'lead.assigned', group: 'Lead & chat', label: 'Lead baru untuk saya', description: 'Lead WhatsApp baru ditetapkan otomatis kepada Anda.', priority: 'action', roles: CS },
   { type: 'message.inbound', group: 'Lead & chat', label: 'Pesan baru dari jamaah', description: 'Pesan jamaah yang Anda tangani (digabung per percakapan).', priority: 'info', roles: CS },
+  { type: 'call.incoming', group: 'Lead & chat', label: 'Jamaah menelepon', description: 'Telepon/video call WhatsApp sedang berdering di HP brand. Angkat dari HP; CRM tidak bisa mengangkat panggilan.', priority: 'urgent', roles: CS },
+  { type: 'call.missed', group: 'Lead & chat', label: 'Panggilan tak terjawab', description: 'Jamaah menelepon tetapi tidak diangkat. Hubungi balik lewat chat.', priority: 'action', roles: CS },
   { type: 'reply.sla_warning', group: 'Lead & chat', label: 'Jamaah menunggu 10 menit', description: 'Balas sebelum 15 menit agar prospek tidak bisa diambil alih.', priority: 'urgent', roles: CS },
   { type: 'reply.takeover_open', group: 'Lead & chat', label: 'Prospek bisa diambil alih', description: 'Jamaah CS lain belum dibalas lebih dari 15 menit.', priority: 'action', roles: CS },
   { type: 'lead.unassigned', group: 'Lead & chat', label: 'Lead tanpa PIC', description: 'Ringkasan per brand: jumlah lead yang saat ini belum punya PIC. Muncul lagi hanya bila jumlahnya bertambah.', priority: 'action', roles: MANAGERS },
@@ -84,9 +86,12 @@ export function notificationTypesForRole(role: string) {
  * Notifikasi Mendesak selalu tampil sebagai toast dan tidak bisa dimatikan. Tipe lain bisa dimatikan (muted):
  * tidak dicatat di lonceng sama sekali.
  */
+/** Bunyi menyala sejak awal hanya untuk telepon berdering: tujuannya membuat CS yang tidak memegang HP tahu. */
+const SOUND_ON_BY_DEFAULT = new Set<string>(['call.incoming']);
+
 export function effectiveNotificationPreference(type: string, stored?: { toast: boolean; sound: boolean; muted?: boolean } | null) {
   const priority = notificationEntry(type)?.priority ?? 'info';
   const locked = priority === 'urgent';
   const toast = locked ? true : stored?.toast ?? priority !== 'info';
-  return { toast, sound: stored?.sound ?? false, muted: locked ? false : stored?.muted ?? false, locked };
+  return { toast, sound: stored?.sound ?? SOUND_ON_BY_DEFAULT.has(type), muted: locked ? false : stored?.muted ?? false, locked };
 }

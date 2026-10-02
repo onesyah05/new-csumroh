@@ -252,17 +252,19 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
           className={cn(
             'fixed z-50 flex max-h-[min(640px,85vh)] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-zinc-900 shadow-lift outline-none',
             placement === 'sidebar' ? 'left-[84px] top-4' : 'right-2 top-16 sm:right-4',
+            // HP: lembar layar penuh agar daftar tidak terpotong menu bawah dan header muat satu baris.
+            'notification-sheet max-md:inset-0 max-md:h-[var(--app-height,100dvh)] max-md:max-h-none max-md:w-full max-md:max-w-none max-md:rounded-none max-md:border-0 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:pt-[env(safe-area-inset-top,0px)]',
           )}
         >
           {/* Bagian atas tidak ikut menyusut: panel dibatasi tingginya, hanya daftar yang boleh menggulir. */}
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
-            <h2 className="text-sm font-bold">Notifikasi</h2>
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3 max-md:py-1.5 max-md:pr-1">
+            <h2 className="text-sm font-bold max-md:text-base">Notifikasi</h2>
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => markAll.mutate()}
                 disabled={markAll.isPending || actionable + info === 0}
-                className="inline-flex min-h-7 items-center gap-1 rounded-md px-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40"
+                className="inline-flex min-h-7 items-center gap-1 whitespace-nowrap rounded-md px-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-40"
               >
                 <CheckCheck size={14} />Tandai semua dibaca
               </button>
@@ -287,7 +289,7 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
                 type="button"
                 aria-pressed={filter === id}
                 onClick={() => setFilter(id)}
-                className={cn('min-h-7 rounded-full px-3 text-xs font-semibold focus-visible:ring-inset focus-visible:ring-offset-0', filter === id ? 'bg-zinc-950 text-white' : 'text-zinc-600 hover:bg-zinc-100')}
+                className={cn('mobile-dense min-h-7 rounded-full px-3 text-xs font-semibold focus-visible:ring-inset focus-visible:ring-offset-0', filter === id ? 'bg-zinc-950 text-white' : 'text-zinc-600 hover:bg-zinc-100')}
               >
                 {text}
               </button>
@@ -304,7 +306,7 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
                   onClick={() => setBrand(option.id)}
                   title={option.id === 'all' ? 'Semua brand' : brandOptions.find((b) => b.id === option.id)?.name}
                   className={cn(
-                    'inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold focus-visible:ring-inset focus-visible:ring-offset-0',
+                    'mobile-dense inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold focus-visible:ring-inset focus-visible:ring-offset-0',
                     activeBrand === option.id ? 'border-zinc-950 bg-zinc-100 text-zinc-950' : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50',
                   )}
                 >
@@ -351,16 +353,19 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className={cn('block text-sm leading-5', unread ? 'font-semibold text-zinc-950' : 'text-zinc-700')}>
-                                {/* Ringkasan per brand sudah menyebut jumlahnya di judul. */}
-                                {item.title}{item.count > 1 && !SUMMARY_TYPES.has(item.type) && <span className="font-normal text-zinc-600"> ({item.count})</span>}
+                                {item.title}
                               </span>
                               {item.body && <span className="mt-0.5 line-clamp-2 block text-xs text-zinc-600">{item.body}</span>}
                               <span className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
                                 {/* Nama brand sebagai label, bukan bagian judul (ringkasan per brand). */}
                                 {brandLabel(item.brandId) && (
-                                  <span className="rounded border border-zinc-200 px-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">{brandLabel(item.brandId)}</span>
+                                  <span className="rounded border border-zinc-200 px-1 text-xs font-semibold uppercase tracking-wide text-zinc-600">{brandLabel(item.brandId)}</span>
                                 )}
-                                <span>{relativeTime(item.updatedAt)}{item.resolvedAt ? ' · selesai' : ''}</span>
+                                <span>
+                                  {/* Jumlah kejadian di baris keterangan, bukan di judul; ringkasan per brand sudah menyebut jumlahnya. */}
+                                  {item.count > 1 && !SUMMARY_TYPES.has(item.type) && <span className="tabular-nums">{item.count} kali · </span>}
+                                  {relativeTime(item.updatedAt)}{item.resolvedAt ? ' · selesai' : ''}
+                                </span>
                               </span>
                             </span>
                           </button>
