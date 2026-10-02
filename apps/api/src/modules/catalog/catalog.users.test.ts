@@ -52,3 +52,18 @@ describe('Mencegah terkunci dari sistem', () => {
     expect(mocks.update.mock.calls[0][0].data).toEqual({ isActive: true });
   });
 });
+
+describe('Edit akun Superadmin', () => {
+  it('akses brand dari form diabaikan: Superadmin tetap mengakses semua brand', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 1, role: 'superadmin', isActive: true, brandId: null, email: 'superadmin@azhan.id', userBrands: [] });
+    mocks.update.mockImplementation(async ({ data }: any) => ({ id: 1, role: 'superadmin', ...data }));
+    const layer = (catalogRouter as any).stack.find((l: any) => l.route?.path === '/users/:id' && l.route.methods.patch);
+    await new Promise<any>((resolve, reject) => {
+      const res = { json: (body: any) => resolve(body.data), status: () => res };
+      layer.route.stack.at(-1).handle({ params: { id: '1' }, body: { name: 'Super Admin', brandIds: [] }, query: {}, user: superadmin }, res, (e: unknown) => (e ? reject(e) : resolve(undefined)));
+    });
+    const data = mocks.update.mock.calls[0][0].data;
+    expect(data.name).toBe('Super Admin');
+    expect(data).not.toHaveProperty('brandId');
+  });
+});

@@ -758,6 +758,11 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
     updateData.role = input.role;
   }
 
+  // Superadmin selalu mengakses semua brand: akses brand dari form diabaikan, bukan disimpan.
+  if (target.role === 'superadmin') {
+    delete input.brandIds;
+    delete input.brandId;
+  }
   let newBrandIds = input.brandIds;
 
   if (input.brandIds !== undefined) {
