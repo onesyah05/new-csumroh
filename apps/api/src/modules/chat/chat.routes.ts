@@ -12,7 +12,7 @@ import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
-import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
+import { attachReferralMarker, normalizeReferralMarker, storedReferral } from '../prospects/referral.service.js';
 import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { adLabels, cacheAdThumbnail, withAdPreviews } from '../ads/meta-ads.js';
@@ -1135,7 +1135,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
         adSourceUrl: referralMarker?.sourceUrl
       }
     });
-    referralCaptured = Boolean(referralMarker);
+    referralCaptured = Boolean(referralMarker?.ctwaClid);
     if (autoAssigned) {
       await prisma.prospectLog.create({
         data: {
@@ -1185,7 +1185,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       ...(mediaUrl ? { mediaUrl } : {}),
       timestamp: timestamp || Math.floor(Date.now() / 1000),
       status: input.status || 'delivered',
-      metaReferralData: referralMarker ?? undefined
+      metaReferralData: storedReferral(referralMarker)
     },
     create: {
       brandId,
@@ -1201,15 +1201,20 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       mediaUrl,
       timestamp: timestamp || Math.floor(Date.now() / 1000),
       status: input.status || 'delivered',
-      metaReferralData: referralMarker ?? undefined
+      metaReferralData: storedReferral(referralMarker)
     }
   });
 
   scheduleConversationStats([message.prospectId, previousOwner?.prospectId]);
   // Dibalas langsung dari HP WhatsApp: sama seperti balasan dari CRM, prospek Baru menjadi Terhubung.
   if (isFromMe && !isGroup) await promoteRepliedProspect(prospect.id, brandId, options.realtime);
-  // Kartu iklan realtime memakai URL CDN dulu; salinan lokal dipakai setelah tersimpan.
-  if (referralMarker) void cacheAdThumbnail(referralMarker.adId, referralMarker.thumbnailUrl);
+  // Kartu iklan realtime memakai URL CDN dulu; salinan lokal dipakai setelah tersimpan. Thumbnail tertanam ditulis
+  // langsung (tanpa jaringan) agar kartu realtime sudah bergambar.
+  if (referralMarker) {
+    const caching = cacheAdThumbnail(referralMarker.adId, referralMarker.thumbnailUrl, referralMarker.thumbnailBase64);
+    if (referralMarker.thumbnailBase64 && !referralMarker.thumbnailUrl) await caching;
+    else void caching;
+  }
   if (options.realtime) emitToBrand(brandId, 'message:new', (await withAdPreviews([message]))[0]);
   if (options.realtime) {
     const ref = { id: prospect.id, brandId, name: prospect.name, userId: prospect.userId };

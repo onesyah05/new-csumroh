@@ -36,7 +36,7 @@ vi.mock('../notifications/notification.events.js', () => ({
 }));
 vi.mock('../prospects/pic.js', () => ({ pickAutoAssignee: vi.fn(async () => null) }));
 vi.mock('../capi/capi.service.js', () => ({ dispatchCapiEvent: vi.fn(async () => undefined), queueCapiForStatus: vi.fn() }));
-vi.mock('../prospects/referral.service.js', () => ({ attachReferralMarker: vi.fn(async () => false), normalizeReferralMarker: () => null }));
+vi.mock('../prospects/referral.service.js', () => ({ attachReferralMarker: vi.fn(async () => false), normalizeReferralMarker: () => null, storedReferral: () => undefined }));
 
 import { env } from '../../config/env.js';
 import { callLogText, internalRouter } from './chat.routes.js';

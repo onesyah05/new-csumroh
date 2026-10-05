@@ -34,7 +34,11 @@ export async function adLabels(adIds: (string | null | undefined)[]) {
 }
 
 const THUMB_DIR = path.resolve(process.cwd(), 'uploads', 'ad-creatives');
-const localThumbnail = (adId: string) => (fs.existsSync(path.join(THUMB_DIR, `${adId}.jpg`)) ? `/uploads/ad-creatives/${adId}.jpg` : null);
+// {adId}.jpg = gambar penuh (Insights / URL iklan); {adId}-wa.jpg = thumbnail kecil dari pesan, hanya cadangan.
+const localThumbnail = (adId: string, includeEmbedded = true) => {
+  if (fs.existsSync(path.join(THUMB_DIR, `${adId}.jpg`))) return `/uploads/ad-creatives/${adId}.jpg`;
+  return includeEmbedded && fs.existsSync(path.join(THUMB_DIR, `${adId}-wa.jpg`)) ? `/uploads/ad-creatives/${adId}-wa.jpg` : null;
+};
 
 /** Hanya CDN Meta: URL gambar datang dari isi pesan WhatsApp, jadi server tidak boleh mengambil host sembarang. */
 export function isMetaCdnUrl(value?: string | null) {
@@ -47,15 +51,26 @@ export function isMetaCdnUrl(value?: string | null) {
   }
 }
 
-/** Salin gambar iklan dari pesan klik iklan ke /uploads/ad-creatives/{adId}.jpg selagi URL CDN-nya belum kedaluwarsa. */
-export async function cacheAdThumbnail(adId?: string, url?: string) {
-  if (!adId || !isAdId(adId) || !isMetaCdnUrl(url) || localThumbnail(adId)) return;
+const isJpeg = (data: Buffer) => data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+
+/**
+ * Salin gambar iklan dari pesan klik iklan ke /uploads/ad-creatives/{adId}.jpg selagi URL CDN-nya belum kedaluwarsa.
+ * Bila URL tidak ada atau gagal diunduh, thumbnail JPEG kecil yang tertanam di pesan dipakai (buram, tetapi lebih
+ * baik daripada kosong).
+ */
+export async function cacheAdThumbnail(adId?: string, url?: string, embeddedBase64?: string) {
+  if (!adId || !isAdId(adId) || localThumbnail(adId, false)) return;
   try {
-    const image = await fetch(url!, { signal: AbortSignal.timeout(15_000) });
-    const type = image.headers.get('content-type') ?? '';
-    if (!image.ok || !type.startsWith('image/')) return;
     await fs.promises.mkdir(THUMB_DIR, { recursive: true });
-    await fs.promises.writeFile(path.join(THUMB_DIR, `${adId}.jpg`), Buffer.from(await image.arrayBuffer()));
+    if (isMetaCdnUrl(url)) {
+      const image = await fetch(url!, { signal: AbortSignal.timeout(15_000) }).catch(() => null);
+      if (image?.ok && (image.headers.get('content-type') ?? '').startsWith('image/')) {
+        await fs.promises.writeFile(path.join(THUMB_DIR, `${adId}.jpg`), Buffer.from(await image.arrayBuffer()));
+        return;
+      }
+    }
+    const data = embeddedBase64 ? Buffer.from(embeddedBase64, 'base64') : null;
+    if (data && isJpeg(data) && !localThumbnail(adId)) await fs.promises.writeFile(path.join(THUMB_DIR, `${adId}-wa.jpg`), data);
   } catch (error) {
     console.error('Ad thumbnail cache failed', (error as Error).message);
   }
