@@ -4,6 +4,9 @@ export type MetaReferral = {
   ctwaClid?: string;
   adId?: string;
   headline?: string;
+  /** Teks iklan dan gambar kreatif untuk kartu "Ad" di chat CRM, seperti pratinjau di WhatsApp. */
+  body?: string;
+  thumbnailUrl?: string;
   sourceUrl?: string;
 };
 
@@ -25,6 +28,8 @@ export function extractMetaReferral(message: WAMessage): MetaReferral | undefine
     ctwaClid: clean(ad.ctwaClid),
     adId: clean(ad.sourceId),
     headline: clean(ad.title ?? ad.body),
+    body: ad.title ? clean(ad.body) : undefined,
+    thumbnailUrl: clean(ad.originalImageUrl ?? ad.thumbnailUrl),
     sourceUrl: clean(ad.sourceUrl),
   };
   return Object.values(referral).some(Boolean) ? referral : undefined;

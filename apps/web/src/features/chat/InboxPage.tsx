@@ -66,6 +66,7 @@ import { useNow } from '../../lib/useNow';
 import { NotificationBell } from '../notifications/NotificationBell';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { cn } from '../../lib/cn';
+import { AdReplyCard } from './AdReplyCard';
 import { ChatSidePanel } from './ChatSidePanel';
 import { canAccessBrand, useBrandScope } from '../../lib/scope';
 import { useAuth } from '../../app/auth';
@@ -1923,6 +1924,8 @@ export function InboxPage() {
                                         {item.senderName || selected.name || 'Jamaah'}
                                       </p>
                                     )}
+
+                                    {item.adPreview && <AdReplyCard ad={item.adPreview} isFromMe={item.isFromMe} />}
 
                                     {/* Quoted Message Preview inside bubble */}
                                     {(item.quotedText || item.quotedMessageId) && (

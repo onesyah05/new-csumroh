@@ -15,7 +15,7 @@ import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker } from '../prospects/referral.service.js';
 import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
-import { adLabels } from '../ads/meta-ads.js';
+import { adLabels, cacheAdThumbnail, withAdPreviews } from '../ads/meta-ads.js';
 import { syncSessionWithGateway } from '../whatsapp/gateway-probe.js';
 import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
 import { Prisma, type ChatMessage } from '@prisma/client';
@@ -393,7 +393,7 @@ chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {
       orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
       take: page.limit,
     });
-    res.json({ success: true, data: data.reverse() });
+    res.json({ success: true, data: await withAdPreviews(data.reverse()) });
     return;
   }
 
@@ -425,7 +425,7 @@ chatRouter.get('/prospects/:id/messages', asyncHandler(async (req, res) => {
     orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
     take: page.limit,
   });
-  res.json({ success: true, data: data.reverse() });
+  res.json({ success: true, data: await withAdPreviews(data.reverse()) });
 }));
 
 chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
@@ -1208,7 +1208,9 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   scheduleConversationStats([message.prospectId, previousOwner?.prospectId]);
   // Dibalas langsung dari HP WhatsApp: sama seperti balasan dari CRM, prospek Baru menjadi Terhubung.
   if (isFromMe && !isGroup) await promoteRepliedProspect(prospect.id, brandId, options.realtime);
-  if (options.realtime) emitToBrand(brandId, 'message:new', message);
+  // Kartu iklan realtime memakai URL CDN dulu; salinan lokal dipakai setelah tersimpan.
+  if (referralMarker) void cacheAdThumbnail(referralMarker.adId, referralMarker.thumbnailUrl);
+  if (options.realtime) emitToBrand(brandId, 'message:new', (await withAdPreviews([message]))[0]);
   if (options.realtime) {
     const ref = { id: prospect.id, brandId, name: prospect.name, userId: prospect.userId };
     const assignee = autoAssigned;
