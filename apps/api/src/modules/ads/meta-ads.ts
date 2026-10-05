@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { decryptMetaToken, withAdsToken } from '../capi/meta-token.js';
@@ -29,6 +31,60 @@ export async function adLabels(adIds: (string | null | undefined)[]) {
     ? await prisma.metaAd.findMany({ where: { adId: { in: ids } }, select: { adId: true, adName: true, campaignName: true, thumbnailUrl: true } })
     : [];
   return new Map<string, AdLabel>(rows.map((row) => [row.adId, row]));
+}
+
+const THUMB_DIR = path.resolve(process.cwd(), 'uploads', 'ad-creatives');
+const localThumbnail = (adId: string) => (fs.existsSync(path.join(THUMB_DIR, `${adId}.jpg`)) ? `/uploads/ad-creatives/${adId}.jpg` : null);
+
+/** Hanya CDN Meta: URL gambar datang dari isi pesan WhatsApp, jadi server tidak boleh mengambil host sembarang. */
+export function isMetaCdnUrl(value?: string | null) {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && /(^|\.)(fbcdn\.net|facebook\.com|whatsapp\.net|cdninstagram\.com)$/.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Salin gambar iklan dari pesan klik iklan ke /uploads/ad-creatives/{adId}.jpg selagi URL CDN-nya belum kedaluwarsa. */
+export async function cacheAdThumbnail(adId?: string, url?: string) {
+  if (!adId || !isAdId(adId) || !isMetaCdnUrl(url) || localThumbnail(adId)) return;
+  try {
+    const image = await fetch(url!, { signal: AbortSignal.timeout(15_000) });
+    const type = image.headers.get('content-type') ?? '';
+    if (!image.ok || !type.startsWith('image/')) return;
+    await fs.promises.mkdir(THUMB_DIR, { recursive: true });
+    await fs.promises.writeFile(path.join(THUMB_DIR, `${adId}.jpg`), Buffer.from(await image.arrayBuffer()));
+  } catch (error) {
+    console.error('Ad thumbnail cache failed', (error as Error).message);
+  }
+}
+
+type StoredReferral = { adId?: string; headline?: string; body?: string; thumbnailUrl?: string; sourceUrl?: string };
+export type AdPreview = { adId: string | null; title: string | null; body: string | null; adName: string | null; thumbnailUrl: string | null; sourceUrl: string | null };
+
+/** Tambahkan adPreview ke pesan yang berasal dari klik iklan (kartu "Ad" di chat), memakai label iklan tersimpan. */
+export async function withAdPreviews<T extends { metaReferralData?: unknown }>(messages: T[]): Promise<(T & { adPreview: AdPreview | null })[]> {
+  const referrals = messages.map((message) => (message.metaReferralData && typeof message.metaReferralData === 'object' ? message.metaReferralData as StoredReferral : null));
+  const labels = referrals.some(Boolean) ? await adLabels(referrals.map((referral) => referral?.adId)) : new Map<string, AdLabel>();
+  return messages.map((message, index) => {
+    const referral = referrals[index];
+    if (!referral) return { ...message, adPreview: null };
+    const adId = referral.adId && isAdId(referral.adId) ? referral.adId : null;
+    const label = adId ? labels.get(adId) : undefined;
+    return {
+      ...message,
+      adPreview: {
+        adId,
+        title: referral.headline ?? label?.adName ?? null,
+        body: referral.body ?? null,
+        adName: label?.adName ?? null,
+        thumbnailUrl: (adId && localThumbnail(adId)) || label?.thumbnailUrl || (isMetaCdnUrl(referral.thumbnailUrl) ? referral.thumbnailUrl! : null),
+        sourceUrl: referral.sourceUrl ?? null,
+      },
+    };
+  });
 }
 
 /**

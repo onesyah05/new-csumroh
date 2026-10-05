@@ -9,7 +9,7 @@ vi.mock('../capi/meta-token.js', () => ({
   withAdsToken: (b: any) => ({ ...b, metaAccessToken: b.metaAdsAccessToken || b.metaAccessToken }),
 }));
 
-import { adLabels, ensureAdLabels } from './meta-ads.js';
+import { adLabels, ensureAdLabels, isMetaCdnUrl, withAdPreviews } from './meta-ads.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -32,6 +32,20 @@ describe('Label iklan Meta', () => {
     expect(labels.get('120255')).toMatchObject({ adName: 'H064 | REG', campaignName: 'New Hana DES26' });
     expect((fetchMock.mock.calls[0] as unknown[])[1]).toMatchObject({ headers: { Authorization: 'Bearer ads' } });
     expect(mocks.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('pesan klik iklan mendapat kartu Ad; pesan biasa tidak, dan URL gambar non-Meta dibuang', async () => {
+    mocks.findMany.mockResolvedValue([{ adId: '9120254', adName: 'H062 | VID', campaignName: null, thumbnailUrl: null }]);
+    const [ad, plain, foreign] = await withAdPreviews([
+      { metaReferralData: { ctwaClid: 'AR-1', adId: '9120254', headline: 'Umroh Desember', thumbnailUrl: 'https://scontent.xx.fbcdn.net/a.jpg' } },
+      { metaReferralData: null },
+      { metaReferralData: { ctwaClid: 'AR-2', thumbnailUrl: 'https://evil.example/a.jpg' } },
+    ]);
+    expect(ad!.adPreview).toMatchObject({ adId: '9120254', title: 'Umroh Desember', adName: 'H062 | VID', thumbnailUrl: 'https://scontent.xx.fbcdn.net/a.jpg' });
+    expect(plain!.adPreview).toBeNull();
+    expect(foreign!.adPreview?.thumbnailUrl).toBeNull();
+    expect(isMetaCdnUrl('http://scontent.fbcdn.net/a.jpg')).toBe(false);
+    expect(isMetaCdnUrl('https://fbcdn.net.evil.com/a.jpg')).toBe(false);
   });
 
   it('kegagalan Meta tidak menggagalkan halaman', async () => {

@@ -6,6 +6,9 @@ const referralSchema = z.object({
   adId: z.string().trim().max(100).optional(),
   campaignId: z.string().trim().max(100).optional(),
   headline: z.string().trim().max(255).optional(),
+  // Kartu "Ad" di chat. Teks panjang dipotong, bukan ditolak, agar penanda klik iklan tetap tersimpan.
+  body: z.string().trim().transform((value) => value.slice(0, 500)).optional(),
+  thumbnailUrl: z.string().trim().url().max(2000).optional().catch(undefined),
   sourceUrl: z.string().trim().url().max(2000).optional(),
 });
 
