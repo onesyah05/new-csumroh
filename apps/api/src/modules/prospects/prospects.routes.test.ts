@@ -333,6 +333,13 @@ describe('R03 sent means delivered by the gateway', () => {
     expect(prospect(1).status).toBe('qualified');
   });
 
+  it('status lama offered tidak melewati syarat penawaran resmi', async () => {
+    const result = await invoke('patch', '/:id/status', { body: { status: 'offered' } });
+    expect(result.status).toBe(422);
+    expect(prospect(1).status).toBe('qualified');
+    expect(mocks.capi).not.toHaveBeenCalled();
+  });
+
   it('closing cannot be set manually before an invoice was actually delivered', async () => {
     prospect(1).invoiceNumber = 'INV/202609/0001';
     const result = await invoke('patch', '/:id/status', { body: { status: 'closing' } });

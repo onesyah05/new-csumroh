@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Prisma, ProspectStatus as DbProspectStatus, PaymentStatus } from '@prisma/client';
 import {
   businessDateKey,
+  canonicalStatus,
   canTransitionStatus,
   firstUnansweredAt,
   PIC_TAKEOVER_AFTER_MINUTES,
@@ -227,7 +228,11 @@ prospectsRouter.get('/:id', asyncHandler(async (req, res) => {
 // Tidak ada pembuatan prospek manual: prospek selalu lahir dari chat WhatsApp asli yang masuk lewat gateway.
 
 prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
-  const { status, lostReason } = statusUpdateSchema.parse(req.body);
+  const parsed = statusUpdateSchema.parse(req.body);
+  // Status lama (offered, identifying, …) dipetakan ke status kanonik SEBELUM aturan tahap diperiksa; tanpa ini
+  // 'offered' lolos dari syarat Kirim Penawaran Resmi dan mengirim AddToCart palsu ke Meta.
+  const status = canonicalStatus(parsed.status);
+  const { lostReason } = parsed;
   const { brandId, existing } = await findScopedProspect(req);
 
   const isLose = isLostStatus(status);
