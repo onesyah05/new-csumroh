@@ -12,8 +12,19 @@ const referralSchema = z.object({
   thumbnailUrl: z.string().trim().url().max(2000).optional().catch(undefined),
   // Thumbnail JPEG tertanam (base64) bila iklan tanpa URL gambar; disimpan sebagai file, tidak masuk database.
   thumbnailBase64: z.string().max(300_000).regex(/^[A-Za-z0-9+/=]+$/).optional().catch(undefined),
-  sourceUrl: z.string().trim().url().max(2000).optional(),
+  // Berasal dari isi pesan WhatsApp: hanya http(s) agar aman bila nanti dirender sebagai link. URL lain dibuang saja.
+  sourceUrl: z.string().trim().url().max(2000).refine(isHttpUrl).optional().catch(undefined),
 });
+
+export function isHttpUrl(value?: string | null) {
+  if (!value) return false;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 export type ReferralMarker = z.infer<typeof referralSchema>;
 
