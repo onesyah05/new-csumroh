@@ -303,6 +303,9 @@ export function InboxPage() {
   });
 
   const isConnected = sessionQuery.data?.status === 'connected';
+  // Putus sesaat: device yang sama sedang tersambung kembali (biasanya beberapa detik). Daftar & riwayat tetap tampil,
+  // hanya pengiriman yang ditahan; bukan layar "WhatsApp Tidak Terhubung".
+  const isReconnecting = sessionQuery.data?.status === 'connecting' && Boolean(sessionQuery.data?.phoneNumber);
   const canManageDevice = user?.role === 'superadmin' || user?.role === 'admin';
 
   const conversations = useQuery({
@@ -326,6 +329,9 @@ export function InboxPage() {
   });
   const activeBrand = brandsQuery.data?.find((b) => b.id === brandId) ?? user?.brand;
 
+  // Chat yang baru diklik dan URL-nya belum diperbarui (lihat efek di bawah).
+  const pendingSelection = useRef<number | null>(null);
+
   // Riwayat tetap dapat dibaca saat WhatsApp terputus (A10); hanya pengiriman yang dikunci.
   useEffect(() => {
     const items = conversations.data;
@@ -334,6 +340,12 @@ export function InboxPage() {
       return;
     }
     const requestedId = Number(searchParams.get('prospectId')) || null;
+    // Klik chat mengganti pilihan seketika, tetapi URL baru (React Router: transisi) menyusul sesaat kemudian.
+    // Selama URL masih menunjuk chat lama, jangan kembalikan pilihan ke sana: itu menimbulkan kedipan B → A → B.
+    if (pendingSelection.current !== null) {
+      if (requestedId !== pendingSelection.current) return;
+      pendingSelection.current = null;
+    }
     const requestedPhone = normalizePhone(searchParams.get('phone'));
     const requestedJid = searchParams.get('jid');
     const requested = items.find((item) => (
@@ -727,6 +739,7 @@ export function InboxPage() {
       next.delete('panel');
       return next;
     }, { state: mobile ? { inboxList: true } : null });
+    pendingSelection.current = id;
     setSelectedId(id);
   }
 
@@ -1099,7 +1112,7 @@ export function InboxPage() {
                           <ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-700 shrink-0" />
                         </div>
                         <p className="text-xs text-[#667781] truncate">
-                          {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : 'Terputus'}
+                          {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : isReconnecting ? 'Menyambung ulang…' : 'Terputus'}
                         </p>
                       </div>
                     </button>
@@ -1184,7 +1197,7 @@ export function InboxPage() {
                       {activeBrand?.name ?? 'WhatsApp Live Chat'}
                     </h2>
                     <p className="text-xs text-[#667781] truncate">
-                      {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : 'Terputus'}
+                      {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : isReconnecting ? 'Menyambung ulang…' : 'Terputus'}
                     </p>
                   </div>
                 </div>
@@ -1259,7 +1272,13 @@ export function InboxPage() {
             </div>
           )}
 
-          {!isConnected && (
+          {isReconnecting && (
+            <div className="flex items-center gap-2 border-b border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs text-zinc-700" role="status">
+              <RefreshCw size={13} className="shrink-0 animate-spin text-zinc-500" />
+              <span>Menyambung ulang ke WhatsApp… Pesan baru menyusul otomatis.</span>
+            </div>
+          )}
+          {!isConnected && !isReconnecting && (
             <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900" role="status">
               <WifiOff size={14} className="mt-0.5 shrink-0 text-amber-600" />
               <div className="min-w-0">
@@ -1391,7 +1410,7 @@ export function InboxPage() {
           'inbox-chat flex flex-col bg-white min-w-0',
           mobileView === 'list' && 'hidden md:flex'
         )}>
-          {!isConnected && !selected ? (
+          {!isConnected && !isReconnecting && !selected ? (
             <div className="grid h-full place-items-center p-8 bg-zinc-50/40">
               <div className="max-w-md text-center">
                 <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-amber-50 text-amber-600 border border-amber-200 shadow-sm">
@@ -2257,7 +2276,14 @@ export function InboxPage() {
               )}
 
               {/* WhatsApp Web Chat Composer Form or Locked Notice */}
-              {!isConnected ? (
+              {isReconnecting ? (
+                <div className="border-t border-[#e9edef] bg-[#f0f2f5] p-3.5 shrink-0" role="status">
+                  <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-700">
+                    <RefreshCw size={15} className="shrink-0 animate-spin text-zinc-500" />
+                    <span>WhatsApp sedang menyambung ulang. Pesan bisa dikirim lagi dalam beberapa detik.</span>
+                  </div>
+                </div>
+              ) : !isConnected ? (
                 <div className="border-t border-[#e9edef] bg-[#f0f2f5] p-3.5 shrink-0" role="status">
                   <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                     <WifiOff size={16} className="shrink-0 text-amber-600" />
