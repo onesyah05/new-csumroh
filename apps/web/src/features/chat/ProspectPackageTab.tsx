@@ -6,6 +6,7 @@ import {
 } from '@csumroh/shared-types';
 import { resolveMediaUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
+import { Button } from '../../components/ui/button';
 
 type Pkg = MatchablePackage & Record<string, any>;
 type Qualification = {
@@ -215,9 +216,11 @@ export function ProspectPackageTab({
         <div className="flex items-center justify-between gap-2 text-xs text-zinc-600">
           <span>Belum ada paket.</span>
           {!locked && (
-            <button type="button" disabled={saving} onClick={() => setPicking(true)} className="rounded-md border border-zinc-300 px-3 py-1.5 font-semibold text-zinc-900 hover:border-zinc-500">
+            // Tombol bersama (sama dengan "Lengkapi kualifikasi"): tombol polos ikut gaya bawaan browser, jadi
+            // tampil berbeda di Chrome.
+            <Button type="button" variant="secondary" size="sm" disabled={saving} onClick={() => setPicking(true)}>
               Pilih paket
-            </button>
+            </Button>
           )}
         </div>
         {footer}
