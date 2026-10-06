@@ -81,3 +81,17 @@ describe('Ganti kata sandi', () => {
     expect(revokeUserSessions).toHaveBeenCalledWith(1);
   });
 });
+
+describe('Edit data staf', () => {
+  it('akses brand tidak berubah: sesi CS tidak diputus saat mengganti nama', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 5, role: 'cs', isActive: true, brandId: 2, email: 'cs@azhan.id', name: 'CS Lama', userBrands: [{ brandId: 2 }, { brandId: 3 }] });
+    mocks.update.mockImplementation(async ({ data }: any) => ({ id: 5, role: 'cs', ...data }));
+    const layer = (catalogRouter as any).stack.find((l: any) => l.route?.path === '/users/:id' && l.route.methods.patch);
+    await new Promise<any>((resolve, reject) => {
+      const res = { json: (body: any) => resolve(body.data), status: () => res };
+      layer.route.stack.at(-1).handle({ params: { id: '5' }, body: { name: 'CS Baru', brandIds: [2, 3] }, query: {}, user: superadmin }, res, (e: unknown) => (e ? reject(e) : resolve(undefined)));
+    });
+    expect(mocks.update.mock.calls[0][0].data).toEqual({ name: 'CS Baru' });
+    expect(revokeUserSessions).not.toHaveBeenCalled();
+  });
+});

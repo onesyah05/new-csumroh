@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn() }));
 
 vi.mock('../../db/prisma.js', () => ({
-  prisma: { package: { findMany: mocks.findMany, findUnique: mocks.findUnique, update: mocks.update, create: mocks.create } },
+  prisma: {
+    package: { findMany: mocks.findMany, findUnique: mocks.findUnique, update: mocks.update, create: mocks.create, count: async () => 0 },
+    chatMessage: { count: async () => 0 },
+  },
 }));
 vi.mock('../../middleware/auth.js', async () => {
   const actual = await vi.importActual<typeof import('../../middleware/auth.js')>('../../middleware/auth.js');
@@ -114,5 +117,35 @@ describe('Admin multi-brand mengelola paket', () => {
     await write('post', '/packages', adminMulti, { ...body, brandId: 6 });
     expect(mocks.create.mock.calls[0][0].data.brandId).toBe(6);
     await expect(write('post', '/packages', adminMulti, { ...body, brandId: 9 })).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+function patch(user: User, id: number, body: Record<string, unknown>) {
+  const layer = (catalogRouter as any).stack.find((l: any) => l.route?.path === '/packages/:id' && l.route.methods.patch);
+  return new Promise<any>((resolve, reject) => {
+    const res = { json: (out: any) => resolve(out.data), status: () => res };
+    const handlers = layer.route.stack.map((s: any) => s.handle);
+    const req = { params: { id: String(id) }, body, query: {}, user };
+    const run = (i: number) => handlers[i](req, res, (error?: unknown) => (error ? reject(error) : run(i + 1)));
+    run(0);
+  });
+}
+
+describe('Edit paket', () => {
+  beforeEach(() => {
+    mocks.update.mockImplementation(async ({ data }: any) => ({ id: 3, ...data }));
+  });
+
+  it('Admin multi-brand bisa memindahkan paket ke brand tugasnya (tidak diabaikan diam-diam)', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 3, brandId: 1, flyerImage: null, priceQuad: 'Rp 30.000.000' });
+    const admin = { id: 2, role: 'admin', brandId: 1, userBrands: [{ brand: { id: 6 } }] };
+    await patch(admin, 3, { brandId: 6 });
+    expect(mocks.update.mock.calls[0][0].data.brandId).toBe(6);
+  });
+
+  it('tanggal keberangkatan dikosongkan: teks tanggal lama ikut dihapus', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 3, brandId: 1, flyerImage: null, priceQuad: 'Rp 30.000.000', departureInfo: '10 November 2026' });
+    await patch({ id: 1, role: 'superadmin', brandId: null }, 3, { departureDate: null });
+    expect(mocks.update.mock.calls[0][0].data).toMatchObject({ departureDate: null, departureInfo: null });
   });
 });
