@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { prisma } from '../../db/prisma.js';
 import { authGuard, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/http.js';
@@ -11,6 +11,15 @@ import {
 // Hanya baca: kontak selalu berasal dari chat WhatsApp asli di device, tidak ada pendaftaran kontak manual.
 export const contactsRouter = Router();
 contactsRouter.use(authGuard);
+
+/** Brand yang boleh dilihat user (aturan sama dengan scopedBrandId): holding semua brand, CS hanya brand penugasannya. */
+function canSeeBrand(req: Request, brandId: number) {
+  try {
+    return scopedBrandId(req, brandId) === brandId;
+  } catch {
+    return false;
+  }
+}
 
 export type ContactDevice = {
   brandId: number;
@@ -28,7 +37,7 @@ export type ContactDevice = {
 
 // GET /api/v1/contacts/devices - List connected WhatsApp devices with real livechat contact counts
 contactsRouter.get('/devices', asyncHandler(async (req, res) => {
-  const brands = await prisma.brand.findMany({
+  const allBrands = await prisma.brand.findMany({
     select: {
       id: true,
       name: true,
@@ -45,6 +54,7 @@ contactsRouter.get('/devices', asyncHandler(async (req, res) => {
     },
     orderBy: { id: 'asc' },
   });
+  const brands = allBrands.filter((brand) => canSeeBrand(req, brand.id));
 
   const devices = await Promise.all(
     brands.map(async (b) => {
@@ -79,16 +89,17 @@ contactsRouter.get('/devices', asyncHandler(async (req, res) => {
 contactsRouter.get('/', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
   const search = String(req.query.search ?? '').trim().toLowerCase();
-  const deviceFilter = req.query.deviceBrandId && req.query.deviceBrandId !== 'all' ? Number(req.query.deviceBrandId) : undefined;
+  // Device brand lain hanya untuk brand yang boleh diakses user; selain itu 403.
+  const deviceFilter = req.query.deviceBrandId && req.query.deviceBrandId !== 'all' ? scopedBrandId(req, Number(req.query.deviceBrandId)) : undefined;
   const allDevices = req.query.allDevices === 'true' || req.query.deviceBrandId === 'all';
   const multiDeviceOnly = req.query.multiDeviceOnly === 'true';
 
   // 1. Fetch all connected brands
-  const connectedBrands = await prisma.brand.findMany({
+  const connectedBrands = (await prisma.brand.findMany({
     where: { whatsappSession: { status: 'connected' } },
     include: { whatsappSession: true },
     orderBy: { id: 'asc' },
-  });
+  })).filter((brand) => canSeeBrand(req, brand.id));
 
   // 2. Fetch livechat conversations for all connected brands in parallel
   const brandConversations = await Promise.all(
