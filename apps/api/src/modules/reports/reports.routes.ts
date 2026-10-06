@@ -12,6 +12,7 @@ import { SpamAudienceError, syncSpamAudience } from '../ads/spam-audience.js';
 import { normalizePhone } from '../capi/capi.payload.js';
 import { withAdsToken } from '../capi/meta-token.js';
 import { adLabels, ensureAdLabels } from '../ads/meta-ads.js';
+import { phoneSearchDigits } from '../../utils/phone-search.js';
 
 /**
  * Laporan manajemen (Superadmin & Admin): penjualan, kinerja CS, sumber lead, alasan batal, pembayaran, iklan Meta,
@@ -502,11 +503,11 @@ reportsRouter.get('/creatives/:adId/prospects', asyncHandler(async (req, res) =>
   const ids = matches.map((row) => Number(row.prospect_id));
   const leadCount = matches.filter((row) => !Number(row.spam)).length;
 
-  const digits = query.search.replace(/\D/g, '');
+  const digits = phoneSearchDigits(query.search);
   const where: Prisma.ProspectWhereInput = {
     id: { in: ids.length ? ids : [-1] },
     ...(query.spam === 'exclude' ? { spamAt: null } : query.spam === 'only' ? { spamAt: { not: null } } : {}),
-    ...(query.search ? { OR: [{ name: { contains: query.search } }, ...(digits.length >= 4 ? [{ phone: { contains: digits } }] : [])] } : {}),
+    ...(query.search ? { OR: [{ name: { contains: query.search } }, ...(digits ? [{ phone: { contains: digits } }] : [])] } : {}),
   };
   const [total, prospects] = await Promise.all([
     prisma.prospect.count({ where }),
