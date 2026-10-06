@@ -107,7 +107,8 @@ const db = vi.hoisted(() => {
       create: async ({ data }: any) => { s().rejections.push(data); return data; },
     },
     prospectLog: {
-      create: async ({ data }: any) => { s().logs.push(data); return { ...data, user: { name: 'CS Fitri' } }; },
+      create: async ({ data }: any) => { s().logs.push({ createdAt: new Date(), ...data }); return { ...data, user: { name: 'CS Fitri' } }; },
+      findFirst: async ({ where }: any) => s().logs.find((log) => log.prospectId === where.prospectId && log.actionType === where.actionType && (!where.createdAt?.gt || log.createdAt > where.createdAt.gt)) ?? null,
       findMany: async ({ where }: any) => s().logs.filter((log) => log.prospectId === where.prospectId).reverse(),
     },
     user: {
@@ -282,6 +283,27 @@ describe('R01 invoice and offer never touch verified cash', () => {
     prospect(1).status = 'deal';
     const result = await invoke('post', '/:id/offer', { body: { packageId: 1, sendViaWhatsApp: false } });
     expect(result.status).toBe(409);
+  });
+});
+
+describe('Nilai deal mengikuti penawaran resmi terakhir', () => {
+  it('invoice dengan paket lain dari penawaran ditolak', async () => {
+    await invoke('post', '/:id/offer', { body: { packageId: 1, sendViaWhatsApp: true, messageText: 'Penawaran' } });
+    const result = await invoke('post', '/:id/invoice', { body: { invoiceAmount: 10_000_000, packageId: 2 } });
+    expect(result.status).toBe(409);
+    expect(prospect(1).packageId).toBe(1);
+  });
+
+  it('jamaah berubah setelah penawaran: invoice dan verifikasi ditahan sampai penawaran ulang', async () => {
+    await invoke('post', '/:id/offer', { body: { packageId: 1, sendViaWhatsApp: true, messageText: 'Penawaran' } });
+    const offeredAt = prospect(1).offerSentAt as Date;
+    expect((await invoke('patch', '/:id/profile', { body: { paxQuad: 4 } })).status).toBe(200);
+    // Log usang tercatat sesudah penawaran.
+    for (const log of mocks.state.logs) if (log.actionType === 'offer_outdated') log.createdAt = new Date(offeredAt.getTime() + 1000);
+    expect((await invoke('post', '/:id/invoice', { body: { invoiceAmount: 10_000_000 } })).status).toBe(409);
+    const verify = await invoke('post', '/:id/verify-payment', { body: { approvedAmount: 5_000_000, bankName: 'BSI', mutationDate: '2026-09-23' }, role: 'finance' });
+    expect(verify.status).toBe(409);
+    expect(prospect(1).status).not.toBe('deal');
   });
 });
 

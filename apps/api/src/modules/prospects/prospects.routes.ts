@@ -764,6 +764,20 @@ prospectsRouter.post('/:id/notes', asyncHandler(async (req, res) => {
 }));
 
 // Trigger 3: Send Official Offer -> offer
+/**
+ * Penawaran resmi terakhir masih berlaku? Jamaah atau paket yang berubah sesudahnya dicatat sebagai `offer_outdated`
+ * (lihat PATCH profil). Nilai deal = nilai penawaran itu, jadi invoice dan verifikasi ditahan sampai CS mengirim
+ * penawaran ulang; tanpa ini Deal tercatat dengan paket baru tetapi nilai paket lama.
+ */
+async function offerIsOutdated(prospect: { id: number; offerSentAt: Date | null }) {
+  if (!prospect.offerSentAt) return false;
+  const log = await prisma.prospectLog.findFirst({
+    where: { prospectId: prospect.id, actionType: 'offer_outdated', createdAt: { gt: prospect.offerSentAt } },
+    select: { id: true },
+  });
+  return Boolean(log);
+}
+
 prospectsRouter.post('/:id/offer', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
   await assertCanActOnProspect(req.user!, existing);
@@ -949,6 +963,14 @@ prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
       throw new HttpError(422, `Tagihan melebihi nilai deal (Rp ${agreed.agreedPrice.toLocaleString('id-ID')}).`);
     }
     input.packageId = agreed.basePackageId;
+  } else if (existing.offerSentAt) {
+    // Nilai deal mengikuti penawaran resmi: paket invoice harus paket yang ditawarkan, dan penawarannya masih berlaku.
+    if (input.packageId && input.packageId !== existing.packageId) {
+      throw new HttpError(409, 'Paket invoice berbeda dari paket penawaran. Kirim penawaran resmi untuk paket ini terlebih dahulu.');
+    }
+    if (await offerIsOutdated(existing)) {
+      throw new HttpError(409, 'Jamaah atau paket berubah setelah penawaran terkirim. Kirim penawaran resmi ulang sebelum invoice.');
+    }
   }
   if (!isWon && input.packageId) {
     const pkg = await prisma.package.findFirst({ where: { id: input.packageId, brandId }, select: { id: true } });
@@ -1277,6 +1299,8 @@ prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
     if (amount < agreed.minDpTotal) {
       throw new HttpError(422, `Pembayaran di bawah DP minimal layanan custom (Rp ${agreed.minDpTotal.toLocaleString('id-ID')}). Tolak bukti bila transfer kurang.`);
     }
+  } else if (await offerIsOutdated(existing)) {
+    throw new HttpError(409, 'Jamaah atau paket berubah setelah penawaran terkirim, sehingga nilai deal belum sesuai. Minta CS mengirim penawaran resmi ulang sebelum verifikasi.');
   }
 
   const seatCount = seatCountFor(existing);
@@ -1376,6 +1400,10 @@ prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
         const dup = referenceNo ? await prisma.payment.findFirst({ where: { brandId, referenceNo } }) : null;
         if (dup && dup.prospectId !== id) {
           throw new HttpError(409, `Nomor referensi mutasi ${referenceNo} sudah dipakai untuk prospek lain.`);
+        }
+        // "Sudah dicatat" hanya benar bila mutasi itu masih terverifikasi; selain itu laporkan, jangan pura-pura berhasil.
+        if (dup && dup.status !== 'verified') {
+          throw new HttpError(409, `Nomor referensi mutasi ${referenceNo} masih tercatat pada pembayaran yang dibatalkan.`);
         }
       }
       return replay();
