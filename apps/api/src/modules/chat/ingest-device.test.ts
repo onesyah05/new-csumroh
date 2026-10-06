@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   prospectUpdateMany: vi.fn(),
   logCreate: vi.fn(),
   queueCapi: vi.fn(),
+  stored: null as null | Record<string, unknown>,
   pickAssignee: vi.fn(async () => null as null | { id: number; name: string }),
 }));
 
@@ -19,7 +20,7 @@ vi.mock('../../db/prisma.js', () => ({
     brand: { findUnique: async () => ({ phone: null }) },
     prospect: { findMany: mocks.prospectFindMany, create: mocks.prospectCreate, update: mocks.prospectUpdate, updateMany: mocks.prospectUpdateMany },
     prospectLog: { create: mocks.logCreate },
-    chatMessage: { findUnique: async () => null, findFirst: async () => null, upsert: mocks.messageUpsert },
+    chatMessage: { findUnique: async () => mocks.stored, findFirst: async () => null, upsert: mocks.messageUpsert },
     whatsappContact: { findFirst: mocks.contactFindFirst },
   },
 }));
@@ -34,7 +35,7 @@ vi.mock('../capi/capi.service.js', () => ({ dispatchCapiEvent: vi.fn(async () =>
 vi.mock('../prospects/referral.service.js', () => ({ attachReferralMarker: vi.fn(async () => false), normalizeReferralMarker: () => null, storedReferral: () => undefined }));
 
 import { env } from '../../config/env.js';
-import { internalRouter } from './chat.routes.js';
+import { internalRouter, laterMessageStatus } from './chat.routes.js';
 import { gatewayFailure, prospectChatJid, sendingDevicePhone } from './outbound.js';
 
 function incoming(body: Record<string, unknown>, path = '/messages/incoming') {
@@ -154,5 +155,28 @@ describe('Balas dari device aktif', () => {
     await gatewayFailure(1, new Response('{}', { status: 409 }), 'ditolak');
     await gatewayFailure(1, null, 'ditolak');
     expect(mocks.sessionUpdateMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Status dan isi pesan yang dikirim ulang', () => {
+  it('status hanya maju; gagal hanya menggantikan pesan yang belum terkirim', () => {
+    expect(laterMessageStatus('sent', 'pending')).toBe('sent');
+    expect(laterMessageStatus('read', 'delivered')).toBe('read');
+    expect(laterMessageStatus('sent', 'read')).toBe('read');
+    expect(laterMessageStatus('pending', 'failed')).toBe('failed');
+    expect(laterMessageStatus('delivered', 'failed')).toBe('delivered');
+    expect(laterMessageStatus(undefined, 'pending')).toBe('pending');
+  });
+
+  it('gema kiriman CRM tidak menurunkan status dan tidak menimpa caption/media', async () => {
+    mocks.stored = { prospectId: 9, status: 'sent', messageText: 'Brosur Umroh Desember', mediaUrl: '/uploads/media/a.jpg' };
+    try {
+      await incoming({ ...base, messageId: 'CRM1', isFromMe: true, status: 'pending', text: '[Gambar]', messageType: 'imageMessage', mediaUrl: '/uploads/media/b.jpg' });
+      const update = mocks.messageUpsert.mock.calls.at(-1)![0].update;
+      expect(update).toMatchObject({ status: 'sent', messageText: 'Brosur Umroh Desember' });
+      expect(update.mediaUrl).toBeUndefined();
+    } finally {
+      mocks.stored = null;
+    }
   });
 });

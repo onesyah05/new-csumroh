@@ -533,7 +533,8 @@ chatRouter.post('/prospects/:id/history-sync', asyncHandler(async (req, res) => 
   const key = conversationKey({ ...target, name: '' });
   const aliases = prospects.filter((item) => conversationKey({ ...item, name: '' }) === key);
   const oldest = await prisma.chatMessage.findFirst({
-    where: { brandId, isDeleted: false, prospectId: { in: aliases.map((item) => item.id) } },
+    // Titik awal harus pesan yang dikenal WhatsApp: riwayat panggilan (call-…) dan pesan lokal (local-…) bukan.
+    where: { brandId, isDeleted: false, prospectId: { in: aliases.map((item) => item.id) }, NOT: [{ messageId: { startsWith: 'call-' } }, { messageId: { startsWith: 'local-' } }] },
     select: { messageId: true, remoteJid: true, phone: true, isFromMe: true, timestamp: true },
     orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
   });
@@ -544,7 +545,8 @@ chatRouter.post('/prospects/:id/history-sync', asyncHandler(async (req, res) => 
   const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/history`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
-    body: JSON.stringify({ jid: oldest.remoteJid, phone: normalizePhoneIdentifier(oldest.phone || target.phone), messageId: oldest.messageId, isFromMe: oldest.isFromMe, timestamp: oldest.timestamp, count: 50 }),
+    // Kontak @lid tanpa nomor: phone tidak dikirim (gateway menolak string kosong).
+    body: JSON.stringify({ jid: oldest.remoteJid, phone: normalizePhoneIdentifier(oldest.phone || target.phone) || undefined, messageId: oldest.messageId, isFromMe: oldest.isFromMe, timestamp: oldest.timestamp, count: 50 }),
   }).catch(() => null);
   if (!response?.ok) throw new HttpError(502, 'Sinkronisasi histori WhatsApp belum dapat dimulai.');
   const result = await response.json() as { data?: unknown };
@@ -1161,7 +1163,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     ? await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true } })
     : null;
 
-  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { prospectId: true } });
+  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { prospectId: true, status: true, messageText: true, mediaUrl: true } });
   const message = await prisma.chatMessage.upsert({
     where: { brandId_messageId: { brandId, messageId } },
     update: {
@@ -1171,11 +1173,13 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       ...(devicePhone ? { devicePhone } : {}),
       senderName,
       isFromMe,
-      messageText: text,
+      // Pesan yang sudah tersimpan dikirim ulang (gema kiriman CRM, sinkron riwayat, retry outbox): isi tidak berubah
+      // (edit lewat /messages/edited) dan status tidak boleh mundur, mis. 'sent' kiriman CRM menjadi 'pending'.
+      messageText: previousOwner?.messageText ? previousOwner.messageText : text,
       messageType,
-      ...(mediaUrl ? { mediaUrl } : {}),
+      ...(mediaUrl && !previousOwner?.mediaUrl ? { mediaUrl } : {}),
       timestamp: timestamp || Math.floor(Date.now() / 1000),
-      status: input.status || 'delivered',
+      status: laterMessageStatus(previousOwner?.status, input.status || 'delivered'),
       metaReferralData: storedReferral(referralMarker)
     },
     create: {
@@ -1224,6 +1228,17 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   return message;
 }
 
+const MESSAGE_STATUS_ORDER = ['pending', 'sent', 'delivered', 'read'] as const;
+
+/** Status pesan yang lebih jauh dari dua nilai; 'failed' hanya menggantikan pesan yang belum terkirim. */
+export function laterMessageStatus(current: string | null | undefined, incoming: string) {
+  if (!current) return incoming;
+  const rank = (status: string) => MESSAGE_STATUS_ORDER.indexOf(status as (typeof MESSAGE_STATUS_ORDER)[number]);
+  if (incoming === 'failed') return rank(current) >= 1 ? current : 'failed';
+  if (current === 'failed') return rank(incoming) >= 1 ? incoming : current;
+  return rank(incoming) > rank(current) ? incoming : current;
+}
+
 internalRouter.post('/messages/status', asyncHandler(async (req, res) => {
   const input = z.object({
     brandId: z.coerce.number().int().positive(),
@@ -1231,17 +1246,14 @@ internalRouter.post('/messages/status', asyncHandler(async (req, res) => {
     status: z.enum(['pending', 'sent', 'delivered', 'read', 'failed']),
   }).parse(req.body);
 
-  const statusCondition = input.status === 'delivered'
-    ? { in: ['pending', 'sent'] }
-    : input.status === 'read'
-    ? { in: ['pending', 'sent', 'delivered'] }
-    : undefined;
+  // Status hanya maju (pending → sent → delivered → read); tanda terima yang terlambat tidak menurunkannya.
+  const statusCondition = { in: MESSAGE_STATUS_ORDER.filter((status) => MESSAGE_STATUS_ORDER.indexOf(status) < MESSAGE_STATUS_ORDER.indexOf(input.status === 'failed' ? 'delivered' : input.status)) };
 
   const updated = await prisma.chatMessage.updateMany({
     where: {
       brandId: input.brandId,
       messageId: input.messageId,
-      ...(statusCondition ? { status: statusCondition } : {}),
+      status: statusCondition,
     },
     data: { status: input.status },
   });
