@@ -815,8 +815,10 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
       userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
     },
   });
-  // Kata sandi, role, atau akses brand berubah: sesi lama user tersebut diputus (kecuali saat mengedit diri sendiri).
-  if (id !== req.user!.id && (input.password || updateData.role || newBrandIds !== undefined)) await revokeUserSessions(id);
+  // Kata sandi diganti: SEMUA sesi diputus, termasuk saat mengganti kata sandi sendiri. Itu justru dilakukan saat akun
+  // dicurigai bocor; tanpa ini penyerang tetap masuk dengan refresh token lama (30 hari). Pengguna masuk ulang.
+  // Role atau akses brand berubah: sesi user lain diputus agar klaim di token lama tidak dipakai lagi.
+  if (input.password || (id !== req.user!.id && (updateData.role || newBrandIds !== undefined))) await revokeUserSessions(id);
   res.json({ success: true, data: { ...updated, releasedProspects } });
 }));
 

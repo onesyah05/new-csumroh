@@ -9,7 +9,8 @@ vi.mock('../../middleware/auth.js', async () => {
   const actual = await vi.importActual<typeof import('../../middleware/auth.js')>('../../middleware/auth.js');
   return { ...actual, authGuard: (_req: unknown, _res: unknown, next: () => void) => next() };
 });
-vi.mock('../auth/sessions.js', () => ({ revokeUserSessions: vi.fn() }));
+const revokeUserSessions = vi.hoisted(() => vi.fn());
+vi.mock('../auth/sessions.js', () => ({ revokeUserSessions }));
 vi.mock('../prospects/pic.js', () => ({ releaseProspectsOf: vi.fn(async () => 0) }));
 
 import { catalogRouter } from './catalog.routes.js';
@@ -65,5 +66,18 @@ describe('Edit akun Superadmin', () => {
     const data = mocks.update.mock.calls[0][0].data;
     expect(data.name).toBe('Super Admin');
     expect(data).not.toHaveProperty('brandId');
+  });
+});
+
+describe('Ganti kata sandi', () => {
+  it('kata sandi sendiri diganti: semua sesi akun itu diputus (akun dicurigai bocor)', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 1, role: 'superadmin', isActive: true, brandId: null, email: 'superadmin@azhan.id', userBrands: [] });
+    mocks.update.mockImplementation(async ({ data }: any) => ({ id: 1, role: 'superadmin', ...data }));
+    const layer = (catalogRouter as any).stack.find((l: any) => l.route?.path === '/users/:id' && l.route.methods.patch);
+    await new Promise<any>((resolve, reject) => {
+      const res = { json: (body: any) => resolve(body.data), status: () => res };
+      layer.route.stack.at(-1).handle({ params: { id: '1' }, body: { name: 'Super Admin', password: 'kata-sandi-baru-123' }, query: {}, user: superadmin }, res, (e: unknown) => (e ? reject(e) : resolve(undefined)));
+    });
+    expect(revokeUserSessions).toHaveBeenCalledWith(1);
   });
 });
