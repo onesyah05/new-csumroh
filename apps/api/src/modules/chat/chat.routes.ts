@@ -21,14 +21,12 @@ import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.
 import { Prisma, type ChatMessage } from '@prisma/client';
 import { avatarNeedsRefresh } from '@csumroh/shared-types';
 import { refreshProspectAvatar, refreshProspectAvatars } from './avatar.service.js';
-import { pickAutoAssignee } from '../prospects/pic.js';
 import { resolveNotifications } from '../notifications/notify.service.js';
 import {
   dispatch,
   notifyCallEnded,
   notifyIncomingCall,
   notifyInboundMessage,
-  notifyLeadAssigned,
   notifyPicChange,
   onWhatsappStatus,
   resolveReplyNotifications,
@@ -1105,17 +1103,14 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     ? (validSenderName || 'Grup WhatsApp')
     : (validSenderName || (phone ? `+${phone}` : 'Kontak WhatsApp'));
 
-  let autoAssigned: { id: number; name: string } | null = null;
   const isNewProspect = !prospect;
   if (!prospect) {
-    // Lead baru dari jamaah langsung punya PIC: CS aktif brand ini (termasuk CS multi-brand) dengan prospek terbuka paling sedikit.
-    // Juga chat baru yang dimulai dari HP brand (pesan keluar realtime): tanpa ini lead itu tidak pernah punya PIC.
-    // Chat lama dari sinkron riwayat yang dimulai dari brand tidak dibagi otomatis; Admin menugaskannya manual.
-    autoAssigned = isGroup || (isFromMe && !options.realtime) ? null : await pickAutoAssignee(brandId);
+    // Lead baru tidak diberi PIC otomatis: semua CS brand diberi tahu, dan CS yang pertama membalas menjadi PIC
+    // (klaim bersyarat di sendTextToProspect / kirim media). Lead yang belum dibalas ada di antrean "Belum ada PIC".
     prospect = await prisma.prospect.create({
       data: {
         brandId,
-        userId: autoAssigned?.id ?? null,
+        userId: null,
         name: isGroup ? 'Grup WhatsApp' : fallbackName,
         phone: isGroup ? null : (phone || null),
         remoteJid: isGroup ? remoteJid : phone ? `${phone}@s.whatsapp.net` : remoteJid,
@@ -1129,18 +1124,6 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       }
     });
     referralCaptured = Boolean(referralMarker?.ctwaClid);
-    if (autoAssigned) {
-      await prisma.prospectLog.create({
-        data: {
-          prospectId: prospect.id,
-          userId: null,
-          actionType: 'pic_assigned',
-          title: `PIC ditetapkan otomatis ke ${autoAssigned.name}`,
-          description: 'Lead baru dibagi ke CS dengan prospek terbuka paling sedikit',
-        },
-      });
-      emitToBrand(brandId, 'prospect:claimed', { prospectIds: [prospect.id], userId: autoAssigned.id, userName: autoAssigned.name, auto: true });
-    }
   } else {
     referralCaptured = await attachReferralMarker(prospect.id, referralMarker);
     const targetJid = isGroup ? remoteJid : phone ? `${phone}@s.whatsapp.net` : remoteJid;
@@ -1213,14 +1196,11 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   if (options.realtime) emitToBrand(brandId, 'message:new', (await withAdPreviews([message]))[0]);
   if (options.realtime) {
     const ref = { id: prospect.id, brandId, name: prospect.name, userId: prospect.userId };
-    const assignee = autoAssigned;
     if (isFromMe) {
       // Dibalas langsung dari HP perangkat: pengingat balasan selesai seperti balasan dari aplikasi.
       dispatch(() => resolveReplyNotifications(ref.id));
-    } else if (isNewProspect) {
-      // Lead tanpa PIC tidak diberi notifikasi per lead: ringkasan per brand diperbarui job SLA tiap menit.
-      if (assignee) dispatch(() => notifyLeadAssigned(ref, assignee.id));
-    } else if (!alreadyStored && options.notifyInbound !== false) {
+    } else if ((isNewProspect || !alreadyStored) && options.notifyInbound !== false) {
+      // Prospek tanpa PIC (termasuk lead baru): semua CS brand diberi tahu, siapa cepat membalas menjadi PIC.
       dispatch(() => notifyInboundMessage(ref, { text, messageType }));
     }
   }

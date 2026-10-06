@@ -47,13 +47,17 @@ const MEDIA_LABELS: Record<string, string> = {
   documentMessage: 'Mengirim dokumen', stickerMessage: 'Mengirim stiker', locationMessage: 'Mengirim lokasi', contactMessage: 'Mengirim kontak',
 };
 
-/** Pesan jamaah untuk PIC; diringkas per prospek sampai dibaca atau dibalas. */
+/**
+ * Pesan jamaah, diringkas per prospek sampai dibaca atau dibalas. Ke PIC. Prospek tanpa PIC (lead baru atau belum diklaim) ke semua CS brand, karena PIC tidak dibagi
+ * otomatis: CS yang pertama membalas menjadi PIC, dan balasan itu menutup notifikasi ini untuk semua CS.
+ */
 export async function notifyInboundMessage(p: ProspectRef, message: { text?: string | null; messageType?: string | null }) {
-  if (!p.userId) return 0;
+  const userIds = p.userId ? await picOf({ userId: p.userId, brandId: p.brandId }) : await csOfBrand(p.brandId);
+  if (!userIds.length) return 0;
   const preview = message.text?.trim() || MEDIA_LABELS[message.messageType ?? ''] || 'Pesan baru';
   return notify({
     type: 'message.inbound', priority: 'info', brandId: p.brandId,
-    userIds: await picOf({ userId: p.userId, brandId: p.brandId }),
+    userIds,
     title: `Pesan baru dari ${p.name}`,
     body: preview.length > 80 ? `${preview.slice(0, 79)}…` : preview,
     link: inboxLink(p), entity: prospectEntity(p), activeKey: `message.inbound:p${p.id}`,

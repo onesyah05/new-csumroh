@@ -42,7 +42,7 @@ Access token hanya disimpan di memory browser. Refresh token dirotasi melalui co
 ## Alur kerja utama
 
 - **Pipeline:** 9 kolom (`pipelineStatuses` di `packages/shared-types/src/contracts.ts`): Baru → Terhubung → Terkualifikasi → Ditawarkan → Keberatan → Follow-up → Tunggu Verifikasi (`closing`) → Deal, atau Batal. Deal hanya terjadi setelah Finance memverifikasi pembayaran. Status lama (`identifying`, `offered`, `closed_won`, `closed_lost`, `nurture`) dipertahankan untuk data historis.
-- **PIC:** lead baru dari jamaah dibagi otomatis ke CS aktif brand dengan prospek terbuka paling sedikit. Lead tanpa PIC diklaim sendiri oleh CS. Prospek CS lain hanya bisa diambil alih bila jamaah belum dibalas 15 menit. Lead lama tidak pernah dibagi otomatis.
+- **PIC:** lead baru tidak dibagi otomatis. Semua CS brand diberi tahu, dan CS yang pertama membalas menjadi PIC (atau mengklaim dari antrean "Belum ada PIC"). Prospek CS lain hanya bisa diambil alih bila jamaah belum dibalas 15 menit dan sedang jam operasional (08.00–22.00 WIB); di luar jam itu PIC tetap terkunci.
 - **Kontak per perangkat:** percakapan terikat ke nomor WhatsApp brand yang menerimanya; prospek perangkat yang terputus disembunyikan sampai tersambung lagi.
 - **Gateway WhatsApp:** event ke API melewati antrean tahan-restart (`apps/wa-gateway/outbox/`). Stiker diunduh sebagai media. Telepon/video call jamaah dicatat di chat dan memicu notifikasi Mendesak (CRM tidak bisa mengangkat panggilan).
 - **Copilot script:** token `{{…}}` diisi server dari data brand, paket, dan prospek. Data yang kosong tidak diganti teks karangan: script ditandai belum bisa dipakai beserta data yang perlu dilengkapi.

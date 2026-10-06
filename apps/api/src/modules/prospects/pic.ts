@@ -72,12 +72,6 @@ export async function picCandidates(brandId: number, db: Db = prisma) {
   return users.map((u) => ({ id: u.id, name: u.name, openProspects: u._count.prospects }));
 }
 
-/** Lead baru diberikan ke CS dengan prospek terbuka paling sedikit di brand ini; seri dipecah oleh id terkecil. */
-export async function pickAutoAssignee(brandId: number, db: Db = prisma) {
-  const candidates = await picCandidates(brandId, db);
-  return candidates.sort((a, b) => a.openProspects - b.openProspects || a.id - b.id)[0] ?? null;
-}
-
 /**
  * Lepas PIC milik CS yang tidak lagi bisa menangani brand tertentu (dinonaktifkan, dihapus, ganti role,
  * atau akses brand dicabut). Prospek terbuka kembali ke antrean "Belum ada PIC" dan tercatat di riwayat.
