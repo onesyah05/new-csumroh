@@ -193,10 +193,9 @@ export function PipelinePage() {
     if (brandParam && brandParam !== brandId && canAccessBrand(user, brandParam)) setActiveBrandId(brandParam);
   }, [brandParam, brandId, setActiveBrandId, user]);
   // Filter & tampilan disimpan di URL: tetap sama saat reload dan bisa dibagikan.
-  // Split-screen ±700 px hanya memuat ±2 kolom Kanban: di bawah 900 px, Tabel jadi tampilan default.
-  const [narrowDefault] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 899px)').matches));
+  // Papan jadi tampilan default di semua ukuran layar, termasuk HP; Tabel dipilih lewat tombol atau ?view=table.
   const viewParam = params.get('view');
-  const view = viewParam === 'table' || viewParam === 'kanban' ? viewParam : narrowDefault ? 'table' : 'kanban';
+  const view = viewParam === 'table' || viewParam === 'kanban' ? viewParam : 'kanban';
   const rawQuick = params.get('quick') ?? 'all';
   const legacyScope: ScopeId | null = rawQuick === 'won' ? 'deal' : rawQuick === 'lost' ? 'batal' : null;
   const quick = legacyScope ? 'all' : rawQuick;
