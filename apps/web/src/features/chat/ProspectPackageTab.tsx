@@ -60,7 +60,6 @@ function PackageDetails({ pkg }: { pkg: Pkg }) {
   const promoActive = Boolean(pkg.isPromo && pkg.promoDiscount && (!promoDeadline || promoDeadline >= businessDateKey()));
   const included = lines(pkg.facilitiesIncluded);
   const excluded = lines(pkg.facilitiesExcluded);
-  const highlights = lines(pkg.highlights);
   const itinerary = lines(pkg.itinerary);
   return <div className="space-y-3 text-xs">
     <DetailSection title="Perjalanan">
@@ -87,7 +86,6 @@ function PackageDetails({ pkg }: { pkg: Pkg }) {
     </DetailSection>
     <DetailSection title="Sudah termasuk"><Bullets items={included} empty="Belum diisi" /></DetailSection>
     <DetailSection title="Belum termasuk"><Bullets items={excluded} empty="Belum diisi. Pastikan ke admin sebelum menyebut total biaya." /></DetailSection>
-    {highlights.length > 0 && <DetailSection title="Keunggulan"><Bullets items={highlights} empty="" /></DetailSection>}
     {itinerary.length > 0 && <DetailSection title="Itinerary"><Bullets items={itinerary} empty="" /></DetailSection>}
   </div>;
 }

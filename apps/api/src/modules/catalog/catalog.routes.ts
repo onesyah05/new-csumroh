@@ -448,7 +448,8 @@ catalogRouter.post('/packages', requireRole('superadmin', 'admin'), asyncHandler
       departureDate: input.departureDate ? new Date(input.departureDate) : null,
       promoDeadline: input.promoDeadline ? new Date(input.promoDeadline) : null,
       priceQuad: input.priceQuad || input.price,
-      highlights: input.highlights || (input.facilitiesIncluded ? input.facilitiesIncluded.slice(0, 250) : null),
+      // Tidak lagi disalin dari fasilitas: "Keunggulan" ganda & terpotong sudah dihapus dari panel paket.
+      highlights: input.highlights || null,
     },
     include: { brand: { select: { id: true, name: true, code: true } } },
   });
