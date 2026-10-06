@@ -320,12 +320,13 @@ export async function morningDigestJob(now = new Date()) {
   }
 }
 
-// ── Ringkasan sore (17.00 WIB): pengambilalihan PIC hari ini ────────────────────
+// ── Ringkasan sore (17.00 WIB): pengambilalihan PIC sejak ringkasan sore kemarin ──
 
 export async function eveningDigestJob(now = new Date()) {
   const today = businessDateKey(now);
   const logs = await prisma.prospectLog.findMany({
-    where: { actionType: 'pic_taken_over', createdAt: { gte: new Date(`${today}T00:00:00+07:00`), lte: now } },
+    // Jendela bergulir sore ke sore: pengambilalihan setelah 17.00 masuk ringkasan besok, tidak hilang.
+    where: { actionType: 'pic_taken_over', createdAt: { gte: new Date(new Date(`${today}T${String(SLA.eveningHour).padStart(2, '0')}:00:00+07:00`).getTime() - 24 * HOUR), lte: now } },
     select: { title: true, prospect: { select: { brandId: true } } },
   });
   const perBrand = new Map<number, Map<string, number>>();
@@ -341,7 +342,7 @@ export async function eveningDigestJob(now = new Date()) {
     const detail = [...byPic].sort((a, b) => b[1] - a[1]).map(([name, n]) => `${name}: ${n}`).join(', ');
     await notify({
       type: 'pic.taken_over_digest', priority: 'info', brandId, userIds: await adminsOf(brandId),
-      title: `${total} prospek diambil alih hari ini`,
+      title: `${total} prospek diambil alih dalam 24 jam terakhir`,
       body: `Jamaah belum dibalas 15 menit oleh PIC. ${detail}`,
       link: '/staff', entity: { type: 'brand', id: brandId },
       dedupeKey: `pic.taken_over_digest:b${brandId}:${today}`,
@@ -354,9 +355,12 @@ export async function eveningDigestJob(now = new Date()) {
 export async function retentionJob(now = new Date()) {
   const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * HOUR);
   const [read, unread, dedupes, ticks] = await Promise.all([
-    prisma.notification.deleteMany({ where: { readAt: { lt: daysAgo(60) } } }),
+    // Ringkasan yang masih aktif (activeKey, belum selesai) tidak dihapus walau sudah dibaca lama: menghapusnya membuat
+    // ringkasan yang sama muncul lagi sebagai notifikasi baru (dengan suara) untuk keadaan yang tidak berubah.
+    prisma.notification.deleteMany({ where: { readAt: { lt: daysAgo(60) }, NOT: { activeKey: { not: null }, resolvedAt: null } } }),
     prisma.notification.deleteMany({ where: { readAt: null, createdAt: { lt: daysAgo(180) } } }),
-    prisma.notificationDedupe.deleteMany({ where: { createdAt: { lt: daysAgo(14) } } }),
+    // Lebih lama dari jendela job terpanjang (invoice lewat jatuh tempo: 30 hari) agar pengingat yang sama tidak terkirim ulang.
+    prisma.notificationDedupe.deleteMany({ where: { createdAt: { lt: daysAgo(35) } } }),
     prisma.notificationDedupe.deleteMany({ where: { key: { startsWith: 'scheduler:' }, createdAt: { lt: daysAgo(1) } } }),
   ]);
   return { read: read.count, unread: unread.count, dedupes: dedupes.count + ticks.count };

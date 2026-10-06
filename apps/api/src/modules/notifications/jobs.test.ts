@@ -160,6 +160,8 @@ describe('retensi', () => {
     const wheres = mocks.deleteMany.mock.calls.map(([arg]: any) => arg.where);
     expect(wheres[0].readAt.lt).toEqual(new Date(NOW.getTime() - 60 * 86_400_000));
     expect(wheres[1]).toMatchObject({ readAt: null, createdAt: { lt: new Date(NOW.getTime() - 180 * 86_400_000) } });
-    expect(wheres[2].createdAt.lt).toEqual(new Date(NOW.getTime() - 14 * 86_400_000));
+    // Ringkasan aktif yang sudah dibaca tetap disimpan; kunci dedupe disimpan lebih lama dari jendela invoice (30 hari).
+    expect(wheres[0].NOT).toEqual({ activeKey: { not: null }, resolvedAt: null });
+    expect(wheres[2].createdAt.lt).toEqual(new Date(NOW.getTime() - 35 * 86_400_000));
   });
 });
