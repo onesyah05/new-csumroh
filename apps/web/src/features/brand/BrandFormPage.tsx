@@ -81,9 +81,13 @@ export function BrandFormPage() {
 
   const currentBrand = brands.data?.find((b) => String(b.id) === brandId);
 
-  // Pre-fill form if editing
+  // Pre-fill form if editing — sekali per brand. Daftar brand dimuat ulang setiap event status WhatsApp; mengisi
+  // ulang form saat itu menghapus isian (mis. rekening) yang belum disimpan.
+  const hydratedFor = useRef<number | null>(null);
   useEffect(() => {
     if (isEditing && currentBrand) {
+      if (hydratedFor.current === currentBrand.id) return;
+      hydratedFor.current = currentBrand.id;
       setForm({
         name: currentBrand.name ?? '',
         code: currentBrand.code ?? '',

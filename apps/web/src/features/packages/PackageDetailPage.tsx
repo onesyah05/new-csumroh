@@ -27,6 +27,7 @@ import { StatusBadge } from '../../components/ui/status-badge';
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog } from '../../components/ui/modal';
 import { ImageLightbox } from '../../components/ui/image-lightbox';
+import { formatWaPackageItinerary, formatWaPackageSummary } from './packageQuote';
 
 export interface PackageItem {
   id: number;
@@ -170,7 +171,6 @@ export function PackageDetailPage() {
       : 'Jadwal menyusul');
   const durationStr = pkg.duration || '9 Hari';
   const flightTypeLabel = pkg.flightType === 'transit' ? 'Transit' : 'Direct';
-  const airlineStr = pkg.airline ? `${pkg.airline} (${flightTypeLabel})` : 'TBA';
   const quadPrice = formatRupiah(pkg.priceQuad || pkg.price);
 
   const incItems = (pkg.facilitiesIncluded || '')
@@ -188,39 +188,13 @@ export function PackageDetailPage() {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  // Clean promo string
-  const cleanPromo = pkg.promoDiscount ? pkg.promoDiscount.replace(/diskon\s*/gi, '').trim() : '';
+  // Promo ditampilkan apa adanya (bisa persen atau nominal); tidak diberi awalan Rp.
+  const promoText = pkg.promoDiscount?.trim() ?? '';
 
-  // WA format: Ringkasan siap kirim
-  let waSummary = `*${pkg.name.toUpperCase()}*\n`;
-  waSummary += `Travel: ${pkg.brand?.name || 'Layanan Resmi'}\n`;
-  waSummary += `Keberangkatan: ${departureStr} (${durationStr})\n`;
-  waSummary += `Maskapai: ${airlineStr}\n`;
-  if (pkg.hotelMakkah) waSummary += `Hotel Makkah: ${pkg.hotelMakkah}\n`;
-  if (pkg.hotelMadinah) waSummary += `Hotel Madinah: ${pkg.hotelMadinah}\n`;
-  waSummary += `\n*HARGA PAKET:*\n`;
-  waSummary += `• Quad: ${quadPrice}\n`;
-  if (pkg.priceTriple) waSummary += `• Triple: ${formatRupiah(pkg.priceTriple)}\n`;
-  if (pkg.priceDouble) waSummary += `• Double: ${formatRupiah(pkg.priceDouble)}\n`;
-  if (pkg.priceInfant) waSummary += `• Infant (< 2 Thn): ${formatRupiah(pkg.priceInfant)}\n`;
-  waSummary += `• Minimal DP: ${formatRupiah(pkg.dp)}\n`;
-  if (incItems.length > 0) {
-    waSummary += `\n*Fasilitas Termasuk:*\n${incItems.map((i) => `• ${i}`).join('\n')}\n`;
-  }
-  if (pkg.isPromo) {
-    waSummary += `\n*Promo:* Potongan ${cleanPromo ? formatRupiah(cleanPromo) : 'Spesial'}\n`;
-  }
-  waSummary += `\nSisa Kuota: ${pkg.quotaRemaining ?? '-'} Seat`;
-
-  // WA format: Itinerary siap kirim
-  let waItinerary = `*ITINERARY ${pkg.name.toUpperCase()}*\n`;
-  waItinerary += `Keberangkatan: ${departureStr} (${durationStr})\n`;
-  waItinerary += `Penerbangan: ${airlineStr}\n\n`;
-  if (itinLines.length > 0) {
-    waItinerary += itinLines.join('\n');
-  } else {
-    waItinerary += 'Rincian agenda harian belum tersedia.';
-  }
+  // Teks WhatsApp memakai formatter yang sama dengan Inbox: promo hanya bila masih berlaku, nominal dari parser
+  // rupiah ketat, kuota hanya bila masih ada.
+  const waSummary = formatWaPackageSummary(pkg);
+  const waItinerary = formatWaPackageItinerary(pkg);
 
   const copyToClipboard = async () => {
     try {
@@ -253,7 +227,7 @@ export function PackageDetailPage() {
             />
             {pkg.isPromo && (
               <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                Promo {cleanPromo ? formatRupiah(cleanPromo) : ''}
+                Promo {promoText}
               </span>
             )}
           </>
@@ -318,9 +292,9 @@ export function PackageDetailPage() {
         />
         <StatCard
           label="Sisa Kuota"
-          value={`${pkg.quotaRemaining ?? 0} Seat`}
-          note={pkg.quotaRemaining && pkg.quotaRemaining <= 5 ? 'Seat hampir habis' : 'Seat tersedia'}
-          alert={Boolean(pkg.quotaRemaining && pkg.quotaRemaining <= 5)}
+          value={pkg.quotaRemaining === null || pkg.quotaRemaining === undefined ? 'Tanpa batas' : `${pkg.quotaRemaining} Seat`}
+          note={pkg.quotaRemaining === 0 ? 'Kuota habis' : pkg.quotaRemaining !== null && pkg.quotaRemaining !== undefined && pkg.quotaRemaining <= 5 ? 'Seat hampir habis' : 'Seat tersedia'}
+          alert={pkg.quotaRemaining !== null && pkg.quotaRemaining !== undefined && pkg.quotaRemaining <= 5}
         />
         <StatCard
           label="Penerbangan"
