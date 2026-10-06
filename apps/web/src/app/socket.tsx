@@ -28,19 +28,29 @@ export function SocketBridge() {
       if (hasConnectedBefore) refresh();
       hasConnectedBefore = true;
     });
+    // Refresh lalu sambung ulang. Gangguan sementara (server/jaringan) dicoba lagi nanti, bukan dianggap logout.
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    const reconnectAfterRefresh = () => {
+      refreshSession()
+        .then((session) => { if (session) socket.connect(); })
+        .catch(() => {
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(reconnectAfterRefresh, 15_000);
+        });
+    };
     socket.on('disconnect', (reason) => {
       setRealtimeStatus('offline');
       // Server memutus saat access token kedaluwarsa atau akses dicabut. socket.io tidak menyambung ulang
       // sendiri untuk alasan ini: refresh dulu. Bila refresh ditolak (akun nonaktif), sesi berakhir → keluar.
       if (reason === 'io server disconnect') {
-        void refreshSession().then((session) => { if (session) socket.connect(); });
+        reconnectAfterRefresh();
       }
     });
     socket.on('connect_error', (error) => {
       setRealtimeStatus('offline');
       // Handshake ditolak middleware auth (token kedaluwarsa): socket.io tidak mencoba lagi sendiri.
       if (error.message === 'unauthorized') {
-        void refreshSession().then((session) => { if (session) socket.connect(); });
+        reconnectAfterRefresh();
       }
     });
     // Setelah refresh token sukses di mana pun, socket yang sedang putus dicoba lagi dengan token baru.
@@ -50,7 +60,8 @@ export function SocketBridge() {
 
     // Sinkron penuh: hanya setelah tersambung ulang (event yang terlewat tidak diputar ulang server).
     const refresh = () => {
-      for (const key of ['contacts', 'prospects', 'prospect', 'messages', 'conversations', 'dashboard', 'verification-queue', 'scripts']) {
+      // Notifikasi & permintaan custom juga: hitungan lonceng tidak dipolling, jadi tanpa ini badge tetap basi.
+      for (const key of ['contacts', 'prospects', 'prospect', 'messages', 'conversations', 'dashboard', 'verification-queue', 'scripts', 'notifications', 'custom-requests']) {
         void queryClient.invalidateQueries({ queryKey: [key] });
       }
     };
@@ -175,6 +186,7 @@ export function SocketBridge() {
 
     return () => {
       if (flushTimer) clearTimeout(flushTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       unsubscribeSession();
       socket.close();
       setRealtimeStatus('offline');

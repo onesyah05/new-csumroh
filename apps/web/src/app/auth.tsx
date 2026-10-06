@@ -25,8 +25,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     });
     // refreshSession() berbagi satu request, jadi efek ganda StrictMode tidak memutar token dua kali.
-    void refreshSession().finally(() => setLoading(false));
-    return unsubscribe;
+    // Server sedang tidak terjangkau saat halaman dibuka: tetap memuat dan coba lagi, jangan tampilkan halaman login
+    // untuk sesi yang sebenarnya masih berlaku.
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const start = () => {
+      refreshSession()
+        .then(() => { if (!cancelled) setLoading(false); })
+        .catch(() => { if (!cancelled) retryTimer = setTimeout(start, 5_000); });
+    };
+    start();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      unsubscribe();
+    };
   }, []);
 
   const value = useMemo<AuthValue>(() => ({
