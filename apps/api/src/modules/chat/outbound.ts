@@ -48,8 +48,13 @@ export function prospectChatJid(prospect: { phone: string | null; remoteJid: str
  * melaporkan sesi tidak tersambung (409); kegagalan satu pesan (mis. nomor tidak valid) tidak memutus semua user.
  */
 export async function gatewayFailure(brandId: number, response: Response | null, message: string) {
-  if (!response || response.status === 409) {
-    await prisma.whatsappSession.updateMany({ where: { brandId }, data: { status: 'disconnected', qrCode: null, disconnectReason: response ? 'connection_lost' : 'gateway_unreachable' } });
+  // 409 = gateway hidup tetapi sesi WhatsApp sedang (menyambung ulang) belum terbuka. Status sesi sudah dilaporkan
+  // gateway sendiri; menandainya "Terputus" di sini membuat Inbox kosong untuk putus beberapa detik.
+  if (response?.status === 409) {
+    return new HttpError(503, 'WhatsApp sedang menyambung ulang. Coba kirim lagi dalam beberapa detik.');
+  }
+  if (!response) {
+    await prisma.whatsappSession.updateMany({ where: { brandId }, data: { status: 'disconnected', qrCode: null, disconnectReason: 'gateway_unreachable' } });
     emitToBrand(brandId, 'whatsapp:status', { brandId, status: 'disconnected' });
     void onWhatsappStatus(brandId, 'disconnected');
     return new HttpError(502, 'WhatsApp belum terhubung atau gateway tidak tersedia.');

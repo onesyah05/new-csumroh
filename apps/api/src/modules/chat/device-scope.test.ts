@@ -4,16 +4,18 @@ const mocks = vi.hoisted(() => ({
   prospectUpdateMany: vi.fn((args: unknown) => ({ model: 'prospect', args })),
   messageUpdateMany: vi.fn((args: unknown) => ({ model: 'chatMessage', args })),
   transaction: vi.fn(async (ops: unknown[]) => ops.map(() => ({ count: 3 }))),
+  session: null as null | { status: string; phoneNumber: string | null },
 }));
 vi.mock('../../db/prisma.js', () => ({
   prisma: {
     prospect: { updateMany: mocks.prospectUpdateMany },
     chatMessage: { updateMany: mocks.messageUpdateMany },
     $transaction: mocks.transaction,
+    whatsappSession: { findUnique: async () => mocks.session },
   },
 }));
 
-import { adoptUnassignedProspects } from './device-scope.js';
+import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 
 describe('Device tersambung mengadopsi data tanpa device', () => {
   it('pesan ikut diikat ke device prospeknya agar riwayat chat tetap tampil', async () => {
@@ -30,5 +32,18 @@ describe('Device tersambung mengadopsi data tanpa device', () => {
     mocks.transaction.mockClear();
     expect(await adoptUnassignedProspects(1, null)).toBe(0);
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('Device aktif', () => {
+  it('menyambung ulang tetap dianggap device yang sama (Inbox tidak kosong saat putus sesaat)', async () => {
+    mocks.session = { status: 'connecting', phoneNumber: '628222000' };
+    expect(await activeDevicePhone(1)).toBe('628222000');
+    mocks.session = { status: 'connected', phoneNumber: '628222000' };
+    expect(await activeDevicePhone(1)).toBe('628222000');
+    mocks.session = { status: 'disconnected', phoneNumber: '628222000' };
+    expect(await activeDevicePhone(1)).toBeNull();
+    mocks.session = { status: 'qr_ready', phoneNumber: null };
+    expect(await activeDevicePhone(1)).toBeNull();
   });
 });

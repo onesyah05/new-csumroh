@@ -175,8 +175,8 @@ function messagePreview(message: ChatMessage) {
 
 export async function getLivechatConversationsForBrand(brandId: number) {
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
-  // Kontak hanya tampil selama device asalnya tersambung (lihat device-scope.ts).
-  const devicePhone = session?.status === 'connected' ? normalizePhoneIdentifier(session.phoneNumber) : '';
+  // Kontak hanya tampil selama device asalnya tersambung atau sedang menyambung ulang (lihat device-scope.ts).
+  const devicePhone = await activeDevicePhone(brandId);
   if (!devicePhone) {
     return [];
   }
@@ -1533,9 +1533,16 @@ internalRouter.post('/wa/status', asyncHandler(async (req, res) => {
     reason: z.string().max(30).optional(),
   }).parse(req.body);
   const qrCode = input.status === 'qr_ready' ? input.qrCode ?? null : null;
-  const phoneNumber = input.status === 'connected' ? input.phoneNumber ?? undefined : input.status === 'disconnected' ? null : undefined;
+  // Nomor device hanya dilepas bila HP benar-benar keluar (logout). Putus sesaat (connecting) dan putus lain tetap
+  // menyimpan nomornya: tanpa nomor, Inbox (per device) kosong sampai tersambung lagi.
+  const phoneNumber = input.status === 'connected' ? input.phoneNumber ?? undefined
+    : input.status === 'disconnected' && input.reason === 'logged_out' ? null
+    : undefined;
   // Alasan dipertahankan selama mencoba menyambung ulang; hilang hanya saat benar-benar tersambung.
-  const disconnectReason = input.status === 'connected' ? null : input.status === 'disconnected' ? input.reason ?? 'connection_lost' : undefined;
+  const disconnectReason = input.status === 'connected' ? null
+    : input.status === 'disconnected' ? input.reason ?? 'connection_lost'
+    : input.status === 'connecting' && input.reason ? input.reason
+    : undefined;
   const session = await prisma.whatsappSession.upsert({
     where: { brandId: input.brandId },
     update: { status: input.status, qrCode, phoneNumber, disconnectReason, lastConnectedAt: input.status === 'connected' ? new Date() : undefined },

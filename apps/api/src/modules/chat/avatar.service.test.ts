@@ -3,10 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ update: vi.fn() }));
-vi.mock('../../db/prisma.js', () => ({ prisma: { prospect: { update: mocks.update } } }));
+const mocks = vi.hoisted(() => ({ update: vi.fn(), checkedAt: null as Date | null }));
+vi.mock('../../db/prisma.js', () => ({ prisma: { prospect: { update: mocks.update, findUnique: async () => ({ photoCheckedAt: mocks.checkedAt }) } } }));
 
-import { refreshProspectAvatar, resetAvatarAttempts } from './avatar.service.js';
+import { refreshProspectAvatar, refreshProspectAvatars, resetAvatarAttempts } from './avatar.service.js';
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46]);
 const base = { id: 7, brandId: 1, remoteJid: '62811@s.whatsapp.net', phone: '62811', photoUrl: null as string | null };
@@ -28,6 +28,8 @@ beforeEach(() => {
   cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'avatar-'));
   resetAvatarAttempts();
   mocks.update.mockReset();
+  mocks.update.mockResolvedValue({});
+  mocks.checkedAt = null;
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -40,7 +42,7 @@ describe('Foto profil WhatsApp', () => {
     const url = await refreshProspectAvatar({ ...base }, { cwd, now: 1_790_000_000_000 });
     expect(url).toMatch(/^\/uploads\/avatars\/p7-1790000000000-[a-f0-9]+\.jpg$/);
     expect(fs.readFileSync(path.join(cwd, 'uploads', 'avatars', path.basename(url!))).equals(JPEG)).toBe(true);
-    expect(mocks.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { photoUrl: url } });
+    expect(mocks.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { photoUrl: url, photoCheckedAt: new Date(1_790_000_000_000) } });
   });
 
   it('URL CDN lama yang tersimpan dianggap basi dan diganti salinan lokal', async () => {
@@ -61,6 +63,34 @@ describe('Foto profil WhatsApp', () => {
     expect(await refreshProspectAvatar({ ...base }, { cwd })).toBeNull();
     expect(await refreshProspectAvatar({ ...base }, { cwd })).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    // Tercatat di database: setelah API restart (memori kosong) tidak ditanyakan lagi ke WhatsApp.
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ data: { photoCheckedAt: expect.any(Date) } }));
+  });
+
+  it('sudah dicek belum lama ini (database): tidak memanggil WhatsApp walau API baru restart', async () => {
+    const fetchMock = stubNetwork({ gatewayUrl: 'https://pps.whatsapp.net/x.jpg' });
+    mocks.checkedAt = new Date(Date.now() - 60_000);
+    expect(await refreshProspectAvatar({ ...base }, { cwd })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('gateway tidak menjawab: tidak dicatat sudah dicek', async () => {
+    stubNetwork({ gatewayOk: false });
+    expect(await refreshProspectAvatar({ ...base }, { cwd })).toBeNull();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('permintaan ke WhatsApp diantre satu per satu per device', async () => {
+    let active = 0;
+    let peak = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      active += 1; peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { ok: true, json: async () => ({ data: { url: null } }) } as Response;
+    }));
+    await refreshProspectAvatars([1, 2, 3, 4].map((id) => ({ ...base, id })), 4);
+    expect(peak).toBe(1);
   });
 
   it('menolak isi yang bukan gambar', async () => {

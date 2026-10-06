@@ -61,7 +61,7 @@ contactsRouter.get('/devices', asyncHandler(async (req, res) => {
       let realContactCount = 0;
       let messageCount = 0;
 
-      if (b.whatsappSession?.status === 'connected') {
+      if (b.whatsappSession?.status === 'connected' || b.whatsappSession?.status === 'connecting') {
         const conversations = await getLivechatConversationsForBrand(b.id);
         const validContacts = conversations.filter((c) => !c.isOwn && c.remoteJid !== '0@s.whatsapp.net');
         realContactCount = validContacts.length;
@@ -96,7 +96,7 @@ contactsRouter.get('/', asyncHandler(async (req, res) => {
 
   // 1. Fetch all connected brands
   const connectedBrands = (await prisma.brand.findMany({
-    where: { whatsappSession: { status: 'connected' } },
+    where: { whatsappSession: { status: { in: ['connected', 'connecting'] } } },
     include: { whatsappSession: true },
     orderBy: { id: 'asc' },
   })).filter((brand) => canSeeBrand(req, brand.id));

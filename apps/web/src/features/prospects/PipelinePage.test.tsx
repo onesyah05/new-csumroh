@@ -51,16 +51,15 @@ afterEach(() => {
 });
 
 describe('Pipeline', () => {
-  it('mobile kembali ke Tabel secara bawaan dan dapat beralih ke Papan', async () => {
+  it('mobile menampilkan Papan secara bawaan dan dapat beralih ke Tabel', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     renderAs('admin', '/pipeline');
-    expect(await screen.findByRole('table')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Tabel$/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Ekspor CSV' })).toBeTruthy();
-    expect(screen.queryByRole('combobox', { name: 'Tahap prospek' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /^Papan$/ }));
     expect(await screen.findByRole('article', { name: 'Kartu prospek Deal Syawal' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Papan$/ }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByRole('table')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Tabel$/ }));
+    expect(await screen.findByRole('table')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ekspor CSV' })).toBeTruthy();
   });
   it('lingkup Deal digabung dengan filter paket (AND), dari URL; tautan lama ?quick=won tetap berlaku', async () => {
     renderAs('admin', '/pipeline?view=table&lingkup=deal&paket=10');

@@ -9,7 +9,8 @@ import { normalizePhoneIdentifier } from './outbound.js';
  */
 export async function activeDevicePhone(brandId: number): Promise<string | null> {
   const session = await prisma.whatsappSession.findUnique({ where: { brandId }, select: { status: true, phoneNumber: true } });
-  if (session?.status !== 'connected') return null;
+  // Menyambung ulang = device yang sama, sedang tersambung kembali: daftar tetap tampil (kirim menunggu tersambung).
+  if (session?.status !== 'connected' && session?.status !== 'connecting') return null;
   return normalizePhoneIdentifier(session.phoneNumber) || null;
 }
 
