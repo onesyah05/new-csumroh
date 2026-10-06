@@ -226,6 +226,22 @@ describe('Layanan custom', () => {
     expect(state.logs.some((log) => log.actionType === 'invoice_voided')).toBe(true);
   });
 
+  it('membatalkan atau menghitung ulang custom yang sudah disepakati ikut membatalkan invoice harga custom', async () => {
+    for (const action of ['cancel', 'revision'] as const) {
+      state.requests = []; state.logs = [];
+      Object.assign(state.prospects[0]!, { status: 'qualified', invoiceSentAt: null, invoiceAmount: 0, invoiceNumber: null });
+      await call('post', '/prospect/:prospectId', { params: { prospectId: '1' }, body: need });
+      await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: quote });
+      await call('post', '/:id/agree', { params: { id: '1' }, body: { agreedPrice: 72_000_000 } });
+      Object.assign(state.prospects[0]!, { status: 'closing', invoiceSentAt: new Date(), invoiceAmount: 20_000_000, invoiceNumber: 'INV/202609/0002' });
+      const result = await call('post', `/:id/${action}`, { params: { id: '1' }, body: { note: 'Jamaah ganti rencana' } });
+      expect(result.status).toBe(200);
+      // Jamaah tidak bisa lagi membayar invoice lama yang lalu dicatat dengan harga katalog.
+      expect(state.prospects[0]).toMatchObject({ status: 'offer', invoiceNumber: null, invoiceAmount: 0, invoiceSentAt: null, dealValue: 0 });
+      expect(state.logs.some((log) => log.actionType === 'invoice_voided')).toBe(true);
+    }
+  });
+
   it('bulan keberangkatan dan budget custom mengisi Kualifikasi yang masih kosong', async () => {
     Object.assign(state.prospects[0]!, { status: 'contact', targetMonth: null, budgetRange: null });
     await call('post', '/prospect/:prospectId', { params: { prospectId: '1' }, body: need });

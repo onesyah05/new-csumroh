@@ -117,6 +117,22 @@ const pax = (input: { paxQuad: number; paxTriple: number; paxDouble: number; pax
 
 type ProspectRow = NonNullable<Awaited<ReturnType<typeof prisma.prospect.findFirst>>>;
 
+const hasOpenInvoice = (prospect: ProspectRow) => Boolean(prospect.invoiceSentAt && Number(prospect.invoiceAmount) > 0);
+
+/**
+ * Invoice yang terkirim memakai harga custom yang tidak berlaku lagi: dibatalkan agar jamaah tidak membayar invoice lama
+ * yang lalu diverifikasi dengan harga lain. Closing kembali ke Penawaran; CS mengirim invoice baru setelah harga baru.
+ */
+async function voidOpenInvoice(tx: Prisma.TransactionClient, userId: number, prospect: ProspectRow, description: string) {
+  await tx.prospect.update({
+    where: { id: prospect.id },
+    data: { invoiceNumber: null, invoiceAmount: 0, invoiceSentAt: null, invoiceDueAt: null, invoiceMessageId: null, ...(prospect.status === 'closing' ? { status: 'offer' } : {}) },
+  });
+  await tx.prospectLog.create({
+    data: { prospectId: prospect.id, userId, actionType: 'invoice_voided', title: `Invoice ${prospect.invoiceNumber ?? ''} dibatalkan`.trim(), description },
+  });
+}
+
 /** Jamaah prospek = jamaah permintaan custom; bulan & budget mengisi Kualifikasi bila kosong, lalu naik ke Terkualifikasi bila lengkap. */
 async function syncProspect(tx: Prisma.TransactionClient, userId: number, prospect: ProspectRow, input: CustomRequestInput, row: { departureDate: Date | null; budgetPerPax: unknown }) {
   const qualification = qualificationFromCustom(row, prospect);
@@ -207,7 +223,7 @@ customRouter.patch('/:id', asyncHandler(async (req, res) => {
   const input = customRequestInputSchema.parse(req.body);
   const { revisionNote: extraNote, voidInvoice } = z.object({ revisionNote: z.string().trim().max(1000).optional(), voidInvoice: z.boolean().optional() }).parse(req.body ?? {});
   // Invoice yang sudah terkirim memakai harga lama: dibatalkan secara sadar sebelum kebutuhan boleh diubah.
-  const invoiceOpen = Boolean(prospect.invoiceSentAt && Number(prospect.invoiceAmount) > 0);
+  const invoiceOpen = hasOpenInvoice(prospect);
   if (priced && invoiceOpen && !voidInvoice) {
     throw new HttpError(409, `Invoice ${prospect.invoiceNumber ?? ''} sudah terkirim. Konfirmasi pembatalan invoice untuk mengubah kebutuhan.`.replace('  ', ' '));
   }
@@ -219,16 +235,7 @@ customRouter.patch('/:id', asyncHandler(async (req, res) => {
     await syncProspect(tx, req.user!.id, prospect, input, row);
     const after = await describeCustom(row, tx);
     if (priced && invoiceOpen) {
-      await tx.prospect.update({
-        where: { id: prospect.id },
-        data: { invoiceNumber: null, invoiceAmount: 0, invoiceSentAt: null, invoiceDueAt: null, invoiceMessageId: null, ...(prospect.status === 'closing' ? { status: 'offer' } : {}) },
-      });
-      await tx.prospectLog.create({
-        data: {
-          prospectId: prospect.id, userId: req.user!.id, actionType: 'invoice_voided', title: `Invoice ${prospect.invoiceNumber ?? ''} dibatalkan`.trim(),
-          description: 'Kebutuhan layanan custom berubah; kirim invoice baru setelah harga baru disepakati.',
-        },
-      });
+      await voidOpenInvoice(tx, req.user!.id, prospect, 'Kebutuhan layanan custom berubah; kirim invoice baru setelah harga baru disepakati.');
     }
     const changes = diffLines(before, after);
     if (priced || resubmit) {
@@ -294,6 +301,7 @@ customRouter.post('/:id/revision', asyncHandler(async (req, res) => {
   await prisma.$transaction(async (tx) => {
     await tx.customRequest.update({ where: { id: current.id }, data: { status: 'revision_requested', revisionNote: note, agreedPrice: null, agreedAt: null, queuedAt: new Date(), claimedById: null, claimedAt: null } });
     if (current.status === 'agreed') await tx.prospect.update({ where: { id: prospect.id }, data: { dealValue: 0 } });
+    if (current.status === 'agreed' && hasOpenInvoice(prospect)) await voidOpenInvoice(tx, req.user!.id, prospect, 'Harga layanan custom dihitung ulang; kirim invoice baru setelah harga baru disepakati.');
     await tx.prospectLog.create({
       data: {
         prospectId: prospect.id, userId: req.user!.id, actionType: 'custom_revision', title: 'Layanan custom diminta hitung ulang',
@@ -347,6 +355,7 @@ customRouter.post('/:id/cancel', asyncHandler(async (req, res) => {
     await tx.customRequest.update({ where: { id: current.id }, data: { status: 'cancelled' } });
     // Nilai deal custom tidak lagi berlaku; penawaran berikutnya dihitung ulang dari paket katalog.
     if (current.status === 'agreed') await tx.prospect.update({ where: { id: prospect.id }, data: { dealValue: 0 } });
+    if (current.status === 'agreed' && hasOpenInvoice(prospect)) await voidOpenInvoice(tx, req.user!.id, prospect, 'Layanan custom dibatalkan; invoice dengan harga custom tidak berlaku.');
     await tx.prospectLog.create({
       data: { prospectId: prospect.id, userId: req.user!.id, actionType: 'custom_cancelled', title: 'Layanan custom dibatalkan', description: note || null },
     });
