@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   claimed: new Set<string>(),
   runs: [] as string[],
+  releaseCapi: null as null | (() => void),
 }));
 
 vi.mock('../modules/notifications/jobs.js', async () => {
@@ -23,18 +24,36 @@ vi.mock('../modules/notifications/jobs.js', async () => {
   };
 });
 vi.mock('../modules/notifications/notification.events.js', () => ({ notifyWhatsappDisconnected: vi.fn() }));
-vi.mock('../modules/capi/capi.service.js', () => ({ capiSyncJob: async () => { mocks.runs.push('capi-sync'); } }));
+vi.mock('../modules/capi/capi.service.js', () => ({
+  capiSyncJob: async () => {
+    mocks.runs.push('capi-sync');
+    if (mocks.releaseCapi === null) await new Promise<void>((resolve) => { mocks.releaseCapi = resolve; });
+  },
+}));
 vi.mock('../modules/chat/chat.routes.js', () => ({ getLivechatConversationsForBrand: vi.fn() }));
 vi.mock('../db/prisma.js', () => ({ prisma: {} }));
 
-import { runTick } from './scheduler.js';
+import { backgroundJobsSettled, runTick } from './scheduler.js';
 
-beforeEach(() => {
+beforeEach(async () => {
+  mocks.releaseCapi?.();
+  mocks.releaseCapi = () => undefined;
+  await backgroundJobsSettled();
   mocks.claimed.clear();
   mocks.runs = [];
 });
 
 describe('scheduler', () => {
+  it('sinkron CAPI yang lambat tidak menahan job menit berikutnya dan tidak jalan tumpang tindih', async () => {
+    mocks.releaseCapi = null; // capi-sync menggantung sampai dilepas
+    await runTick(new Date('2026-09-24T02:00:00Z'));
+    await runTick(new Date('2026-09-24T02:01:00Z'));
+    expect(mocks.runs.filter((r) => r === 'reply-sla')).toHaveLength(2);
+    expect(mocks.runs.filter((r) => r === 'capi-sync')).toHaveLength(1);
+    mocks.releaseCapi!();
+    await backgroundJobsSettled();
+  });
+
   it('satu putaran per menit walau dipanggil dua kali (proses kedua dilewati)', async () => {
     const at = new Date('2026-09-24T02:00:10Z'); // 09.00 WIB
     expect(await runTick(at)).toBe(true);
