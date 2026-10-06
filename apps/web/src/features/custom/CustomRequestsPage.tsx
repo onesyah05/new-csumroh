@@ -156,7 +156,7 @@ export function CustomRequestsPage() {
         {!selectedId ? <EmptyState title="Pilih permintaan" description="Rincian kebutuhan jamaah dan form harga tampil di sini." />
           : detail.isLoading ? <PageLoading label="Memuat rincian" />
           : detail.isError || !detail.data ? <PageError description={detail.error?.message} onRetry={() => void detail.refetch()} />
-          : <RequestDetail key={`${detail.data.id}:${detail.data.updatedAt}`} request={detail.data} canPrice={canPrice} userId={user?.id} onBack={() => open(null)} />}
+          : <RequestDetail key={`${detail.data.id}:${detail.data.requirementsUpdatedAt}`} request={detail.data} canPrice={canPrice} userId={user?.id} onBack={() => open(null)} />}
       </section>
     </div>
   </div>;
@@ -168,7 +168,7 @@ function RequestDetail({ request, canPrice, userId, onBack }: { request: CustomR
   const canReturn = canPrice && ['submitted', 'revision_requested'].includes(request.status);
   // Kebutuhan diubah CS setelah masuk antrean (Tim LA mungkin sudah mulai menghitung).
   const editedByCs = (status === 'submitted' || status === 'revision_requested') && Boolean(request.queuedAt)
-    && new Date(request.updatedAt).getTime() - new Date(request.queuedAt!).getTime() > 5_000;
+    && new Date(request.requirementsUpdatedAt).getTime() - new Date(request.queuedAt!).getTime() > 5_000;
   const [returning, setReturning] = useState(false);
   const [returnNote, setReturnNote] = useState('');
   const [pkgOpen, setPkgOpen] = useState(false);
@@ -216,7 +216,7 @@ function RequestDetail({ request, canPrice, userId, onBack }: { request: CustomR
         : <Button size="sm" variant={claimedByOther ? 'secondary' : 'primary'} loading={claim.isPending} onClick={() => claim.mutate('claim')}>{claimedByOther ? 'Ambil alih' : 'Ambil untuk dihitung'}</Button>}
       {claim.error && <p role="alert" className="w-full text-rose-700">{claim.error.message}</p>}
     </div>}
-    {editedByCs && <p role="status" className="rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-800"><b className="font-semibold">Diubah CS {sinceLabel(request.updatedAt)} lalu.</b> Rincian di bawah sudah versi terbaru.</p>}
+    {editedByCs && <p role="status" className="rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-800"><b className="font-semibold">Diubah CS {sinceLabel(request.requirementsUpdatedAt)} lalu.</b> Rincian di bawah sudah versi terbaru.</p>}
     {request.status === 'revision_requested' && request.revisionNote && <p className="whitespace-pre-line rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Hitung ulang: {request.revisionNote}</p>}
     {request.status === 'needs_info' && request.returnNote && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Dikembalikan ke CS: {request.returnNote}</p>}
 
@@ -274,7 +274,7 @@ function QuoteForm({ request, claimedByOther }: { request: CustomRequest; claime
   const invalidRooms = rooms.filter((room) => offered[room.key] && floor[room.key] && floor[room.key]! > offered[room.key]!);
   const save = useMutation({
     mutationFn: (force: boolean) => api.post<CustomRequest>(`/custom-requests/${request.id}/quote`, {
-      version: request.updatedAt, force, offeredPrices: offered, floorPrices: floor, minDpPerPax: dp, minDpInfant: hasInfant ? dpInfant : null, validUntil: validity === 'date' ? validUntil : null, note: note.trim() || null,
+      version: request.requirementsUpdatedAt, force, offeredPrices: offered, floorPrices: floor, minDpPerPax: dp, minDpInfant: hasInfant ? dpInfant : null, validUntil: validity === 'date' ? validUntil : null, note: note.trim() || null,
     }),
     onSuccess: () => {
       setConfirmForce(false);

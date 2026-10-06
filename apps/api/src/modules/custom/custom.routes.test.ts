@@ -201,15 +201,24 @@ describe('Layanan custom', () => {
 
   it('mengubah kebutuhan yang sedang dihitung memberi tahu Tim LA; harga dari versi lama ditolak', async () => {
     await call('post', '/prospect/:prospectId', { params: { prospectId: '1' }, body: need });
-    const version = state.requests[0]!.updatedAt.toISOString();
+    const version = state.requests[0]!.requirementsUpdatedAt.toISOString();
     await new Promise((resolve) => setTimeout(resolve, 5));
     await call('patch', '/:id', { params: { id: '1' }, body: { ...need, hotelMakkah: 'Swissotel' } });
     expect(state.notified.at(-1)).toBe('updated');
     const stale = await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: { ...quote, version } });
     expect(stale.status).toBe(409);
     expect(stale.error).toContain('Muat ulang');
-    const fresh = await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: { ...quote, version: state.requests[0]!.updatedAt.toISOString() } });
+    const fresh = await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: { ...quote, version: state.requests[0]!.requirementsUpdatedAt.toISOString() } });
     expect(fresh.status).toBe(200);
+  });
+
+  it('klaim dan lepas oleh Tim LA tidak mengubah versi kebutuhan', async () => {
+    await call('post', '/prospect/:prospectId', { params: { prospectId: '1' }, body: need });
+    const version = state.requests[0]!.requirementsUpdatedAt.toISOString();
+    await call('post', '/:id/claim', { user: users.product, params: { id: '1' } });
+    await call('post', '/:id/release', { user: users.product, params: { id: '1' } });
+    const result = await call('post', '/:id/quote', { user: users.product2, params: { id: '1' }, body: { ...quote, version } });
+    expect(result.status).toBe(200);
   });
 
   it('invoice yang sudah terkirim harus dibatalkan secara sadar sebelum kebutuhan diubah', async () => {

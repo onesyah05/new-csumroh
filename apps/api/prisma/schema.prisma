@@ -580,6 +580,8 @@ model CustomRequest {
   queuedAt            DateTime?           @map("queued_at")
   /// Berapa kali harga dihitung; > 1 = harga diperbarui.
   quoteCount          Int                 @default(0) @map("quote_count")
+  /// Terakhir CS mengubah kebutuhan (kirim/ubah). Versi harga Tim LA; klaim/lepas Tim LA tidak mengubahnya.
+  requirementsUpdatedAt DateTime          @default(now()) @map("requirements_updated_at")
   agreedPrice         Decimal?            @map("agreed_price") @db.Decimal(15, 2)
   agreedAt            DateTime?           @map("agreed_at")
   createdAt           DateTime            @default(now()) @map("created_at")

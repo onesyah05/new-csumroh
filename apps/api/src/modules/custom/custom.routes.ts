@@ -102,6 +102,7 @@ function toData(input: CustomRequestInput, pkg: BasePackage) {
       : { departureNote: null, extendNightsMakkah: null, extendNightsMadinah: null, servicesRemoved: Prisma.DbNull, servicesAdded: Prisma.DbNull }),
     extraHotels: input.extraHotels as unknown as Prisma.InputJsonValue,
     basePackageId: input.basePackageId ?? null,
+    requirementsUpdatedAt: new Date(),
   };
 }
 
@@ -377,7 +378,7 @@ customRouter.post('/:id/quote', requireRole(...PRICING_ROLES), asyncHandler(asyn
   if (current.claimedById && current.claimedById !== req.user!.id && !force) {
     throw new HttpError(409, `Sedang dihitung ${current.claimedBy?.name ?? 'anggota Tim LA lain'}. Konfirmasi untuk tetap mengirim harga.`);
   }
-  if (version && version !== current.updatedAt.toISOString()) {
+  if (version && version !== current.requirementsUpdatedAt.toISOString()) {
     throw new HttpError(409, 'Kebutuhan baru saja diubah CS. Muat ulang rincian sebelum mengirim harga.');
   }
   const validUntil = quoteValidUntil(input.validUntil);
