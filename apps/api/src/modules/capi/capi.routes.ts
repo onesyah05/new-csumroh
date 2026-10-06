@@ -76,8 +76,10 @@ capiRouter.get('/settings', asyncHandler(async (req, res) => {
 capiRouter.put('/settings', asyncHandler(async (req, res) => {
   const input = settingsSchema.parse(req.body);
   const brandId = scopedBrandId(req, input.brandId);
-  const current = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true, metaAdsAccessToken: true } });
+  const current = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true, metaAdsAccessToken: true, metaAdAccountId: true } });
   if (!current) throw new HttpError(404, 'Brand tidak ditemukan.');
+  // Audiens spam milik ad account lama: tidak bisa dipakai set iklan ad account baru. Dibuat ulang saat sinkron berikutnya.
+  const adAccountChanged = (input.adAccountId || null) !== (current.metaAdAccountId ?? null);
 
   let metaAccessToken = current.metaAccessToken;
   if (input.clearAccessToken) metaAccessToken = null;
@@ -98,6 +100,7 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
       metaAdsAccessToken,
       metaVerifiedAt: null,
       metaLastError: null,
+      ...(adAccountChanged ? { metaSpamAudienceId: null, metaSpamSyncedAt: null } : {}),
     },
   });
   // Laporan iklan di-cache per ad account: token/ad account baru harus langsung terpakai.

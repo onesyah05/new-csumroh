@@ -371,8 +371,8 @@ reportsRouter.get('/ads', asyncHandler(async (req, res) => {
       leads: leadCount,
       deals: myDeals.length,
       purchaseValue,
-      cpl: spend !== null && leadCount ? Math.round(spend / leadCount) : null,
-      cac: spend !== null && myDeals.length ? Math.round(spend / myDeals.length) : null,
+      cpl: spend && leadCount ? Math.round(spend / leadCount) : null,
+      cac: spend && myDeals.length ? Math.round(spend / myDeals.length) : null,
       roas: spend ? Math.round((purchaseValue / spend) * 100) / 100 : null,
     };
   });
