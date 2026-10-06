@@ -3,6 +3,7 @@ import { effectiveNotificationPreference, notificationCatalog, notificationTypes
 import {
   PIC_TAKEOVER_AFTER_MINUTES,
   firstUnansweredAt,
+  isOperationalTime,
   isTakeoverOpen,
   takeoverOpensAt,
   businessDateKey,
@@ -98,12 +99,37 @@ describe('ambil alih PIC setelah 15 menit belum dibalas', () => {
     expect(firstUnansweredAt([...messages, { timestamp: 1000, isFromMe: true }])).toBeNull();
   });
 
-  it('terbuka tepat 15 menit setelah pesan pertama yang belum dibalas', () => {
-    const since = 1_700_000_000;
+  const wib = (iso: string) => new Date(`${iso}+07:00`).getTime();
+
+  it('jam operasional: terbuka tepat 15 menit setelah pesan pertama yang belum dibalas', () => {
+    const since = wib('2026-10-06T10:00:00') / 1000;
     expect(isTakeoverOpen(since, (since + 14 * 60) * 1000)).toBe(false);
     expect(isTakeoverOpen(since, (since + 15 * 60) * 1000)).toBe(true);
     expect(isTakeoverOpen(null)).toBe(false);
-    expect(takeoverOpensAt(since)).toBe((since + PIC_TAKEOVER_AFTER_MINUTES * 60) * 1000);
+    expect(takeoverOpensAt(since, since * 1000)).toBe((since + PIC_TAKEOVER_AFTER_MINUTES * 60) * 1000);
+  });
+
+  it('di luar jam operasional (22.00–08.00 WIB) PIC tetap terkunci; terbuka lagi tepat 08.00', () => {
+    // Chat 21.30: terbuka 21.45, terkunci mulai 22.00, terbuka lagi 08.00 besok.
+    const evening = wib('2026-10-06T21:30:00') / 1000;
+    expect(isTakeoverOpen(evening, wib('2026-10-06T21:50:00'))).toBe(true);
+    expect(isTakeoverOpen(evening, wib('2026-10-06T22:00:00'))).toBe(false);
+    expect(isTakeoverOpen(evening, wib('2026-10-07T07:59:00'))).toBe(false);
+    expect(isTakeoverOpen(evening, wib('2026-10-07T08:00:00'))).toBe(true);
+    expect(takeoverOpensAt(evening, wib('2026-10-06T23:00:00'))).toBe(wib('2026-10-07T08:00:00'));
+    // Chat 21.55: 15 menit jatuh 22.10 (di luar jam) → terbuka tepat 08.00.
+    expect(takeoverOpensAt(wib('2026-10-06T21:55:00') / 1000, wib('2026-10-06T21:56:00'))).toBe(wib('2026-10-07T08:00:00'));
+    // Chat dini hari 03.00 → terbuka 08.00 hari yang sama.
+    expect(takeoverOpensAt(wib('2026-10-07T03:00:00') / 1000, wib('2026-10-07T03:00:00'))).toBe(wib('2026-10-07T08:00:00'));
+    // Chat 07.50 → 15 menit jatuh 08.05 (jam operasional).
+    expect(takeoverOpensAt(wib('2026-10-07T07:50:00') / 1000, wib('2026-10-07T07:51:00'))).toBe(wib('2026-10-07T08:05:00'));
+  });
+
+  it('batas jam operasional: 08.00 masuk, 22.00 sudah di luar', () => {
+    expect(isOperationalTime(wib('2026-10-06T07:59:59'))).toBe(false);
+    expect(isOperationalTime(wib('2026-10-06T08:00:00'))).toBe(true);
+    expect(isOperationalTime(wib('2026-10-06T21:59:59'))).toBe(true);
+    expect(isOperationalTime(wib('2026-10-06T22:00:00'))).toBe(false);
   });
 });
 

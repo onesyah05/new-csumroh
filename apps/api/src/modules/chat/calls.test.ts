@@ -34,7 +34,6 @@ vi.mock('../notifications/notification.events.js', () => ({
   dispatch: (task: () => unknown) => task(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn(),
   notifyLeadAssigned: vi.fn(), notifyInboundMessage: mocks.notifyInboundMessage, notifyIncomingCall: mocks.notifyIncomingCall, notifyCallEnded: mocks.notifyCallEnded,
 }));
-vi.mock('../prospects/pic.js', () => ({ pickAutoAssignee: vi.fn(async () => null) }));
 vi.mock('../capi/capi.service.js', () => ({ dispatchCapiEvent: vi.fn(async () => undefined), queueCapiForStatus: vi.fn() }));
 vi.mock('../prospects/referral.service.js', () => ({ attachReferralMarker: vi.fn(async () => false), normalizeReferralMarker: () => null, storedReferral: () => undefined }));
 

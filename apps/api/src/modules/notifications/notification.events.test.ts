@@ -32,7 +32,7 @@ vi.mock('../../db/prisma.js', () => ({
   },
 }));
 
-import { notifyPaymentVerified, notifyPicChange, notifyProofSubmitted, notifyQuotaAfterBooking, onWhatsappStatus, refreshProofSummary } from './notification.events.js';
+import { notifyInboundMessage, notifyPaymentVerified, notifyPicChange, notifyProofSubmitted, notifyQuotaAfterBooking, onWhatsappStatus, refreshProofSummary } from './notification.events.js';
 
 const prospect = { id: 7, brandId: 1, name: 'Ibu Aisyah' };
 const sent = () => mocks.notify.mock.calls.map(([arg]: any) => arg);
@@ -124,5 +124,13 @@ describe('ringkasan bukti transfer untuk Finance', () => {
     mocks.pendingProofs.mockResolvedValueOnce([]);
     await refreshProofSummary();
     expect(mocks.resolve).toHaveBeenCalledWith({ types: ['payment.proof_new'] });
+  });
+});
+
+describe('Pesan masuk', () => {
+  it('prospek tanpa PIC: semua CS brand diberi tahu; prospek ber-PIC hanya ke PIC-nya', async () => {
+    await notifyInboundMessage({ ...prospect, userId: null }, { text: 'Assalamualaikum' });
+    await notifyInboundMessage({ ...prospect, userId: 21 }, { text: 'Jadi 3 orang' });
+    expect(sent().map((n) => n.userIds)).toEqual([[21, 22], [21]]);
   });
 });

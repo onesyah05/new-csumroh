@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   logCreate: vi.fn(),
   queueCapi: vi.fn(),
   stored: null as null | Record<string, unknown>,
-  pickAssignee: vi.fn(async () => null as null | { id: number; name: string }),
+  notifyInbound: vi.fn(),
 }));
 
 vi.mock('../../db/prisma.js', () => ({
@@ -27,10 +27,9 @@ vi.mock('../../db/prisma.js', () => ({
 vi.mock('./conversation-stats.js', () => ({ ensureConversationStats: vi.fn(), loadConversationWindows: vi.fn(), scheduleConversationStats: vi.fn(), summarizeMessages: vi.fn() }));
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: vi.fn() }));
 vi.mock('../notifications/notification.events.js', () => ({
-  dispatch: vi.fn(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn(),
-  notifyLeadAssigned: vi.fn(), notifyLeadUnassigned: vi.fn(), notifyInboundMessage: vi.fn(),
+  dispatch: (task: () => unknown) => task(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn(),
+  notifyLeadAssigned: vi.fn(), notifyLeadUnassigned: vi.fn(), notifyInboundMessage: mocks.notifyInbound,
 }));
-vi.mock('../prospects/pic.js', () => ({ pickAutoAssignee: mocks.pickAssignee }));
 vi.mock('../capi/capi.service.js', () => ({ dispatchCapiEvent: vi.fn(async () => undefined), queueCapiForStatus: mocks.queueCapi }));
 vi.mock('../prospects/referral.service.js', () => ({ attachReferralMarker: vi.fn(async () => false), normalizeReferralMarker: () => null, storedReferral: () => undefined }));
 
@@ -109,15 +108,17 @@ describe('Pesan WhatsApp masuk', () => {
   });
 });
 
-describe('PIC otomatis untuk lead baru', () => {
-  it('chat baru yang dimulai dari HP brand (realtime) juga mendapat PIC', async () => {
-    await incoming({ ...base, isFromMe: true });
-    expect(mocks.pickAssignee).toHaveBeenCalledWith(1);
+describe('Lead baru tanpa PIC otomatis', () => {
+  it('lead baru dari jamaah tanpa PIC; semua CS brand diberi tahu (siapa cepat membalas menjadi PIC)', async () => {
+    await incoming({ ...base });
+    expect(mocks.prospectCreate.mock.calls[0]![0].data.userId).toBeNull();
+    expect(mocks.notifyInbound).toHaveBeenCalledWith(expect.objectContaining({ userId: null }), expect.anything());
   });
 
-  it('chat lama dari sinkron riwayat yang dimulai brand tidak dibagi otomatis', async () => {
-    await incoming({ brandId: 1, messages: [{ ...base, isFromMe: true }] }, '/messages/history');
-    expect(mocks.pickAssignee).not.toHaveBeenCalled();
+  it('chat baru dari HP brand dan chat lama dari sinkron riwayat juga tanpa PIC', async () => {
+    await incoming({ ...base, isFromMe: true });
+    await incoming({ brandId: 1, messages: [{ ...base, messageId: 'H1' }] }, '/messages/history');
+    for (const call of mocks.prospectCreate.mock.calls) expect(call[0].data.userId).toBeNull();
   });
 });
 

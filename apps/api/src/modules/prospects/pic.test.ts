@@ -20,7 +20,7 @@ vi.mock('../../db/prisma.js', () => {
 vi.mock('../notifications/notification.events.js', () => ({ dispatch: vi.fn(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn() }));
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: mocks.emit }));
 
-import { canActOnProspect, pickAutoAssignee, releaseProspectsOf } from './pic.js';
+import { canActOnProspect, releaseProspectsOf } from './pic.js';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -32,29 +32,6 @@ describe('canActOnProspect', () => {
     expect(canActOnProspect({ id: 6, role: 'cs' }, { userId: 5 })).toBe(false);
     expect(canActOnProspect({ id: 9, role: 'finance' }, { userId: 5 })).toBe(false);
     expect(canActOnProspect({ id: 9, role: 'finance' }, { userId: 5 }, { finance: true })).toBe(true);
-  });
-});
-
-describe('pickAutoAssignee', () => {
-  it('memilih CS dengan prospek terbuka paling sedikit di brand ini, termasuk CS multi-brand', async () => {
-    mocks.userFindMany.mockResolvedValue([
-      { id: 3, name: 'Busy', _count: { prospects: 12 } },
-      { id: 4, name: 'Multi-brand', _count: { prospects: 2 } },
-      { id: 2, name: 'Also two', _count: { prospects: 2 } },
-    ]);
-    expect(await pickAutoAssignee(1)).toMatchObject({ id: 2 });
-    const query = mocks.userFindMany.mock.calls[0][0];
-    expect(query.where.OR).toEqual([{ brandId: 1 }, { userBrands: { some: { brandId: 1 } } }]);
-    // Deal/Batal (status baru dan lama) bukan beban; hitungan per brand.
-    expect(query.select._count.select.prospects.where).toEqual({
-      brandId: 1,
-      status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] },
-    });
-  });
-
-  it('tanpa CS aktif, lead masuk antrean', async () => {
-    mocks.userFindMany.mockResolvedValue([]);
-    expect(await pickAutoAssignee(1)).toBeNull();
   });
 });
 

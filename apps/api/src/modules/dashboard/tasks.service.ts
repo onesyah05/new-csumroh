@@ -1,4 +1,4 @@
-import { businessDateKey, dateOnlyKey, isLostStatus, isWonStatus, lostStatuses, PIC_TAKEOVER_AFTER_MINUTES, wonStatuses } from '@csumroh/shared-types';
+import { businessDateKey, dateOnlyKey, isLostStatus, isTakeoverOpen, isWonStatus, lostStatuses, PIC_TAKEOVER_AFTER_MINUTES, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { visibleProspectWhere } from '../chat/device-scope.js';
@@ -78,7 +78,9 @@ export async function tasksForCs(user: Actor, brandIds: number[], now = new Date
   const myWaiting = mine.filter((c) => isActiveWait(c, now));
   const myStale = mine.filter((c) => isStaleWait(c, now));
   const longest = Math.max(0, ...myWaiting.map((c) => waitedMinutes(c, now)));
-  const takeover = conversations.filter((c) => c.userId && c.userId !== user.id && isActiveWait(c, now) && waitedMinutes(c, now) >= PIC_TAKEOVER_AFTER_MINUTES);
+  // Mengikuti aturan ambil alih: 15 menit belum dibalas dan sedang jam operasional.
+  const takeover = conversations.filter((c) => c.userId && c.userId !== user.id && isActiveWait(c, now) && isTakeoverOpen(c.awaitingSince, now.getTime()));
+  const myTakeoverOpen = myWaiting.some((c) => isTakeoverOpen(c.awaitingSince, now.getTime()));
   const unassigned = conversations.filter((c) => !c.userId);
   const followToday = mine.filter((c) => dateOnlyKey(c.nextFollowupDate) === today).length;
   const followLate = mine.filter((c) => { const d = dateOnlyKey(c.nextFollowupDate); return d !== null && d < today; }).length;
@@ -89,7 +91,7 @@ export async function tasksForCs(user: Actor, brandIds: number[], now = new Date
     tasks: [
       task('reply', 'Menunggu balasan', myWaiting.length, '/pipeline?quick=reply&pic=mine', {
         urgent: longest >= REPLY_WARNING_MINUTES,
-        hint: myWaiting.length ? `Terlama ${longest} menit${longest >= PIC_TAKEOVER_AFTER_MINUTES ? ' · bisa diambil alih CS lain' : ''}` : null,
+        hint: myWaiting.length ? `Terlama ${longest} menit${myTakeoverOpen ? ' · bisa diambil alih CS lain' : ''}` : null,
         action: 'Balas',
       }),
       task('followup_today', 'Follow-up hari ini', followToday, '/pipeline?quick=today&pic=mine', { action: 'Follow-up' }),

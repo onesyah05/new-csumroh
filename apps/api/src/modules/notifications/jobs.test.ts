@@ -60,6 +60,15 @@ describe('SLA balasan', () => {
     expect(mocks.resolve).not.toHaveBeenCalled();
   });
 
+  it('di luar jam operasional: tidak ada ajakan ambil alih, tetapi eskalasi ke Admin tetap jalan', async () => {
+    const NIGHT = new Date('2026-09-24T16:00:00Z'); // 23.00 WIB
+    const since = Math.floor(NIGHT.getTime() / 1000) - 35 * 60;
+    await replySlaForBrand(1, [conversation({ awaitingSince: since })], NIGHT);
+    expect(sent().map((n) => n.type)).not.toContain('reply.takeover_open');
+    expect(mocks.resolve).toHaveBeenCalledWith({ entity: { type: 'brand', id: 1 }, types: ['reply.takeover_open'] });
+    expect(summaries()['reply.escalation'].count).toBe(1);
+  });
+
   it('30 menit: eskalasi ke Admin sebagai satu ringkasan per brand (jumlah saat ini)', async () => {
     await replySlaForBrand(1, [conversation({ awaitingSince: minutesAgo(35) }), conversation({ id: 2, name: 'Pak Umar', awaitingSince: minutesAgo(50) })], NOW);
     expect(sent().map((n) => n.type)).toEqual(['reply.takeover_open', 'reply.takeover_open']);
