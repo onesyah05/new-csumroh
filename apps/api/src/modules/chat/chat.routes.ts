@@ -985,18 +985,22 @@ chatRouter.get('/wa/status', asyncHandler(async (req, res) => {
 export const internalRouter = Router();
 internalRouter.use((req, _res, next) => (secretMatches(req.get('x-internal-secret'), env.WA_GATEWAY_SECRET) ? next() : next(new HttpError(401, 'Internal secret tidak valid.'))));
 
+/** Teks tampilan dari WhatsApp dipotong, bukan ditolak: satu nilai kepanjangan tidak boleh membuang pesan/batch. */
+const clipped = (max: number) => z.string().transform((value) => value.slice(0, max));
+
 const gatewayMessageSchema = z.object({
   brandId: z.coerce.number().int().positive(),
   messageId: z.string().min(1).max(100),
   remoteJid: z.string().min(3).max(100),
   phone: z.string().max(30).optional().default(''),
-  senderName: z.string().max(100).optional(),
+  senderName: clipped(100).optional(),
   text: z.string().optional().default(''),
   timestamp: z.coerce.number().int().nonnegative(),
-  messageType: z.string().max(30).optional().default('conversation'),
+  // WAProto punya tipe lebih dari 30 karakter (mis. newsletterFollowerInviteMessageV2).
+  messageType: clipped(30).optional().default('conversation'),
   mediaUrl: z.string().max(10_000).optional(),
   isFromMe: z.boolean().optional().default(false),
-  status: z.string().max(30).optional().default('delivered'),
+  status: clipped(30).optional().default('delivered'),
   referral: z.unknown().optional(),
   // Nomor akun WhatsApp yang menerima/mengirim pesan (dari gateway).
   devicePhone: z.string().max(40).optional(),
@@ -1459,9 +1463,16 @@ internalRouter.post('/messages/incoming', asyncHandler(async (req, res) => {
 }));
 
 internalRouter.post('/messages/history', asyncHandler(async (req, res) => {
-  const input = z.object({ brandId: z.coerce.number().int().positive(), devicePhone: z.string().max(40).optional(), messages: z.array(gatewayMessageSchema).max(100) }).parse(req.body);
+  const input = z.object({ brandId: z.coerce.number().int().positive(), devicePhone: z.string().max(40).optional(), messages: z.array(z.unknown()).max(100) }).parse(req.body);
   const messages = [];
-  for (const item of input.messages) {
+  // Divalidasi per pesan: satu pesan rusak dilewati, bukan menggagalkan (lalu membuang) 49 pesan lain di batch.
+  for (const raw of input.messages) {
+    const parsed = gatewayMessageSchema.safeParse(raw);
+    if (!parsed.success) {
+      console.warn('Skipping invalid history message', parsed.error.issues[0]?.path.join('.'), parsed.error.issues[0]?.message);
+      continue;
+    }
+    const item = parsed.data;
     if (item.brandId !== input.brandId) throw new HttpError(400, 'Brand histori pesan tidak konsisten.');
     const result = await ingestGatewayMessage({ ...item, devicePhone: item.devicePhone ?? input.devicePhone }, { realtime: false });
     if (result) messages.push(result);
@@ -1475,19 +1486,24 @@ const gatewayContactSchema = z.object({
   brandId: z.coerce.number().int().positive(),
   remoteJid: z.string().min(3).max(100),
   phone: z.string().max(30).optional().default(''),
-  name: z.string().trim().min(1).max(100).optional(),
+  name: z.string().trim().min(1).transform((value) => value.slice(0, 100)).optional(),
 });
 
 internalRouter.post('/contacts/sync', asyncHandler(async (req, res) => {
   const input = z.object({
     brandId: z.coerce.number().int().positive(),
     devicePhone: z.string().max(40).optional(),
-    contacts: z.array(gatewayContactSchema).max(100),
+    contacts: z.array(z.unknown()).max(100),
   }).parse(req.body);
   let imported = 0;
   invalidateLidPhoneMap(input.brandId);
   const devicePhone = normalizePhoneIdentifier(input.devicePhone) || await activeDevicePhone(input.brandId);
-  for (const contact of input.contacts) {
+  // Divalidasi per kontak: satu kontak rusak dilewati, bukan menggagalkan seluruh batch.
+  const contacts = input.contacts.flatMap((raw) => {
+    const parsed = gatewayContactSchema.safeParse(raw);
+    return parsed.success ? [parsed.data] : [];
+  });
+  for (const contact of contacts) {
     if (contact.brandId !== input.brandId) throw new HttpError(400, 'Brand kontak tidak konsisten.');
     const phone = normalizePhoneIdentifier(contact.phone);
     // WhatsApp makin sering menyembunyikan nomor (alamat @lid). Kontak seperti itu tetap membawa nama profil:

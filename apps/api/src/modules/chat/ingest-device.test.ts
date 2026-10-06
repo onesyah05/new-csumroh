@@ -120,6 +120,19 @@ describe('PIC otomatis untuk lead baru', () => {
   });
 });
 
+describe('Batch riwayat dari gateway', () => {
+  it('satu pesan rusak dilewati, pesan lain di batch tetap masuk; tipe pesan panjang dipotong', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await incoming({ brandId: 1, messages: [
+      { ...base, messageId: 'BAD', timestamp: 'bukan angka' },
+      { ...base, messageId: 'LONG', messageType: 'newsletterFollowerInviteMessageV2' },
+    ] }, '/messages/history');
+    const created = mocks.messageUpsert.mock.calls.map((call) => call[0].create);
+    expect(created.map((item) => item.messageId)).toEqual(['LONG']);
+    expect(created[0].messageType).toBe('newsletterFollowerInviteMessag');
+  });
+});
+
 describe('Balas dari device aktif', () => {
   it('kontak milik nomor lain tidak bisa dibalas dari device aktif', () => {
     expect(() => sendingDevicePhone({ devicePhone: '628111' }, { phoneNumber: '628222' })).toThrow(/\+628111/);
