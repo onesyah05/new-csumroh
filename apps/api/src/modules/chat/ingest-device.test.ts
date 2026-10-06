@@ -149,13 +149,14 @@ describe('Balas dari device aktif', () => {
     expect(prospectChatJid({ phone: null, remoteJid: null })).toBeNull();
   });
 
-  it('pesan yang ditolak gateway tidak memutus sesi; gateway tak terjangkau atau 409 memutus', async () => {
+  it('pesan ditolak atau sesi sedang menyambung ulang (409) tidak memutus sesi; hanya gateway tak terjangkau yang memutus', async () => {
     const rejected = await gatewayFailure(1, new Response('{}', { status: 500 }), 'ditolak');
     expect(rejected.message).toBe('ditolak');
+    const reconnecting = await gatewayFailure(1, new Response('{}', { status: 409 }), 'ditolak');
+    expect(reconnecting.message).toContain('menyambung ulang');
     expect(mocks.sessionUpdateMany).not.toHaveBeenCalled();
-    await gatewayFailure(1, new Response('{}', { status: 409 }), 'ditolak');
     await gatewayFailure(1, null, 'ditolak');
-    expect(mocks.sessionUpdateMany).toHaveBeenCalledTimes(2);
+    expect(mocks.sessionUpdateMany).toHaveBeenCalledTimes(1);
   });
 });
 

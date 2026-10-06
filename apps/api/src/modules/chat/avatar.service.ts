@@ -16,7 +16,30 @@ const avatarsDir = (cwd = process.cwd()) => path.resolve(cwd, 'uploads', 'avatar
 
 type AvatarProspect = { id: number; brandId: number; remoteJid: string | null; phone: string | null; photoUrl: string | null };
 
-async function fetchProfilePicUrl(prospect: AvatarProspect) {
+/**
+ * Permintaan foto profil ke WhatsApp diantre satu per satu per device dengan jeda. Daftar Inbox dimuat ulang setiap ada
+ * pesan di setiap browser CS; tanpa batas ini ratusan permintaan per jam diduga membuat WhatsApp memutus koneksi
+ * device (stream error 500). Antrean penuh = permintaan dilewati, dicoba lagi pada pemuatan berikutnya.
+ */
+let profilePicGapMs = 3_000;
+const MAX_QUEUED_PER_BRAND = 20;
+const brandQueues = new Map<number, { tail: Promise<unknown>; pending: number }>();
+
+function throttledPerBrand<T>(brandId: number, task: () => Promise<T>): Promise<T> | null {
+  const queue = brandQueues.get(brandId) ?? { tail: Promise.resolve(), pending: 0 };
+  if (queue.pending >= MAX_QUEUED_PER_BRAND) return null;
+  queue.pending += 1;
+  const run = queue.tail.then(task, task);
+  queue.tail = run
+    .catch(() => undefined)
+    .then(() => new Promise((resolve) => setTimeout(resolve, profilePicGapMs)))
+    .finally(() => { queue.pending -= 1; });
+  brandQueues.set(brandId, queue);
+  return run;
+}
+
+/** ok: false = gateway tidak menjawab (putus/sibuk), bukan kontak tanpa foto; tidak dicatat sebagai sudah dicek. */
+async function fetchProfilePicUrl(prospect: AvatarProspect): Promise<{ ok: boolean; url: string | null }> {
   const params = new URLSearchParams();
   if (prospect.remoteJid) params.set('jid', prospect.remoteJid);
   if (prospect.phone) params.set('phone', prospect.phone);
@@ -24,10 +47,10 @@ async function fetchProfilePicUrl(prospect: AvatarProspect) {
     headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
     signal: AbortSignal.timeout(8_000),
   }).catch(() => null);
-  if (!response?.ok) return null;
+  if (!response?.ok) return { ok: false, url: null };
   const body = await response.json().catch(() => null) as { data?: { url?: string | null } } | null;
   const url = body?.data?.url;
-  return url && /^https:\/\//.test(url) ? url : null;
+  return { ok: true, url: url && /^https:\/\//.test(url) ? url : null };
 }
 
 function removeLocalAvatar(photoUrl: string | null, cwd?: string) {
@@ -48,10 +71,23 @@ export async function refreshProspectAvatar(prospect: AvatarProspect, options: {
   if (prospect.remoteJid?.endsWith('@g.us')) return localCurrent;
   const previous = lastAttempt.get(prospect.id);
   if (previous && now - previous < RETRY_AFTER_MS) return localCurrent;
+  // Sudah dicek belum lama ini (tersimpan di database, bertahan setelah API restart): jangan tanya WhatsApp lagi.
+  const checked = await prisma.prospect.findUnique({ where: { id: prospect.id }, select: { photoCheckedAt: true } }).catch(() => null);
+  if (checked?.photoCheckedAt && now - checked.photoCheckedAt.getTime() < RETRY_AFTER_MS) return localCurrent;
   lastAttempt.set(prospect.id, now);
 
-  const remoteUrl = await fetchProfilePicUrl(prospect);
-  if (!remoteUrl) return localCurrent;
+  const pending = throttledPerBrand(prospect.brandId, () => fetchProfilePicUrl(prospect));
+  if (!pending) {
+    lastAttempt.delete(prospect.id);
+    return localCurrent;
+  }
+  const remote = await pending;
+  const remoteUrl = remote.url;
+  if (!remoteUrl) {
+    // Kontak tanpa foto juga dicatat sudah dicek; gangguan gateway (ok: false) tidak.
+    if (remote.ok) await prisma.prospect.update({ where: { id: prospect.id }, data: { photoCheckedAt: new Date(now) } }).catch(() => undefined);
+    return localCurrent;
+  }
   const image = await fetch(remoteUrl, { signal: AbortSignal.timeout(8_000) }).catch(() => null);
   if (!image?.ok) return localCurrent;
   const buffer = Buffer.from(await image.arrayBuffer());
@@ -66,7 +102,7 @@ export async function refreshProspectAvatar(prospect: AvatarProspect, options: {
   const fileName = `p${prospect.id}-${now}-${crypto.randomBytes(6).toString('hex')}.${small ? 'webp' : type}`;
   await fs.promises.writeFile(path.join(dir, fileName), small ?? buffer);
   const photoUrl = `/uploads/avatars/${fileName}`;
-  await prisma.prospect.update({ where: { id: prospect.id }, data: { photoUrl } });
+  await prisma.prospect.update({ where: { id: prospect.id }, data: { photoUrl, photoCheckedAt: new Date(now) } });
   removeLocalAvatar(prospect.photoUrl, options.cwd);
   return photoUrl;
 }
@@ -90,6 +126,8 @@ export async function refreshProspectAvatars(prospects: AvatarProspect[], concur
 }
 
 /** Hanya untuk tes. */
-export function resetAvatarAttempts() {
+export function resetAvatarAttempts(gapMs = 0) {
   lastAttempt.clear();
+  brandQueues.clear();
+  profilePicGapMs = gapMs;
 }

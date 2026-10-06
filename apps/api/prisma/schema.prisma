@@ -226,6 +226,8 @@ model Prospect {
   adSourceUrl             String?                 @map("ad_source_url") @db.Text
   closedWonCount          Int                     @default(0) @map("closed_won_count")
   photoUrl                String?                 @map("photo_url") @db.Text
+  /// Terakhir foto profil WhatsApp dicek (ada foto atau tidak). Mencegah permintaan berulang ke WhatsApp setelah API restart.
+  photoCheckedAt          DateTime?               @map("photo_checked_at")
   notes                   String?                 @db.Text
   objectionCategory       String?                 @map("objection_category") @db.VarChar(50)
   objectionNotes          String?                 @map("objection_notes") @db.Text

@@ -223,13 +223,22 @@ async function startSession(brandId: number) {
       if (clearCredentials) {
         await rm(path.join(sessionsRoot, `brand_${brandId}`), { recursive: true, force: true }).catch(() => null);
       }
-      await notify('/wa/status', { brandId, status: 'disconnected', qrCode: null, reason: kind });
-      if (!permanent && !manuallyStopped.has(brandId)) {
+      const willReconnect = !permanent && !manuallyStopped.has(brandId);
+      // Putus sesaat (sambung ulang otomatis) dilaporkan sebagai "connecting": device tetap tertaut dan nomornya tetap,
+      // sehingga Inbox tidak mengosongkan daftar chat setiap kali WhatsApp menutup koneksi beberapa detik.
+      statuses.set(brandId, willReconnect ? 'connecting' : 'disconnected');
+      await notify('/wa/status', { brandId, status: willReconnect ? 'connecting' : 'disconnected', qrCode: null, reason: kind });
+      if (willReconnect) {
         // Jeda berlipat: internet mati berjam-jam tidak membuat gateway membombardir server WhatsApp.
         const attempt = reconnectAttempts.get(brandId) ?? 0;
         reconnectAttempts.set(brandId, attempt + 1);
         const delay = kind === 'restart' ? 1_000 : reconnectDelayMs(attempt);
-        logger.warn({ brandId, code, attempt: attempt + 1, delay }, 'WhatsApp connection closed; reconnecting');
+        // Alasan teks dari WhatsApp (mis. "Stream Errored (…)") untuk mendiagnosis putus berulang.
+        const error = lastDisconnect?.error as (Error & { data?: { tag?: string; attrs?: unknown; content?: unknown } }) | undefined;
+        const detail = error?.data && typeof error.data === 'object'
+          ? JSON.stringify({ tag: error.data.tag, attrs: error.data.attrs, content: error.data.content }).slice(0, 500)
+          : undefined;
+        logger.warn({ brandId, code, reason: error?.message, detail, attempt: attempt + 1, delay }, 'WhatsApp connection closed; reconnecting');
         const timer = setTimeout(() => void startSession(brandId), delay);
         reconnectTimers.set(brandId, timer);
       }
@@ -414,7 +423,10 @@ app.use(express.json({ limit: '50mb' }));
 app.post('/sessions/:brandId/start', async (req, res, next) => {
   try {
     const brandId = brandIdSchema.parse(req.params.brandId);
-    if (statuses.get(brandId) !== 'connected') {
+    // Kredensial hanya dihapus bila sesi memang tidak tertaut. Saat menyambung ulang (connecting), sesi masih sah:
+    // menghapusnya memaksa scan QR ulang hanya karena koneksi putus sebentar.
+    const current = statuses.get(brandId);
+    if (current !== 'connected' && current !== 'connecting') {
       await rm(path.join(sessionsRoot, `brand_${brandId}`), { recursive: true, force: true }).catch(() => null);
     }
     reconnectAttempts.delete(brandId);
