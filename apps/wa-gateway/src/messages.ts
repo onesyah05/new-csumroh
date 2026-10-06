@@ -53,7 +53,7 @@ export function normalizePhone(value?: string | null) {
   if (!digits || digits === '0' || digits.length < 8 || digits.length > 15) return '';
   if (digits.startsWith('62')) return digits;
   if (digits.startsWith('0')) return `62${digits.slice(1)}`;
-  if (digits.startsWith('8')) return `62${digits}`;
+  // JID WhatsApp selalu format internasional: 852… (Hong Kong), 82… (Korea), 81… (Jepang), 886… (Taiwan) bukan 62….
   return digits;
 }
 

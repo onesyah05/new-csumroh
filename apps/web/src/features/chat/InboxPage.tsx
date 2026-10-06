@@ -157,7 +157,7 @@ function normalizePhone(value?: string | null) {
   const digits = value?.replace(/\D/g, '') ?? '';
   if (digits.startsWith('62')) return digits;
   if (digits.startsWith('0')) return `62${digits.slice(1)}`;
-  if (digits.startsWith('8')) return `62${digits}`;
+  // Nomor WhatsApp selalu internasional; awalan 8 bisa nomor luar negeri (852…, 82…, 81…), bukan 62….
   return digits;
 }
 
@@ -270,6 +270,9 @@ export function InboxPage() {
     packageId?: number;
   } | null>(null);
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
+  // Chat yang terbuka saat ini, untuk kiriman yang selesai setelah CS pindah chat.
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const focusDraftAfterPanel = useRef(false);
   useEffect(() => {
@@ -536,24 +539,39 @@ export function InboxPage() {
     }
   }
 
+  // Semua data kiriman diambil saat tombol ditekan. onSuccess baru jalan 1–3 detik kemudian, saat CS mungkin sudah
+  // membuka chat lain: draft yang dihapus harus draft chat pengirim, bukan chat yang sedang terbuka.
   const send = useMutation({
-    mutationFn: (text: string) =>
+    mutationFn: (vars: { text: string; prospectId: number | null; quoted: typeof replyingTo; clearDraft: typeof setMessage }) =>
       api.post(`/chat/messages${query}`, {
         brandId,
-        prospectId: selectedId,
-        text,
-        quotedMessageId: replyingTo?.messageId,
-        quotedText: replyingTo?.text,
-        quotedSender: replyingTo?.senderName,
+        prospectId: vars.prospectId,
+        text: vars.text,
+        quotedMessageId: vars.quoted?.messageId,
+        quotedText: vars.quoted?.text,
+        quotedSender: vars.quoted?.senderName,
       }),
-    onSuccess: () => {
-      setMessage('');
-      setReplyingTo(null);
-      if (composerRef.current) composerRef.current.style.height = '44px';
-      void queryClient.invalidateQueries({ queryKey: ['messages', selectedId] });
+    onSuccess: (_data, vars) => {
+      vars.clearDraft('');
+      if (selectedIdRef.current === vars.prospectId) {
+        setReplyingTo(null);
+        if (composerRef.current) composerRef.current.style.height = '44px';
+      }
+      void queryClient.invalidateQueries({ queryKey: ['messages', vars.prospectId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
+
+  // Kutipan, lampiran, dan error kirim milik chat sebelumnya tidak boleh terbawa: isi chat jamaah A bisa terkirim ke B.
+  const resetSend = send.reset;
+  useEffect(() => {
+    setReplyingTo(null);
+    setMediaPreview((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return null;
+    });
+    resetSend();
+  }, [selectedId, brandId, resetSend]);
 
   const starMutation = useMutation({
     mutationFn: (messageId: number) => api.post<{ isStarred?: boolean }>(`/chat/messages/${messageId}/star${query}`),
@@ -761,7 +779,7 @@ export function InboxPage() {
       showToast('Draft masih memuat data yang belum terisi (tanda {{…}}). Lengkapi dulu sebelum mengirim.');
       return;
     }
-    send.mutate(text);
+    send.mutate({ text, prospectId: selectedId, quoted: replyingTo, clearDraft: setMessage });
   }
 
   function showToast(msg: string) {
@@ -989,13 +1007,15 @@ export function InboxPage() {
           .catch(() => null);
       }
 
-      if (mediaPreview?.url) {
-        URL.revokeObjectURL(mediaPreview.url);
-      }
-      setMediaPreview(null);
+      // setMessage di sini milik chat pengirim (closure saat kirim). Lampiran & kutipan hanya dibersihkan bila
+      // chat itu masih terbuka; bila sudah pindah, efek pergantian chat sudah membersihkannya.
       setMessage('');
-      setReplyingTo(null);
-      if (composerRef.current) composerRef.current.style.height = '44px';
+      if (selectedIdRef.current === selectedId) {
+        if (mediaPreview?.url) URL.revokeObjectURL(mediaPreview.url);
+        setMediaPreview(null);
+        setReplyingTo(null);
+        if (composerRef.current) composerRef.current.style.height = '44px';
+      }
       void queryClient.invalidateQueries({ queryKey: ['messages', selectedId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       showToast('Media berhasil dikirim!');

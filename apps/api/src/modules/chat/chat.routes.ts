@@ -13,7 +13,7 @@ import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker, storedReferral } from '../prospects/referral.service.js';
-import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, sendingDevicePhone, sendTextToProspect } from './outbound.js';
+import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, resolveQuote, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { adLabels, cacheAdThumbnail, withAdPreviews } from '../ads/meta-ads.js';
 import { syncSessionWithGateway } from '../whatsapp/gateway-probe.js';
@@ -654,21 +654,8 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
 
   const phone = normalizePhoneIdentifier(prospect.phone);
 
-  // Kutipan: pesan yang dibalas bisa milik jamaah atau pesan kita sendiri.
-  let quotedText = input.quotedText;
-  let quotedSender = input.quotedSender;
-  let isQuotedFromMe = false;
-  if (input.quotedMessageId) {
-    const quoted = await prisma.chatMessage.findFirst({
-      where: { brandId, messageId: input.quotedMessageId },
-      select: { messageText: true, senderName: true, isFromMe: true },
-    });
-    if (quoted) {
-      quotedText = quotedText || quoted.messageText || '';
-      quotedSender = quotedSender || (quoted.isFromMe ? 'Anda' : (quoted.senderName || prospect.name || 'Jamaah'));
-      isQuotedFromMe = quoted.isFromMe;
-    }
-  }
+  // Kutipan: pesan yang dibalas bisa milik jamaah atau pesan kita sendiri, tetapi harus dari chat prospek ini.
+  const { quotedMessageId, quotedText, quotedSender, isQuotedFromMe } = await resolveQuote(brandId, prospect, input);
 
   // Save media file locally to uploads/media/ if not already a local file
   if (!resolvedLocalUrl) {
@@ -699,7 +686,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
       base64Data: resolvedBase64,
       mediaType: input.mediaType,
       caption: input.caption,
-      quotedMessageId: input.quotedMessageId,
+      quotedMessageId,
       quotedText,
       isQuotedFromMe,
     }),
@@ -726,7 +713,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
         mediaUrl: resolvedLocalUrl || (gatewayResult.data?.mediaUrl ?? null),
         status: 'sent',
         timestamp: Math.floor(Date.now() / 1000),
-        quotedMessageId: input.quotedMessageId,
+        quotedMessageId,
         quotedText,
         quotedSender,
       },
@@ -1563,7 +1550,10 @@ internalRouter.post('/wa/status', asyncHandler(async (req, res) => {
     create: { brandId: input.brandId, sessionName: `brand_${input.brandId}`, status: input.status, qrCode, phoneNumber: phoneNumber ?? null, disconnectReason: disconnectReason ?? null },
   });
   if (input.status === 'connected') await adoptUnassignedProspects(input.brandId, session.phoneNumber);
-  emitToBrand(input.brandId, input.status === 'qr_ready' ? 'wa:qr' : 'wa:status', session);
+  // Room brand berisi CS & Finance: QR tidak ikut dikirim (siapa pun yang memindainya menautkan HP-nya sebagai device
+  // brand). Klien hanya me-refetch status; QR diambil lewat REST yang menyaringnya untuk Admin/Superadmin.
+  const { qrCode: _qrCode, ...publicSession } = session;
+  emitToBrand(input.brandId, input.status === 'qr_ready' ? 'wa:qr' : 'wa:status', { ...publicSession, qrCode: null });
   void onWhatsappStatus(input.brandId, input.status);
   res.json({ success: true, data: session });
 }));
