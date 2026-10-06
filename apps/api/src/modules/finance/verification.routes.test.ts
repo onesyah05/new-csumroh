@@ -173,6 +173,8 @@ describe('Koreksi & pembatalan (Superadmin)', () => {
     mocks.paymentAggregate.mockResolvedValue({ _sum: { amount: null } });
     await call('post', '/payments/:id/reverse', { params: { id: '50' }, body: { reason: 'Mutasi tidak ditemukan' } });
     expect(mocks.paymentUpdateMany.mock.calls[0][0].data).toMatchObject({ status: 'reversed', reversalReason: 'Mutasi tidak ditemukan', reversedByUserId: 1 });
+    // Nomor referensi dilepas agar mutasi yang sama bisa diverifikasi ulang.
+    expect(mocks.paymentUpdateMany.mock.calls[0][0].data.referenceNo).toBe('REF1 [batal #50]');
     expect(mocks.prospectUpdateMany.mock.calls[0][0]).toMatchObject({ where: { id: 7, status: 'deal' }, data: { status: 'closing' } });
     expect(mocks.packageUpdateMany.mock.calls[0][0].data).toEqual({ quotaRemaining: { increment: 3 } });
     expect(mocks.prospectUpdate.mock.calls[0][0].data).toMatchObject({ dpAmount: 0, paymentStatus: 'unpaid', seatsReserved: 0, paymentProofUrl: null });
@@ -186,5 +188,15 @@ describe('Koreksi & pembatalan (Superadmin)', () => {
     mocks.paymentFindUnique.mockResolvedValueOnce(payment({ status: 'reversed' }));
     await expect(call('post', '/payments/:id/reverse', { params: { id: '50' }, body: { reason: 'Keliru' } })).rejects.toMatchObject({ status: 409 });
     expect(mocks.paymentUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('Nomor referensi pembayaran batal', () => {
+  it('diberi penanda batal dan tetap muat 100 karakter', async () => {
+    const { reversedReferenceNo } = await import('./verification.routes.js');
+    expect(reversedReferenceNo('ABC', 7)).toBe('ABC [batal #7]');
+    const long = reversedReferenceNo('X'.repeat(100), 123);
+    expect(long).toHaveLength(100);
+    expect(long.endsWith(' [batal #123]')).toBe(true);
   });
 });

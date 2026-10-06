@@ -287,6 +287,12 @@ async function findPayment(req: Request) {
 }
 
 const rp = (value: unknown) => `Rp ${Number(value ?? 0).toLocaleString('id-ID')}`;
+
+/** Nomor referensi pembayaran yang dibatalkan: tetap terbaca, tapi tidak lagi menahan nomor aslinya (maks. 100 karakter). */
+export function reversedReferenceNo(referenceNo: string, paymentId: number) {
+  const suffix = ` [batal #${paymentId}]`;
+  return `${referenceNo.slice(0, 100 - suffix.length)}${suffix}`;
+}
 const dateKey = (value: Date | null) => (value ? value.toISOString().slice(0, 10) : '-');
 
 /** Superadmin: koreksi salah ketik (nominal, bank, referensi, tanggal mutasi). Nilai lama → baru tercatat di log. */
@@ -362,7 +368,12 @@ verificationRouter.post('/payments/:id/reverse', requireRole('superadmin'), asyn
   await prisma.$transaction(async (tx) => {
     const reversed = await tx.payment.updateMany({
       where: { id: payment.id, status: 'verified' },
-      data: { status: 'reversed', reversedAt: new Date(), reversedByUserId: req.user!.id, reversalReason: reason },
+      data: {
+        status: 'reversed', reversedAt: new Date(), reversedByUserId: req.user!.id, reversalReason: reason,
+        // Nomor referensi unik per brand: dilepas agar mutasi yang sama bisa diverifikasi ulang (ke prospek yang benar),
+        // tetap terbaca di riwayat dengan penanda batal.
+        ...(payment.referenceNo ? { referenceNo: reversedReferenceNo(payment.referenceNo, payment.id) } : {}),
+      },
     });
     if (reversed.count !== 1) throw new HttpError(409, 'Pembayaran ini baru saja dibatalkan.');
     const reopened = await tx.prospect.updateMany({ where: { id: prospect.id, status: 'deal' }, data: { status: 'closing' } });
