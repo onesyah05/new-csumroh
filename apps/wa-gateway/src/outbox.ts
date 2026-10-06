@@ -57,7 +57,30 @@ export class Outbox {
     if (!this.draining && !this.retryTimer) void this.drain();
   }
 
-  /** Kirim berurutan; berhenti di item pertama yang gagal dan coba lagi dengan jeda berlipat (1 dtk … 30 dtk). */
+  private scheduleRetry() {
+    this.failures += 1;
+    const delay = Math.min((this.options.baseDelayMs ?? 1000) * 2 ** (this.failures - 1), this.options.maxDelayMs ?? 30_000);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.kick();
+    }, delay);
+    this.retryTimer.unref?.();
+  }
+
+  /** null = file hilang atau isinya rusak (tidak akan pernah terkirim); error lain = gangguan baca sementara. */
+  private async readItem(file: string): Promise<OutboxItem | null> {
+    try {
+      return JSON.parse(await readFile(file, 'utf8')) as OutboxItem;
+    } catch (error) {
+      if (error instanceof SyntaxError || (error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Kirim berurutan; berhenti di item pertama yang gagal dan coba lagi dengan jeda berlipat (1 dtk … 30 dtk).
+   * Tidak pernah melempar error: gangguan disk juga dicoba ulang, agar gateway tidak mati karena unhandled rejection.
+   */
   async drain() {
     if (this.draining) return;
     this.draining = true;
@@ -65,28 +88,28 @@ export class Outbox {
       while (this.queue.length) {
         const name = this.queue[0]!;
         const file = path.join(this.dir, name);
-        let item: OutboxItem | null = null;
-        try {
-          item = JSON.parse(await readFile(file, 'utf8')) as OutboxItem;
-        } catch {
-          item = null;
-        }
+        const item = await this.readItem(file);
         const result: SendResult = item ? await this.send(item).catch(() => 'retry' as const) : 'drop';
         if (result === 'retry') {
-          this.failures += 1;
-          const delay = Math.min((this.options.baseDelayMs ?? 1000) * 2 ** (this.failures - 1), this.options.maxDelayMs ?? 30_000);
-          this.retryTimer = setTimeout(() => {
-            this.retryTimer = null;
-            this.kick();
-          }, delay);
-          this.retryTimer.unref?.();
+          this.scheduleRetry();
           return;
         }
         if (result === 'drop' && item) this.options.onDrop?.(item, name);
+        // Event yang dibuang disimpan di dead/ agar bisa diperiksa atau dikirim ulang manual, bukan hilang.
+        if (result === 'drop') {
+          await mkdir(path.join(this.dir, 'dead'), { recursive: true });
+          await rename(file, path.join(this.dir, 'dead', name)).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== 'ENOENT') throw error;
+          });
+        } else {
+          await rm(file, { force: true });
+        }
+        // Keluar dari antrean hanya setelah file selesai dipindah/dihapus.
         this.failures = 0;
         this.queue.shift();
-        await rm(file, { force: true });
       }
+    } catch {
+      this.scheduleRetry();
     } finally {
       this.draining = false;
     }

@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -58,5 +58,19 @@ describe('Outbox gateway → API', () => {
     await waitFor(() => outbox.size === 0);
     expect(dropped).toEqual(['bad']);
     expect(delivered).toEqual(['ok']);
+    // Tidak dihapus: disimpan di dead/ untuk diperiksa.
+    expect(await readdir(dir)).toEqual(['dead']);
+    expect(await readdir(path.join(dir, 'dead'))).toHaveLength(1);
+  });
+
+  it('file antrean yang rusak dipindah ke dead/ tanpa menahan event berikutnya', async () => {
+    await writeFile(path.join(dir, '000000000000001-000000000.json'), '{rusak');
+    await writeFile(path.join(dir, '000000000000002-000000000.json'), JSON.stringify({ pathname: '/x', payload: 'ok' }));
+    const delivered: unknown[] = [];
+    const outbox = new Outbox(dir, async (item) => { delivered.push(item.payload); return 'delivered'; });
+    await outbox.init();
+    await waitFor(() => outbox.size === 0);
+    expect(delivered).toEqual(['ok']);
+    expect(await readdir(path.join(dir, 'dead'))).toEqual(['000000000000001-000000000.json']);
   });
 });
