@@ -146,13 +146,40 @@ export function avatarNeedsRefresh(photoUrl: string | null | undefined, now = Da
  */
 export const PIC_TAKEOVER_AFTER_MINUTES = 15;
 
-/** Waktu (ms) prospek mulai boleh diambil alih; null bila jamaah tidak sedang menunggu balasan. */
-export function takeoverOpensAt(awaitingSince: number | null | undefined) {
-  return awaitingSince ? awaitingSince * 1000 + PIC_TAKEOVER_AFTER_MINUTES * 60_000 : null;
+/**
+ * Jam operasional CS (WIB, setiap hari). Di luar jam ini prospek tetap milik PIC-nya: tidak bisa diambil alih walau
+ * jamaah sudah menunggu lebih dari 15 menit. Pengingat/eskalasi "belum dibalas" tetap berjalan 24 jam.
+ */
+export const OPERATIONAL_HOURS = { start: 8, end: 22 } as const;
+const WIB_OFFSET_MS = 7 * 60 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
+
+export function isOperationalTime(ms = Date.now()) {
+  const hour = Math.floor((((ms + WIB_OFFSET_MS) % DAY_MS) + DAY_MS) % DAY_MS / (60 * 60_000));
+  return hour >= OPERATIONAL_HOURS.start && hour < OPERATIONAL_HOURS.end;
+}
+
+/** Awal jam operasional berikutnya (ms) dari waktu di luar jam operasional: hari ini 08.00 WIB, atau besok bila sudah lewat 22.00. */
+function nextOperationalStart(ms: number) {
+  const wibMidnight = Math.floor((ms + WIB_OFFSET_MS) / DAY_MS) * DAY_MS - WIB_OFFSET_MS;
+  const todayStart = wibMidnight + OPERATIONAL_HOURS.start * 60 * 60_000;
+  return ms < todayStart ? todayStart : todayStart + DAY_MS;
+}
+
+/**
+ * Waktu (ms) prospek mulai boleh diambil alih; null bila jamaah tidak sedang menunggu balasan. Syaratnya jamaah sudah
+ * menunggu 15 menit DAN sedang jam operasional. Batas 15 menit yang jatuh di luar jam operasional terbuka tepat
+ * 08.00 WIB. Bila 15 menit sudah lewat tetapi sekarang di luar jam operasional, hasilnya 08.00 berikutnya.
+ */
+export function takeoverOpensAt(awaitingSince: number | null | undefined, now = Date.now()) {
+  if (!awaitingSince) return null;
+  const due = awaitingSince * 1000 + PIC_TAKEOVER_AFTER_MINUTES * 60_000;
+  if (due <= now) return isOperationalTime(now) ? due : nextOperationalStart(now);
+  return isOperationalTime(due) ? due : nextOperationalStart(due);
 }
 
 export function isTakeoverOpen(awaitingSince: number | null | undefined, now = Date.now()) {
-  const opensAt = takeoverOpensAt(awaitingSince);
+  const opensAt = takeoverOpensAt(awaitingSince, now);
   return opensAt !== null && now >= opensAt;
 }
 

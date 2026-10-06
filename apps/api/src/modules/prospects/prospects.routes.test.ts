@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 
 /**
@@ -633,6 +633,9 @@ describe('PIC: klaim, tugaskan, dan serahkan', () => {
 });
 
 describe('PIC: ambil alih setelah 15 menit belum dibalas', () => {
+  // Jam operasional 08.00–22.00 WIB ikut menentukan: waktu dikunci agar test tidak bergantung jam dijalankan.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-06T10:00:00+07:00') }); });
+  afterEach(() => { vi.useRealTimers(); });
   const minutesAgo = (m: number) => Math.floor(Date.now() / 1000) - m * 60;
   const chat = (id: number, isFromMe: boolean, at: number) =>
     ({ id, prospectId: 1, brandId: 1, isFromMe, timestamp: at, isDeleted: false, messageType: 'conversation' });
@@ -667,9 +670,23 @@ describe('PIC: ambil alih setelah 15 menit belum dibalas', () => {
     prospect(1).userId = null;
     expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(409);
   });
+
+  it('di luar jam operasional (22.00–08.00 WIB) prospek tetap milik PIC walau sudah lebih dari 15 menit', async () => {
+    vi.setSystemTime(new Date('2026-10-06T23:30:00+07:00'));
+    mocks.state.messages = [chat(1, false, minutesAgo(60))];
+    const night = await invoke('post', '/:id/takeover', { userId: 8 });
+    expect(night.status).toBe(409);
+    expect(night.error).toContain('jam operasional');
+    expect(prospect(1).userId).toBe(7);
+    // Pagi 08.00: jamaah masih belum dibalas, prospek boleh diambil alih.
+    vi.setSystemTime(new Date('2026-10-07T08:00:00+07:00'));
+    expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(200);
+  });
 });
 
 describe('Notifikasi dari tindakan prospek', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-06T10:00:00+07:00') }); });
+  afterEach(() => { vi.useRealTimers(); });
   const minutesAgo = (m: number) => Math.floor(Date.now() / 1000) - m * 60;
 
   it('ambil alih memberi tahu PIC lama', async () => {

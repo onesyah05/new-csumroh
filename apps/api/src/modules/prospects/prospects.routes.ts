@@ -9,6 +9,8 @@ import {
   canonicalStatus,
   canTransitionStatus,
   firstUnansweredAt,
+  isOperationalTime,
+  OPERATIONAL_HOURS,
   PIC_TAKEOVER_AFTER_MINUTES,
   takeoverOpensAt,
   dateOnlyKey,
@@ -531,6 +533,9 @@ prospectsRouter.post('/:id/takeover', asyncHandler(async (req, res) => {
   }
   if (Date.now() < opensAt) {
     const waited = Math.max(0, Math.floor((Date.now() / 1000 - since) / 60));
+    if (!isOperationalTime()) {
+      throw new HttpError(409, `Di luar jam operasional (${String(OPERATIONAL_HOURS.start).padStart(2, '0')}.00–${OPERATIONAL_HOURS.end}.00 WIB) prospek tetap milik PIC-nya. Bisa diambil alih mulai ${String(OPERATIONAL_HOURS.start).padStart(2, '0')}.00 bila jamaah masih belum dibalas.`);
+    }
     throw new HttpError(409, `Jamaah baru menunggu ${waited} menit. Prospek bisa diambil alih setelah ${PIC_TAKEOVER_AFTER_MINUTES} menit belum dibalas.`);
   }
   const previous = await prisma.user.findUnique({ where: { id: existing.userId }, select: { name: true } });

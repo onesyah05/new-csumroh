@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { businessDateKey, dateOnlyKey, isLostStatus, isWonStatus, lostStatuses, PIC_TAKEOVER_AFTER_MINUTES, wonStatuses } from '@csumroh/shared-types';
+import { businessDateKey, dateOnlyKey, isLostStatus, isTakeoverOpen, isWonStatus, lostStatuses, PIC_TAKEOVER_AFTER_MINUTES, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
@@ -81,12 +81,16 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
         type: 'reply.sla_warning', priority: 'urgent', brandId,
         userIds: await picOf({ userId: c.userId, brandId }),
         title: `${c.name} menunggu balasan ${waited} menit`,
-        body: `Balas sebelum ${SLA.takeoverMinutes} menit agar prospek tidak bisa diambil alih CS lain.`,
+        // Di luar jam operasional prospek tidak bisa diambil alih: pengingat tetap dikirim tanpa ancaman itu.
+        body: isTakeoverOpen(since, (since + SLA.takeoverMinutes * 60) * 1000)
+          ? `Balas sebelum ${SLA.takeoverMinutes} menit agar prospek tidak bisa diambil alih CS lain.`
+          : 'Jamaah menunggu balasan Anda.',
         link: inboxLink(ref), entity: { type: 'prospect', id: c.id },
         dedupeKey: `reply.sla_warning:p${c.id}:${since}`,
       });
     }
-    if (waited >= SLA.takeoverMinutes) {
+    // Boleh diambil alih: 15 menit DAN jam operasional (08.00–22.00 WIB). Di luar jam itu PIC tetap terkunci.
+    if (waited >= SLA.takeoverMinutes && isTakeoverOpen(since, now.getTime())) {
       takeoverOpen++;
       const others = (await csOfBrand(brandId)).filter((id) => id !== c.userId);
       await notify({

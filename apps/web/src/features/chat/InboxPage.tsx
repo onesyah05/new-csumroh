@@ -366,7 +366,8 @@ export function InboxPage() {
   const isPic = Boolean(selected?.userId && selected.userId === user?.id);
   const isUnassigned = !selected?.userId;
   const canReply = isAdmin || isPic || (isUnassigned && user?.role === 'cs');
-  // Aturan ambil alih: CS lain boleh mengambil prospek bila jamaah belum dibalas lebih dari 15 menit.
+  // Aturan ambil alih: CS lain boleh mengambil prospek bila jamaah belum dibalas lebih dari 15 menit, hanya pada jam
+  // operasional 08.00–22.00 WIB (di luar jam itu PIC tetap terkunci).
   const now = useNow();
   const canTakeOver = Boolean(
     selected && user?.role === 'cs' && !isPic && !isUnassigned && !selected.isGroup
@@ -2622,7 +2623,7 @@ export function InboxPage() {
                               Percakapan ini ditugaskan kepada PIC <strong>{selected.user?.name || 'CS lain'}</strong>.{' '}
                               {canTakeOver
                                 ? 'Jamaah belum dibalas lebih dari 15 menit, jadi Anda boleh mengambil alih.'
-                                : 'Anda hanya dapat membaca pesan. Bila jamaah belum dibalas lebih dari 15 menit, CS lain boleh mengambil alih.'}
+                                : 'Anda hanya dapat membaca pesan. Bila jamaah belum dibalas lebih dari 15 menit pada jam operasional (08.00–22.00 WIB), CS lain boleh mengambil alih.'}
                             </p>
                           </>
                         )}

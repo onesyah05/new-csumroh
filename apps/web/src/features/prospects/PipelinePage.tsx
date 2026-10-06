@@ -495,7 +495,8 @@ export function PipelinePage() {
     canClaim: isCs && !p.userId && isOpen(p),
     canAssign: isManager,
     canHandover: isCs && p.userId === user?.id,
-    // Aturan ambil alih: jamaah belum dibalas lebih dari 15 menit (server memeriksa ulang dari riwayat chat).
+    // Aturan ambil alih: jamaah belum dibalas lebih dari 15 menit DAN jam operasional 08.00–22.00 WIB
+    // (server memeriksa ulang dari riwayat chat).
     canTakeOver: isLockedForCs(user, p) && isOpen(p) && isTakeoverOpen(p.awaitingSince, now),
     onTakeOver: () => takeover.mutate(p),
     locked: !canEditProspect(user, p),
@@ -1109,7 +1110,7 @@ function ProspectCard({
               {locked && (
                 <p className="px-2 py-2 text-xs text-zinc-600">
                   {role === 'finance' ? readOnlyNote({ role }, prospect) : <>Ditangani {prospect.user?.name ?? 'CS lain'}. Hanya PIC atau Admin yang dapat mengubah prospek ini
-                  {canTakeOver ? '.' : ', kecuali jamaah belum dibalas lebih dari 15 menit.'}</>}
+                  {canTakeOver ? '.' : ', kecuali jamaah belum dibalas lebih dari 15 menit pada jam operasional (08.00–22.00 WIB).'}</>}
                 </p>
               )}
               {canTakeOver && (
