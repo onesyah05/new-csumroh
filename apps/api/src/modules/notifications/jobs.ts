@@ -149,6 +149,9 @@ export async function whatsappDisconnectedJob(now = new Date()) {
 
 let gatewayFailures = 0;
 let gatewayOutageSince: number | null = null;
+// Status mati hanya di memori: setelah API restart, alert 'gateway mati' yang masih terbuka ditutup pada
+// pemeriksaan sehat pertama walau proses ini tidak melihat matinya.
+let gatewayCheckedSinceStart = false;
 
 export async function gatewayHealthJob(now = new Date(), probe = defaultProbe) {
   const healthy = await probe();
@@ -156,9 +159,11 @@ export async function gatewayHealthJob(now = new Date(), probe = defaultProbe) {
   const superadmins = async () => (await prisma.user.findMany({ where: { role: { in: ['superadmin', 'admin'] }, isActive: true }, select: { id: true } })).map((u) => u.id);
   if (healthy) {
     gatewayFailures = 0;
-    if (gatewayOutageSince !== null) {
+    if (gatewayOutageSince !== null || !gatewayCheckedSinceStart) {
       gatewayOutageSince = null;
-      await resolveNotifications({ entity: { type: 'system', id: 0 }, types: ['system.gateway_down'] });
+      gatewayCheckedSinceStart = true;
+      const resolved = await resolveNotifications({ entity: { type: 'system', id: 0 }, types: ['system.gateway_down'] });
+      if (!resolved) return;
       await notify({
         type: 'system.gateway_up', priority: 'info', userIds: await superadmins(),
         title: 'Gateway WhatsApp aktif kembali', link: '/brands', entity: { type: 'system', id: 0 },
@@ -191,6 +196,7 @@ async function defaultProbe() {
 export function resetGatewayState() {
   gatewayFailures = 0;
   gatewayOutageSince = null;
+  gatewayCheckedSinceStart = false;
 }
 
 // ── Bukti transfer menunggu terlalu lama ────────────────────────────────────────

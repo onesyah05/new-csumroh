@@ -131,6 +131,7 @@ describe('ringkasan pagi', () => {
 describe('gateway WhatsApp', () => {
   it('dua kegagalan berturut-turut = mati; pulih menutup dan memberi info', async () => {
     mocks.userFindMany.mockResolvedValue([{ id: 1 }]);
+    mocks.resolve.mockResolvedValue(1);
     await gatewayHealthJob(NOW, async () => false);
     expect(mocks.notify).not.toHaveBeenCalled();
     await gatewayHealthJob(NOW, async () => false);
@@ -139,6 +140,17 @@ describe('gateway WhatsApp', () => {
     await gatewayHealthJob(NOW, async () => true);
     expect(mocks.resolve).toHaveBeenCalledWith(expect.objectContaining({ types: ['system.gateway_down'] }));
     expect(sent().map((n) => n.type)).toEqual(['system.gateway_down', 'system.gateway_up']);
+  });
+
+  it('API restart saat gateway mati: alert lama ditutup pada pemeriksaan sehat pertama', async () => {
+    mocks.userFindMany.mockResolvedValue([{ id: 1 }]);
+    mocks.resolve.mockResolvedValueOnce(2).mockResolvedValue(0);
+    await gatewayHealthJob(NOW, async () => true);
+    expect(mocks.resolve).toHaveBeenCalledWith(expect.objectContaining({ types: ['system.gateway_down'] }));
+    expect(sent().map((n) => n.type)).toEqual(['system.gateway_up']);
+    // Pemeriksaan sehat berikutnya tidak menanyakan database lagi.
+    await gatewayHealthJob(NOW, async () => true);
+    expect(mocks.resolve).toHaveBeenCalledTimes(1);
   });
 });
 
