@@ -255,7 +255,7 @@ async function startSession(brandId: number) {
   socket.ev.on('messages.upsert', async ({ messages }) => {
     for (const message of messages) {
       // Pesan ditarik/diedit pengirim: perbarui pesan asli di CRM, bukan pesan baru.
-      const change = toMessageChange(message);
+      const change = toMessageChange(message, lidPnMap);
       if (change) {
         await notify(change.kind === 'revoked' ? '/messages/revoked' : '/messages/edited', { brandId, ...change });
         continue;

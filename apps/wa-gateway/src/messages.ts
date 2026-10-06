@@ -149,20 +149,57 @@ function textFromMessage(message: WAMessage) {
   return '';
 }
 
-export type GatewayMessageChange = { kind: 'revoked'; messageId: string } | { kind: 'edited'; messageId: string; text: string };
+type MessageKeyWithAlt = WAMessage['key'] & {
+  senderPn?: string;
+  participant?: string;
+  participantPn?: string;
+  remoteJidAlt?: string;
+  participantAlt?: string;
+};
+
+/** Nomor pengirim: di grup = participant, di chat pribadi = lawan bicara. */
+function senderPhone(message: WAMessage, lidPnMap: Map<string, string>) {
+  const remoteJid = message.key.remoteJid ?? '';
+  const isFromMe = Boolean(message.key.fromMe);
+  const key = message.key as MessageKeyWithAlt;
+  const candidates = remoteJid.endsWith('@g.us')
+    ? [key.participantPn, key.participant, key.participantAlt, isFromMe ? '' : key.senderPn]
+    : [
+        remoteJid,
+        key.remoteJidAlt,
+        ...(isFromMe ? [] : [key.senderPn, key.participantPn, key.participantAlt]),
+        lidPnMap.get(remoteJid),
+      ];
+  return candidates.map(normalizePhone).find(Boolean) ?? '';
+}
+
+/**
+ * Identitas pengirim protocolMessage. Isi protocolMessage (ID pesan yang diubah) dibuat bebas oleh client pengirim,
+ * jadi API hanya boleh mengubah pesan milik pengirim ini di chat yang sama.
+ */
+export type GatewayChangeAuthor = { fromMe: boolean; chatJids: string[]; phone: string };
+
+export type GatewayMessageChange =
+  | ({ kind: 'revoked'; messageId: string } & GatewayChangeAuthor)
+  | ({ kind: 'edited'; messageId: string; text: string } & GatewayChangeAuthor);
 
 /**
  * Pesan ditarik ("hapus untuk semua") atau diedit pengirimnya. WhatsApp mengirimnya sebagai protocolMessage yang
  * merujuk ID pesan asli, bukan pesan baru.
  */
-export function toMessageChange(message: WAMessage): GatewayMessageChange | null {
+export function toMessageChange(message: WAMessage, lidPnMap: Map<string, string> = new Map()): GatewayMessageChange | null {
   const protocol = normalizeMessageContent(message.message)?.protocolMessage;
   const messageId = protocol?.key?.id;
-  if (!protocol || !messageId) return null;
-  if (protocol.type === proto.Message.ProtocolMessage.Type.REVOKE) return { kind: 'revoked', messageId };
+  const remoteJid = message.key.remoteJid;
+  if (!protocol || !messageId || !remoteJid) return null;
+  const key = message.key as MessageKeyWithAlt;
+  // protocol.key.remoteJid dilihat dari sisi pengirim (bisa nomor brand sendiri), jadi chat diambil dari key pembawa.
+  const chatJids = [...new Set([remoteJid, key.remoteJidAlt, lidPnMap.get(remoteJid)].filter((jid): jid is string => Boolean(jid)))];
+  const author = { fromMe: Boolean(message.key.fromMe), chatJids, phone: senderPhone(message, lidPnMap) };
+  if (protocol.type === proto.Message.ProtocolMessage.Type.REVOKE) return { kind: 'revoked', messageId, ...author };
   if (protocol.type === proto.Message.ProtocolMessage.Type.MESSAGE_EDIT && protocol.editedMessage) {
     const text = textFromMessage({ key: message.key, message: protocol.editedMessage } as WAMessage);
-    return text ? { kind: 'edited', messageId, text } : null;
+    return text ? { kind: 'edited', messageId, text, ...author } : null;
   }
   return null;
 }
@@ -207,25 +244,7 @@ export function toGatewayMessage(
   if (messageType === 'protocolMessage' || messageType === 'reactionMessage') return null;
 
   const isFromMe = Boolean(message.key.fromMe);
-  const isGroup = remoteJid.endsWith('@g.us');
-  const key = message.key as typeof message.key & {
-    senderPn?: string;
-    participant?: string;
-    participantPn?: string;
-    remoteJidAlt?: string;
-    participantAlt?: string;
-  };
-
-  // For group messages, participant is the sender. For 1-on-1, remoteJid is the other party.
-  const phoneCandidates = isGroup
-    ? [key.participantPn, key.participant, key.participantAlt, isFromMe ? '' : key.senderPn]
-    : [
-        remoteJid,
-        key.remoteJidAlt,
-        ...(isFromMe ? [] : [key.senderPn, key.participantPn, key.participantAlt]),
-        lidPnMap.get(remoteJid),
-      ];
-  const phone = phoneCandidates.map(normalizePhone).find(Boolean) ?? '';
+  const phone = senderPhone(message, lidPnMap);
 
   let status = options?.isHistory && options.isChatRead !== false ? 'read' : 'delivered';
   const rawStatus = (message as any).status;

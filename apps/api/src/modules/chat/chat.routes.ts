@@ -1341,11 +1341,39 @@ internalRouter.post('/messages/reaction', asyncHandler(async (req, res) => {
   res.json({ success: true, data: { updated: updated.count } });
 }));
 
+const messageChangeSchema = z.object({
+  brandId: z.coerce.number().int().positive(),
+  messageId: z.string().min(1).max(100),
+  fromMe: z.boolean(),
+  chatJids: z.array(z.string().min(1).max(100)).min(1).max(5),
+  phone: z.string().max(30).default(''),
+});
+type MessageChangeAuthor = z.infer<typeof messageChangeSchema>;
+type StoredMessageOwner = { remoteJid: string; phone: string; isFromMe: boolean; messageId: string };
+
+const phoneDigits = (value: string) => value.replace(/\D/g, '');
+
+/**
+ * ID pesan di protocolMessage (tarik/edit) ditulis bebas oleh client pengirim. Perubahan hanya sah bila pesan asli
+ * dikirim oleh pihak yang sama (brand atau kontak) di chat yang sama; untuk grup, pengirimnya juga harus sama.
+ */
+export function isMessageChangeAuthor(stored: StoredMessageOwner, author: Pick<MessageChangeAuthor, 'fromMe' | 'chatJids' | 'phone'>) {
+  if (stored.messageId.startsWith('call-')) return false;
+  if (stored.isFromMe !== author.fromMe) return false;
+  const isGroup = stored.remoteJid.endsWith('@g.us');
+  const samePhone = Boolean(phoneDigits(author.phone)) && phoneDigits(stored.phone) === phoneDigits(author.phone);
+  const sameChat = author.chatJids.includes(stored.remoteJid) || (!isGroup && samePhone);
+  if (!sameChat) return false;
+  return !isGroup || author.fromMe || samePhone;
+}
+
+const changeOwnerSelect = { id: true, remoteJid: true, phone: true, isFromMe: true, messageId: true } as const;
+
 /** Pengirim menarik pesannya ("hapus untuk semua") di WhatsApp: tandai terhapus seperti hapus dari CRM. */
 internalRouter.post('/messages/revoked', asyncHandler(async (req, res) => {
-  const input = z.object({ brandId: z.coerce.number().int().positive(), messageId: z.string().min(1).max(100) }).parse(req.body);
-  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { id: true, prospectId: true, isDeleted: true } });
-  if (message && !message.isDeleted) {
+  const input = messageChangeSchema.parse(req.body);
+  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { ...changeOwnerSelect, prospectId: true, isDeleted: true } });
+  if (message && !message.isDeleted && isMessageChangeAuthor(message, input)) {
     const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { isDeleted: true, deletedAt: new Date() } });
     scheduleConversationStats([updated.prospectId]);
     emitToBrand(input.brandId, 'message:deleted', { id: updated.id, messageId: updated.messageId, isDeleted: true, deletedAt: updated.deletedAt });
@@ -1355,9 +1383,9 @@ internalRouter.post('/messages/revoked', asyncHandler(async (req, res) => {
 
 /** Pengirim mengedit pesannya di WhatsApp: teks di CRM ikut berubah. */
 internalRouter.post('/messages/edited', asyncHandler(async (req, res) => {
-  const input = z.object({ brandId: z.coerce.number().int().positive(), messageId: z.string().min(1).max(100), text: z.string().max(65_000) }).parse(req.body);
-  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { id: true } });
-  if (message) {
+  const input = messageChangeSchema.extend({ text: z.string().max(65_000) }).parse(req.body);
+  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: changeOwnerSelect });
+  if (message && isMessageChangeAuthor(message, input)) {
     const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { messageText: input.text } });
     scheduleConversationStats([updated.prospectId]);
     emitToBrand(input.brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText });
