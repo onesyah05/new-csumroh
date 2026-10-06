@@ -31,7 +31,8 @@ const SPAM_OPTIONS = [
   { value: 'all', label: 'Semua' },
 ];
 
-const dateText = (value: string | null) => (value ? new Date(`${value}T00:00:00+07:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+// Tanggal kalender (WIB) dicetak di zona UTC: browser di zona lain (mis. staf di Saudi) tidak menggesernya sehari.
+const dateText = (value: string | null) => (value ? new Date(`${value}T00:00:00Z`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
 
 /**
  * Prospek dari satu iklan Click-to-WhatsApp, dibuka dari angka Lead di Laporan › Kreatif iklan. Periode & brand
@@ -72,7 +73,8 @@ export function AdLeadsPage() {
   return (
     <div className="app-page space-y-5 pb-16">
       <PageHeader
-        backUrl={`/laporan?tab=creatives`}
+        // Kembali ke laporan dengan periode & brand yang sama.
+        backUrl={`/laporan?${new URLSearchParams({ tab: 'creatives', from, to, brandId }).toString()}`}
         kicker="Prospek dari iklan"
         title={<span className="flex min-w-0 items-center gap-3"><CreativeThumb row={data.ad} size="sm" /><span className="truncate" title={data.ad.adName}>{data.ad.adName}</span></span>}
         subtitle={[data.ad.campaignName, `${dateText(from)} – ${dateText(to)}`, `${data.summary.leads} lead · ${data.summary.spam} spam`].filter(Boolean).join(' · ')}

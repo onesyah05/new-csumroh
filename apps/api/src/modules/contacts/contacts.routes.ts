@@ -1,37 +1,24 @@
-import { Router } from 'express';
-import { z } from 'zod';
+import { Router, type Request } from 'express';
 import { prisma } from '../../db/prisma.js';
-import { activeDevicePhone } from '../chat/device-scope.js';
-import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
-import { emitToBrand } from '../../realtime/socket.js';
-import { asyncHandler, HttpError } from '../../utils/http.js';
+import { authGuard, scopedBrandId } from '../../middleware/auth.js';
+import { asyncHandler } from '../../utils/http.js';
 import {
   getLivechatConversationsForBrand,
   normalizePhoneIdentifier,
   chooseCanonicalProspect,
 } from '../chat/chat.routes.js';
 
+// Hanya baca: kontak selalu berasal dari chat WhatsApp asli di device, tidak ada pendaftaran kontak manual.
 export const contactsRouter = Router();
 contactsRouter.use(authGuard);
 
-const contactInputSchema = z.object({
-  name: z.string().trim().min(2).max(100),
-  phone: z.string().trim().min(8).max(30),
-  city: z.string().trim().max(100).nullable().optional(),
-  brandId: z.coerce.number().int().positive().optional(),
-});
-
-function normalizePhone(value: string) {
-  const digits = value.replace(/\D/g, '');
-  if (digits.startsWith('62')) return digits;
-  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
-  if (digits.startsWith('8')) return `62${digits}`;
-  return digits;
-}
-
-function phoneAliases(value: string) {
-  const phone = normalizePhone(value);
-  return [...new Set([phone, `+${phone}`, phone.startsWith('62') ? `0${phone.slice(2)}` : phone])];
+/** Brand yang boleh dilihat user (aturan sama dengan scopedBrandId): holding semua brand, CS hanya brand penugasannya. */
+function canSeeBrand(req: Request, brandId: number) {
+  try {
+    return scopedBrandId(req, brandId) === brandId;
+  } catch {
+    return false;
+  }
 }
 
 export type ContactDevice = {
@@ -50,7 +37,7 @@ export type ContactDevice = {
 
 // GET /api/v1/contacts/devices - List connected WhatsApp devices with real livechat contact counts
 contactsRouter.get('/devices', asyncHandler(async (req, res) => {
-  const brands = await prisma.brand.findMany({
+  const allBrands = await prisma.brand.findMany({
     select: {
       id: true,
       name: true,
@@ -67,6 +54,7 @@ contactsRouter.get('/devices', asyncHandler(async (req, res) => {
     },
     orderBy: { id: 'asc' },
   });
+  const brands = allBrands.filter((brand) => canSeeBrand(req, brand.id));
 
   const devices = await Promise.all(
     brands.map(async (b) => {
@@ -101,16 +89,17 @@ contactsRouter.get('/devices', asyncHandler(async (req, res) => {
 contactsRouter.get('/', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
   const search = String(req.query.search ?? '').trim().toLowerCase();
-  const deviceFilter = req.query.deviceBrandId && req.query.deviceBrandId !== 'all' ? Number(req.query.deviceBrandId) : undefined;
+  // Device brand lain hanya untuk brand yang boleh diakses user; selain itu 403.
+  const deviceFilter = req.query.deviceBrandId && req.query.deviceBrandId !== 'all' ? scopedBrandId(req, Number(req.query.deviceBrandId)) : undefined;
   const allDevices = req.query.allDevices === 'true' || req.query.deviceBrandId === 'all';
   const multiDeviceOnly = req.query.multiDeviceOnly === 'true';
 
   // 1. Fetch all connected brands
-  const connectedBrands = await prisma.brand.findMany({
+  const connectedBrands = (await prisma.brand.findMany({
     where: { whatsappSession: { status: 'connected' } },
     include: { whatsappSession: true },
     orderBy: { id: 'asc' },
-  });
+  })).filter((brand) => canSeeBrand(req, brand.id));
 
   // 2. Fetch livechat conversations for all connected brands in parallel
   const brandConversations = await Promise.all(
@@ -249,51 +238,4 @@ contactsRouter.get('/', asyncHandler(async (req, res) => {
   });
 
   res.json({ success: true, data });
-}));
-
-// POST /api/v1/contacts - Manually register contact to connected WhatsApp device
-contactsRouter.post('/', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
-  const input = contactInputSchema.parse(req.body);
-  const brandId = scopedBrandId(req, input.brandId);
-  const phone = normalizePhone(input.phone);
-  if (phone.length < 8) throw new HttpError(422, 'Nomor WhatsApp tidak valid.');
-
-  // Check if brand has WhatsApp device session
-  const brand = await prisma.brand.findUniqueOrThrow({
-    where: { id: brandId },
-    include: { whatsappSession: true },
-  });
-
-  const devicePhone = await activeDevicePhone(brandId);
-  const existing = await prisma.prospect.findFirst({
-    where: { brandId, devicePhone, phone: { in: phoneAliases(phone) } },
-    select: { id: true },
-  });
-  if (existing) throw new HttpError(409, 'Kontak dengan nomor WhatsApp tersebut sudah tersedia.');
-
-  const contact = await prisma.prospect.create({
-    data: {
-      brandId,
-      name: input.name,
-      phone,
-      city: input.city || null,
-      remoteJid: `${phone}@s.whatsapp.net`,
-      leadSource: 'whatsapp', // marked as whatsapp lead so it syncs with connected device
-      // Tanpa device tersambung: diikat saat device berikutnya tersambung (adoptUnassignedProspects).
-      devicePhone,
-    },
-    include: { user: { select: { id: true, name: true } } },
-  });
-
-  await prisma.prospectLog.create({
-    data: {
-      prospectId: contact.id,
-      userId: req.user!.id,
-      actionType: 'contact_created',
-      title: `Kontak riil didaftarkan untuk device ${brand.whatsappSession?.phoneNumber || brand.name} oleh ${req.user!.name}`,
-    },
-  });
-
-  emitToBrand(brandId, 'contacts:synced', { imported: 1, contactId: contact.id });
-  res.status(201).json({ success: true, data: contact });
 }));

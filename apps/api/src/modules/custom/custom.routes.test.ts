@@ -201,15 +201,24 @@ describe('Layanan custom', () => {
 
   it('mengubah kebutuhan yang sedang dihitung memberi tahu Tim LA; harga dari versi lama ditolak', async () => {
     await call('post', '/prospect/:prospectId', { params: { prospectId: '1' }, body: need });
-    const version = state.requests[0]!.updatedAt.toISOString();
+    const version = state.requests[0]!.requirementsUpdatedAt.toISOString();
     await new Promise((resolve) => setTimeout(resolve, 5));
     await call('patch', '/:id', { params: { id: '1' }, body: { ...need, hotelMakkah: 'Swissotel' } });
     expect(state.notified.at(-1)).toBe('updated');
     const stale = await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: { ...quote, version } });
     expect(stale.status).toBe(409);
     expect(stale.error).toContain('Muat ulang');
-    const fresh = await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: { ...quote, version: state.requests[0]!.updatedAt.toISOString() } });
+    const fresh = await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: { ...quote, version: state.requests[0]!.requirementsUpdatedAt.toISOString() } });
     expect(fresh.status).toBe(200);
+  });
+
+  it('klaim dan lepas oleh Tim LA tidak mengubah versi kebutuhan', async () => {
+    await call('post', '/prospect/:prospectId', { params: { prospectId: '1' }, body: need });
+    const version = state.requests[0]!.requirementsUpdatedAt.toISOString();
+    await call('post', '/:id/claim', { user: users.product, params: { id: '1' } });
+    await call('post', '/:id/release', { user: users.product, params: { id: '1' } });
+    const result = await call('post', '/:id/quote', { user: users.product2, params: { id: '1' }, body: { ...quote, version } });
+    expect(result.status).toBe(200);
   });
 
   it('invoice yang sudah terkirim harus dibatalkan secara sadar sebelum kebutuhan diubah', async () => {
@@ -224,6 +233,22 @@ describe('Layanan custom', () => {
     expect(ok.status).toBe(200);
     expect(state.prospects[0]).toMatchObject({ status: 'offer', invoiceNumber: null, invoiceAmount: 0, invoiceSentAt: null, dealValue: 0 });
     expect(state.logs.some((log) => log.actionType === 'invoice_voided')).toBe(true);
+  });
+
+  it('membatalkan atau menghitung ulang custom yang sudah disepakati ikut membatalkan invoice harga custom', async () => {
+    for (const action of ['cancel', 'revision'] as const) {
+      state.requests = []; state.logs = [];
+      Object.assign(state.prospects[0]!, { status: 'qualified', invoiceSentAt: null, invoiceAmount: 0, invoiceNumber: null });
+      await call('post', '/prospect/:prospectId', { params: { prospectId: '1' }, body: need });
+      await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: quote });
+      await call('post', '/:id/agree', { params: { id: '1' }, body: { agreedPrice: 72_000_000 } });
+      Object.assign(state.prospects[0]!, { status: 'closing', invoiceSentAt: new Date(), invoiceAmount: 20_000_000, invoiceNumber: 'INV/202609/0002' });
+      const result = await call('post', `/:id/${action}`, { params: { id: '1' }, body: { note: 'Jamaah ganti rencana' } });
+      expect(result.status).toBe(200);
+      // Jamaah tidak bisa lagi membayar invoice lama yang lalu dicatat dengan harga katalog.
+      expect(state.prospects[0]).toMatchObject({ status: 'offer', invoiceNumber: null, invoiceAmount: 0, invoiceSentAt: null, dealValue: 0 });
+      expect(state.logs.some((log) => log.actionType === 'invoice_voided')).toBe(true);
+    }
   });
 
   it('bulan keberangkatan dan budget custom mengisi Kualifikasi yang masih kosong', async () => {

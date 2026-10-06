@@ -14,7 +14,8 @@ export function normalizePhoneIdentifier(value?: string | null) {
   if (!digits || digits === '0') return '';
   if (digits.startsWith('62')) return digits;
   if (digits.startsWith('0')) return `62${digits.slice(1)}`;
-  if (digits.startsWith('8')) return `62${digits}`;
+  // Nomor WhatsApp selalu format internasional. Jangan menambah 62 di depan angka 8: itu mengubah nomor Hong Kong
+  // (852…), Korea (82…), Jepang (81…), Taiwan (886…) menjadi nomor Indonesia milik orang lain.
   return digits;
 }
 
@@ -76,6 +77,37 @@ export type OutboundTextInput = {
  * Tidak ada perubahan apa pun di database bila gateway gagal: pemanggil boleh
  * menganggap nilai kembalian (messageId) sebagai bukti pesan benar-benar dikirim.
  */
+export type QuoteInput = { quotedMessageId?: string; quotedText?: string; quotedSender?: string };
+
+/**
+ * Kutipan balasan hanya sah untuk pesan di chat prospek yang sama. Tanpa cek ini, kutipan yang tertinggal dari chat
+ * lain mengirim isi chat jamaah A (nama, nomor, info pembayaran) ke jamaah B. Pesan yang tidak cocok: kutipan dibuang,
+ * pesannya tetap terkirim tanpa kutipan.
+ */
+export async function resolveQuote(
+  brandId: number,
+  prospect: { id: number; name: string; phone: string | null; remoteJid: string | null },
+  input: QuoteInput,
+) {
+  if (!input.quotedMessageId) return {};
+  const quoted = await prisma.chatMessage.findFirst({
+    where: { brandId, messageId: input.quotedMessageId },
+    select: { prospectId: true, remoteJid: true, phone: true, messageText: true, senderName: true, isFromMe: true },
+  });
+  if (!quoted) return {};
+  const prospectPhone = normalizePhoneIdentifier(prospect.phone);
+  const sameChat = quoted.prospectId === prospect.id
+    || (Boolean(prospect.remoteJid) && quoted.remoteJid === prospect.remoteJid)
+    || (Boolean(prospectPhone) && normalizePhoneIdentifier(quoted.phone) === prospectPhone);
+  if (!sameChat) return {};
+  return {
+    quotedMessageId: input.quotedMessageId,
+    quotedText: input.quotedText || quoted.messageText || '',
+    quotedSender: input.quotedSender || (quoted.isFromMe ? 'Anda' : (quoted.senderName || prospect.name || 'Jamaah')),
+    isQuotedFromMe: quoted.isFromMe,
+  };
+}
+
 export async function sendTextToProspect(input: OutboundTextInput) {
   const { user, brandId } = input;
   const prospect = await prisma.prospect.findUnique({
@@ -102,27 +134,14 @@ export async function sendTextToProspect(input: OutboundTextInput) {
 
   const phone = normalizePhoneIdentifier(prospect.phone);
 
-  let quotedText = input.quotedText;
-  let quotedSender = input.quotedSender;
-  let isQuotedFromMe = false;
-  if (input.quotedMessageId) {
-    const quoted = await prisma.chatMessage.findFirst({
-      where: { brandId, messageId: input.quotedMessageId },
-      select: { messageText: true, senderName: true, isFromMe: true },
-    });
-    if (quoted) {
-      quotedText = quotedText || quoted.messageText || '';
-      quotedSender = quotedSender || (quoted.isFromMe ? 'Anda' : (quoted.senderName || prospect.name || 'Jamaah'));
-      isQuotedFromMe = quoted.isFromMe;
-    }
-  }
+  const { quotedMessageId, quotedText, quotedSender, isQuotedFromMe } = await resolveQuote(brandId, prospect, input);
 
   const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/messages`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
     body: JSON.stringify({
       jid: remoteJid,
       text: input.text,
-      quotedMessageId: input.quotedMessageId,
+      quotedMessageId,
       quotedText,
       isQuotedFromMe,
     }),
@@ -147,7 +166,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
         messageType: 'conversation',
         status: 'sent',
         timestamp: Math.floor(Date.now() / 1000),
-        quotedMessageId: input.quotedMessageId,
+        quotedMessageId,
         quotedText,
         quotedSender,
       },

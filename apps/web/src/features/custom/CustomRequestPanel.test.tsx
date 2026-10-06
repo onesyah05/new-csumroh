@@ -18,7 +18,7 @@ const base: CustomRequest = {
   extraHotels: [], route: 'madinah_first', equipment: true, fastTrain: true, tourLeader: false, muthawif: true, cityTour: 'Thaif',
   budgetPerPax: 35_000_000, specialNeeds: null, notes: null,
   offeredPrice: 76_000_000, floorPrice: 70_000_000, minDpPerPax: 10_000_000, quoteValidUntil: new Date(Date.now() + 86_400_000).toISOString(),
-  quoteNote: null, quotedAt: null, revisionNote: null, agreedPrice: null, agreedAt: null, createdAt: '', updatedAt: new Date().toISOString(),
+  quoteNote: null, quotedAt: null, revisionNote: null, agreedPrice: null, agreedAt: null, createdAt: '', updatedAt: new Date().toISOString(), requirementsUpdatedAt: new Date().toISOString(),
 };
 const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 afterEach(() => { cleanup(); vi.clearAllMocks(); });

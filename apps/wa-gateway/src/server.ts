@@ -15,6 +15,7 @@ import makeWASocket, {
   downloadMediaMessage,
   normalizeMessageContent,
   getContentType,
+  type BaileysEventMap,
   type WASocket,
   type WAMessage,
 } from '@whiskeysockets/baileys';
@@ -191,6 +192,17 @@ async function startSession(brandId: number) {
   // Nomor akun yang benar-benar menerima event ini. API memakainya untuk memisahkan kontak & riwayat per device,
   // tanpa bergantung pada status sesi di database (bisa sesaat kosong saat sambung ulang).
   const devicePhone = () => socket.user?.id?.split(':')[0]?.split('@')[0] || undefined;
+  // Event chat diteruskan ke API berurutan sesuai kedatangan. Pesan media menunggu download dulu; tanpa antrean ini
+  // "hapus untuk semua", edit, atau centang yang datang sesudahnya bisa sampai ke API lebih dulu lalu diabaikan
+  // karena pesan aslinya belum tersimpan.
+  let eventChain: Promise<void> = Promise.resolve();
+  const onInOrder = <E extends keyof BaileysEventMap>(event: E, handler: (arg: BaileysEventMap[E]) => Promise<void>) => {
+    socket.ev.on(event, (arg) => {
+      eventChain = eventChain
+        .then(() => handler(arg))
+        .catch((error) => logger.error({ err: error, brandId, event }, 'WhatsApp event handler failed'));
+    });
+  };
   socket.ev.on('creds.update', saveCreds);
   socket.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (generations.get(brandId) !== generation) return;
@@ -223,7 +235,7 @@ async function startSession(brandId: number) {
       }
     }
   });
-  socket.ev.on('messaging-history.set', async ({ contacts, lidPnMappings, messages, chats }: any) => {
+  onInOrder('messaging-history.set', async ({ contacts, lidPnMappings, messages, chats }: any) => {
     addLidMappings(lidPnMap, lidPnMappings, contacts);
     const unreadChatJids = new Set<string>();
     if (Array.isArray(chats)) {
@@ -252,10 +264,10 @@ async function startSession(brandId: number) {
     // Sync contacts AFTER history messages so existing prospects get updated with WhatsApp username / contact name
     await syncContacts(brandId, contacts, lidPnMap, devicePhone());
   });
-  socket.ev.on('messages.upsert', async ({ messages }) => {
+  onInOrder('messages.upsert', async ({ messages }) => {
     for (const message of messages) {
       // Pesan ditarik/diedit pengirim: perbarui pesan asli di CRM, bukan pesan baru.
-      const change = toMessageChange(message);
+      const change = toMessageChange(message, lidPnMap);
       if (change) {
         await notify(change.kind === 'revoked' ? '/messages/revoked' : '/messages/edited', { brandId, ...change });
         continue;
@@ -270,7 +282,7 @@ async function startSession(brandId: number) {
       }
     }
   });
-  socket.ev.on('chats.update', async (updates) => {
+  onInOrder('chats.update', async (updates) => {
     for (const update of updates) {
       if (!update.id) continue;
       const isRead = update.unreadCount === 0 || (update as any).read === true;
@@ -283,7 +295,7 @@ async function startSession(brandId: number) {
       }
     }
   });
-  socket.ev.on('messages.update', async (updates) => {
+  onInOrder('messages.update', async (updates) => {
     for (const { key, update } of updates) {
       if (!key?.id) continue;
       const rawStatus = (update as any)?.status;
@@ -305,7 +317,7 @@ async function startSession(brandId: number) {
       }
     }
   });
-  socket.ev.on('message-receipt.update', async (receipts) => {
+  onInOrder('message-receipt.update', async (receipts) => {
     for (const item of receipts) {
       if (!item.key?.id) continue;
       const receipt = item.receipt;
@@ -328,13 +340,13 @@ async function startSession(brandId: number) {
     }
   });
   // Telepon/video call dari jamaah: CS diberi tahu dan riwayatnya tercatat di chat (tidak ditolak otomatis).
-  socket.ev.on('call', async (calls) => {
+  onInOrder('call', async (calls) => {
     for (const call of calls) {
       const payload = toGatewayCall(brandId, call, lidPnMap, devicePhone());
       if (payload) await notify('/calls/event', { ...payload, devicePhone: devicePhone() });
     }
   });
-  socket.ev.on('messages.reaction', async (reactions) => {
+  onInOrder('messages.reaction', async (reactions) => {
     for (const item of reactions) {
       if (!item.key?.id) continue;
       await notify('/messages/reaction', {
@@ -345,11 +357,11 @@ async function startSession(brandId: number) {
       });
     }
   });
-  socket.ev.on('contacts.upsert', async (contacts) => {
+  onInOrder('contacts.upsert', async (contacts) => {
     addLidMappings(lidPnMap, [], contacts);
     await syncContacts(brandId, contacts, lidPnMap, devicePhone());
   });
-  socket.ev.on('contacts.update', async (contacts) => {
+  onInOrder('contacts.update', async (contacts) => {
     addLidMappings(lidPnMap, [], contacts);
     await syncContacts(brandId, contacts, lidPnMap, devicePhone());
   });

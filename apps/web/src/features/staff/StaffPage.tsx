@@ -170,6 +170,7 @@ function StaffFormModal({
   onSaved: (msg: string) => void;
 }) {
   const isEdit = Boolean(editing);
+  const { user: me, logout } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -239,6 +240,12 @@ function StaffFormModal({
       }
     },
     onSuccess: (data) => {
+      // Kata sandi sendiri diganti: server memutus semua sesi akun ini (termasuk yang ini), jadi langsung masuk ulang.
+      if (isEdit && editing?.id === me?.id && form.password) {
+        window.alert('Kata sandi berhasil diganti. Semua sesi akun ini telah diputus; silakan masuk lagi dengan kata sandi baru.');
+        void logout();
+        return;
+      }
       onSaved(isEdit ? `Data staf berhasil diperbarui.${releasedNote(data?.releasedProspects)}` : 'Akun staf baru berhasil dibuat.');
       onClose();
     },

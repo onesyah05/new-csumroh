@@ -48,7 +48,7 @@ export type CustomRequest = {
   offeredPrices: CustomRoomPrices | null; floorPrices: CustomRoomPrices | null;
   offeredPrice: string | number | null; floorPrice: string | number | null; minDpPerPax: string | number | null;
   quoteValidUntil: string | null; quoteNote: string | null; quotedAt: string | null; revisionNote: string | null;
-  returnNote: string | null; queuedAt: string | null; quoteCount: number; minDpInfant: string | number | null;
+  returnNote: string | null; queuedAt: string | null; requirementsUpdatedAt: string; quoteCount: number; minDpInfant: string | number | null;
   claimedById?: number | null; claimedAt?: string | null; claimedBy?: { id: number; name: string } | null;
   agreedPrice: string | number | null; agreedAt: string | null; createdAt: string; updatedAt: string;
   prospect?: {

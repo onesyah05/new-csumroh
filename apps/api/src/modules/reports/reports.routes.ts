@@ -12,6 +12,7 @@ import { SpamAudienceError, syncSpamAudience } from '../ads/spam-audience.js';
 import { normalizePhone } from '../capi/capi.payload.js';
 import { withAdsToken } from '../capi/meta-token.js';
 import { adLabels, ensureAdLabels } from '../ads/meta-ads.js';
+import { phoneSearchDigits } from '../../utils/phone-search.js';
 
 /**
  * Laporan manajemen (Superadmin & Admin): penjualan, kinerja CS, sumber lead, alasan batal, pembayaran, iklan Meta,
@@ -70,15 +71,15 @@ const stageKey = (status: string) => {
   return isWonStatus(s) ? 'deal' : isLostStatus(s) ? 'lose' : s;
 };
 
-/** Deal = pembayaran pertama terverifikasi (tidak dibatalkan) dalam periode. */
-async function dealsInRange(brandWhere: object, range: object) {
+/** Pembayaran terverifikasi (tidak dibatalkan) dalam periode: uang masuk, dihitung per transfer. */
+async function verifiedPaymentsInRange(brandWhere: object, range: object) {
   return prisma.payment.findMany({
     where: { ...brandWhere, status: 'verified', createdAt: range },
     select: {
       amount: true, createdAt: true, bankName: true,
       prospect: {
         select: {
-          id: true, createdAt: true, dealValue: true, paymentStatus: true, userId: true, leadSource: true,
+          id: true, status: true, createdAt: true, dealValue: true, paymentStatus: true, userId: true, leadSource: true,
           brand: { select: { name: true } }, package: { select: { name: true } }, user: { select: { name: true } },
         },
       },
@@ -86,14 +87,38 @@ async function dealsInRange(brandWhere: object, range: object) {
   });
 }
 
+/**
+ * Deal = prospek, bukan pembayaran. Satu prospek dihitung sekali, di periode pembayaran terverifikasi PERTAMANYA, dengan
+ * nilai deal-nya sekali. Tanpa ini prospek dengan dua pembayaran terverifikasi (dibatalkan lalu jadi lagi, data lama)
+ * terhitung dua kali dan nilai deal serta ROAS berlipat. Booking yang dibatalkan setelah DP diverifikasi (status bukan
+ * Deal lagi) tidak dihitung sebagai deal; uang masuknya tetap terlihat di laporan Pembayaran.
+ */
+async function firstDeals<T extends { createdAt: Date; prospect: { id: number; status: string } }>(payments: T[], rangeStart: Date) {
+  const earliest = new Map<number, T>();
+  for (const payment of payments) {
+    if (!isWonStatus(payment.prospect.status)) continue;
+    const current = earliest.get(payment.prospect.id);
+    if (!current || payment.createdAt < current.createdAt) earliest.set(payment.prospect.id, payment);
+  }
+  if (!earliest.size) return [];
+  const paidBefore = await prisma.payment.findMany({
+    where: { prospectId: { in: [...earliest.keys()] }, status: 'verified', createdAt: { lt: rangeStart } },
+    select: { prospectId: true },
+    distinct: ['prospectId'],
+  });
+  for (const { prospectId } of paidBefore) earliest.delete(prospectId);
+  return [...earliest.values()];
+}
+
 // ── 1. Penjualan & funnel ────────────────────────────────────────────────────────────────────────────────
 reportsRouter.get('/sales', asyncHandler(async (req, res) => {
   const { format, range, brandWhere } = parseRange(req);
-  const [leads, spam, deals] = await Promise.all([
+  const [leads, spam, payments] = await Promise.all([
     prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range, ...notSpam }, select: { status: true } }),
     prisma.prospect.count({ where: { ...brandWhere, createdAt: range, spamAt: { not: null } } }),
-    dealsInRange(brandWhere, range),
+    verifiedPaymentsInRange(brandWhere, range),
   ]);
+  const deals = await firstDeals(payments, range.gte);
 
   // Posisi lead periode ini sekarang (per tahap).
   const byStage = new Map<string, number>();
@@ -103,7 +128,7 @@ reportsRouter.get('/sales', asyncHandler(async (req, res) => {
     .filter((s) => s.count > 0 || ['deal', 'lose'].includes(s.key));
 
   const dealValue = deals.reduce((sum, d) => sum + num(d.prospect.dealValue), 0);
-  const cashIn = deals.reduce((sum, d) => sum + num(d.amount), 0);
+  const cashIn = payments.reduce((sum, p) => sum + num(p.amount), 0);
   const days = deals.map((d) => (d.createdAt.getTime() - d.prospect.createdAt.getTime()) / 86_400_000).filter((v) => v >= 0);
 
   const group = (keyOf: (d: (typeof deals)[number]) => string) => {
@@ -147,13 +172,14 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
   });
   const ids = csUsers.map((u) => u.id);
   const today = new Date(`${businessDateKey()}T00:00:00.000Z`);
-  const [leads, deals, openNow, overdue, takeovers] = await Promise.all([
+  const [leads, payments, openNow, overdue, takeovers] = await Promise.all([
     prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range, userId: { in: ids }, ...notSpam }, select: { id: true, userId: true } }),
-    dealsInRange(brandWhere, range),
+    verifiedPaymentsInRange(brandWhere, range),
     prisma.prospect.groupBy({ by: ['userId'], where: { ...brandWhere, userId: { in: ids }, ...notSpam, status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] } }, _count: true }),
     prisma.prospect.groupBy({ by: ['userId'], where: { ...brandWhere, userId: { in: ids }, ...notSpam, status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] }, nextFollowupDate: { lt: today } }, _count: true }),
     prisma.prospectLog.findMany({ where: { actionType: 'pic_taken_over', createdAt: range, ...(brandId ? { prospect: { brandId } } : {}) }, select: { title: true } }),
   ]);
+  const deals = await firstDeals(payments, range.gte);
 
   // Waktu balas pertama: pesan jamaah pertama → balasan pertama sesudahnya (lead periode ini, menit kalender).
   const leadIds = leads.map((l) => l.id);
@@ -260,7 +286,7 @@ reportsRouter.get('/payments', asyncHandler(async (req, res) => {
   const { format, range, brandWhere } = parseRange(req);
   const now = new Date();
   const [payments, reversed, rejected, invoices] = await Promise.all([
-    dealsInRange(brandWhere, range),
+    verifiedPaymentsInRange(brandWhere, range),
     prisma.payment.count({ where: { ...brandWhere, status: 'reversed', createdAt: range } }),
     prisma.paymentProofRejection.count({ where: { ...brandWhere, kind: 'rejected', createdAt: range } }),
     // Invoice berjalan saat ini (belum Deal/Batal).
@@ -321,9 +347,9 @@ reportsRouter.get('/ads', asyncHandler(async (req, res) => {
     prisma.prospect.groupBy({ by: ['brandId'], where: { ...brandWhere, leadSource: 'meta_ads', createdAt: range, ...notSpam }, _count: true }),
     prisma.payment.findMany({
       where: { ...brandWhere, status: 'verified', createdAt: range, prospect: { leadSource: 'meta_ads' } },
-      select: { brandId: true, prospect: { select: { dealValue: true } } },
+      select: { brandId: true, createdAt: true, prospect: { select: { id: true, status: true, dealValue: true } } },
     }),
-  ]);
+  ]).then(async ([brands, leads, payments]) => [brands, leads, await firstDeals(payments, range.gte)] as const);
   const spends = await Promise.all(brands.map((brand) => fetchAdSpend(withAdsToken(brand), from, to)));
 
   const rows = brands.map((brand, index) => {
@@ -345,8 +371,8 @@ reportsRouter.get('/ads', asyncHandler(async (req, res) => {
       leads: leadCount,
       deals: myDeals.length,
       purchaseValue,
-      cpl: spend !== null && leadCount ? Math.round(spend / leadCount) : null,
-      cac: spend !== null && myDeals.length ? Math.round(spend / myDeals.length) : null,
+      cpl: spend && leadCount ? Math.round(spend / leadCount) : null,
+      cac: spend && myDeals.length ? Math.round(spend / myDeals.length) : null,
       roas: spend ? Math.round((purchaseValue / spend) * 100) / 100 : null,
     };
   });
@@ -416,9 +442,13 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
   const [insights, leads, payments] = await Promise.all([
     Promise.all(brands.map((brand) => fetchAdInsights(withAdsToken(brand), from, to))),
     prospectAdIds(brandIds, range),
-    prisma.payment.findMany({ where: { ...brandWhere, status: 'verified', createdAt: range }, select: { prospectId: true, prospect: { select: { dealValue: true } } } }),
+    prisma.payment.findMany({
+      where: { ...brandWhere, status: 'verified', createdAt: range },
+      select: { prospectId: true, brandId: true, createdAt: true, prospect: { select: { id: true, status: true, dealValue: true } } },
+    }),
   ]);
-  const paidAds = await prospectAdIds(brandIds, undefined, payments.map((p) => p.prospectId));
+  const deals = await firstDeals(payments, range.gte);
+  const paidAds = await prospectAdIds(brandIds, undefined, deals.map((p) => p.prospectId));
   const adOfProspect = new Map(paidAds.map((r) => [Number(r.prospect_id), r.ad_id]));
   const brandName = new Map(brands.map((b) => [b.id, b.name]));
 
@@ -451,10 +481,11 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
     row.leads += 1;
     if (QUALIFIED_STAGES.has(stageKey(lead.status))) row.qualified += 1;
   }
-  for (const payment of payments) {
+  for (const payment of deals) {
     // Hanya prospek Meta Ads (sama dengan tab Iklan Meta); yang ID iklannya tak terbaca masuk baris "tidak teridentifikasi".
     if (!adOfProspect.has(payment.prospectId)) continue;
-    const row = rowFor(adOfProspect.get(payment.prospectId) || UNKNOWN_AD, '');
+    // Iklan tanpa biaya/lead di periode ini baru muncul lewat deal-nya: brand diambil dari pembayaran.
+    const row = rowFor(adOfProspect.get(payment.prospectId) || UNKNOWN_AD, brandName.get(payment.brandId) ?? '');
     row.deals += 1;
     row.dealValue += num(payment.prospect.dealValue);
   }
@@ -502,11 +533,11 @@ reportsRouter.get('/creatives/:adId/prospects', asyncHandler(async (req, res) =>
   const ids = matches.map((row) => Number(row.prospect_id));
   const leadCount = matches.filter((row) => !Number(row.spam)).length;
 
-  const digits = query.search.replace(/\D/g, '');
+  const digits = phoneSearchDigits(query.search);
   const where: Prisma.ProspectWhereInput = {
     id: { in: ids.length ? ids : [-1] },
     ...(query.spam === 'exclude' ? { spamAt: null } : query.spam === 'only' ? { spamAt: { not: null } } : {}),
-    ...(query.search ? { OR: [{ name: { contains: query.search } }, ...(digits.length >= 4 ? [{ phone: { contains: digits } }] : [])] } : {}),
+    ...(query.search ? { OR: [{ name: { contains: query.search } }, ...(digits ? [{ phone: { contains: digits } }] : [])] } : {}),
   };
   const [total, prospects] = await Promise.all([
     prisma.prospect.count({ where }),

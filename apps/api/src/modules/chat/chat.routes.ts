@@ -13,7 +13,7 @@ import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker, storedReferral } from '../prospects/referral.service.js';
-import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, sendingDevicePhone, sendTextToProspect } from './outbound.js';
+import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, resolveQuote, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { adLabels, cacheAdThumbnail, withAdPreviews } from '../ads/meta-ads.js';
 import { syncSessionWithGateway } from '../whatsapp/gateway-probe.js';
@@ -533,7 +533,8 @@ chatRouter.post('/prospects/:id/history-sync', asyncHandler(async (req, res) => 
   const key = conversationKey({ ...target, name: '' });
   const aliases = prospects.filter((item) => conversationKey({ ...item, name: '' }) === key);
   const oldest = await prisma.chatMessage.findFirst({
-    where: { brandId, isDeleted: false, prospectId: { in: aliases.map((item) => item.id) } },
+    // Titik awal harus pesan yang dikenal WhatsApp: riwayat panggilan (call-…) dan pesan lokal (local-…) bukan.
+    where: { brandId, isDeleted: false, prospectId: { in: aliases.map((item) => item.id) }, NOT: [{ messageId: { startsWith: 'call-' } }, { messageId: { startsWith: 'local-' } }] },
     select: { messageId: true, remoteJid: true, phone: true, isFromMe: true, timestamp: true },
     orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
   });
@@ -544,7 +545,8 @@ chatRouter.post('/prospects/:id/history-sync', asyncHandler(async (req, res) => 
   const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/history`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
-    body: JSON.stringify({ jid: oldest.remoteJid, phone: normalizePhoneIdentifier(oldest.phone || target.phone), messageId: oldest.messageId, isFromMe: oldest.isFromMe, timestamp: oldest.timestamp, count: 50 }),
+    // Kontak @lid tanpa nomor: phone tidak dikirim (gateway menolak string kosong).
+    body: JSON.stringify({ jid: oldest.remoteJid, phone: normalizePhoneIdentifier(oldest.phone || target.phone) || undefined, messageId: oldest.messageId, isFromMe: oldest.isFromMe, timestamp: oldest.timestamp, count: 50 }),
   }).catch(() => null);
   if (!response?.ok) throw new HttpError(502, 'Sinkronisasi histori WhatsApp belum dapat dimulai.');
   const result = await response.json() as { data?: unknown };
@@ -654,21 +656,8 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
 
   const phone = normalizePhoneIdentifier(prospect.phone);
 
-  // Kutipan: pesan yang dibalas bisa milik jamaah atau pesan kita sendiri.
-  let quotedText = input.quotedText;
-  let quotedSender = input.quotedSender;
-  let isQuotedFromMe = false;
-  if (input.quotedMessageId) {
-    const quoted = await prisma.chatMessage.findFirst({
-      where: { brandId, messageId: input.quotedMessageId },
-      select: { messageText: true, senderName: true, isFromMe: true },
-    });
-    if (quoted) {
-      quotedText = quotedText || quoted.messageText || '';
-      quotedSender = quotedSender || (quoted.isFromMe ? 'Anda' : (quoted.senderName || prospect.name || 'Jamaah'));
-      isQuotedFromMe = quoted.isFromMe;
-    }
-  }
+  // Kutipan: pesan yang dibalas bisa milik jamaah atau pesan kita sendiri, tetapi harus dari chat prospek ini.
+  const { quotedMessageId, quotedText, quotedSender, isQuotedFromMe } = await resolveQuote(brandId, prospect, input);
 
   // Save media file locally to uploads/media/ if not already a local file
   if (!resolvedLocalUrl) {
@@ -699,7 +688,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
       base64Data: resolvedBase64,
       mediaType: input.mediaType,
       caption: input.caption,
-      quotedMessageId: input.quotedMessageId,
+      quotedMessageId,
       quotedText,
       isQuotedFromMe,
     }),
@@ -726,7 +715,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
         mediaUrl: resolvedLocalUrl || (gatewayResult.data?.mediaUrl ?? null),
         status: 'sent',
         timestamp: Math.floor(Date.now() / 1000),
-        quotedMessageId: input.quotedMessageId,
+        quotedMessageId,
         quotedText,
         quotedSender,
       },
@@ -985,18 +974,22 @@ chatRouter.get('/wa/status', asyncHandler(async (req, res) => {
 export const internalRouter = Router();
 internalRouter.use((req, _res, next) => (secretMatches(req.get('x-internal-secret'), env.WA_GATEWAY_SECRET) ? next() : next(new HttpError(401, 'Internal secret tidak valid.'))));
 
+/** Teks tampilan dari WhatsApp dipotong, bukan ditolak: satu nilai kepanjangan tidak boleh membuang pesan/batch. */
+const clipped = (max: number) => z.string().transform((value) => value.slice(0, max));
+
 const gatewayMessageSchema = z.object({
   brandId: z.coerce.number().int().positive(),
   messageId: z.string().min(1).max(100),
   remoteJid: z.string().min(3).max(100),
   phone: z.string().max(30).optional().default(''),
-  senderName: z.string().max(100).optional(),
+  senderName: clipped(100).optional(),
   text: z.string().optional().default(''),
   timestamp: z.coerce.number().int().nonnegative(),
-  messageType: z.string().max(30).optional().default('conversation'),
+  // WAProto punya tipe lebih dari 30 karakter (mis. newsletterFollowerInviteMessageV2).
+  messageType: clipped(30).optional().default('conversation'),
   mediaUrl: z.string().max(10_000).optional(),
   isFromMe: z.boolean().optional().default(false),
-  status: z.string().max(30).optional().default('delivered'),
+  status: clipped(30).optional().default('delivered'),
   referral: z.unknown().optional(),
   // Nomor akun WhatsApp yang menerima/mengirim pesan (dari gateway).
   devicePhone: z.string().max(40).optional(),
@@ -1170,7 +1163,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     ? await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true } })
     : null;
 
-  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { prospectId: true } });
+  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { prospectId: true, status: true, messageText: true, mediaUrl: true } });
   const message = await prisma.chatMessage.upsert({
     where: { brandId_messageId: { brandId, messageId } },
     update: {
@@ -1180,11 +1173,13 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       ...(devicePhone ? { devicePhone } : {}),
       senderName,
       isFromMe,
-      messageText: text,
+      // Pesan yang sudah tersimpan dikirim ulang (gema kiriman CRM, sinkron riwayat, retry outbox): isi tidak berubah
+      // (edit lewat /messages/edited) dan status tidak boleh mundur, mis. 'sent' kiriman CRM menjadi 'pending'.
+      messageText: previousOwner?.messageText ? previousOwner.messageText : text,
       messageType,
-      ...(mediaUrl ? { mediaUrl } : {}),
+      ...(mediaUrl && !previousOwner?.mediaUrl ? { mediaUrl } : {}),
       timestamp: timestamp || Math.floor(Date.now() / 1000),
-      status: input.status || 'delivered',
+      status: laterMessageStatus(previousOwner?.status, input.status || 'delivered'),
       metaReferralData: storedReferral(referralMarker)
     },
     create: {
@@ -1233,6 +1228,17 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
   return message;
 }
 
+const MESSAGE_STATUS_ORDER = ['pending', 'sent', 'delivered', 'read'] as const;
+
+/** Status pesan yang lebih jauh dari dua nilai; 'failed' hanya menggantikan pesan yang belum terkirim. */
+export function laterMessageStatus(current: string | null | undefined, incoming: string) {
+  if (!current) return incoming;
+  const rank = (status: string) => MESSAGE_STATUS_ORDER.indexOf(status as (typeof MESSAGE_STATUS_ORDER)[number]);
+  if (incoming === 'failed') return rank(current) >= 1 ? current : 'failed';
+  if (current === 'failed') return rank(incoming) >= 1 ? incoming : current;
+  return rank(incoming) > rank(current) ? incoming : current;
+}
+
 internalRouter.post('/messages/status', asyncHandler(async (req, res) => {
   const input = z.object({
     brandId: z.coerce.number().int().positive(),
@@ -1240,17 +1246,14 @@ internalRouter.post('/messages/status', asyncHandler(async (req, res) => {
     status: z.enum(['pending', 'sent', 'delivered', 'read', 'failed']),
   }).parse(req.body);
 
-  const statusCondition = input.status === 'delivered'
-    ? { in: ['pending', 'sent'] }
-    : input.status === 'read'
-    ? { in: ['pending', 'sent', 'delivered'] }
-    : undefined;
+  // Status hanya maju (pending → sent → delivered → read); tanda terima yang terlambat tidak menurunkannya.
+  const statusCondition = { in: MESSAGE_STATUS_ORDER.filter((status) => MESSAGE_STATUS_ORDER.indexOf(status) < MESSAGE_STATUS_ORDER.indexOf(input.status === 'failed' ? 'delivered' : input.status)) };
 
   const updated = await prisma.chatMessage.updateMany({
     where: {
       brandId: input.brandId,
       messageId: input.messageId,
-      ...(statusCondition ? { status: statusCondition } : {}),
+      status: statusCondition,
     },
     data: { status: input.status },
   });
@@ -1341,11 +1344,39 @@ internalRouter.post('/messages/reaction', asyncHandler(async (req, res) => {
   res.json({ success: true, data: { updated: updated.count } });
 }));
 
+const messageChangeSchema = z.object({
+  brandId: z.coerce.number().int().positive(),
+  messageId: z.string().min(1).max(100),
+  fromMe: z.boolean(),
+  chatJids: z.array(z.string().min(1).max(100)).min(1).max(5),
+  phone: z.string().max(30).default(''),
+});
+type MessageChangeAuthor = z.infer<typeof messageChangeSchema>;
+type StoredMessageOwner = { remoteJid: string; phone: string; isFromMe: boolean; messageId: string };
+
+const phoneDigits = (value: string) => value.replace(/\D/g, '');
+
+/**
+ * ID pesan di protocolMessage (tarik/edit) ditulis bebas oleh client pengirim. Perubahan hanya sah bila pesan asli
+ * dikirim oleh pihak yang sama (brand atau kontak) di chat yang sama; untuk grup, pengirimnya juga harus sama.
+ */
+export function isMessageChangeAuthor(stored: StoredMessageOwner, author: Pick<MessageChangeAuthor, 'fromMe' | 'chatJids' | 'phone'>) {
+  if (stored.messageId.startsWith('call-')) return false;
+  if (stored.isFromMe !== author.fromMe) return false;
+  const isGroup = stored.remoteJid.endsWith('@g.us');
+  const samePhone = Boolean(phoneDigits(author.phone)) && phoneDigits(stored.phone) === phoneDigits(author.phone);
+  const sameChat = author.chatJids.includes(stored.remoteJid) || (!isGroup && samePhone);
+  if (!sameChat) return false;
+  return !isGroup || author.fromMe || samePhone;
+}
+
+const changeOwnerSelect = { id: true, remoteJid: true, phone: true, isFromMe: true, messageId: true } as const;
+
 /** Pengirim menarik pesannya ("hapus untuk semua") di WhatsApp: tandai terhapus seperti hapus dari CRM. */
 internalRouter.post('/messages/revoked', asyncHandler(async (req, res) => {
-  const input = z.object({ brandId: z.coerce.number().int().positive(), messageId: z.string().min(1).max(100) }).parse(req.body);
-  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { id: true, prospectId: true, isDeleted: true } });
-  if (message && !message.isDeleted) {
+  const input = messageChangeSchema.parse(req.body);
+  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { ...changeOwnerSelect, prospectId: true, isDeleted: true } });
+  if (message && !message.isDeleted && isMessageChangeAuthor(message, input)) {
     const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { isDeleted: true, deletedAt: new Date() } });
     scheduleConversationStats([updated.prospectId]);
     emitToBrand(input.brandId, 'message:deleted', { id: updated.id, messageId: updated.messageId, isDeleted: true, deletedAt: updated.deletedAt });
@@ -1355,9 +1386,9 @@ internalRouter.post('/messages/revoked', asyncHandler(async (req, res) => {
 
 /** Pengirim mengedit pesannya di WhatsApp: teks di CRM ikut berubah. */
 internalRouter.post('/messages/edited', asyncHandler(async (req, res) => {
-  const input = z.object({ brandId: z.coerce.number().int().positive(), messageId: z.string().min(1).max(100), text: z.string().max(65_000) }).parse(req.body);
-  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { id: true } });
-  if (message) {
+  const input = messageChangeSchema.extend({ text: z.string().max(65_000) }).parse(req.body);
+  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: changeOwnerSelect });
+  if (message && isMessageChangeAuthor(message, input)) {
     const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { messageText: input.text } });
     scheduleConversationStats([updated.prospectId]);
     emitToBrand(input.brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText });
@@ -1431,9 +1462,16 @@ internalRouter.post('/messages/incoming', asyncHandler(async (req, res) => {
 }));
 
 internalRouter.post('/messages/history', asyncHandler(async (req, res) => {
-  const input = z.object({ brandId: z.coerce.number().int().positive(), devicePhone: z.string().max(40).optional(), messages: z.array(gatewayMessageSchema).max(100) }).parse(req.body);
+  const input = z.object({ brandId: z.coerce.number().int().positive(), devicePhone: z.string().max(40).optional(), messages: z.array(z.unknown()).max(100) }).parse(req.body);
   const messages = [];
-  for (const item of input.messages) {
+  // Divalidasi per pesan: satu pesan rusak dilewati, bukan menggagalkan (lalu membuang) 49 pesan lain di batch.
+  for (const raw of input.messages) {
+    const parsed = gatewayMessageSchema.safeParse(raw);
+    if (!parsed.success) {
+      console.warn('Skipping invalid history message', parsed.error.issues[0]?.path.join('.'), parsed.error.issues[0]?.message);
+      continue;
+    }
+    const item = parsed.data;
     if (item.brandId !== input.brandId) throw new HttpError(400, 'Brand histori pesan tidak konsisten.');
     const result = await ingestGatewayMessage({ ...item, devicePhone: item.devicePhone ?? input.devicePhone }, { realtime: false });
     if (result) messages.push(result);
@@ -1447,19 +1485,24 @@ const gatewayContactSchema = z.object({
   brandId: z.coerce.number().int().positive(),
   remoteJid: z.string().min(3).max(100),
   phone: z.string().max(30).optional().default(''),
-  name: z.string().trim().min(1).max(100).optional(),
+  name: z.string().trim().min(1).transform((value) => value.slice(0, 100)).optional(),
 });
 
 internalRouter.post('/contacts/sync', asyncHandler(async (req, res) => {
   const input = z.object({
     brandId: z.coerce.number().int().positive(),
     devicePhone: z.string().max(40).optional(),
-    contacts: z.array(gatewayContactSchema).max(100),
+    contacts: z.array(z.unknown()).max(100),
   }).parse(req.body);
   let imported = 0;
   invalidateLidPhoneMap(input.brandId);
   const devicePhone = normalizePhoneIdentifier(input.devicePhone) || await activeDevicePhone(input.brandId);
-  for (const contact of input.contacts) {
+  // Divalidasi per kontak: satu kontak rusak dilewati, bukan menggagalkan seluruh batch.
+  const contacts = input.contacts.flatMap((raw) => {
+    const parsed = gatewayContactSchema.safeParse(raw);
+    return parsed.success ? [parsed.data] : [];
+  });
+  for (const contact of contacts) {
     if (contact.brandId !== input.brandId) throw new HttpError(400, 'Brand kontak tidak konsisten.');
     const phone = normalizePhoneIdentifier(contact.phone);
     // WhatsApp makin sering menyembunyikan nomor (alamat @lid). Kontak seperti itu tetap membawa nama profil:
@@ -1519,7 +1562,10 @@ internalRouter.post('/wa/status', asyncHandler(async (req, res) => {
     create: { brandId: input.brandId, sessionName: `brand_${input.brandId}`, status: input.status, qrCode, phoneNumber: phoneNumber ?? null, disconnectReason: disconnectReason ?? null },
   });
   if (input.status === 'connected') await adoptUnassignedProspects(input.brandId, session.phoneNumber);
-  emitToBrand(input.brandId, input.status === 'qr_ready' ? 'wa:qr' : 'wa:status', session);
+  // Room brand berisi CS & Finance: QR tidak ikut dikirim (siapa pun yang memindainya menautkan HP-nya sebagai device
+  // brand). Klien hanya me-refetch status; QR diambil lewat REST yang menyaringnya untuk Admin/Superadmin.
+  const { qrCode: _qrCode, ...publicSession } = session;
+  emitToBrand(input.brandId, input.status === 'qr_ready' ? 'wa:qr' : 'wa:status', { ...publicSession, qrCode: null });
   void onWhatsappStatus(input.brandId, input.status);
   res.json({ success: true, data: session });
 }));

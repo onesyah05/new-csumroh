@@ -26,9 +26,27 @@ const minuteJobs: Job[] = [
   { name: 'gateway-health', run: (now) => gatewayHealthJob(now) },
   { name: 'proof-stale', run: proofStaleJob },
   { name: 'custom-expiring', run: customExpiringJob },
+];
+
+/**
+ * Job panjang yang bergantung pada layanan luar: dijalankan di latar tanpa ditunggu putaran menit, agar Meta yang
+ * lambat (15 dtk per kiriman) tidak menunda SLA balasan atau cek gateway. Satu job tidak pernah jalan tumpang tindih.
+ */
+const backgroundJobs: Job[] = [
   // Retry + backfill event Meta CAPI; job sendiri hanya bekerja tiap 5 menit.
   { name: 'capi-sync', run: capiSyncJob },
 ];
+const backgroundRunning = new Map<string, Promise<void>>();
+
+function startBackgroundJob(job: Job, now: Date) {
+  if (backgroundRunning.has(job.name)) return;
+  backgroundRunning.set(job.name, runJob(job, now).finally(() => backgroundRunning.delete(job.name)));
+}
+
+/** Untuk test: tunggu job latar yang sedang berjalan. */
+export async function backgroundJobsSettled() {
+  await Promise.all(backgroundRunning.values());
+}
 
 /** Job harian: jalan sekali per tanggal WIB setelah jamnya tiba (juga menyusul bila API baru hidup). */
 const dailyJobs: (Job & { hour: number })[] = [
@@ -54,6 +72,7 @@ async function runJob(job: Job, now: Date) {
  */
 export async function runTick(now = new Date()) {
   if (!(await claimOnce(`scheduler:tick:${Math.floor(now.getTime() / TICK_MS)}`))) return false;
+  for (const job of backgroundJobs) startBackgroundJob(job, now);
   for (const job of minuteJobs) await runJob(job, now);
   const today = businessDateKey(now);
   const hour = businessHour(now);
@@ -67,7 +86,9 @@ let timer: ReturnType<typeof setInterval> | undefined;
 let running = false;
 
 export function startScheduler() {
-  if (!env.SCHEDULER_ENABLED || !env.NOTIFICATIONS_ENABLED || timer) return;
+  // NOTIFICATIONS_ENABLED tidak mematikan scheduler: pengiriman notifikasi sudah dimatikan di notify.service,
+  // sedangkan job lain (retry CAPI) tetap harus jalan.
+  if (!env.SCHEDULER_ENABLED || timer) return;
   const tick = async () => {
     // Putaran yang masih berjalan tidak ditumpuk.
     if (running) return;
@@ -83,7 +104,7 @@ export function startScheduler() {
   setTimeout(() => void tick(), 15_000).unref?.();
   timer = setInterval(() => void tick(), TICK_MS);
   timer.unref?.();
-  console.log('Scheduler notifikasi aktif (tiap 60 detik)');
+  console.log('Scheduler aktif (tiap 60 detik)');
 }
 
 export function stopScheduler() {

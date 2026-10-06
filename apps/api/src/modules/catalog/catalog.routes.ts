@@ -194,13 +194,12 @@ catalogRouter.patch('/brands/:id', requireRole('superadmin'), asyncHandler(async
   const existing = await prisma.brand.findUnique({ where: { id } });
   if (!existing) throw new HttpError(404, 'Brand tidak ditemukan.');
 
-  // Hapus file logo lama jika diganti
+  const data = withoutSecrets(await prisma.brand.update({ where: { id }, data: input as any }));
+  // File logo lama dihapus SETELAH update berhasil: bila update gagal (mis. kode brand bentrok), logo lama masih dipakai.
   if (input.logoUrl !== undefined && existing.logoUrl && input.logoUrl !== existing.logoUrl) {
     const oldFile = path.resolve(process.cwd(), 'uploads', 'brands', path.basename(existing.logoUrl));
     fs.promises.unlink(oldFile).catch(() => {});
   }
-
-  const data = withoutSecrets(await prisma.brand.update({ where: { id }, data: input as any }));
   res.json({ success: true, data });
 }));
 
@@ -456,6 +455,20 @@ catalogRouter.post('/packages', requireRole('superadmin', 'admin'), asyncHandler
   res.status(201).json({ success: true, data });
 }));
 
+/**
+ * File flyer lama dihapus bila tidak dipakai lagi: bukan flyer paket lain, dan tidak pernah dikirim di chat (pesan
+ * flyer di Inbox menunjuk ke file yang sama). Hanya file unggahan di uploads/packages.
+ */
+async function removeFlyerIfUnused(url: string) {
+  if (!url.startsWith('/uploads/packages/')) return;
+  const [packages, messages] = await Promise.all([
+    prisma.package.count({ where: { flyerImage: url } }),
+    prisma.chatMessage.count({ where: { mediaUrl: url } }),
+  ]);
+  if (packages || messages) return;
+  await fs.promises.unlink(path.resolve(process.cwd(), 'uploads', 'packages', path.basename(url))).catch(() => {});
+}
+
 catalogRouter.patch('/packages/:id', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.package.findUnique({ where: { id } });
@@ -479,6 +492,9 @@ catalogRouter.patch('/packages/:id', requireRole('superadmin', 'admin'), asyncHa
   }
   if (departureInfo !== undefined) {
     updatePayload.departureInfo = departureInfo;
+  } else if (input.departureDate === null || input.departureDate === '') {
+    // Tanggal dikosongkan: teks tanggal lama ikut dihapus (dipakai di detail paket dan script).
+    updatePayload.departureInfo = null;
   }
   if (input.promoDeadline !== undefined) {
     updatePayload.promoDeadline = input.promoDeadline ? new Date(input.promoDeadline) : null;
@@ -486,7 +502,8 @@ catalogRouter.patch('/packages/:id', requireRole('superadmin', 'admin'), asyncHa
   if (input.price && !input.priceQuad && !existing.priceQuad) {
     updatePayload.priceQuad = input.price;
   }
-  if (req.user!.role === 'superadmin' && input.brandId) {
+  // Pindah brand sudah diperiksa assertCanManagePackages untuk brand tujuan (admin multi-brand juga boleh).
+  if (input.brandId && input.brandId !== existing.brandId) {
     updatePayload.brandId = input.brandId;
   } else {
     delete updatePayload.brandId;
@@ -497,6 +514,7 @@ catalogRouter.patch('/packages/:id', requireRole('superadmin', 'admin'), asyncHa
     data: updatePayload,
     include: { brand: { select: { id: true, name: true, code: true } } },
   });
+  if (input.flyerImage !== undefined && existing.flyerImage && input.flyerImage !== existing.flyerImage) await removeFlyerIfUnused(existing.flyerImage);
   res.json({ success: true, data });
 }));
 
@@ -518,24 +536,26 @@ catalogRouter.delete('/packages/:id', requireRole('superadmin', 'admin'), asyncH
   const id = Number(req.params.id);
   const existing = await prisma.package.findUnique({
     where: { id },
-    include: { _count: { select: { prospects: true } } },
+    include: { _count: { select: { prospects: true, customRequests: true } } },
   });
   if (!existing) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
   assertCanManagePackages(req.user!, existing.brandId);
 
-  if (existing._count?.prospects > 0) {
+  // Permintaan layanan custom berbasis paket ini juga riwayat: tanpa paketnya, Tim LA kehilangan itinerary & fasilitas.
+  if (existing._count?.prospects > 0 || existing._count?.customRequests > 0) {
     await prisma.package.update({
       where: { id },
       data: { isActive: false },
     });
     res.json({
       success: true,
-      message: `Paket umroh "${existing.name}" memiliki ${existing._count.prospects} riwayat prospek/transaksi, sehingga dinonaktifkan (diarsipkan) demi menjaga integritas data historis.`,
+      message: `Paket umroh "${existing.name}" memiliki ${existing._count.prospects + existing._count.customRequests} riwayat prospek/transaksi/layanan custom, sehingga dinonaktifkan (diarsipkan) demi menjaga integritas data historis.`,
     });
     return;
   }
 
   await prisma.package.delete({ where: { id } });
+  if (existing.flyerImage) await removeFlyerIfUnused(existing.flyerImage);
   res.json({ success: true, message: 'Paket umroh berhasil dihapus.' });
 }));
 
@@ -778,6 +798,18 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
     newBrandIds = input.brandId ? [input.brandId] : [];
   }
 
+  // Form staf selalu mengirim akses brand. Sama dengan yang tersimpan (brand utama dan daftar akses) = tidak berubah:
+  // edit nama/email tidak boleh memutus sesi CS atau melepas prospeknya.
+  if (newBrandIds !== undefined) {
+    const currentIds = [...new Set(target.userBrands.map((ub) => ub.brandId))].sort((a, b) => a - b);
+    const sameAccess = (target.brandId ?? null) === (updateData.brandId ?? null)
+      && currentIds.join(',') === [...newBrandIds].sort((a, b) => a - b).join(',');
+    if (sameAccess) {
+      newBrandIds = undefined;
+      delete updateData.brandId;
+    }
+  }
+
   if (newBrandIds !== undefined) {
     await prisma.$transaction([
       prisma.user.update({ where: { id }, data: updateData }),
@@ -815,8 +847,10 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
       userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
     },
   });
-  // Kata sandi, role, atau akses brand berubah: sesi lama user tersebut diputus (kecuali saat mengedit diri sendiri).
-  if (id !== req.user!.id && (input.password || updateData.role || newBrandIds !== undefined)) await revokeUserSessions(id);
+  // Kata sandi diganti: SEMUA sesi diputus, termasuk saat mengganti kata sandi sendiri. Itu justru dilakukan saat akun
+  // dicurigai bocor; tanpa ini penyerang tetap masuk dengan refresh token lama (30 hari). Pengguna masuk ulang.
+  // Role atau akses brand berubah: sesi user lain diputus agar klaim di token lama tidak dipakai lagi.
+  if (input.password || (id !== req.user!.id && (updateData.role || newBrandIds !== undefined))) await revokeUserSessions(id);
   res.json({ success: true, data: { ...updated, releasedProspects } });
 }));
 

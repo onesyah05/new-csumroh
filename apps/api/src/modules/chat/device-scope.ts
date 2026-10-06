@@ -21,12 +21,15 @@ export async function visibleProspectWhere(brandIds: number[]) {
 }
 
 /**
- * Device baru tersambung: prospek brand yang belum punya device (data lama sebelum kolom ini ada,
- * atau kontak manual yang didaftarkan saat device terputus) diikat ke nomor ini.
+ * Device baru tersambung: prospek brand yang belum punya device (data lama sebelum kolom ini ada) diikat ke nomor ini,
+ * begitu juga pesan-pesannya. Riwayat chat disaring per device, jadi pesan yang tertinggal tanpa device tidak tampil.
  */
 export async function adoptUnassignedProspects(brandId: number, phoneNumber?: string | null) {
   const devicePhone = normalizePhoneIdentifier(phoneNumber);
   if (!devicePhone) return 0;
-  const { count } = await prisma.prospect.updateMany({ where: { brandId, devicePhone: null }, data: { devicePhone } });
+  const [{ count }] = await prisma.$transaction([
+    prisma.prospect.updateMany({ where: { brandId, devicePhone: null }, data: { devicePhone } }),
+    prisma.chatMessage.updateMany({ where: { brandId, devicePhone: null, prospect: { is: { devicePhone } } }, data: { devicePhone } }),
+  ]);
   return count;
 }

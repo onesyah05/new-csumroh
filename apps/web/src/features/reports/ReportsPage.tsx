@@ -87,9 +87,14 @@ export function ReportsPage() {
   const tab = (REPORT_TABS.find((t) => t.key === params.get('tab'))?.key ?? 'sales') as ReportKey;
   const setTab = (key: ReportKey) => setParams((p) => { p.set('tab', key); return p; }, { replace: true });
 
-  const [brandScope, setBrandScope] = useState('all');
-  const [period, setPeriod] = useState<Period>('this_month');
-  const [custom, setCustom] = useState(() => periodRange('this_month'));
+  // Periode & brand bisa datang dari tautan (mis. tombol kembali dari daftar lead per iklan).
+  const linkedFrom = params.get('from');
+  const linkedTo = params.get('to');
+  const isDateKey = (value: string | null): value is string => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+  const linkedRange = isDateKey(linkedFrom) && isDateKey(linkedTo) ? { from: linkedFrom, to: linkedTo } : null;
+  const [brandScope, setBrandScope] = useState(() => params.get('brandId') ?? 'all');
+  const [period, setPeriod] = useState<Period>(linkedRange ? 'custom' : 'this_month');
+  const [custom, setCustom] = useState(() => linkedRange ?? periodRange('this_month'));
   const range = period === 'custom' ? custom : periodRange(period);
   const [downloading, setDownloading] = useState(false);
 

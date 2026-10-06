@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   retryLogs: [] as any[],
   backfillProspects: [] as any[],
   notified: 0,
+  closed: [] as any[],
 }));
 
 vi.mock('../../db/prisma.js', () => ({
@@ -15,6 +16,7 @@ vi.mock('../../db/prisma.js', () => ({
     metaCapiLog: {
       findUnique: async ({ where }: any) => mocks.logs.get(where.brandId_eventId.eventId) ?? null,
       findMany: async () => mocks.retryLogs,
+      updateMany: async (args: any) => { mocks.closed.push(args); return { count: 1 }; },
       upsert: async ({ where, create, update }: any) => {
         const prev = mocks.logs.get(where.brandId_eventId.eventId);
         mocks.logs.set(where.brandId_eventId.eventId, { status: prev ? update.status : create.status, createdAt: prev?.createdAt ?? new Date() });
@@ -44,6 +46,7 @@ beforeEach(() => {
   mocks.retryLogs = [];
   mocks.backfillProspects = [];
   mocks.notified = 0;
+  mocks.closed = [];
   mocks.prospect = { ...base };
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
     mocks.sent.push(JSON.parse(String(init.body)));
@@ -101,7 +104,7 @@ describe('Aturan event CAPI', () => {
 
 describe('Retry & backfill CAPI', () => {
   it('job sinkron hanya jalan di produksi', async () => {
-    mocks.retryLogs = [{ prospectId: 5, eventName: 'LeadSubmitted', attempts: 1, updatedAt: new Date(0), status: 'failed' }];
+    mocks.retryLogs = [{ brandId: 1, prospectId: 5, eventName: 'LeadSubmitted', eventId: 'csumroh_prospect_5_contact', attempts: 1, updatedAt: new Date(0), status: 'failed' }];
     const at = new Date('2026-09-30T03:05:00Z');
     expect(await capiSyncJob(at, 'development')).toEqual({ retried: 0, backfilled: 0 });
     expect(mocks.sent).toEqual([]);
@@ -116,8 +119,8 @@ describe('Retry & backfill CAPI', () => {
     const now = new Date();
     mocks.logs.set('csumroh_prospect_5_contact', { status: 'failed', createdAt: now });
     mocks.retryLogs = [
-      { prospectId: 5, eventName: 'LeadSubmitted', attempts: 1, updatedAt: new Date(now.getTime() - 20 * 60_000), status: 'failed' },
-      { prospectId: 5, eventName: 'QualifiedLead', attempts: 2, updatedAt: new Date(now.getTime() - 20 * 60_000), status: 'failed' },
+      { brandId: 1, prospectId: 5, eventName: 'LeadSubmitted', eventId: 'csumroh_prospect_5_contact', attempts: 1, updatedAt: new Date(now.getTime() - 20 * 60_000), status: 'failed' },
+      { brandId: 1, prospectId: 5, eventName: 'QualifiedLead', eventId: 'csumroh_prospect_5_lead', attempts: 2, updatedAt: new Date(now.getTime() - 20 * 60_000), status: 'failed' },
     ];
     expect(await retryFailedCapiEvents(now)).toBe(1);
     expect(names()).toEqual(['LeadSubmitted']);
@@ -126,8 +129,33 @@ describe('Retry & backfill CAPI', () => {
   it('backfill mengirim event tahap yang belum pernah tercatat', async () => {
     expect(expectedCapiEvents('offer')).toEqual(['LeadSubmitted', 'QualifiedLead', 'AddToCart']);
     mocks.prospect = { ...base, offerSentAt: new Date(), dealValue: 40_000_000 };
-    mocks.backfillProspects = [{ id: 5, status: 'offer', createdAt: new Date(), capiLogs: [{ eventName: 'LeadSubmitted' }] }];
+    mocks.backfillProspects = [{ id: 5, status: 'offer', createdAt: new Date(), offerSentAt: new Date(), invoiceSentAt: null, dpPaidAt: null, capiLogs: [{ eventName: 'LeadSubmitted' }] }];
     expect(await backfillCapiEvents()).toBe(2);
     expect(names()).toEqual(['QualifiedLead', 'AddToCart']);
+  });
+
+  it('backfill tidak mengirim event yang waktunya tidak tercatat dalam 7 hari terakhir', async () => {
+    const old = new Date(Date.now() - 60 * 86_400_000);
+    mocks.prospect = { ...base, createdAt: old, offerSentAt: null, dealValue: 40_000_000 };
+    mocks.backfillProspects = [{ id: 5, status: 'offer', createdAt: old, offerSentAt: null, invoiceSentAt: null, dpPaidAt: null, capiLogs: [] }];
+    expect(await backfillCapiEvents()).toBe(0);
+    expect(mocks.sent).toEqual([]);
+  });
+
+  it('log yang tidak boleh dikirim lagi (prospek jadi spam) ditutup agar tidak diambil ulang terus', async () => {
+    mocks.prospect = { ...base, spamAt: new Date() };
+    mocks.retryLogs = [{ brandId: 1, prospectId: 5, eventName: 'LeadSubmitted', eventId: 'csumroh_prospect_5_contact', attempts: 1, updatedAt: new Date(0), status: 'failed' }];
+    expect(await retryFailedCapiEvents()).toBe(0);
+    expect(mocks.closed).toEqual([expect.objectContaining({
+      where: expect.objectContaining({ brandId: 1, eventId: 'csumroh_prospect_5_contact' }),
+      data: expect.objectContaining({ attempts: 8 }),
+    })]);
+  });
+
+  it('retry mengirim ulang event_id log itu sendiri, bukan dihitung ulang (Purchase won_1 setelah closing kedua)', async () => {
+    mocks.prospect = { ...base, closedWonCount: 2, dpPaidAt: new Date(), dealValue: 40_000_000 };
+    mocks.retryLogs = [{ brandId: 1, prospectId: 5, eventName: 'Purchase', eventId: 'csumroh_prospect_5_won_1', attempts: 1, updatedAt: new Date(0), status: 'failed' }];
+    expect(await retryFailedCapiEvents()).toBe(1);
+    expect(mocks.sent[0].data[0].event_id).toBe('csumroh_prospect_5_won_1');
   });
 });

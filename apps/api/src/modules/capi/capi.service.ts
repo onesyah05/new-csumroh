@@ -28,8 +28,12 @@ function businessEventTime(
 }
 
 type DispatchResult = { status: 'sent' | 'failed' | 'skipped'; reason?: string; eventId?: string };
-/** notify: false untuk retry/backfill otomatis agar satu konfigurasi yang salah tidak membanjiri notifikasi admin. */
-type DispatchOptions = { notify?: boolean };
+/**
+ * notify: false untuk retry/backfill otomatis agar satu konfigurasi yang salah tidak membanjiri notifikasi admin.
+ * eventId: kirim ulang log tertentu. Tanpa ini event_id dihitung ulang dari closedWonCount, sehingga Purchase won_1
+ * yang gagal tidak pernah terkirim lagi setelah prospek closing kedua (won_2).
+ */
+type DispatchOptions = { notify?: boolean; eventId?: string };
 
 async function saveFailure(input: { brandId: number; prospectId: number; eventName: CapiEventName; eventId: string; reason: string; payload?: string; notify: boolean; attempts?: number }) {
   await prisma.metaCapiLog.upsert({
@@ -51,7 +55,7 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
   // Chat spam tidak pernah dikirim: Meta hanya belajar dari prospek yang serius.
   if (prospect.spamAt) return { status: 'skipped', reason: 'SPAM' };
 
-  const eventId = buildCapiEventId(prospect.id, eventName, prospect.closedWonCount);
+  const eventId = options.eventId ?? buildCapiEventId(prospect.id, eventName, prospect.closedWonCount);
   const existing = await prisma.metaCapiLog.findUnique({ where: { brandId_eventId: { brandId: prospect.brandId, eventId } }, select: { status: true, createdAt: true } });
   if (existing?.status === 'success') return { status: 'skipped', reason: 'ALREADY_SENT', eventId };
 
@@ -167,7 +171,7 @@ export async function retryFailedCapiEvents(now = new Date()) {
       createdAt: { gte: new Date(now.getTime() - CAPI_MAX_EVENT_AGE_MS) },
       eventId: { startsWith: 'csumroh_' },
     },
-    select: { prospectId: true, eventName: true, attempts: true, updatedAt: true, status: true },
+    select: { brandId: true, prospectId: true, eventName: true, eventId: true, attempts: true, updatedAt: true, status: true },
     orderBy: { updatedAt: 'asc' },
     take: 200,
   });
@@ -177,10 +181,43 @@ export async function retryFailedCapiEvents(now = new Date()) {
     // Pending lebih dari 10 menit = proses mati sebelum jawaban Meta tercatat.
     const wait = log.status === 'pending' ? 10 * 60_000 : capiRetryDelayMs(log.attempts);
     if (now.getTime() - log.updatedAt.getTime() < wait) continue;
-    const result = await dispatchCapiEvent(log.prospectId, log.eventName as CapiEventName, { notify: false });
+    const result = await resendCapiLog(log);
     if (result.status !== 'skipped') sent += 1;
   }
   return sent;
+}
+
+/**
+ * Kirim ulang satu log apa adanya (event_id log itu sendiri). Bila event tidak lagi boleh dikirim (prospek ditandai
+ * spam, penanda iklan hilang, terlalu tua), log ditutup: tanpa ini log tetap 'failed' dan diambil ulang setiap putaran,
+ * menutupi log lain yang benar-benar perlu dikirim.
+ */
+export async function resendCapiLog(log: { brandId: number; prospectId: number; eventName: string; eventId: string }) {
+  const result = await dispatchCapiEvent(log.prospectId, log.eventName as CapiEventName, { notify: false, eventId: log.eventId });
+  if (result.status === 'skipped' && result.reason !== 'ALREADY_SENT') {
+    await prisma.metaCapiLog.updateMany({
+      where: { brandId: log.brandId, eventId: log.eventId, status: { not: 'success' } },
+      data: { status: 'failed', attempts: CAPI_MAX_ATTEMPTS, responseBody: `Tidak dikirim ulang: ${result.reason}` },
+    });
+  }
+  return result;
+}
+
+/**
+ * Backfill hanya mengirim event yang waktu kejadiannya diketahui berada dalam jendela 7 hari. Tanpa stempel tahap,
+ * event_time jatuh ke "sekarang": lead yang terkualifikasi berbulan-bulan lalu akan tercatat sebagai konversi hari ini.
+ * QualifiedLead tidak punya stempel sendiri, jadi hanya untuk prospek yang chat pertamanya masih dalam 7 hari.
+ */
+function backfillHasEventTime(
+  prospect: { createdAt: Date; offerSentAt: Date | null; invoiceSentAt: Date | null; dpPaidAt: Date | null },
+  event: CapiEventName,
+  oldest: number,
+) {
+  const at = event === 'Purchase' ? prospect.dpPaidAt
+    : event === 'InitiateCheckout' ? prospect.invoiceSentAt
+    : event === 'AddToCart' ? prospect.offerSentAt
+    : prospect.createdAt;
+  return Boolean(at && at.getTime() >= oldest);
 }
 
 /**
@@ -195,7 +232,10 @@ export async function backfillCapiEvents(now = new Date()) {
       updatedAt: { gte: new Date(now.getTime() - CAPI_MAX_EVENT_AGE_MS) },
       brand: { metaPixelId: { not: null }, metaAccessToken: { not: null }, facebookPageId: { not: null } },
     },
-    select: { id: true, status: true, createdAt: true, capiLogs: { select: { eventName: true } } },
+    select: {
+      id: true, status: true, createdAt: true, offerSentAt: true, invoiceSentAt: true, dpPaidAt: true,
+      capiLogs: { select: { eventName: true } },
+    },
     orderBy: { updatedAt: 'desc' },
     take: 300,
   });
@@ -204,8 +244,7 @@ export async function backfillCapiEvents(now = new Date()) {
   for (const prospect of prospects) {
     if (sent >= SENDS_PER_RUN) break;
     const logged = new Set(prospect.capiLogs.map((log) => log.eventName));
-    // LeadSubmitted memakai waktu chat pertama; lead yang lebih tua dari 7 hari tidak bisa dikirim lagi.
-    const missing = expectedCapiEvents(prospect.status).filter((event) => !logged.has(event) && !(event === 'LeadSubmitted' && prospect.createdAt.getTime() < oldest));
+    const missing = expectedCapiEvents(prospect.status).filter((event) => !logged.has(event) && backfillHasEventTime(prospect, event, oldest));
     for (const event of missing) {
       const result = await dispatchCapiEvent(prospect.id, event, { notify: false });
       if (result.status !== 'skipped') sent += 1;

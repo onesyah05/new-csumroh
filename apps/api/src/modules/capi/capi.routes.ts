@@ -9,8 +9,9 @@ import { decryptMetaToken, encryptMetaToken, maskMetaToken } from './meta-token.
 import { clearAdInsightsCache } from '../ads/ad-insights.js';
 import { clearAdSpendCache } from '../reports/ad-spend.js';
 import { adLabels } from '../ads/meta-ads.js';
-import { buildCapiPayload, CAPI_EVENT_NAMES, type CapiEventName } from './capi.payload.js';
-import { CAPI_MAX_EVENT_AGE_MS, dispatchCapiEvent } from './capi.service.js';
+import { buildCapiPayload, CAPI_EVENT_NAMES } from './capi.payload.js';
+import { CAPI_MAX_EVENT_AGE_MS, resendCapiLog } from './capi.service.js';
+import { phoneSearchDigits } from '../../utils/phone-search.js';
 
 export const capiRouter = Router();
 capiRouter.use(authGuard, requireRole('superadmin', 'admin'));
@@ -75,8 +76,10 @@ capiRouter.get('/settings', asyncHandler(async (req, res) => {
 capiRouter.put('/settings', asyncHandler(async (req, res) => {
   const input = settingsSchema.parse(req.body);
   const brandId = scopedBrandId(req, input.brandId);
-  const current = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true, metaAdsAccessToken: true } });
+  const current = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true, metaAdsAccessToken: true, metaAdAccountId: true } });
   if (!current) throw new HttpError(404, 'Brand tidak ditemukan.');
+  // Audiens spam milik ad account lama: tidak bisa dipakai set iklan ad account baru. Dibuat ulang saat sinkron berikutnya.
+  const adAccountChanged = (input.adAccountId || null) !== (current.metaAdAccountId ?? null);
 
   let metaAccessToken = current.metaAccessToken;
   if (input.clearAccessToken) metaAccessToken = null;
@@ -97,6 +100,7 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
       metaAdsAccessToken,
       metaVerifiedAt: null,
       metaLastError: null,
+      ...(adAccountChanged ? { metaSpamAudienceId: null, metaSpamSyncedAt: null } : {}),
     },
   });
   // Laporan iklan di-cache per ad account: token/ad account baru harus langsung terpakai.
@@ -144,7 +148,7 @@ capiRouter.get('/logs', asyncHandler(async (req, res) => {
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(10).max(100).default(25),
   }).parse(req.query);
-  const digits = query.search.replace(/\D/g, '');
+  const digits = phoneSearchDigits(query.search);
   const where: Prisma.MetaCapiLogWhereInput = {
     brandId,
     ...(query.event !== 'all' ? { eventName: query.event } : {}),
@@ -154,7 +158,7 @@ capiRouter.get('/logs', asyncHandler(async (req, res) => {
           OR: [
             { eventId: { contains: query.search } },
             { prospect: { name: { contains: query.search } } },
-            ...(digits.length >= 4 ? [{ prospect: { phone: { contains: digits } } }] : []),
+            ...(digits ? [{ prospect: { phone: { contains: digits } } }] : []),
           ],
         }
       : {}),
@@ -201,11 +205,11 @@ capiRouter.get('/logs', asyncHandler(async (req, res) => {
 /** Kirim ulang satu event gagal (mis. setelah konfigurasi Meta dibetulkan), tanpa menunggu retry otomatis. */
 capiRouter.post('/logs/:id/resend', asyncHandler(async (req, res) => {
   const id = z.coerce.number().int().positive().parse(req.params.id);
-  const log = await prisma.metaCapiLog.findUnique({ where: { id }, select: { brandId: true, prospectId: true, eventName: true, status: true } });
+  const log = await prisma.metaCapiLog.findUnique({ where: { id }, select: { brandId: true, prospectId: true, eventName: true, eventId: true, status: true } });
   if (!log) throw new HttpError(404, 'Log event tidak ditemukan.');
   scopedBrandId(req, log.brandId);
   if (log.status === 'success') throw new HttpError(409, 'Event ini sudah diterima Meta.');
-  const result = await dispatchCapiEvent(log.prospectId, log.eventName as CapiEventName, { notify: false });
+  const result = await resendCapiLog(log);
   res.json({ success: true, data: result });
 }));
 
@@ -215,13 +219,13 @@ capiRouter.post('/logs/resend-failed', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, input.brandId);
   const logs = await prisma.metaCapiLog.findMany({
     where: { brandId, status: 'failed', eventId: { startsWith: 'csumroh_' }, createdAt: { gte: new Date(Date.now() - CAPI_MAX_EVENT_AGE_MS) } },
-    select: { prospectId: true, eventName: true },
+    select: { brandId: true, prospectId: true, eventName: true, eventId: true },
     orderBy: { createdAt: 'asc' },
     take: 100,
   });
   const counts = { sent: 0, failed: 0, skipped: 0 };
   for (const log of logs) {
-    const result = await dispatchCapiEvent(log.prospectId, log.eventName as CapiEventName, { notify: false });
+    const result = await resendCapiLog(log);
     counts[result.status] += 1;
   }
   res.json({ success: true, data: { total: logs.length, ...counts } });

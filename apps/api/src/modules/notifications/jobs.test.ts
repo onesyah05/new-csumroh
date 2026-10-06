@@ -131,6 +131,7 @@ describe('ringkasan pagi', () => {
 describe('gateway WhatsApp', () => {
   it('dua kegagalan berturut-turut = mati; pulih menutup dan memberi info', async () => {
     mocks.userFindMany.mockResolvedValue([{ id: 1 }]);
+    mocks.resolve.mockResolvedValue(1);
     await gatewayHealthJob(NOW, async () => false);
     expect(mocks.notify).not.toHaveBeenCalled();
     await gatewayHealthJob(NOW, async () => false);
@@ -140,6 +141,17 @@ describe('gateway WhatsApp', () => {
     expect(mocks.resolve).toHaveBeenCalledWith(expect.objectContaining({ types: ['system.gateway_down'] }));
     expect(sent().map((n) => n.type)).toEqual(['system.gateway_down', 'system.gateway_up']);
   });
+
+  it('API restart saat gateway mati: alert lama ditutup pada pemeriksaan sehat pertama', async () => {
+    mocks.userFindMany.mockResolvedValue([{ id: 1 }]);
+    mocks.resolve.mockResolvedValueOnce(2).mockResolvedValue(0);
+    await gatewayHealthJob(NOW, async () => true);
+    expect(mocks.resolve).toHaveBeenCalledWith(expect.objectContaining({ types: ['system.gateway_down'] }));
+    expect(sent().map((n) => n.type)).toEqual(['system.gateway_up']);
+    // Pemeriksaan sehat berikutnya tidak menanyakan database lagi.
+    await gatewayHealthJob(NOW, async () => true);
+    expect(mocks.resolve).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('retensi', () => {
@@ -148,6 +160,8 @@ describe('retensi', () => {
     const wheres = mocks.deleteMany.mock.calls.map(([arg]: any) => arg.where);
     expect(wheres[0].readAt.lt).toEqual(new Date(NOW.getTime() - 60 * 86_400_000));
     expect(wheres[1]).toMatchObject({ readAt: null, createdAt: { lt: new Date(NOW.getTime() - 180 * 86_400_000) } });
-    expect(wheres[2].createdAt.lt).toEqual(new Date(NOW.getTime() - 14 * 86_400_000));
+    // Ringkasan aktif yang sudah dibaca tetap disimpan; kunci dedupe disimpan lebih lama dari jendela invoice (30 hari).
+    expect(wheres[0].NOT).toEqual({ activeKey: { not: null }, resolvedAt: null });
+    expect(wheres[2].createdAt.lt).toEqual(new Date(NOW.getTime() - 35 * 86_400_000));
   });
 });

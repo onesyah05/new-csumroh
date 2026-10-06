@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  stored: null as null | { id: number; prospectId: number; messageText: string; messageId: string },
+  stored: null as null | Record<string, unknown>,
   messageUpsert: vi.fn(),
   messageUpdate: vi.fn(),
   notifyIncomingCall: vi.fn(),
@@ -41,8 +41,8 @@ vi.mock('../prospects/referral.service.js', () => ({ attachReferralMarker: vi.fn
 import { env } from '../../config/env.js';
 import { callLogText, internalRouter } from './chat.routes.js';
 
-function callEvent(body: Record<string, unknown>) {
-  const layer = (internalRouter as any).stack.find((l: any) => l.route?.path === '/calls/event');
+function callEvent(body: Record<string, unknown>, path = '/calls/event') {
+  const layer = (internalRouter as any).stack.find((l: any) => l.route?.path === path);
   return new Promise<void>((resolve, reject) => {
     const res = { status: () => res, json: () => resolve() };
     layer.route.stack.at(-1).handle({ body, get: () => env.WA_GATEWAY_SECRET }, res, reject);
@@ -108,5 +108,47 @@ describe('Telepon/video call WhatsApp dari jamaah', () => {
     await callEvent({ ...call, status: 'timeout' });
     expect(mocks.messageUpdate).not.toHaveBeenCalled();
     expect(mocks.notifyCallEnded).not.toHaveBeenCalled();
+  });
+});
+
+describe('Pesan ditarik / diedit lewat protocolMessage', () => {
+  const csReply = { id: 7, prospectId: 9, messageId: 'CS1', remoteJid: '62811@s.whatsapp.net', phone: '62811', isFromMe: true, isDeleted: false, messageText: 'Transfer ke BSI 111' };
+  const fromContact = { brandId: 1, messageId: 'CS1', fromMe: false, chatJids: ['62811@s.whatsapp.net'], phone: '62811' };
+
+  it('kontak tidak bisa mengedit atau menarik balasan CS', async () => {
+    mocks.stored = csReply;
+    await callEvent({ ...fromContact, text: 'Transfer ke BCA 999' }, '/messages/edited');
+    await callEvent(fromContact, '/messages/revoked');
+    expect(mocks.messageUpdate).not.toHaveBeenCalled();
+    expect(mocks.emitToBrand).not.toHaveBeenCalled();
+  });
+
+  it('kontak tidak bisa mengubah pesan di chat lain', async () => {
+    mocks.stored = { ...csReply, messageId: 'X1', remoteJid: '62899@s.whatsapp.net', phone: '62899', isFromMe: false };
+    await callEvent({ ...fromContact, messageId: 'X1', text: 'palsu' }, '/messages/edited');
+    expect(mocks.messageUpdate).not.toHaveBeenCalled();
+  });
+
+  it('anggota grup tidak bisa mengedit pesan anggota lain', async () => {
+    mocks.stored = { ...csReply, messageId: 'G1', remoteJid: '120363@g.us', phone: '62833', isFromMe: false };
+    await callEvent({ brandId: 1, messageId: 'G1', fromMe: false, chatJids: ['120363@g.us'], phone: '62844', text: 'palsu' }, '/messages/edited');
+    expect(mocks.messageUpdate).not.toHaveBeenCalled();
+  });
+
+  it('riwayat panggilan tidak bisa diedit', async () => {
+    mocks.stored = { ...ringing(), remoteJid: '62811@s.whatsapp.net', phone: '62811', isFromMe: false };
+    await callEvent({ ...fromContact, messageId: 'call-C1', text: 'palsu' }, '/messages/edited');
+    expect(mocks.messageUpdate).not.toHaveBeenCalled();
+  });
+
+  it('pengirim asli tetap bisa mengedit dan menarik pesannya, termasuk lewat alamat LID', async () => {
+    mocks.stored = { ...csReply, messageId: 'K1', isFromMe: false };
+    await callEvent({ ...fromContact, messageId: 'K1', chatJids: ['1234@lid'], text: 'jadi 3 orang' }, '/messages/edited');
+    expect(mocks.messageUpdate.mock.calls[0]![0].data).toEqual({ messageText: 'jadi 3 orang' });
+
+    vi.clearAllMocks();
+    mocks.stored = csReply;
+    await callEvent({ ...fromContact, fromMe: true }, '/messages/revoked');
+    expect(mocks.messageUpdate.mock.calls[0]![0].data).toMatchObject({ isDeleted: true });
   });
 });

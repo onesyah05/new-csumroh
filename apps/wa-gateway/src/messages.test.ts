@@ -9,6 +9,12 @@ describe('WhatsApp history normalization', () => {
     expect(normalizePhone('123456@lid')).toBe('');
   });
 
+  it('nomor luar negeri berawalan 8 tidak diubah menjadi nomor Indonesia', () => {
+    expect(normalizePhone('85291234567@s.whatsapp.net')).toBe('85291234567'); // Hong Kong
+    expect(normalizePhone('821012345678@s.whatsapp.net')).toBe('821012345678'); // Korea
+    expect(normalizePhone('886912345678@s.whatsapp.net')).toBe('886912345678'); // Taiwan
+  });
+
   it('resolves a LID history message through Baileys mappings', () => {
     const mappings = new Map<string, string>();
     addLidMappings(mappings, [{ lid: '123@lid', pn: '628123456789@s.whatsapp.net' }]);

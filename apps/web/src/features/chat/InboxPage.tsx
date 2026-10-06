@@ -157,7 +157,7 @@ function normalizePhone(value?: string | null) {
   const digits = value?.replace(/\D/g, '') ?? '';
   if (digits.startsWith('62')) return digits;
   if (digits.startsWith('0')) return `62${digits.slice(1)}`;
-  if (digits.startsWith('8')) return `62${digits}`;
+  // Nomor WhatsApp selalu internasional; awalan 8 bisa nomor luar negeri (852…, 82…, 81…), bukan 62….
   return digits;
 }
 
@@ -270,6 +270,9 @@ export function InboxPage() {
     packageId?: number;
   } | null>(null);
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
+  // Chat yang terbuka saat ini, untuk kiriman yang selesai setelah CS pindah chat.
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const focusDraftAfterPanel = useRef(false);
   useEffect(() => {
@@ -477,16 +480,19 @@ export function InboxPage() {
   // Riwayat berhalaman: 100 pesan terbaru dulu; "Muat pesan lebih lama" menambah halaman di atas. Muat ulang
   // (pesan baru, dsb.) mempertahankan jumlah yang sudah dimuat agar pesan lama tidak hilang dari layar.
   const messagesIdentity = `${selectedId ?? ''}:${brandId ?? ''}`;
-  const [olderPage, setOlderPage] = useState<{ identity: string; hasMore: boolean; loading: boolean }>({ identity: '', hasMore: false, loading: false });
+  // 'Ada pesan lebih lama' disimpan per percakapan: kembali ke chat dari cache (tanpa refetch) tetap menampilkan tombolnya.
+  const [hasOlderBy, setHasOlderBy] = useState<Record<string, boolean>>({});
+  const [olderLoading, setOlderLoading] = useState(false);
   const messagesUrl = (params: Record<string, number>) =>
     `/chat/prospects/${selectedId}/messages${query}${query ? '&' : '?'}${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString()}`;
   const messages = useQuery({
     queryKey: ['messages', selectedId, brandId],
     queryFn: async () => {
+      const identity = messagesIdentity;
       const loaded = queryClient.getQueryData<any[]>(['messages', selectedId, brandId])?.length ?? 0;
       const limit = Math.min(1000, Math.max(MESSAGE_PAGE, loaded));
       const data = await api.get<any[]>(messagesUrl({ limit }));
-      setOlderPage({ identity: messagesIdentity, hasMore: data.length >= limit, loading: false });
+      setHasOlderBy((current) => ({ ...current, [identity]: data.length >= limit }));
       return data;
     },
     enabled: !!selectedId && !!brandId,
@@ -504,8 +510,9 @@ export function InboxPage() {
 
   async function loadOlderMessages() {
     const oldest = messages.data?.[0];
-    if (!oldest || olderPage.loading) return;
-    setOlderPage((current) => ({ ...current, loading: true }));
+    if (!oldest || olderLoading) return;
+    const identity = messagesIdentity;
+    setOlderLoading(true);
     try {
       const older = await api.get<any[]>(messagesUrl({ limit: MESSAGE_PAGE, beforeTs: oldest.timestamp, beforeId: oldest.id }));
       // Posisi baca dijaga: tinggi yang bertambah di atas dikompensasi ke scrollTop.
@@ -516,10 +523,11 @@ export function InboxPage() {
         const known = new Set(current.map((m) => m.id));
         return [...older.filter((m) => !known.has(m.id)), ...current];
       });
-      setOlderPage({ identity: messagesIdentity, hasMore: older.length >= MESSAGE_PAGE, loading: false });
+      setHasOlderBy((current) => ({ ...current, [identity]: older.length >= MESSAGE_PAGE }));
+      setOlderLoading(false);
       requestAnimationFrame(() => { if (timeline) timeline.scrollTop = previousTop + (timeline.scrollHeight - previousHeight); });
     } catch (error) {
-      setOlderPage((current) => ({ ...current, loading: false }));
+      setOlderLoading(false);
       showToast((error as Error).message || 'Pesan lama gagal dimuat');
     }
   }
@@ -536,24 +544,39 @@ export function InboxPage() {
     }
   }
 
+  // Semua data kiriman diambil saat tombol ditekan. onSuccess baru jalan 1–3 detik kemudian, saat CS mungkin sudah
+  // membuka chat lain: draft yang dihapus harus draft chat pengirim, bukan chat yang sedang terbuka.
   const send = useMutation({
-    mutationFn: (text: string) =>
+    mutationFn: (vars: { text: string; prospectId: number | null; quoted: typeof replyingTo; clearDraft: typeof setMessage }) =>
       api.post(`/chat/messages${query}`, {
         brandId,
-        prospectId: selectedId,
-        text,
-        quotedMessageId: replyingTo?.messageId,
-        quotedText: replyingTo?.text,
-        quotedSender: replyingTo?.senderName,
+        prospectId: vars.prospectId,
+        text: vars.text,
+        quotedMessageId: vars.quoted?.messageId,
+        quotedText: vars.quoted?.text,
+        quotedSender: vars.quoted?.senderName,
       }),
-    onSuccess: () => {
-      setMessage('');
-      setReplyingTo(null);
-      if (composerRef.current) composerRef.current.style.height = '44px';
-      void queryClient.invalidateQueries({ queryKey: ['messages', selectedId] });
+    onSuccess: (_data, vars) => {
+      vars.clearDraft('');
+      if (selectedIdRef.current === vars.prospectId) {
+        setReplyingTo(null);
+        if (composerRef.current) composerRef.current.style.height = '44px';
+      }
+      void queryClient.invalidateQueries({ queryKey: ['messages', vars.prospectId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
+
+  // Kutipan, lampiran, dan error kirim milik chat sebelumnya tidak boleh terbawa: isi chat jamaah A bisa terkirim ke B.
+  const resetSend = send.reset;
+  useEffect(() => {
+    setReplyingTo(null);
+    setMediaPreview((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return null;
+    });
+    resetSend();
+  }, [selectedId, brandId, resetSend]);
 
   const starMutation = useMutation({
     mutationFn: (messageId: number) => api.post<{ isStarred?: boolean }>(`/chat/messages/${messageId}/star${query}`),
@@ -672,6 +695,25 @@ export function InboxPage() {
 
   const activeFilter = inboxWorkFilters.find((filter) => filter.id === chatFilter) ?? inboxWorkFilters[0];
 
+  // Chat yang sedang terbuka = sudah dibaca, apa pun cara membukanya (klik daftar, tautan notifikasi, chat pertama)
+  // dan juga saat pesan baru masuk ke chat yang terbuka. Hanya saat tab terlihat. Pemantau (bukan PIC) tidak
+  // menghapus tanda belum dibaca milik PIC; server yang memutuskan.
+  const selectedUnread = selected?.unreadCount ?? 0;
+  useEffect(() => {
+    if (!selectedId || selectedUnread <= 0) return;
+    const id = selectedId;
+    const markRead = () => {
+      if (document.visibilityState !== 'visible') return;
+      void api.post<{ observerOnly?: boolean }>(`/chat/prospects/${id}/read${query}`).then((result) => {
+        if (result?.observerOnly) return;
+        queryClient.setQueryData<any[]>(['conversations', brandId], (old) => old?.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
+      }).catch(() => null);
+    };
+    markRead();
+    document.addEventListener('visibilitychange', markRead);
+    return () => document.removeEventListener('visibilitychange', markRead);
+  }, [selectedId, selectedUnread, brandId, query]);
+
   function handleSelectConversation(id: number) {
     // Keep the deep link aligned with the user's choice; otherwise the selection
     // effect immediately restores the prospect/phone/jid from the previous URL.
@@ -685,14 +727,6 @@ export function InboxPage() {
       return next;
     }, { state: mobile ? { inboxList: true } : null });
     setSelectedId(id);
-    // Pemantau (bukan PIC) tidak menghapus tanda belum dibaca milik PIC; server yang memutuskan.
-    void api.post<{ observerOnly?: boolean }>(`/chat/prospects/${id}/read${query}`).then((result) => {
-      if (result?.observerOnly) return;
-      queryClient.setQueryData<any[]>(['conversations', brandId], (old) => {
-        if (!old) return old;
-        return old.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c));
-      });
-    }).catch(() => null);
   }
 
   function adjustTextareaHeight(element: HTMLTextAreaElement | null) {
@@ -761,7 +795,7 @@ export function InboxPage() {
       showToast('Draft masih memuat data yang belum terisi (tanda {{…}}). Lengkapi dulu sebelum mengirim.');
       return;
     }
-    send.mutate(text);
+    send.mutate({ text, prospectId: selectedId, quoted: replyingTo, clearDraft: setMessage });
   }
 
   function showToast(msg: string) {
@@ -989,13 +1023,15 @@ export function InboxPage() {
           .catch(() => null);
       }
 
-      if (mediaPreview?.url) {
-        URL.revokeObjectURL(mediaPreview.url);
-      }
-      setMediaPreview(null);
+      // setMessage di sini milik chat pengirim (closure saat kirim). Lampiran & kutipan hanya dibersihkan bila
+      // chat itu masih terbuka; bila sudah pindah, efek pergantian chat sudah membersihkannya.
       setMessage('');
-      setReplyingTo(null);
-      if (composerRef.current) composerRef.current.style.height = '44px';
+      if (selectedIdRef.current === selectedId) {
+        if (mediaPreview?.url) URL.revokeObjectURL(mediaPreview.url);
+        setMediaPreview(null);
+        setReplyingTo(null);
+        if (composerRef.current) composerRef.current.style.height = '44px';
+      }
       void queryClient.invalidateQueries({ queryKey: ['messages', selectedId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       showToast('Media berhasil dikirim!');
@@ -1594,15 +1630,15 @@ export function InboxPage() {
                     </span>
                   </div>
 
-                  {olderPage.identity === messagesIdentity && olderPage.hasMore && !messages.isLoading && (
+                  {hasOlderBy[messagesIdentity] && !messages.isLoading && (
                     <div className="mb-3 text-center">
                       <button
                         type="button"
                         onClick={() => void loadOlderMessages()}
-                        disabled={olderPage.loading}
+                        disabled={olderLoading}
                         className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-[#54656f] shadow-2xs hover:bg-white disabled:opacity-60"
                       >
-                        {olderPage.loading ? 'Memuat…' : 'Muat pesan lebih lama'}
+                        {olderLoading ? 'Memuat…' : 'Muat pesan lebih lama'}
                       </button>
                     </div>
                   )}

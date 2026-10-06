@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Prisma, ProspectStatus as DbProspectStatus, PaymentStatus } from '@prisma/client';
 import {
   businessDateKey,
+  canonicalStatus,
   canTransitionStatus,
   firstUnansweredAt,
   PIC_TAKEOVER_AFTER_MINUTES,
@@ -14,7 +15,6 @@ import {
   isLostStatus,
   isWonStatus,
   packageBookingValue,
-  prospectInputSchema,
   prospectProfileSchema,
   seatCountFor,
   settlementFields,
@@ -45,7 +45,6 @@ import { queueCapiForStatus } from '../capi/capi.service.js';
 import { updateSpamAudienceMember } from '../ads/spam-audience.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
-import { activeDevicePhone } from '../chat/device-scope.js';
 import { ensureAdLabels } from '../ads/meta-ads.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
 import { env } from '../../config/env.js';
@@ -226,33 +225,14 @@ prospectsRouter.get('/:id', asyncHandler(async (req, res) => {
   res.json({ success: true, data: { ...prospect, ad } });
 }));
 
-prospectsRouter.post('/', asyncHandler(async (req, res) => {
-  const input = prospectInputSchema.parse(req.body);
-  const brandId = scopedBrandId(req, req.body.brandId ? Number(req.body.brandId) : undefined);
-  const prospect = await prisma.prospect.create({
-    data: {
-      brandId,
-      userId: req.user?.role === 'cs' ? req.user.id : null,
-      name: input.name,
-      phone: input.phone,
-      city: input.city,
-      leadSource: input.leadSource,
-      devicePhone: await activeDevicePhone(brandId),
-      packageId: input.packageId,
-      notes: input.notes,
-      nextFollowupDate: input.nextFollowupDate ? new Date(input.nextFollowupDate) : null,
-    },
-    include,
-  });
-  await prisma.prospectLog.create({
-    data: { prospectId: prospect.id, userId: req.user!.id, actionType: 'created', title: 'Prospek dibuat' },
-  });
-  emitToBrand(brandId, 'prospect:updated', prospect);
-  res.status(201).json({ success: true, data: prospect });
-}));
+// Tidak ada pembuatan prospek manual: prospek selalu lahir dari chat WhatsApp asli yang masuk lewat gateway.
 
 prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
-  const { status, lostReason } = statusUpdateSchema.parse(req.body);
+  const parsed = statusUpdateSchema.parse(req.body);
+  // Status lama (offered, identifying, …) dipetakan ke status kanonik SEBELUM aturan tahap diperiksa; tanpa ini
+  // 'offered' lolos dari syarat Kirim Penawaran Resmi dan mengirim AddToCart palsu ke Meta.
+  const status = canonicalStatus(parsed.status);
+  const { lostReason } = parsed;
   const { brandId, existing } = await findScopedProspect(req);
 
   const isLose = isLostStatus(status);
@@ -789,6 +769,20 @@ prospectsRouter.post('/:id/notes', asyncHandler(async (req, res) => {
 }));
 
 // Trigger 3: Send Official Offer -> offer
+/**
+ * Penawaran resmi terakhir masih berlaku? Jamaah atau paket yang berubah sesudahnya dicatat sebagai `offer_outdated`
+ * (lihat PATCH profil). Nilai deal = nilai penawaran itu, jadi invoice dan verifikasi ditahan sampai CS mengirim
+ * penawaran ulang; tanpa ini Deal tercatat dengan paket baru tetapi nilai paket lama.
+ */
+async function offerIsOutdated(prospect: { id: number; offerSentAt: Date | null }) {
+  if (!prospect.offerSentAt) return false;
+  const log = await prisma.prospectLog.findFirst({
+    where: { prospectId: prospect.id, actionType: 'offer_outdated', createdAt: { gt: prospect.offerSentAt } },
+    select: { id: true },
+  });
+  return Boolean(log);
+}
+
 prospectsRouter.post('/:id/offer', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
   await assertCanActOnProspect(req.user!, existing);
@@ -974,6 +968,14 @@ prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
       throw new HttpError(422, `Tagihan melebihi nilai deal (Rp ${agreed.agreedPrice.toLocaleString('id-ID')}).`);
     }
     input.packageId = agreed.basePackageId;
+  } else if (existing.offerSentAt) {
+    // Nilai deal mengikuti penawaran resmi: paket invoice harus paket yang ditawarkan, dan penawarannya masih berlaku.
+    if (input.packageId && input.packageId !== existing.packageId) {
+      throw new HttpError(409, 'Paket invoice berbeda dari paket penawaran. Kirim penawaran resmi untuk paket ini terlebih dahulu.');
+    }
+    if (await offerIsOutdated(existing)) {
+      throw new HttpError(409, 'Jamaah atau paket berubah setelah penawaran terkirim. Kirim penawaran resmi ulang sebelum invoice.');
+    }
   }
   if (!isWon && input.packageId) {
     const pkg = await prisma.package.findFirst({ where: { id: input.packageId, brandId }, select: { id: true } });
@@ -1302,6 +1304,8 @@ prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
     if (amount < agreed.minDpTotal) {
       throw new HttpError(422, `Pembayaran di bawah DP minimal layanan custom (Rp ${agreed.minDpTotal.toLocaleString('id-ID')}). Tolak bukti bila transfer kurang.`);
     }
+  } else if (await offerIsOutdated(existing)) {
+    throw new HttpError(409, 'Jamaah atau paket berubah setelah penawaran terkirim, sehingga nilai deal belum sesuai. Minta CS mengirim penawaran resmi ulang sebelum verifikasi.');
   }
 
   const seatCount = seatCountFor(existing);
@@ -1401,6 +1405,10 @@ prospectsRouter.post('/:id/verify-payment', asyncHandler(async (req, res) => {
         const dup = referenceNo ? await prisma.payment.findFirst({ where: { brandId, referenceNo } }) : null;
         if (dup && dup.prospectId !== id) {
           throw new HttpError(409, `Nomor referensi mutasi ${referenceNo} sudah dipakai untuk prospek lain.`);
+        }
+        // "Sudah dicatat" hanya benar bila mutasi itu masih terverifikasi; selain itu laporkan, jangan pura-pura berhasil.
+        if (dup && dup.status !== 'verified') {
+          throw new HttpError(409, `Nomor referensi mutasi ${referenceNo} masih tercatat pada pembayaran yang dibatalkan.`);
         }
       }
       return replay();

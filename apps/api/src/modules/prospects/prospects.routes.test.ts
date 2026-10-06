@@ -107,7 +107,8 @@ const db = vi.hoisted(() => {
       create: async ({ data }: any) => { s().rejections.push(data); return data; },
     },
     prospectLog: {
-      create: async ({ data }: any) => { s().logs.push(data); return { ...data, user: { name: 'CS Fitri' } }; },
+      create: async ({ data }: any) => { s().logs.push({ createdAt: new Date(), ...data }); return { ...data, user: { name: 'CS Fitri' } }; },
+      findFirst: async ({ where }: any) => s().logs.find((log) => log.prospectId === where.prospectId && log.actionType === where.actionType && (!where.createdAt?.gt || log.createdAt > where.createdAt.gt)) ?? null,
       findMany: async ({ where }: any) => s().logs.filter((log) => log.prospectId === where.prospectId).reverse(),
     },
     user: {
@@ -285,6 +286,27 @@ describe('R01 invoice and offer never touch verified cash', () => {
   });
 });
 
+describe('Nilai deal mengikuti penawaran resmi terakhir', () => {
+  it('invoice dengan paket lain dari penawaran ditolak', async () => {
+    await invoke('post', '/:id/offer', { body: { packageId: 1, sendViaWhatsApp: true, messageText: 'Penawaran' } });
+    const result = await invoke('post', '/:id/invoice', { body: { invoiceAmount: 10_000_000, packageId: 2 } });
+    expect(result.status).toBe(409);
+    expect(prospect(1).packageId).toBe(1);
+  });
+
+  it('jamaah berubah setelah penawaran: invoice dan verifikasi ditahan sampai penawaran ulang', async () => {
+    await invoke('post', '/:id/offer', { body: { packageId: 1, sendViaWhatsApp: true, messageText: 'Penawaran' } });
+    const offeredAt = prospect(1).offerSentAt as Date;
+    expect((await invoke('patch', '/:id/profile', { body: { paxQuad: 4 } })).status).toBe(200);
+    // Log usang tercatat sesudah penawaran.
+    for (const log of mocks.state.logs) if (log.actionType === 'offer_outdated') log.createdAt = new Date(offeredAt.getTime() + 1000);
+    expect((await invoke('post', '/:id/invoice', { body: { invoiceAmount: 10_000_000 } })).status).toBe(409);
+    const verify = await invoke('post', '/:id/verify-payment', { body: { approvedAmount: 5_000_000, bankName: 'BSI', mutationDate: '2026-09-23' }, role: 'finance' });
+    expect(verify.status).toBe(409);
+    expect(prospect(1).status).not.toBe('deal');
+  });
+});
+
 describe('R03 sent means delivered by the gateway', () => {
   it('failed delivery leaves no sent timestamp and no stage change', async () => {
     mocks.send.mockRejectedValue(Object.assign(new Error('WhatsApp belum terhubung'), { status: 502 }));
@@ -309,6 +331,13 @@ describe('R03 sent means delivered by the gateway', () => {
     expect(mocks.send).not.toHaveBeenCalled();
     expect(prospect(1).invoiceSentAt).toBeNull();
     expect(prospect(1).status).toBe('qualified');
+  });
+
+  it('status lama offered tidak melewati syarat penawaran resmi', async () => {
+    const result = await invoke('patch', '/:id/status', { body: { status: 'offered' } });
+    expect(result.status).toBe(422);
+    expect(prospect(1).status).toBe('qualified');
+    expect(mocks.capi).not.toHaveBeenCalled();
   });
 
   it('closing cannot be set manually before an invoice was actually delivered', async () => {

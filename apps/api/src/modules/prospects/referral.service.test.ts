@@ -34,3 +34,15 @@ describe('Stored referral', () => {
     expect(storedReferral(marker)).toEqual({ adId: '1202500', headline: 'Umroh' });
   });
 });
+
+describe('Referral source URL', () => {
+  it('keeps http(s) URLs and drops other schemes without losing the ad marker', () => {
+    expect(normalizeReferralMarker({ adId: '1202500', sourceUrl: 'https://fb.me/abc' })?.sourceUrl).toBe('https://fb.me/abc');
+    for (const sourceUrl of ['javascript:alert(1)', 'data:text/html,<b>x</b>', 'not a url']) {
+      const marker = normalizeReferralMarker({ adId: '1202500', sourceUrl });
+      expect(marker).toMatchObject({ adId: '1202500' });
+      expect(marker?.sourceUrl).toBeUndefined();
+    }
+    expect(normalizeReferralMarker({ sourceUrl: 'javascript:alert(1)' })).toBeNull();
+  });
+});

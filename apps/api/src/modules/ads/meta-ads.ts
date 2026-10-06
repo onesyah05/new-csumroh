@@ -3,6 +3,7 @@ import path from 'node:path';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { decryptMetaToken, withAdsToken } from '../capi/meta-token.js';
+import { isHttpUrl } from '../prospects/referral.service.js';
 
 export type AdLabel = { adId: string; adName: string; campaignName: string | null; thumbnailUrl: string | null };
 
@@ -96,7 +97,8 @@ export async function withAdPreviews<T extends { metaReferralData?: unknown }>(m
         body: referral.body ?? null,
         adName: label?.adName ?? null,
         thumbnailUrl: (adId && localThumbnail(adId)) || label?.thumbnailUrl || (isMetaCdnUrl(referral.thumbnailUrl) ? referral.thumbnailUrl! : null),
-        sourceUrl: referral.sourceUrl ?? null,
+        // Data lama tersimpan sebelum validasi http(s) di referral.service.
+        sourceUrl: isHttpUrl(referral.sourceUrl) ? referral.sourceUrl! : null,
       },
     };
   });

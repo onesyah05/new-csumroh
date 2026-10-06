@@ -24,23 +24,43 @@ export function onSessionChange(listener: SessionListener) {
 let refreshInFlight: Promise<SessionPayload | null> | null = null;
 
 /**
+ * Refresh gagal karena gangguan sementara (jaringan putus, 429 dibatasi, 5xx/DB tidak tersedia), bukan karena sesi
+ * berakhir. Sesi dan cookie refresh masih berlaku: pengguna tidak boleh dikeluarkan, cukup dicoba lagi nanti.
+ */
+export class SessionRefreshUnavailableError extends Error {
+  status = 503;
+  constructor() { super('Koneksi ke server sedang terganggu. Coba lagi sebentar.'); }
+}
+
+const REFRESH_RETRY_DELAYS_MS = [1_000, 3_000];
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * Refresh token dirotasi backend: token lama dicabut begitu dipakai. Beberapa request yang
  * mendapat 401 bersamaan harus berbagi SATU refresh; refresh paralel membuat request kedua
  * memakai token yang sudah dicabut dan sesi terputus.
+ *
+ * Hasil: payload baru bila sukses, null HANYA bila server menolak sesi (401/403). Gangguan sementara dicoba ulang
+ * sebentar, lalu dilempar sebagai SessionRefreshUnavailableError tanpa mengubah status login.
  */
 export function refreshSession(): Promise<SessionPayload | null> {
   if (!refreshInFlight) {
-    const request = () => fetch(`${baseUrl}/auth/refresh`, { method: 'POST', credentials: 'include' })
-      .then(async (response) => {
-        if (!response.ok) return null;
-        const body = await response.json() as ApiResponse<SessionPayload>;
-        return body.data ?? null;
-      });
+    const attempt = async (): Promise<SessionPayload | null> => {
+      for (let index = 0; ; index += 1) {
+        const response = await fetch(`${baseUrl}/auth/refresh`, { method: 'POST', credentials: 'include' }).catch(() => null);
+        if (response && (response.status === 401 || response.status === 403)) return null;
+        if (response?.ok) {
+          const body = await response.json().catch(() => null) as ApiResponse<SessionPayload> | null;
+          if (body?.data) return body.data;
+        }
+        if (index >= REFRESH_RETRY_DELAYS_MS.length) throw new SessionRefreshUnavailableError();
+        await wait(REFRESH_RETRY_DELAYS_MS[index]!);
+      }
+    };
     // Antartab: refresh diserialkan dengan Web Locks, sehingga tab kedua mengirim cookie yang sudah
     // diperbarui tab pertama, bukan token lama yang baru saja dirotasi.
     const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-    refreshInFlight = (locks ? (locks.request('csumroh-auth-refresh', request) as unknown as Promise<SessionPayload | null>) /* lib.dom mengetik hasil ganda; runtime sudah flatten */ : request())
-      .catch(() => null)
+    refreshInFlight = (locks ? (locks.request('csumroh-auth-refresh', attempt) as unknown as Promise<SessionPayload | null>) /* lib.dom mengetik hasil ganda; runtime sudah flatten */ : attempt())
       .then((session) => {
         setAccessToken(session?.accessToken ?? null);
         sessionListeners.forEach((listener) => listener(session));

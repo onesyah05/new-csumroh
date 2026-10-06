@@ -8,6 +8,15 @@ export class HttpError extends Error {
 export const asyncHandler = (handler: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => void handler(req, res, next).catch(next);
 
+// P1001 tidak terjangkau, P1002 timeout, P1008 operasi timeout, P1017 koneksi ditutup server, P2024 pool timeout.
+const DATABASE_UNAVAILABLE_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017', 'P2024']);
+
+export function isDatabaseUnavailable(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const { code, name } = error as { code?: string; name?: string };
+  return name === 'PrismaClientInitializationError' || (typeof code === 'string' && DATABASE_UNAVAILABLE_CODES.has(code));
+}
+
 export function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction) {
   if (error instanceof HttpError) {
     res.status(error.status).json({ success: false, error: error.message, details: error.details });
@@ -53,6 +62,14 @@ export function errorHandler(error: unknown, _req: Request, res: Response, _next
   }
   if (parserError?.type === 'entity.parse.failed') {
     res.status(400).json({ success: false, error: 'Format data tidak valid.' });
+    return;
+  }
+
+  // Database tidak terjangkau / pool habis: sementara. 503 membuat gateway WhatsApp menahan event sampai DB pulih,
+  // bukan membuangnya setelah beberapa kali 500.
+  if (isDatabaseUnavailable(error)) {
+    console.error('Database unavailable', (error as Error).message);
+    res.status(503).json({ success: false, error: 'Database sedang tidak tersedia. Coba lagi sebentar.' });
     return;
   }
 

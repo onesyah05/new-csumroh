@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -120,16 +120,17 @@ export function PackagesPage() {
 
   const packages = packagesQuery.data ?? [];
 
-  // Month list extracted from packages data for dropdown
-  const monthList = useMemo(() => {
-    const months = new Set<string>();
-    packages.forEach((p) => {
-      if (p.departureDate) {
-        months.add(p.departureDate.slice(0, 7));
-      }
-    });
-    return Array.from(months).sort();
+  // Pilihan bulan dikumpulkan dari semua hasil yang pernah dimuat (plus bulan terpilih). Daftar paket sudah tersaring
+  // bulan/pencarian; mengambil bulan hanya dari hasil itu membuat dropdown menyusut ke satu bulan atau hilang.
+  const [knownMonths, setKnownMonths] = useState<string[]>([]);
+  useEffect(() => {
+    const months = packages.map((p) => p.departureDate?.slice(0, 7)).filter((m): m is string => Boolean(m));
+    if (months.length) setKnownMonths((current) => (months.every((m) => current.includes(m)) ? current : [...new Set([...current, ...months])].sort()));
   }, [packages]);
+  const monthList = useMemo(
+    () => (monthFilter && !knownMonths.includes(monthFilter) ? [...knownMonths, monthFilter].sort() : knownMonths),
+    [knownMonths, monthFilter],
+  );
 
   // Toast state
 

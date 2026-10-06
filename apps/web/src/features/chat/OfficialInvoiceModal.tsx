@@ -184,6 +184,11 @@ export function OfficialInvoiceModal({
       <div className="space-y-4">
         {custom ? (
           <p className="text-xs text-zinc-600"><b className="font-semibold text-zinc-900">Layanan custom</b> · nilai deal {rupiah(customMax)}</p>
+        ) : prospect?.offerSentAt && prospect.packageId ? (
+          // Nilai deal mengikuti penawaran resmi: paket invoice terkunci ke paket yang ditawarkan.
+          <p className="text-xs text-zinc-600">
+            <b className="font-semibold text-zinc-900">Paket: {selectedPackage?.name ?? '–'}</b> · sesuai penawaran resmi. Ganti paket lewat Kirim Penawaran ulang.
+          </p>
         ) : <div>
           <span className="mb-1 block text-xs font-semibold text-zinc-600">Paket</span>
           <Select

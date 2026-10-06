@@ -221,10 +221,14 @@ export function PackageFormPage() {
     enabled: isEdit,
   });
 
-  // Pre-fill form if editing
+  // Pre-fill form if editing — sekali per paket. Data paket/brand dimuat ulang di latar (mis. setiap event status
+  // WhatsApp memuat ulang daftar brand); mengisi ulang form saat itu menghapus isian yang belum disimpan.
+  const hydratedFor = useRef<number | null>(null);
   useEffect(() => {
     if (isEdit && packageQuery.data) {
       const p = packageQuery.data;
+      if (hydratedFor.current === p.id) return;
+      hydratedFor.current = p.id;
       setForm({
         brandId: String(p.brandId || ''),
         name: p.name || '',
