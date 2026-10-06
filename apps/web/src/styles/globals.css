@@ -135,7 +135,9 @@
 .sales-panel button:disabled { cursor: not-allowed; opacity: 0.5; }
 .sales-panel .thin-scrollbar { scroll-padding-block: 1rem; }
 .sales-panel textarea { line-height: 1.6; }
-@media (pointer: coarse) { .sales-panel button { min-height: 44px; } }
+/* Target sentuh 44px hanya untuk tablet. HP (≤767px) sudah diatur di shell mobile; laptop layar sentuh (pointer coarse
+   tetapi lebar desktop) memakai ukuran desktop, supaya tampilan panel sama dengan di laptop biasa. */
+@media (pointer: coarse) and (min-width: 768px) and (max-width: 1023px) { .sales-panel button { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .sales-panel *, .sales-panel *::before, .sales-panel *::after { animation: none !important; transition: none !important; } }
 
 /* Mobile application shell: one screen, one primary scroll area. */
