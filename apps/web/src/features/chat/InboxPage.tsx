@@ -3,7 +3,7 @@ import { useInboxNavigation } from './useInboxNavigation';
 import { useOnline } from '../../app/pwa';
 import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { businessDateKey, isLostStatus, isTakeoverOpen, isWonStatus, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -590,6 +590,12 @@ export function InboxPage() {
     });
     resetSend();
   }, [selectedId, brandId, resetSend]);
+
+  // Tinggi kotak ketik mengikuti draf chat yang sedang terbuka. Tanpa ini tinggi dari draf panjang chat sebelumnya
+  // (mis. caption flyer) terbawa ke chat lain yang draftnya kosong. Dihitung sebelum paint agar tidak berkedip.
+  useLayoutEffect(() => {
+    adjustTextareaHeight(composerRef.current);
+  }, [selectedId, brandId]);
 
   const starMutation = useMutation({
     mutationFn: (messageId: number) => api.post<{ isStarred?: boolean }>(`/chat/messages/${messageId}/star${query}`),
