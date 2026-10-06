@@ -57,7 +57,7 @@ function get(path: string, query: Row = {}) {
 const deal = (overrides: Row = {}): Row => ({
   amount: 10_000_000, createdAt: new Date('2026-09-11T03:00:00.000Z'), bankName: 'BSI',
   prospect: {
-    id: 1, createdAt: new Date('2026-09-01T03:00:00.000Z'), dealValue: 40_000_000, paymentStatus: 'partial_dp', userId: 7, leadSource: 'meta_ads',
+    id: 1, status: 'deal', createdAt: new Date('2026-09-01T03:00:00.000Z'), dealValue: 40_000_000, paymentStatus: 'partial_dp', userId: 7, leadSource: 'meta_ads',
     brand: { name: 'Hana Tours' }, package: { name: 'Umroh Syawal' }, user: { name: 'Aisyah' }, ...overrides,
   },
 });
@@ -65,13 +65,14 @@ const deal = (overrides: Row = {}): Row => ({
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.prospectCount.mockResolvedValue(0);
+  mocks.paymentFindMany.mockResolvedValue([]);
 });
 
 describe('Laporan penjualan', () => {
   it('lead periode per tahap, deal dari pembayaran terverifikasi, dan rentang tanggal WIB', async () => {
     mocks.prospectFindMany.mockResolvedValueOnce([{ status: 'new' }, { status: 'identifying' }, { status: 'closed_won' }, { status: 'lose' }]);
     mocks.prospectCount.mockResolvedValueOnce(6);
-    mocks.paymentFindMany.mockResolvedValueOnce([deal(), deal({ package: null, dealValue: 60_000_000 })]);
+    mocks.paymentFindMany.mockResolvedValueOnce([deal(), deal({ id: 2, package: null, dealValue: 60_000_000 })]);
     const data = await get('/sales', { brandId: '2' });
     expect(data.summary).toMatchObject({ leads: 4, spam: 6, deals: 2, lost: 1, conversion: 50, dealValue: 100_000_000, cashIn: 20_000_000, avgDaysToDeal: 10 });
     expect(data.stages.find((s: Row) => s.key === 'contact').count).toBe(1);
@@ -94,6 +95,23 @@ describe('Laporan penjualan', () => {
 
   it('menolak tanggal tidak valid', async () => {
     await expect(get('/sales', { from: '01-09-2026' })).rejects.toThrow();
+  });
+});
+
+describe('Deal dihitung per prospek', () => {
+  it('dua pembayaran terverifikasi satu prospek = satu deal; booking batal & yang sudah bayar sebelum periode tidak dihitung', async () => {
+    mocks.prospectFindMany.mockResolvedValueOnce([]);
+    mocks.paymentFindMany
+      .mockResolvedValueOnce([
+        deal(),
+        { ...deal(), createdAt: new Date('2026-09-20T03:00:00.000Z') },
+        deal({ id: 2, status: 'lose' }),
+        deal({ id: 3 }),
+      ])
+      .mockResolvedValueOnce([{ prospectId: 3 }]); // prospek 3 sudah Deal bulan lalu
+    const data = await get('/sales');
+    expect(data.summary).toMatchObject({ deals: 1, dealValue: 40_000_000, cashIn: 40_000_000 });
+    expect(mocks.paymentFindMany.mock.calls[1]![0].where).toMatchObject({ prospectId: { in: [1, 3] }, status: 'verified' });
   });
 });
 
@@ -165,8 +183,8 @@ describe('Laporan iklan Meta', () => {
     ]);
     mocks.prospectGroupBy.mockResolvedValueOnce([{ brandId: 1, _count: 50 }, { brandId: 2, _count: 9 }]);
     mocks.paymentFindMany.mockResolvedValueOnce([
-      { brandId: 1, prospect: { dealValue: 40_000_000 } },
-      { brandId: 1, prospect: { dealValue: 35_000_000 } },
+      { brandId: 1, createdAt: new Date('2026-09-11T03:00:00.000Z'), prospect: { id: 1, status: 'deal', dealValue: 40_000_000 } },
+      { brandId: 1, createdAt: new Date('2026-09-11T03:00:00.000Z'), prospect: { id: 2, status: 'deal', dealValue: 35_000_000 } },
     ]);
     mocks.fetchAdSpend
       .mockResolvedValueOnce({ status: 'ok', spend: 5_000_000, currency: 'IDR' })
@@ -198,7 +216,7 @@ describe('Laporan kreatif iklan', () => {
         { prospect_id: 4, brand_id: 1, status: 'contact', spam: 0, ad_id: 'A2' },
       ])
       .mockResolvedValueOnce([{ prospect_id: 1, brand_id: 1, status: 'deal', spam: 0, ad_id: 'A1' }]);
-    mocks.paymentFindMany.mockResolvedValueOnce([{ prospectId: 1, prospect: { dealValue: 40_000_000 } }]);
+    mocks.paymentFindMany.mockResolvedValueOnce([{ prospectId: 1, brandId: 1, createdAt: new Date('2026-09-11T03:00:00.000Z'), prospect: { id: 1, status: 'deal', dealValue: 40_000_000 } }]);
     const { rows, brands } = await get('/creatives');
     expect(brands).toEqual([{ brandId: 1, brand: 'Hana', status: 'ok', message: null }]);
     expect(rows[0]).toMatchObject({ adId: 'A1', leads: 2, spam: 0, qualified: 1, deals: 1, dealValue: 40_000_000, costPerLead: 1_000_000, costPerDeal: 2_000_000, roas: 20, thumbnailUrl: '/uploads/ad-creatives/A1.jpg' });
@@ -217,9 +235,9 @@ describe('Kreatif iklan selaras dengan Iklan Meta', () => {
       ])
       .mockResolvedValueOnce([{ prospect_id: 1, brand_id: 1, status: 'deal', spam: 0, ad_id: null }]);
     mocks.paymentFindMany.mockResolvedValueOnce([
-      { prospectId: 1, prospect: { dealValue: 30_000_000 } },
+      { prospectId: 1, brandId: 1, createdAt: new Date('2026-09-11T03:00:00.000Z'), prospect: { id: 1, status: 'deal', dealValue: 30_000_000 } },
       // Bukan prospek Meta Ads: tidak dihitung, sama seperti tab Iklan Meta.
-      { prospectId: 99, prospect: { dealValue: 50_000_000 } },
+      { prospectId: 99, brandId: 1, createdAt: new Date('2026-09-11T03:00:00.000Z'), prospect: { id: 99, status: 'deal', dealValue: 50_000_000 } },
     ]);
     const { rows } = await get('/creatives');
     const unknown = rows.find((r: any) => r.adId === 'tanpa-id');
