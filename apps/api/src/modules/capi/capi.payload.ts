@@ -7,9 +7,14 @@ import { createHash } from 'node:crypto';
 export const CAPI_EVENT_NAMES = ['LeadSubmitted', 'QualifiedLead', 'AddToCart', 'InitiateCheckout', 'Purchase'] as const;
 export type CapiEventName = (typeof CAPI_EVENT_NAMES)[number];
 
+/**
+ * Nomor format internasional tanpa +, aturan sama dengan normalizePhoneIdentifier di chat: nol di depan = Indonesia,
+ * selain itu apa adanya. Nomor luar negeri (Saudi 966…, Malaysia 60…, Hong Kong 852…) tidak boleh diberi awalan 62:
+ * hash-nya tidak lagi cocok di Meta dan negara terkirim salah.
+ */
 export const normalizePhone = (phone: string) => {
-  const digits = phone.replace(/\D/g, '').replace(/^0/, '62');
-  return digits.startsWith('62') ? digits : `62${digits}`;
+  const digits = phone.replace(/\D/g, '');
+  return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
 };
 
 export const sha256 = (value: string) => createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
