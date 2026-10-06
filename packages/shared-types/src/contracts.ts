@@ -129,16 +129,6 @@ export const loginSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
-export const prospectInputSchema = z.object({
-  name: z.string().trim().min(2).max(100),
-  phone: z.string().trim().min(8).max(30).nullable().optional(),
-  city: z.string().trim().max(100).nullable().optional(),
-  leadSource: z.string().trim().max(50).default('whatsapp'),
-  packageId: z.number().int().positive().nullable().optional(),
-  notes: z.string().max(5000).nullable().optional(),
-  nextFollowupDate: z.string().date().nullable().optional(),
-});
-
 export const statusUpdateSchema = z.object({
   status: prospectStatusSchema,
   lostReason: z.string().max(500).optional().nullable(),

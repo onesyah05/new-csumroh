@@ -14,7 +14,6 @@ import {
   isLostStatus,
   isWonStatus,
   packageBookingValue,
-  prospectInputSchema,
   prospectProfileSchema,
   seatCountFor,
   settlementFields,
@@ -45,7 +44,6 @@ import { queueCapiForStatus } from '../capi/capi.service.js';
 import { updateSpamAudienceMember } from '../ads/spam-audience.js';
 import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
-import { activeDevicePhone } from '../chat/device-scope.js';
 import { ensureAdLabels } from '../ads/meta-ads.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
 import { env } from '../../config/env.js';
@@ -226,30 +224,7 @@ prospectsRouter.get('/:id', asyncHandler(async (req, res) => {
   res.json({ success: true, data: { ...prospect, ad } });
 }));
 
-prospectsRouter.post('/', asyncHandler(async (req, res) => {
-  const input = prospectInputSchema.parse(req.body);
-  const brandId = scopedBrandId(req, req.body.brandId ? Number(req.body.brandId) : undefined);
-  const prospect = await prisma.prospect.create({
-    data: {
-      brandId,
-      userId: req.user?.role === 'cs' ? req.user.id : null,
-      name: input.name,
-      phone: input.phone,
-      city: input.city,
-      leadSource: input.leadSource,
-      devicePhone: await activeDevicePhone(brandId),
-      packageId: input.packageId,
-      notes: input.notes,
-      nextFollowupDate: input.nextFollowupDate ? new Date(input.nextFollowupDate) : null,
-    },
-    include,
-  });
-  await prisma.prospectLog.create({
-    data: { prospectId: prospect.id, userId: req.user!.id, actionType: 'created', title: 'Prospek dibuat' },
-  });
-  emitToBrand(brandId, 'prospect:updated', prospect);
-  res.status(201).json({ success: true, data: prospect });
-}));
+// Tidak ada pembuatan prospek manual: prospek selalu lahir dari chat WhatsApp asli yang masuk lewat gateway.
 
 prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
   const { status, lostReason } = statusUpdateSchema.parse(req.body);
