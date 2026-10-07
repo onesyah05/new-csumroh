@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Copy,
   ImageIcon,
+  Loader2,
   MessageSquare,
   Pencil,
   ShieldCheck,
@@ -13,6 +14,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Trash2,
+  Upload,
   XCircle,
   ZoomIn,
 } from 'lucide-react';
@@ -27,6 +29,7 @@ import { StatusBadge } from '../../components/ui/status-badge';
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog } from '../../components/ui/modal';
 import { ImageLightbox } from '../../components/ui/image-lightbox';
+import { compressImageToWebp } from './compressImage';
 import { formatWaPackageItinerary, formatWaPackageSummary } from './packageQuote';
 
 export interface PackageItem {
@@ -107,6 +110,8 @@ export function PackageDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const canManage = user?.role === 'superadmin' || user?.role === 'admin';
+  const isDesigner = user?.role === 'designer';
+  const flyerInputRef = useRef<HTMLInputElement>(null);
 
   const [copyTab, setCopyTab] = useState<'summary' | 'itinerary'>('summary');
   const [copied, setCopied] = useState(false);
@@ -136,6 +141,21 @@ export function PackageDetailPage() {
       showToast(`Paket berhasil ${isNowActive ? 'diaktifkan' : 'diarsipkan'}.`);
     },
     onError: (err: any) => showToast(err?.message || 'Gagal mengubah status paket.'),
+  });
+
+  // Ganti flyer: kompres ke WebP di browser lalu kirim; hanya field flyer paket yang berubah.
+  const flyerMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!file.type.startsWith('image/')) throw new Error('Hanya file gambar (JPG, PNG, WEBP) yang dapat diunggah.');
+      const { dataUrl } = await compressImageToWebp(file);
+      return api.put(`/catalog/packages/${id}/flyer`, { image: dataUrl });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['package', id] });
+      void queryClient.invalidateQueries({ queryKey: ['packages'] });
+      showToast('Flyer paket berhasil diperbarui.');
+    },
+    onError: (err: any) => showToast(err?.message || 'Gagal mengunggah flyer.'),
   });
 
   // Delete mutation
@@ -451,6 +471,30 @@ export function PackageDetailPage() {
               <h3 className="text-xs font-extrabold text-zinc-700">
                 Poster Flyer
               </h3>
+              {(canManage || isDesigner) && (
+                <>
+                  <input
+                    ref={flyerInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) flyerMutation.mutate(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => flyerInputRef.current?.click()}
+                    disabled={flyerMutation.isPending}
+                    className="text-xs font-semibold text-zinc-600 hover:text-zinc-950 flex items-center gap-1 transition cursor-pointer disabled:opacity-60"
+                  >
+                    {flyerMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                    <span>{pkg.flyerImage ? 'Ganti' : 'Unggah'}</span>
+                  </button>
+                </>
+              )}
               {pkg.flyerImage && (
                 <button
                   type="button"

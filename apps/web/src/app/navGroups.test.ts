@@ -30,4 +30,8 @@ describe('Navigasi sidebar per role', () => {
     ]);
     expect(shape('superadmin')[1]).toEqual(['Operasional', ['Layanan custom', 'Verifikasi']]);
   });
+
+  it('Designer hanya Paket Umroh', () => {
+    expect(shape('designer')).toEqual([['Utama', ['Paket Umroh']]]);
+  });
 });

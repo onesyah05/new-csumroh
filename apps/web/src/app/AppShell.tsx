@@ -17,7 +17,7 @@ import { NetworkBanner } from './pwa';
 import { useAppViewport } from '../lib/useMobile';
 
 /** Nama peran untuk pengguna; kode peran (mis. `product` = Tim LA) tidak ditampilkan. */
-const ROLE_LABELS: Record<string, string> = { superadmin: 'Superadmin', admin: 'Admin', cs: 'CS', finance: 'Finance', product: 'Tim LA' };
+const ROLE_LABELS: Record<string, string> = { superadmin: 'Superadmin', admin: 'Admin', cs: 'CS', finance: 'Finance', product: 'Tim LA', designer: 'Designer' };
 
 type NavItem = { to: string; label: string; icon: typeof BarChart3 };
 type NavGroup = { label: string; items: NavItem[] };
@@ -41,7 +41,7 @@ export function navGroupsFor(role?: string): NavGroup[] {
         ] : []),
         // CS/Admin mengajukan & menyepakati custom dari Inbox; menu ini untuk memantau statusnya.
         ...(is('cs', 'admin') ? [{ to: '/layanan-custom', label: 'Status custom', icon: SlidersHorizontal }] : []),
-        ...(is('superadmin', 'admin', 'cs', 'finance') ? [{ to: '/packages', label: 'Paket Umroh', icon: PackageOpen }] : []),
+        ...(is('superadmin', 'admin', 'cs', 'finance', 'designer') ? [{ to: '/packages', label: 'Paket Umroh', icon: PackageOpen }] : []),
         // Materi melayani jamaah: tidak relevan untuk Finance.
         ...(is('cs', 'admin', 'superadmin') ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
       ],
@@ -132,6 +132,8 @@ export function AppShell() {
   const navigate = useNavigate();
   useNotificationTitle();
   const { sidebarOpen, toggleSidebar, activeBrandId, setActiveBrandId } = useUiStore();
+  // Designer tidak punya notifikasi maupun koneksi realtime (hanya mengunggah flyer).
+  const hasNotifications = user?.role !== 'designer';
   // Backend hanya mengembalikan brand yang boleh diakses user (semua untuk holding, UserBrand untuk CS).
   const brands = useQuery({ queryKey: ['brands'], queryFn: () => api.get<any[]>('/catalog/brands'), enabled: !!user });
 
@@ -251,9 +253,9 @@ export function AppShell() {
 
         {/* Notifikasi: item pertama di bawah logo — titik pertama yang dilihat mata, sama di semua halaman
             (termasuk Inbox yang tanpa header). Di layar kecil lonceng ada di header halaman/Inbox. */}
-        <div className="relative hidden shrink-0 px-4 pb-2 lg:block">
+        {hasNotifications && <div className="relative hidden shrink-0 px-4 pb-2 lg:block">
           <NotificationBell placement="sidebar" />
-        </div>
+        </div>}
 
         {/* Main Navigation Links: Exact 1:1 40x40 centered square items when collapsed */}
         <nav className="relative flex-1 space-y-2 px-4 py-2 overflow-y-auto thin-scrollbar overflow-x-hidden">
@@ -339,12 +341,12 @@ export function AppShell() {
                   <p className="text-xs font-bold text-zinc-900 truncate">{user?.name}</p>
                   <p className="text-xs text-zinc-500 truncate">{user?.email}</p>
                 </div>
-                <DropdownMenu.Item
+                {hasNotifications && <DropdownMenu.Item
                   onSelect={() => navigate('/pengaturan/notifikasi')}
                   className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-700 outline-none hover:bg-zinc-100 transition data-[highlighted]:bg-zinc-100"
                 >
                   <Bell size={15} />Pengaturan notifikasi
-                </DropdownMenu.Item>
+                </DropdownMenu.Item>}
                 <DropdownMenu.Item
                   onSelect={() => void logout()}
                   className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-rose-600 outline-none hover:bg-rose-50 transition data-[highlighted]:bg-rose-50"
@@ -401,8 +403,8 @@ export function AppShell() {
                   aria-label="Brand aktif"
                 />
               )}
-              <RealtimeIndicator />
-              <NotificationBell placement="header" className="lg:hidden" />
+              {hasNotifications && <RealtimeIndicator />}
+              {hasNotifications && <NotificationBell placement="header" className="lg:hidden" />}
             </div>
           </header>
         )}

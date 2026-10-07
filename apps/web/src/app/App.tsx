@@ -62,6 +62,23 @@ export function App() {
     );
   }
 
+  // Designer hanya mengunggah flyer paket: daftar & detail paket, tanpa prospek/chat/notifikasi.
+  if (user.role === 'designer') {
+    return (
+      <>
+        <Toaster />
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="lainnya" element={<MorePage />} />
+            <Route path="packages" element={<PackagesPage />} />
+            <Route path="packages/:id" element={<PackageDetailPage />} />
+            <Route path="*" element={<Navigate to="/packages" replace />} />
+          </Route>
+        </Routes>
+      </>
+    );
+  }
+
   return (
     <>
       <Suspense fallback={null}><SocketBridge /></Suspense>

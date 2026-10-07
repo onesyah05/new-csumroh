@@ -29,7 +29,7 @@ export const catalogRouter = Router();
 catalogRouter.use(authGuard);
 
 catalogRouter.get('/brands', asyncHandler(async (req, res) => {
-  const isHoldingWide = req.user!.role === 'superadmin' || req.user!.role === 'admin' || req.user!.role === 'finance';
+  const isHoldingWide = req.user!.role === 'superadmin' || req.user!.role === 'admin' || req.user!.role === 'finance' || req.user!.role === 'designer';
   const allowedBrandIds: number[] = [];
   if (!isHoldingWide) {
     if (req.user!.brandId) allowedBrandIds.push(req.user!.brandId);
@@ -38,6 +38,13 @@ catalogRouter.get('/brands', asyncHandler(async (req, res) => {
         if (ub.brand?.id) allowedBrandIds.push(ub.brand.id);
       }
     }
+  }
+
+  // Designer hanya perlu nama brand: tanpa sesi WhatsApp, nomor, atau hitungan internal.
+  if (req.user!.role === 'designer') {
+    const data = await prisma.brand.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, code: true, logoUrl: true } });
+    res.json({ success: true, data });
+    return;
   }
 
   const rows = isHoldingWide
@@ -284,13 +291,13 @@ catalogRouter.get('/packages', asyncHandler(async (req, res) => {
   // Tanpa brandId: peran holding memakai brand utamanya (perilaku lama pemanggil seperti Inbox/Pipeline), staf
   // lain melihat semua brand tugasnya (brand utama + penugasan).
   const role = req.user!.role;
-  const isHolding = role === 'superadmin' || role === 'admin' || role === 'finance';
+  const isHolding = role === 'superadmin' || role === 'admin' || role === 'finance' || role === 'designer';
   const wantsAll = req.query.brandId === 'all';
   const requested = req.query.brandId && !wantsAll ? Number(req.query.brandId) : undefined;
   const assigned = [...new Set([req.user!.brandId, ...(req.user!.userBrands ?? []).map((ub) => ub.brand?.id)].filter((id): id is number => Boolean(id)))];
 
   // Admin yang punya penugasan brand: "semua" = semua brand tugasnya (sama dengan paket yang boleh ia kelola).
-  const unrestricted = role === 'superadmin' || role === 'finance' || (role === 'admin' && assigned.length === 0);
+  const unrestricted = role === 'superadmin' || role === 'finance' || role === 'designer' || (role === 'admin' && assigned.length === 0);
   const assignedWhere = assigned.length === 1 ? assigned[0] : { in: assigned };
 
   const where: any = {};
@@ -364,14 +371,14 @@ catalogRouter.get('/packages/:id', asyncHandler(async (req, res) => {
   });
   if (!item) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
   // Boleh dibuka oleh siapa pun yang punya akses ke brand paket ini (CS multi-brand, Admin/Finance lintas brand).
-  if (req.user!.role !== 'superadmin') {
+  if (req.user!.role !== 'superadmin' && req.user!.role !== 'designer') {
     try { scopedBrandId(req, item.brandId); } catch { throw new HttpError(403, 'Akses paket antar-brand dibatasi.'); }
   }
   res.json({ success: true, data: item });
 }));
 
-catalogRouter.post('/packages/upload-flyer', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
-  const { image } = req.body;
+/** Validasi data URL gambar flyer (maks. 5MB, JPG/PNG/WEBP asli) lalu simpan ke uploads/packages. */
+async function storeFlyer(image: unknown) {
   if (!image || typeof image !== 'string') {
     throw new HttpError(400, 'Data gambar poster flyer wajib disertakan.');
   }
@@ -417,15 +424,28 @@ catalogRouter.post('/packages/upload-flyer', requireRole('superadmin', 'admin'),
   const filePath = path.join(uploadsDir, safeName);
   await fs.promises.writeFile(filePath, buffer);
 
-  const fileUrl = `/uploads/packages/${safeName}`;
-  res.json({
-    success: true,
-    data: {
-      url: fileUrl,
-      size: buffer.length,
-      filename: safeName,
-    },
+  return { url: `/uploads/packages/${safeName}`, size: buffer.length, filename: safeName };
+}
+
+catalogRouter.post('/packages/upload-flyer', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await storeFlyer(req.body.image) });
+}));
+
+// Designer hanya boleh mengganti gambar flyer paket yang sudah ada; tidak ada field paket lain yang disentuh.
+catalogRouter.put('/packages/:id/flyer', requireRole('superadmin', 'admin', 'designer'), asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const existing = await prisma.package.findUnique({ where: { id } });
+  if (!existing) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
+  if (req.user!.role !== 'designer') assertCanManagePackages(req.user!, existing.brandId);
+
+  const stored = await storeFlyer(req.body.image);
+  const data = await prisma.package.update({
+    where: { id },
+    data: { flyerImage: stored.url },
+    include: { brand: { select: { id: true, name: true, code: true } } },
   });
+  if (existing.flyerImage) await removeFlyerIfUnused(existing.flyerImage);
+  res.json({ success: true, data });
 }));
 
 catalogRouter.post('/packages', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
@@ -598,7 +618,7 @@ catalogRouter.post('/users', requireRole('superadmin', 'admin'), asyncHandler(as
     name: z.string().min(2).max(100),
     email: z.string().email(),
     password: z.string().min(8).max(128),
-    role: z.enum(['admin', 'cs', 'finance', 'product']).default('cs'),
+    role: z.enum(['admin', 'cs', 'finance', 'product', 'designer']).default('cs'),
   }).parse(req.body);
 
   if (req.user!.role === 'admin' && input.role !== 'cs') {
@@ -619,7 +639,7 @@ catalogRouter.post('/users', requireRole('superadmin', 'admin'), asyncHandler(as
   } else {
     allBrandIds = [...new Set([...(input.brandIds || []), ...(input.brandId ? [input.brandId] : [])])].filter(Boolean);
     // Tim LA melayani semua brand holding: tidak terikat brand.
-    if (input.role === 'product') allBrandIds = [];
+    if (input.role === 'product' || input.role === 'designer') allBrandIds = [];
     else if (allBrandIds.length === 0) throw new HttpError(422, 'Pilih minimal satu brand.');
     effectiveBrandId = allBrandIds[0] ?? null;
   }
@@ -734,7 +754,7 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
     name: z.string().min(2).max(100).optional(),
     email: z.string().email().optional(),
     password: z.string().min(8).max(128).optional(),
-    role: z.enum(['admin', 'cs', 'finance', 'product']).optional(),
+    role: z.enum(['admin', 'cs', 'finance', 'product', 'designer']).optional(),
     brandId: z.number().int().positive().nullable().optional(),
     brandIds: z.array(z.number().int().positive()).optional(),
   }).parse(req.body);

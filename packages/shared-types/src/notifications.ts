@@ -2,7 +2,7 @@
  * Katalog notifikasi in-app. Dipakai API (tipe yang sah, prioritas default) dan halaman preferensi
  * (label, kelompok, role yang menerimanya). Notifikasi `urgent` selalu tampil sebagai toast.
  */
-export type NotificationRole = 'superadmin' | 'admin' | 'cs' | 'finance' | 'product';
+export type NotificationRole = 'superadmin' | 'admin' | 'cs' | 'finance' | 'product' | 'designer';
 export type NotificationPriorityLevel = 'info' | 'action' | 'urgent';
 
 type Entry = {

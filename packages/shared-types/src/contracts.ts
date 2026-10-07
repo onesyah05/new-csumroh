@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const roleSchema = z.enum(['superadmin', 'admin', 'cs', 'finance', 'product']);
+export const roleSchema = z.enum(['superadmin', 'admin', 'cs', 'finance', 'product', 'designer']);
 export type Role = z.infer<typeof roleSchema>;
 
 export const pipelineStatuses = [

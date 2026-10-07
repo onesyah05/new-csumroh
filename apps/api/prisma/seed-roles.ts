@@ -22,6 +22,7 @@ const ACCOUNTS: { email: string; name: string; role: Role; brand: 'primary' | nu
   { email: 'admin.uji@crm.test', name: 'Admin Uji', role: 'admin', brand: 'primary' },
   { email: 'finance.uji@crm.test', name: 'Finance Uji', role: 'finance', brand: null },
   { email: 'timla.uji@crm.test', name: 'Tim LA Uji', role: 'product', brand: null },
+  { email: 'designer.uji@crm.test', name: 'Designer Uji', role: 'designer', brand: null },
   // CS yang memegang dua brand: menguji paket, inbox, dan pipeline lintas brand.
   { email: 'cs.multi.uji@crm.test', name: 'CS Multi-brand Uji', role: 'cs', brand: 'primary', extraBrands: true },
 ];
