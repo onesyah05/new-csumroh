@@ -12,6 +12,10 @@ const sales = {
   byPackage: [{ label: 'Umroh Syawal', deals: 4, value: 160_000_000 }],
   byBrand: [{ label: 'Hana Tours', deals: 4, value: 160_000_000 }],
 };
+const deals = {
+  basis: 'verified', summary: { deals: 1, dealValue: 33_999_000, daysToDeal: { avg: 8, median: 8, min: 8, max: 8 } },
+  rows: [{ id: 9, brandId: 2, brand: 'Hana Tours', name: 'HaikalShahab', phone: '62812', packageName: 'Umroh Reguler', dealValue: 33_999_000, source: 'Meta Ads', adName: 'H078', pic: 'Nadiya', lastCs: { name: 'Dara', at: '2026-10-06T05:00:00.000Z' }, leadAt: '2026-09-28T05:00:00.000Z', verifiedAt: '2026-10-06T04:00:00.000Z', daysToDeal: 8 }],
+};
 const cs = { rows: [{ id: 7, name: 'Aisyah', isActive: true, leads: 10, deals: 2, dealValue: 80_000_000, conversion: 20, medianReplyMinutes: 12, takenOver: 1, openNow: 6, overdueFollowups: 2 }] };
 
 const creatives = {
@@ -36,6 +40,7 @@ describe('Menu Laporan', () => {
       const url = String(input);
       urls.push(url);
       if (url.includes('/reports/sales')) return json(sales);
+      if (url.includes('/reports/deals')) return json(url.includes('basis=lead') ? { basis: 'lead', summary: { deals: 0, dealValue: 0 }, rows: [] } : deals);
       if (url.includes('/reports/cs')) return json(cs);
       if (url.includes('/reports/creatives')) return json(creatives);
       if (url.includes('/catalog/brands')) return json([{ id: 2, name: 'Hana Tours' }]);
@@ -63,6 +68,19 @@ describe('Menu Laporan', () => {
     expect(await screen.findByText('Aisyah')).toBeTruthy();
     expect(screen.getByText('12 menit')).toBeTruthy();
     await waitFor(() => expect(urls.some((u) => u.includes('/reports/cs?'))).toBe(true));
+  });
+
+  it('Daftar deal di Penjualan: PIC, CS terakhir, dan pilihan tanggal verifikasi atau lead masuk', async () => {
+    render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/laporan']}><ReportsPage /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('HaikalShahab')).toBeTruthy();
+    expect(screen.getByText('Nadiya')).toBeTruthy();
+    expect(screen.getByText('Dara')).toBeTruthy();
+    expect(screen.getByText('Rata-rata lead → deal')).toBeTruthy();
+    expect(screen.getAllByText('8 hari').length).toBe(4);
+    expect(urls.some((u) => u.includes('/reports/deals?') && u.includes('basis=verified'))).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: 'Tanggal lead masuk' }));
+    expect(await screen.findByText('Belum ada deal pada periode ini.')).toBeTruthy();
+    expect(urls.some((u) => u.includes('basis=lead'))).toBe(true);
   });
 
   it('tab Kreatif iklan: thumbnail, metrik Meta, hasil CRM sampai ROAS, dan peringatan token', async () => {

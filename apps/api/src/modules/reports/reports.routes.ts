@@ -162,6 +162,89 @@ reportsRouter.get('/sales', asyncHandler(async (req, res) => {
   });
 }));
 
+// ── 1b. Daftar deal ──────────────────────────────────────────────────────────────────────────────────────
+/**
+ * Prospek deal beserta PIC dan CS terakhir yang membalas. `basis`:
+ * - verified (bawaan): deal yang pembayaran terverifikasi pertamanya jatuh di periode; sama dengan kartu Deal Penjualan.
+ * - lead: prospek yang MASUK di periode dan kini Deal, kapan pun diverifikasi; cocok untuk menilai hasil iklan per periode.
+ */
+reportsRouter.get('/deals', asyncHandler(async (req, res) => {
+  const { format, range, brandWhere } = parseRange(req);
+  const basis = z.enum(['verified', 'lead']).default('verified').parse(req.query.basis);
+  const prospectSelect = {
+    id: true, brandId: true, name: true, phone: true, status: true, createdAt: true, dealValue: true, leadSource: true, adId: true,
+    brand: { select: { name: true } }, package: { select: { name: true } }, user: { select: { name: true } },
+  } as const;
+
+  let deals: { verifiedAt: Date | null; prospect: Prisma.ProspectGetPayload<{ select: typeof prospectSelect }> }[];
+  if (basis === 'verified') {
+    const payments = await prisma.payment.findMany({
+      where: { ...brandWhere, status: 'verified', createdAt: range },
+      select: { createdAt: true, prospect: { select: prospectSelect } },
+    });
+    deals = (await firstDeals(payments, range.gte)).map((p) => ({ verifiedAt: p.createdAt, prospect: p.prospect }));
+  } else {
+    const prospects = (await prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range, ...notSpam }, select: prospectSelect }))
+      .filter((p) => isWonStatus(p.status));
+    const firstPaid = prospects.length
+      ? await prisma.payment.groupBy({ by: ['prospectId'], where: { prospectId: { in: prospects.map((p) => p.id) }, status: 'verified' }, _min: { createdAt: true } })
+      : [];
+    const paidAt = new Map(firstPaid.map((row) => [row.prospectId, row._min.createdAt]));
+    deals = prospects.map((prospect) => ({ verifiedAt: paidAt.get(prospect.id) ?? null, prospect }));
+  }
+
+  // CS terakhir = pengirim balasan keluar terakhir di percakapan (nama CS dari CRM, atau nama akun bila dibalas dari HP).
+  const lastReplies = await Promise.all(deals.map((d) => prisma.chatMessage.findFirst({
+    where: { prospectId: d.prospect.id, isFromMe: true, isDeleted: false },
+    orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
+    select: { senderName: true, timestamp: true },
+  })));
+  const ads = await adLabels(deals.map((d) => d.prospect.adId));
+
+  const rows = deals.map((d, index) => {
+    const p = d.prospect;
+    const reply = lastReplies[index];
+    return {
+      id: p.id,
+      brandId: p.brandId,
+      brand: p.brand.name,
+      name: p.name,
+      phone: p.phone,
+      packageName: p.package?.name ?? null,
+      dealValue: num(p.dealValue),
+      source: SOURCE_LABEL[p.leadSource ?? ''] ?? p.leadSource ?? '—',
+      adName: p.adId ? ads.get(p.adId)?.adName ?? null : null,
+      pic: p.user?.name ?? null,
+      lastCs: reply ? { name: reply.senderName ?? null, at: new Date(reply.timestamp * 1000) } : null,
+      leadAt: p.createdAt,
+      verifiedAt: d.verifiedAt,
+      daysToDeal: d.verifiedAt ? Math.max(0, Math.round(((d.verifiedAt.getTime() - p.createdAt.getTime()) / 86_400_000) * 10) / 10) : null,
+    };
+  }).sort((a, b) => (b.verifiedAt?.getTime() ?? 0) - (a.verifiedAt?.getTime() ?? 0));
+
+  const wib = (date: Date | null) => (date ? businessDateKey(date) : '');
+  // Lama lead → deal (hari, 1 desimal) untuk deal yang sudah punya tanggal verifikasi.
+  const days = rows.map((r) => r.daysToDeal).filter((v): v is number => v !== null).sort((a, b) => a - b);
+  const oneDecimal = (value: number) => Math.round(value * 10) / 10;
+  const mid = Math.floor(days.length / 2);
+  const daysToDeal = days.length
+    ? {
+        avg: oneDecimal(days.reduce((sum, v) => sum + v, 0) / days.length),
+        median: oneDecimal(days.length % 2 ? days[mid]! : (days[mid - 1]! + days[mid]!) / 2),
+        min: days[0]!,
+        max: days[days.length - 1]!,
+      }
+    : null;
+  send(res, format, 'daftar-deal', {
+    basis,
+    summary: { deals: rows.length, dealValue: rows.reduce((sum, r) => sum + r.dealValue, 0), daysToDeal },
+    rows,
+  }, {
+    header: ['Brand', 'Jamaah', 'No. WhatsApp', 'Paket', 'Nilai deal', 'Sumber', 'Iklan', 'PIC', 'CS terakhir', 'Balasan terakhir', 'Lead masuk', 'Diverifikasi', 'Hari ke deal'],
+    rows: rows.map((r) => [r.brand, r.name, r.phone ?? '', r.packageName ?? 'Layanan custom / tanpa paket', r.dealValue, r.source, r.adName ?? '', r.pic ?? '', r.lastCs?.name ?? '', r.lastCs ? r.lastCs.at.toISOString() : '', wib(r.leadAt), wib(r.verifiedAt), r.daysToDeal ?? '']),
+  });
+}));
+
 // ── 2. Kinerja CS ────────────────────────────────────────────────────────────────────────────────────────
 reportsRouter.get('/cs', asyncHandler(async (req, res) => {
   const { format, range, brandId, brandWhere } = parseRange(req);

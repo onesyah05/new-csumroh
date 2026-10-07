@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   prospectCount: vi.fn(),
   paymentFindMany: vi.fn(),
   paymentCount: vi.fn(),
+  paymentGroupBy: vi.fn(),
+  chatFindFirst: vi.fn(),
   rejectionCount: vi.fn(),
   logFindMany: vi.fn(),
   userFindMany: vi.fn(),
@@ -21,7 +23,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../db/prisma.js', () => ({
   prisma: {
     prospect: { findMany: mocks.prospectFindMany, groupBy: mocks.prospectGroupBy, count: mocks.prospectCount },
-    payment: { findMany: mocks.paymentFindMany, count: mocks.paymentCount },
+    payment: { findMany: mocks.paymentFindMany, count: mocks.paymentCount, groupBy: mocks.paymentGroupBy },
+    chatMessage: { findFirst: mocks.chatFindFirst },
     paymentProofRejection: { count: mocks.rejectionCount },
     prospectLog: { findMany: mocks.logFindMany },
     user: { findMany: mocks.userFindMany },
@@ -112,6 +115,33 @@ describe('Deal dihitung per prospek', () => {
     const data = await get('/sales');
     expect(data.summary).toMatchObject({ deals: 1, dealValue: 40_000_000, cashIn: 40_000_000 });
     expect(mocks.paymentFindMany.mock.calls[1]![0].where).toMatchObject({ prospectId: { in: [1, 3] }, status: 'verified' });
+  });
+});
+
+describe('Daftar deal', () => {
+  const dealProspect = (overrides: Row = {}): Row => ({
+    id: 1, brandId: 1, name: 'Haikal', phone: '62812', status: 'deal', createdAt: new Date('2026-09-01T03:00:00.000Z'), dealValue: 34_000_000,
+    leadSource: 'meta_ads', adId: null, brand: { name: 'Hana Tours' }, package: { name: 'Umroh Reguler' }, user: { name: 'Nadiya' }, ...overrides,
+  });
+
+  it('berdasarkan tanggal verifikasi: sama dengan kartu Deal, dengan PIC dan CS terakhir yang membalas', async () => {
+    mocks.paymentFindMany.mockResolvedValueOnce([{ createdAt: new Date('2026-09-11T03:00:00.000Z'), prospect: dealProspect() }]);
+    mocks.chatFindFirst.mockResolvedValueOnce({ senderName: 'Dara', timestamp: 1_789_000_000 });
+    const data = await get('/deals');
+    expect(data.summary).toEqual({ deals: 1, dealValue: 34_000_000, daysToDeal: { avg: 10, median: 10, min: 10, max: 10 } });
+    expect(data.rows[0]).toMatchObject({ name: 'Haikal', pic: 'Nadiya', source: 'Meta Ads', packageName: 'Umroh Reguler', lastCs: { name: 'Dara' }, daysToDeal: 10 });
+    expect(mocks.chatFindFirst.mock.calls[0]![0].where).toMatchObject({ prospectId: 1, isFromMe: true });
+  });
+
+  it('berdasarkan tanggal lead masuk: lead periode yang kini Deal, dengan tanggal verifikasi pertama kapan pun', async () => {
+    mocks.prospectFindMany.mockResolvedValueOnce([dealProspect(), dealProspect({ id: 2, status: 'contact' })]);
+    mocks.paymentGroupBy.mockResolvedValueOnce([{ prospectId: 1, _min: { createdAt: new Date('2026-10-06T03:00:00.000Z') } }]);
+    mocks.chatFindFirst.mockResolvedValueOnce(null);
+    const data = await get('/deals', { basis: 'lead' });
+    expect(data.rows.map((r: Row) => r.id)).toEqual([1]);
+    expect(data.rows[0].verifiedAt).toEqual(new Date('2026-10-06T03:00:00.000Z'));
+    expect(data.rows[0].lastCs).toBeNull();
+    expect(mocks.prospectFindMany.mock.calls[0]![0].where).toMatchObject({ spamAt: null });
   });
 });
 

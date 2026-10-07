@@ -14,6 +14,7 @@ import { onRovingKey, rovingTabIndex } from '../custom/roving';
 import { showFeedback } from '../../app/toast';
 import { durationLabel, rupiah } from '../finance/verificationApi';
 import { CreativesView, roasText } from './CreativesView';
+import { DealsList } from './DealsList';
 
 export const REPORT_TABS = [
   { key: 'sales', label: 'Penjualan', file: 'penjualan' },
@@ -186,7 +187,12 @@ export function ReportsPage() {
           <PageError description={report.error.message} onRetry={() => void report.refetch()} />
         ) : report.data ? (
           <div className={cn('space-y-5 transition-opacity', report.isFetching && 'opacity-60')}>
-            {tab === 'sales' && <SalesView data={report.data} />}
+            {tab === 'sales' && (
+              <>
+                <SalesView data={report.data} />
+                <DealsList query={query} />
+              </>
+            )}
             {tab === 'cs' && <CsView data={report.data} />}
             {tab === 'sources' && <SourcesView data={report.data} />}
             {tab === 'ads' && <AdsView data={report.data} />}
