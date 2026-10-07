@@ -12,7 +12,7 @@ import { revokeUserSessions } from '../auth/sessions.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { FLYER_URL_PATTERN, LOGO_URL_PATTERN } from '../../utils/safe-path.js';
 import { releaseProspectsOf } from '../prospects/pic.js';
-import { ITINERARY_CANVAS, ITINERARY_MAX_CHARS, itineraryDateText, itineraryFits, renderItineraryGuide, renderItineraryImage } from './itinerary-image.js';
+import { ITINERARY_CANVAS, ITINERARY_MAX_CHARS, ITINERARY_TONES, itineraryDateText, itineraryFits, renderItineraryGuide, renderItineraryImage, renderItineraryPreview, type ItineraryTone } from './itinerary-image.js';
 
 // Tautan yang dirender sebagai <a href>: hanya http(s), mencegah skema javascript:/data:.
 const httpsUrlSchema = z.union([
@@ -43,7 +43,7 @@ catalogRouter.get('/brands', asyncHandler(async (req, res) => {
 
   // Designer hanya perlu nama brand dan template itinerary: tanpa sesi WhatsApp, nomor, atau hitungan internal.
   if (req.user!.role === 'designer') {
-    const data = await prisma.brand.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, code: true, logoUrl: true, itineraryTemplate: true } });
+    const data = await prisma.brand.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, code: true, logoUrl: true, itineraryTemplate: true, itineraryTone: true } });
     res.json({ success: true, data });
     return;
   }
@@ -171,10 +171,43 @@ catalogRouter.post('/brands/upload-logo', requireRole('superadmin', 'admin'), as
 const ITINERARY_TEMPLATE_URL = /^\/uploads\/itinerary\/brand-\d+-\d+\.png$/;
 const TEMPLATE_ROLES = ['superadmin', 'admin', 'designer'] as const;
 
-catalogRouter.get('/itinerary-template/guide', requireRole(...TEMPLATE_ROLES), asyncHandler(async (_req, res) => {
-  const image = await renderItineraryGuide();
-  res.set({ 'Content-Type': 'image/png', 'Content-Disposition': 'attachment; filename="panduan-template-itinerary.png"', 'Cache-Control': 'no-store' });
+const toneSchema = z.enum(ITINERARY_TONES as [ItineraryTone, ...ItineraryTone[]]);
+
+/** Berkas template brand di disk; null bila belum diunggah atau berkasnya hilang. */
+function itineraryTemplateFile(url: string | null | undefined) {
+  if (!url || !ITINERARY_TEMPLATE_URL.test(url)) return null;
+  const file = path.resolve(process.cwd(), 'uploads', 'itinerary', path.basename(url));
+  return fs.existsSync(file) ? file : null;
+}
+
+catalogRouter.get('/itinerary-template/guide', requireRole(...TEMPLATE_ROLES), asyncHandler(async (req, res) => {
+  const tone = toneSchema.catch('light').parse(req.query.tone);
+  const image = await renderItineraryGuide(tone);
+  res.set({ 'Content-Type': 'image/png', 'Content-Disposition': `attachment; filename="panduan-template-itinerary-banner-${tone === 'dark' ? 'gelap' : 'terang'}.png"`, 'Cache-Control': 'no-store' });
   res.send(image);
+}));
+
+// Pratinjau untuk designer: template brand + contoh paket, memakai warna teks sesuai pilihan banner.
+catalogRouter.get('/brands/:id/itinerary-preview', requireRole(...TEMPLATE_ROLES), asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const brand = await prisma.brand.findUnique({ where: { id }, select: { itineraryTemplate: true, itineraryTone: true } });
+  if (!brand) throw new HttpError(404, 'Brand tidak ditemukan.');
+  if (req.user!.role === 'admin') assertCanManagePackages(req.user!, id);
+  const file = itineraryTemplateFile(brand.itineraryTemplate);
+  if (!file) throw new HttpError(409, 'Template itinerary brand ini belum diunggah.');
+  res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+  res.send(await renderItineraryPreview(file, toneSchema.catch('light').parse(brand.itineraryTone)));
+}));
+
+// Banner terang → teks gelap; banner gelap → teks terang.
+catalogRouter.put('/brands/:id/itinerary-tone', requireRole(...TEMPLATE_ROLES), asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const { tone } = z.object({ tone: toneSchema }).parse(req.body);
+  const brand = await prisma.brand.findUnique({ where: { id }, select: { id: true } });
+  if (!brand) throw new HttpError(404, 'Brand tidak ditemukan.');
+  if (req.user!.role === 'admin') assertCanManagePackages(req.user!, id);
+  const data = await prisma.brand.update({ where: { id }, data: { itineraryTone: tone }, select: { id: true, name: true, itineraryTone: true } });
+  res.json({ success: true, data });
 }));
 
 catalogRouter.put('/brands/:id/itinerary-template', requireRole(...TEMPLATE_ROLES), asyncHandler(async (req, res) => {
@@ -482,18 +515,18 @@ async function storeFlyer(image: unknown) {
 // Itinerary paket sebagai gambar: template brand + nama, tanggal berangkat, dan agenda paket di area tetap.
 catalogRouter.get('/packages/:id/itinerary-image', asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  const pkg = await prisma.package.findUnique({ where: { id }, include: { brand: { select: { itineraryTemplate: true } } } });
+  const pkg = await prisma.package.findUnique({ where: { id }, include: { brand: { select: { itineraryTemplate: true, itineraryTone: true } } } });
   if (!pkg) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
   if (req.user!.role !== 'superadmin' && req.user!.role !== 'designer') {
     try { scopedBrandId(req, pkg.brandId); } catch { throw new HttpError(403, 'Akses paket antar-brand dibatasi.'); }
   }
   if (!pkg.itinerary?.trim()) throw new HttpError(422, 'Itinerary paket belum diisi di katalog.');
-  const template = pkg.brand.itineraryTemplate;
-  if (!template || !ITINERARY_TEMPLATE_URL.test(template)) throw new HttpError(409, 'Template itinerary brand ini belum diunggah designer.');
-  const templatePath = path.resolve(process.cwd(), 'uploads', 'itinerary', path.basename(template));
-  if (!fs.existsSync(templatePath)) throw new HttpError(409, 'File template itinerary brand ini tidak ditemukan; minta designer mengunggah ulang.');
+  if (!pkg.brand.itineraryTemplate) throw new HttpError(409, 'Template itinerary brand ini belum diunggah designer.');
+  const templatePath = itineraryTemplateFile(pkg.brand.itineraryTemplate);
+  if (!templatePath) throw new HttpError(409, 'File template itinerary brand ini tidak ditemukan; minta designer mengunggah ulang.');
 
-  const { image, truncated } = await renderItineraryImage(templatePath, { name: pkg.name, dateText: itineraryDateText(pkg), itinerary: pkg.itinerary });
+  const tone = toneSchema.catch('light').parse(pkg.brand.itineraryTone);
+  const { image, truncated } = await renderItineraryImage(templatePath, { name: pkg.name, dateText: itineraryDateText(pkg), itinerary: pkg.itinerary }, tone);
   res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Itinerary-Truncated': truncated ? '1' : '0' });
   res.send(image);
 }));

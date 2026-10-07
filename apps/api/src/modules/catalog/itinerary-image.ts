@@ -22,8 +22,13 @@ export const ITINERARY_ZONES = {
   footer: { x: 0, y: 1230, width: 1080, height: 120 },
 } as const satisfies Record<string, Zone>;
 
-export const ITINERARY_TEXT_COLOR = '#1f2937';
-const ACCENT_COLOR = '#0f766e';
+/** Banner terang → teks gelap; banner gelap → teks terang. Dipilih designer per brand. */
+export type ItineraryTone = 'light' | 'dark';
+export const ITINERARY_TONES: ItineraryTone[] = ['light', 'dark'];
+const PALETTE = {
+  light: { text: '#1f2937', accent: '#0f766e' },
+  dark: { text: '#f8fafc', accent: '#5eead4' },
+} as const;
 
 const FONTS = fileURLToPath(new URL('../../../assets/fonts/', import.meta.url));
 const FONT_FAMILY = 'Plus Jakarta Sans';
@@ -74,7 +79,7 @@ export function itineraryDateText(pkg: { departureDate?: Date | string | null; d
 }
 
 /** "Hari 1: ..." → label diberi aksen, isi tetap biasa; baris tanpa label ditulis apa adanya. */
-function itineraryMarkup(itinerary: string) {
+function itineraryMarkup(itinerary: string, tone: ItineraryTone) {
   return itinerary
     .split(/\r?\n/)
     .map((line) => line.replace(/^\s*[-•*]\s*/, '').trim())
@@ -82,7 +87,7 @@ function itineraryMarkup(itinerary: string) {
     .map((line) => {
       const match = /^(hari\s*\d+[^:]{0,20}):\s*(.*)$/i.exec(line);
       return match
-        ? `<span foreground="${ACCENT_COLOR}" font_weight="800">${escapeMarkup(match[1]!)}:</span>  ${escapeMarkup(match[2]!)}`
+        ? `<span foreground="${PALETTE[tone].accent}" font_weight="800">${escapeMarkup(match[1]!)}:</span>  ${escapeMarkup(match[2]!)}`
         : escapeMarkup(line);
     })
     // Jarak antar hari berupa baris kecil (bukan baris kosong penuh) agar itinerary 9–12 hari tetap muat.
@@ -90,8 +95,8 @@ function itineraryMarkup(itinerary: string) {
 }
 
 /** Agenda: huruf terbesar (34 → 20 px) yang membuat seluruh teks muat di area agenda. */
-const fitBody = (itinerary: string) => fitText(
-  (size) => ({ markup: `<span foreground="${ITINERARY_TEXT_COLOR}">${itineraryMarkup(itinerary)}</span>`, width: ITINERARY_ZONES.body.width, size, spacing: 4 }),
+const fitBody = (itinerary: string, tone: ItineraryTone = 'light') => fitText(
+  (size) => ({ markup: `<span foreground="${PALETTE[tone].text}">${itineraryMarkup(itinerary, tone)}</span>`, width: ITINERARY_ZONES.body.width, size, spacing: 4 }),
   34, 20, ITINERARY_ZONES.body.height,
 );
 
@@ -106,19 +111,19 @@ export async function itineraryFits(itinerary: string) {
 
 export type ItineraryInput = { name: string; dateText: string; itinerary: string };
 
-export async function renderItineraryImage(templatePath: string | Buffer, input: ItineraryInput) {
+export async function renderItineraryImage(templatePath: string | Buffer, input: ItineraryInput, tone: ItineraryTone = 'light') {
   await registerFonts();
   const { title, date, body } = ITINERARY_ZONES;
-  const color = ITINERARY_TEXT_COLOR;
+  const { text: color, accent } = PALETTE[tone];
 
   const titleText = await fitText(
     (size) => ({ markup: `<span foreground="${color}" font_weight="800">${escapeMarkup(input.name)}</span>`, width: title.width, size, spacing: -1 }),
     64, 40, title.height,
   );
   const dateLayer = input.dateText
-    ? await fitText((size) => ({ markup: `<span foreground="${ACCENT_COLOR}" font_weight="600">${escapeMarkup(input.dateText)}</span>`, width: date.width, size }), 34, 24, date.height)
+    ? await fitText((size) => ({ markup: `<span foreground="${accent}" font_weight="600">${escapeMarkup(input.dateText)}</span>`, width: date.width, size }), 34, 24, date.height)
     : null;
-  const bodyText = await fitBody(input.itinerary);
+  const bodyText = await fitBody(input.itinerary, tone);
 
   // Teks yang tetap tidak muat pada ukuran minimum dipotong di batas area, bukan menimpa footer.
   const bodyCrop = { left: 0, top: 0, width: bodyText.width, height: Math.min(bodyText.height, body.height) };
@@ -133,7 +138,7 @@ export async function renderItineraryImage(templatePath: string | Buffer, input:
   return { image, truncated: !bodyText.fits };
 }
 
-const SAMPLE = {
+export const ITINERARY_SAMPLE = {
   name: 'Umroh Syawal Reguler Bintang 5 Direct',
   dateText: 'Berangkat 15 Oktober 2026 · 9 Hari',
   itinerary: [
@@ -149,11 +154,17 @@ const SAMPLE = {
   ].join('\n'),
 };
 
+/** Pratinjau untuk designer: template brand + contoh paket 9 hari, dengan warna teks sesuai pilihan banner. */
+export function renderItineraryPreview(templatePath: string, tone: ItineraryTone) {
+  return renderItineraryImage(templatePath, ITINERARY_SAMPLE, tone).then((result) => result.image);
+}
+
 /**
  * Panduan untuk designer (PNG 1080×1350): latar abu-abu dengan setiap area berlabel dan contoh teks. Designer
  * membuat template di kanvas yang sama dan membiarkan area teks tetap terang dan polos.
  */
-export async function renderItineraryGuide() {
+export async function renderItineraryGuide(tone: ItineraryTone = 'light') {
+  const zoneFill = tone === 'dark' ? 'rgba(15,23,42,0.88)' : 'rgba(255,255,255,0.7)';
   const { width, height } = ITINERARY_CANVAS;
   const label = (zone: Zone, name: string, fill: string, stroke: string) =>
     `<rect x="${zone.x + 2}" y="${zone.y + 2}" width="${zone.width - 4}" height="${zone.height - 4}" fill="${fill}" stroke="${stroke}" stroke-width="3" stroke-dasharray="14 8"/>` +
@@ -164,15 +175,15 @@ export async function renderItineraryGuide() {
     <rect width="${width}" height="${height}" fill="#f4f4f5"/>
     ${label(header, 'AREA DESIGNER (logo / ornamen)', 'rgba(37,99,235,0.08)', '#2563eb')}
     ${label(footer, 'AREA DESIGNER (kontak / ornamen)', 'rgba(37,99,235,0.08)', '#2563eb')}
-    ${label(title, 'NAMA PAKET (maks. 2 baris)', 'rgba(255,255,255,0.7)', '#dc2626')}
-    ${label(date, 'TANGGAL BERANGKAT · DURASI (1 baris)', 'rgba(255,255,255,0.7)', '#dc2626')}
-    ${label(body, 'AGENDA PER HARI', 'rgba(255,255,255,0.7)', '#dc2626')}
-    <text x="16" y="${height - 36}" font-family="Arial, sans-serif" font-size="18" fill="#52525b">Kanvas 1080×1350 px. Area merah harus polos dan terang (teks gelap).</text>
-    <text x="16" y="${height - 14}" font-family="Arial, sans-serif" font-size="18" fill="#52525b">Panduan ini hanya acuan posisi; jangan diunggah sebagai template.</text>
+    ${label(title, 'NAMA PAKET (maks. 2 baris)', zoneFill, '#dc2626')}
+    ${label(date, 'TANGGAL BERANGKAT · DURASI (1 baris)', zoneFill, '#dc2626')}
+    ${label(body, 'AGENDA PER HARI', zoneFill, '#dc2626')}
+    <text x="16" y="${height - 36}" font-family="Arial, sans-serif" font-size="18" fill="#52525b">Kanvas 1080×1350 px. ${tone === 'dark' ? 'Banner GELAP: area merah harus polos dan gelap (teks terang).' : 'Banner TERANG: area merah harus polos dan terang (teks gelap).'}</text>
+    <text x="16" y="${height - 14}" font-family="Arial, sans-serif" font-size="18" fill="#52525b">Beri jarak ±24 px di sekeliling area merah. Hanya acuan posisi; jangan diunggah sebagai template.</text>
   </svg>`;
   await registerFonts();
-  const { name, dateText, itinerary } = SAMPLE;
+  const { name, dateText, itinerary } = ITINERARY_SAMPLE;
   const blank = await sharp(Buffer.from(svg)).png().toBuffer();
-  const { image } = await renderItineraryImage(blank, { name, dateText, itinerary });
+  const { image } = await renderItineraryImage(blank, { name, dateText, itinerary }, tone);
   return image;
 }

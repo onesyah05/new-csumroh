@@ -245,7 +245,7 @@ export function ProspectPackageTab({
   const actions = [
     ...(selected.flyerImage ? [{ label: 'Flyer', icon: ImageIcon, disabled: !connected, onClick: () => onSendFlyer(selected) }] : []),
     { label: 'Harga', icon: FileText, disabled: false, onClick: onInsertSummary },
-    ...(selected.itinerary ? [{ label: 'Itinerary', icon: Plane, disabled: false, onClick: onInsertItinerary }] : []),
+    ...(selected.itinerary ? [{ label: 'Itinerary teks', icon: Plane, disabled: false, onClick: onInsertItinerary }] : []),
     ...(selected.itinerary && onSendItineraryImage ? [{ label: 'Itinerary gambar', icon: ImageIcon, disabled: !connected, onClick: () => onSendItineraryImage(selected) }] : []),
   ];
 
@@ -317,16 +317,16 @@ export function ProspectPackageTab({
       </div>
 
       {/* Bahan jualan ke chat: flyer dikirim lewat pratinjau, harga & itinerary disisipkan ke kolom pesan. */}
-      <div className="flex items-center gap-1.5 border-t border-zinc-100 pt-3">
-        <span className="mr-0.5 text-xs text-zinc-600">Ke chat:</span>
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-3">
+        <span className="mr-0.5 w-full text-xs text-zinc-600">Ke chat:</span>
         {actions.map(({ label, icon: Icon, disabled, onClick }) => (
           <button
             key={label}
             type="button"
             disabled={disabled}
             onClick={onClick}
-            aria-label={`${label === 'Flyer' ? 'Kirim flyer' : `Sisipkan ${label.toLowerCase()}`} ke chat`}
-            className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs font-medium text-zinc-800 hover:border-zinc-400 disabled:text-zinc-400"
+            aria-label={`${label === 'Flyer' || label.endsWith('gambar') ? 'Kirim' : 'Sisipkan'} ${label.toLowerCase()} ke chat`}
+            className="mobile-compact-control inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-zinc-200 px-2 py-1 text-xs font-medium text-zinc-800 hover:border-zinc-400 disabled:text-zinc-400"
           >
             <Icon size={12} aria-hidden="true" />{label}
           </button>
