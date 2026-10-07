@@ -77,7 +77,7 @@ import { StatusBadge } from '../../components/ui/status-badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
-import { formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
+import { formatWaFlyerCaption, formatWaItineraryCaption, formatWaPackageSummary } from '../packages/packageQuote';
 import { unresolvedScript } from './scriptLibrary';
 import { customBadge } from '../custom/customApi';
 import { EmojiPicker } from './EmojiPicker';
@@ -905,6 +905,43 @@ export function InboxPage() {
       });
       flyerInputRef.current?.click();
       showToast('Pilih gambar flyer manual');
+    } finally {
+      setIsCompressing(false);
+    }
+  }
+
+  /** Itinerary paket sebagai gambar: dirender server di atas template brand, lalu masuk pratinjau media seperti flyer. */
+  async function loadItineraryImageAsMediaPreview(pkg: any) {
+    if (!pkg || !selectedId) return;
+    setIsCompressing(true);
+    try {
+      const blob = await api.blob(`/api/v1/catalog/packages/${pkg.id}/itinerary-image`);
+      const cleanName = (pkg.name || 'paket').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const file = new File([blob], `Itinerary_${cleanName}.png`, { type: 'image/png' });
+      if (mediaPreview?.url) URL.revokeObjectURL(mediaPreview.url);
+      setMediaPreview({
+        file,
+        url: URL.createObjectURL(file),
+        type: file.type,
+        name: `Itinerary - ${pkg.name}`,
+        originalSize: file.size,
+        compressedSize: file.size,
+        savingsPercent: 0,
+        isCompressed: false,
+        isPackageFlyer: true,
+        packageName: pkg.name,
+        packageId: pkg.id,
+      });
+      setMessage(previous => appendFlyerCaption(previous, formatWaItineraryCaption(pkg)));
+      requestAnimationFrame(() => {
+        if (composerRef.current) {
+          adjustTextareaHeight(composerRef.current);
+          composerRef.current.focus();
+        }
+      });
+      showToast(`Itinerary ${pkg.name} siap dikirim sebagai gambar`);
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal membuat gambar itinerary.');
     } finally {
       setIsCompressing(false);
     }
@@ -2716,6 +2753,7 @@ export function InboxPage() {
             packagesLoading={packages.isPending}
             onInsertText={handleInsertDirectText}
             onSendFlyer={(pkg) => openSendFlyerModal(pkg)}
+            onSendItineraryImage={(pkg) => void loadItineraryImageAsMediaPreview(pkg)}
             onOpenPackagePicker={() => setShowPackagePickerModal(true)}
             onPreviewImage={(url) => setPreviewFlyer(url)}
             onShowToast={showToast}

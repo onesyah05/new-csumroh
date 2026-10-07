@@ -24,6 +24,10 @@ import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { StatusBadge } from '../../components/ui/status-badge';
 import type { PackageItem } from './PackageDetailPage';
+import { compressImageToWebp } from './compressImage';
+
+/** Sama dengan ITINERARY_MAX_CHARS di API (itinerary-image.ts); API juga memeriksa muat-tidaknya di gambar. */
+const ITINERARY_MAX_CHARS = 1600;
 
 function toRupiah(val: string | number): string {
   const digits = String(val).replace(/\D/g, '');
@@ -99,58 +103,6 @@ Hari 6: Ibadah mandiri dan memperbanyak thawaf sunnah di Masjidil Haram.
 Hari 7: Ziarah Kota Makkah (Jabal Tsur, Padang Arafah, Muzdalifah, Mina, Miqat Ji'ranah).
 Hari 8: Thawaf Wada' dan persiapan bertolak menuju Bandara Jeddah.
 Hari 9: Penerbangan kepulangan ke Tanah Air dan tiba di Bandara Soekarno-Hatta.`;
-
-// ── WebP Autocompression helper ────────────────────────────────────────────────
-async function compressImageToWebp(file: File): Promise<{
-  dataUrl: string;
-  originalSize: number;
-  compressedSize: number;
-  savingsPercent: number;
-}> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('File gambar tidak valid.'));
-      img.onload = () => {
-        const maxW = 1200;
-        const maxH = 1600;
-        let width = img.naturalWidth || img.width;
-        let height = img.naturalHeight || img.height;
-
-        if (width > maxW || height > maxH) {
-          const ratio = Math.min(maxW / width, maxH / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Canvas tidak didukung oleh peramban.'));
-          return;
-        }
-
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const dataUrl = canvas.toDataURL('image/webp', 0.82);
-        const base64Length = dataUrl.length - (dataUrl.indexOf(',') + 1);
-        const compressedSize = Math.round((base64Length * 3) / 4);
-        const originalSize = file.size;
-        const savingsPercent = Math.max(0, Math.round(((originalSize - compressedSize) / originalSize) * 100));
-
-        resolve({ dataUrl, originalSize, compressedSize, savingsPercent });
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -683,11 +635,19 @@ export function PackageFormPage() {
               </h3>
               <textarea
                 rows={7}
+                maxLength={ITINERARY_MAX_CHARS}
                 value={form.itinerary}
                 onChange={(e) => setForm({ ...form, itinerary: e.target.value })}
                 placeholder="Rundown harian agenda perjalanan..."
+                aria-describedby="itinerary-hint"
                 className="w-full rounded-lg border border-zinc-200 p-2.5 text-xs leading-relaxed focus:border-zinc-950 focus:outline-none"
               />
+              <div id="itinerary-hint" className="flex items-start justify-between gap-3 text-xs text-zinc-500">
+                <span>Satu baris per hari ("Hari 1: ..."). Tulis ringkas, usahakan maksimal 2 baris per hari; teks ini dicetak di gambar itinerary.</span>
+                <span className={`shrink-0 tabular-nums ${form.itinerary.length >= ITINERARY_MAX_CHARS * 0.9 ? 'font-semibold text-amber-700' : ''}`}>
+                  {form.itinerary.length}/{ITINERARY_MAX_CHARS}
+                </span>
+              </div>
             </div>
           </Card>
         </div>

@@ -16,7 +16,7 @@ interface ChatSidePanelProps {
   packageName?: string; brandId?: number; query?: string; activeBrand?: any; packages: any[];
   /** Daftar paket brand aktif masih dimuat (mis. baru ganti brand). */
   packagesLoading?: boolean;
-  onInsertText(text: string): void; onSendFlyer(pkg: any): void; onOpenPackagePicker(): void;
+  onInsertText(text: string): void; onSendFlyer(pkg: any): void; onSendItineraryImage?(pkg: any): void; onOpenPackagePicker(): void;
   onPreviewImage?(url: string): void; onShowToast(message: string): void; connected?: boolean;
 }
 export function ChatSidePanel(props: ChatSidePanelProps) {

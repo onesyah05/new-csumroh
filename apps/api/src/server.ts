@@ -44,6 +44,8 @@ const LARGE_BODY_ROUTES = [
   /^\/api\/v1\/chat\/messages\/media$/,
   /^\/api\/v1\/catalog\/brands\/upload-logo$/,
   /^\/api\/v1\/catalog\/packages\/upload-flyer$/,
+  /^\/api\/v1\/catalog\/packages\/\d+\/flyer$/,
+  /^\/api\/v1\/catalog\/brands\/\d+\/itinerary-template$/,
   /^\/api\/v1\/prospects\/\d+\/payment-proof(?:-upload)?$/,
 ];
 const smallJson = express.json({ limit: '1mb' });

@@ -5,6 +5,7 @@ import {
   Edit2,
   Eye,
   EyeOff,
+  Image as ImageIcon,
   Key,
   Loader2,
   Mail,
@@ -43,9 +44,9 @@ interface Brand {
   logoUrl?: string | null;
 }
 
-type StaffRole = 'superadmin' | 'admin' | 'cs' | 'finance' | 'product';
+type StaffRole = 'superadmin' | 'admin' | 'cs' | 'finance' | 'product' | 'designer';
 /** Role yang dapat dipilih superadmin di form; superadmin sendiri tidak dapat ditetapkan/diubah lewat UI. */
-const ASSIGNABLE_ROLES = ['cs', 'admin', 'finance', 'product'] as const;
+const ASSIGNABLE_ROLES = ['cs', 'admin', 'finance', 'product', 'designer'] as const;
 type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 interface StaffUser {
@@ -71,7 +72,7 @@ const roleBadge = (role: string) =>
     : 'border-emerald-200 bg-emerald-50/80 text-emerald-800';
 
 const roleLabel = (role: string) =>
-  role === 'superadmin' ? 'Superadmin' : role === 'admin' ? 'Admin Brand' : role === 'finance' ? 'Finance' : role === 'product' ? 'Tim LA' : 'Customer Service';
+  role === 'superadmin' ? 'Superadmin' : role === 'admin' ? 'Admin Brand' : role === 'finance' ? 'Finance' : role === 'product' ? 'Tim LA' : role === 'designer' ? 'Designer' : 'Customer Service';
 
 /* ─── Brand Multi-Checkbox Component ────────────────────────── */
 /** Catatan toast saat prospek terbuka milik CS dilepas ke antrean (nonaktif, dihapus, atau akses brand dicabut). */
@@ -209,7 +210,7 @@ function StaffFormModal({
     }
   }, [open, editing?.id, defaultBrandId, brands]);
 
-  const brandFree = form.role === 'product' || form.role === 'superadmin';
+  const brandFree = form.role === 'product' || form.role === 'designer' || form.role === 'superadmin';
   const save = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error('Nama lengkap wajib diisi.');
@@ -357,9 +358,9 @@ function StaffFormModal({
                 <label className="text-xs font-semibold text-zinc-800">
                   Role Staf
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 p-1 bg-zinc-100 rounded-lg gap-1 border border-zinc-200/50">
+                <div className="grid grid-cols-2 sm:grid-cols-5 p-1 bg-zinc-100 rounded-lg gap-1 border border-zinc-200/50">
                   {ASSIGNABLE_ROLES.map((role: AssignableRole) => {
-                    const Icon = role === 'cs' ? UserCircle2 : role === 'admin' ? ShieldCheck : role === 'product' ? SlidersHorizontal : Wallet;
+                    const Icon = role === 'cs' ? UserCircle2 : role === 'admin' ? ShieldCheck : role === 'product' ? SlidersHorizontal : role === 'designer' ? ImageIcon : Wallet;
                     const active = form.role === role;
                     return (
                       <button
@@ -390,6 +391,8 @@ function StaffFormModal({
               <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">Superadmin mengakses semua brand; tidak perlu akses brand.</p>
             ) : form.role === 'product' ? (
               <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">Tim LA melayani Layanan Custom semua brand; tidak perlu akses brand.</p>
+            ) : form.role === 'designer' ? (
+              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">Designer mengunggah flyer paket semua brand; tidak perlu akses brand.</p>
             ) : <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-zinc-800">
@@ -697,7 +700,7 @@ export function StaffPage() {
 
                       {/* Brand Access Badges */}
                       <td className="px-4 py-3">
-                        {staff.role === 'superadmin' || staff.role === 'product' ? (
+                        {staff.role === 'superadmin' || staff.role === 'product' || staff.role === 'designer' ? (
                           <span className="text-xs text-zinc-500">Semua brand</span>
                         ) : allBrands.length > 0 ? (
                           <div className="flex flex-wrap items-center gap-1.5">

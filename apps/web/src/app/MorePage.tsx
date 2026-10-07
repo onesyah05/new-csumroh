@@ -1,4 +1,4 @@
-import { Bell, BookOpen, Building2, ChevronRight, LogOut, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2 } from 'lucide-react';
+import { Bell, BookOpen, Building2, ChevronRight, Image as ImageIcon, LogOut, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from './auth';
 import { InstallApp } from './pwa';
@@ -8,17 +8,19 @@ export function MorePage() {
   const manager = user?.role === 'admin' || user?.role === 'superadmin';
   const product = user?.role === 'product';
   const finance = user?.role === 'finance';
+  const designer = user?.role === 'designer';
   const items = [
-    ...(!product ? [{ to: '/packages', label: 'Paket Umroh', icon: PackageOpen }] : []),
-    ...(!product && !finance ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
-    ...(!finance ? [{ to: '/layanan-custom', label: product || user?.role === 'superadmin' ? 'Layanan custom' : 'Status custom', icon: SlidersHorizontal }] : []),
+    ...(!product && !designer ? [{ to: '/packages', label: 'Paket Umroh', icon: PackageOpen }] : []),
+    ...(!product && !finance && !designer ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
+    ...(!finance && !designer ? [{ to: '/layanan-custom', label: product || user?.role === 'superadmin' ? 'Layanan custom' : 'Status custom', icon: SlidersHorizontal }] : []),
     ...(manager ? [
+      { to: '/template-itinerary', label: 'Template itinerary', icon: ImageIcon },
       { to: '/laporan', label: 'Laporan', icon: TrendingUp },
       { to: '/verifikasi', label: 'Verifikasi pembayaran', icon: ShieldCheck },
       { to: '/staff', label: 'Staf', icon: Users2 },
       { to: '/brands', label: 'Brand Travel', icon: Building2 },
     ] : []),
-    { to: '/pengaturan/notifikasi', label: 'Pengaturan notifikasi', icon: Bell },
+    ...(!designer ? [{ to: '/pengaturan/notifikasi', label: 'Pengaturan notifikasi', icon: Bell }] : []),
   ];
   return <div className="app-page max-w-2xl">
     <div><h1 className="page-title">Lainnya</h1><p className="mt-2 text-sm text-zinc-600">{user?.name} · CRM Azhan</p></div>

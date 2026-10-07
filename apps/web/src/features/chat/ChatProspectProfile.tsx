@@ -83,6 +83,7 @@ interface ChatProspectProfileProps {
   packagesLoading?: boolean;
   onInsertText: (text: string) => void;
   onSendFlyer: (pkg: any) => void;
+  onSendItineraryImage?: (pkg: any) => void;
   onOpenPackagePicker: () => void;
   onPreviewImage?: (url: string) => void;
   onShowToast: (msg: string) => void;
@@ -104,6 +105,7 @@ export function ChatProspectProfile({
   packagesLoading = false,
   onInsertText,
   onSendFlyer,
+  onSendItineraryImage,
   onOpenPackagePicker,
   onPreviewImage,
   onShowToast,
@@ -454,6 +456,7 @@ export function ChatProspectProfile({
             onSendFlyer={onSendFlyer}
             onInsertSummary={handleSendPackageFormat}
             onInsertItinerary={handleSendItinerary}
+            onSendItineraryImage={activeBrand?.itineraryTemplate && onSendItineraryImage ? onSendItineraryImage : undefined}
             onOpenGallery={onOpenPackagePicker}
             onOpenQualification={() => setActiveTab('qualification')}
             onPreviewImage={onPreviewImage}

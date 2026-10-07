@@ -19,6 +19,7 @@ const LmsPage = page(() => import('../features/lms/LmsPage'), 'LmsPage');
 const PackagesPage = page(() => import('../features/packages/PackagesPage'), 'PackagesPage');
 const PackageDetailPage = page(() => import('../features/packages/PackageDetailPage'), 'PackageDetailPage');
 const PackageFormPage = page(() => import('../features/packages/PackageFormPage'), 'PackageFormPage');
+const ItineraryTemplatePage = page(() => import('../features/packages/ItineraryTemplatePage'), 'ItineraryTemplatePage');
 const BrandPage = page(() => import('../features/brand/BrandPage'), 'BrandPage');
 const BrandDetailPage = page(() => import('../features/brand/BrandDetailPage'), 'BrandDetailPage');
 const BrandFormPage = page(() => import('../features/brand/BrandFormPage'), 'BrandFormPage');
@@ -62,6 +63,24 @@ export function App() {
     );
   }
 
+  // Designer hanya mengunggah flyer paket: daftar & detail paket, tanpa prospek/chat/notifikasi.
+  if (user.role === 'designer') {
+    return (
+      <>
+        <Toaster />
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="lainnya" element={<MorePage />} />
+            <Route path="packages" element={<PackagesPage />} />
+            <Route path="packages/:id" element={<PackageDetailPage />} />
+            <Route path="template-itinerary" element={<ItineraryTemplatePage />} />
+            <Route path="*" element={<Navigate to="/packages" replace />} />
+          </Route>
+        </Routes>
+      </>
+    );
+  }
+
   return (
     <>
       <Suspense fallback={null}><SocketBridge /></Suspense>
@@ -80,6 +99,7 @@ export function App() {
             <Route path="packages/new" element={canEditPackages ? <PackageFormPage /> : <Navigate to="/packages" replace />} />
             <Route path="packages/:id" element={<PackageDetailPage />} />
             <Route path="packages/:id/edit" element={canEditPackages ? <PackageFormPage /> : <Navigate to="/packages" replace />} />
+            <Route path="template-itinerary" element={managerOnly(<ItineraryTemplatePage />)} />
             <Route path="copilot" element={<Navigate to="/inbox" replace />} />
             <Route path="lms" element={<LmsPage />} />
             <Route path="layanan-custom" element={user.role === 'finance' ? <Navigate to="/" replace /> : <CustomRequestsPage />} />

@@ -29,11 +29,12 @@ export function clearMediaCookie(res: Response) {
 /** Status aktif per user di-cache sebentar agar tiap gambar tidak memicu query. */
 const activeCache = new Map<number, { active: boolean; at: number }>();
 const ACTIVE_CACHE_MS = 60_000;
+/** Aktif dan berhak membuka media percakapan. Designer hanya mengurus flyer/template: tidak melihat media jamaah. */
 async function isActiveUser(userId: number) {
   const cached = activeCache.get(userId);
   if (cached && Date.now() - cached.at < ACTIVE_CACHE_MS) return cached.active;
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isActive: true } });
-  const active = Boolean(user?.isActive);
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isActive: true, role: true } });
+  const active = Boolean(user?.isActive) && user?.role !== 'designer';
   activeCache.set(userId, { active, at: Date.now() });
   return active;
 }
