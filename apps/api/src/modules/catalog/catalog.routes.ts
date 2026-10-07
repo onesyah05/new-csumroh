@@ -12,6 +12,7 @@ import { revokeUserSessions } from '../auth/sessions.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { FLYER_URL_PATTERN, LOGO_URL_PATTERN } from '../../utils/safe-path.js';
 import { releaseProspectsOf } from '../prospects/pic.js';
+import { ITINERARY_CANVAS, ITINERARY_MAX_CHARS, itineraryDateText, itineraryFits, renderItineraryGuide, renderItineraryImage } from './itinerary-image.js';
 
 // Tautan yang dirender sebagai <a href>: hanya http(s), mencegah skema javascript:/data:.
 const httpsUrlSchema = z.union([
@@ -40,9 +41,9 @@ catalogRouter.get('/brands', asyncHandler(async (req, res) => {
     }
   }
 
-  // Designer hanya perlu nama brand: tanpa sesi WhatsApp, nomor, atau hitungan internal.
+  // Designer hanya perlu nama brand dan template itinerary: tanpa sesi WhatsApp, nomor, atau hitungan internal.
   if (req.user!.role === 'designer') {
-    const data = await prisma.brand.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, code: true, logoUrl: true } });
+    const data = await prisma.brand.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, code: true, logoUrl: true, itineraryTemplate: true } });
     res.json({ success: true, data });
     return;
   }
@@ -166,6 +167,47 @@ catalogRouter.post('/brands/upload-logo', requireRole('superadmin', 'admin'), as
   });
 }));
 
+// ── Template itinerary (gambar kosong 1080×1350 buatan designer, satu per brand) ──
+const ITINERARY_TEMPLATE_URL = /^\/uploads\/itinerary\/brand-\d+-\d+\.png$/;
+const TEMPLATE_ROLES = ['superadmin', 'admin', 'designer'] as const;
+
+catalogRouter.get('/itinerary-template/guide', requireRole(...TEMPLATE_ROLES), asyncHandler(async (_req, res) => {
+  const image = await renderItineraryGuide();
+  res.set({ 'Content-Type': 'image/png', 'Content-Disposition': 'attachment; filename="panduan-template-itinerary.png"', 'Cache-Control': 'no-store' });
+  res.send(image);
+}));
+
+catalogRouter.put('/brands/:id/itinerary-template', requireRole(...TEMPLATE_ROLES), asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const brand = await prisma.brand.findUnique({ where: { id }, select: { id: true, itineraryTemplate: true } });
+  if (!brand) throw new HttpError(404, 'Brand tidak ditemukan.');
+  if (req.user!.role === 'admin') assertCanManagePackages(req.user!, id);
+
+  const image = req.body?.image;
+  if (!image || typeof image !== 'string') throw new HttpError(400, 'Data gambar template wajib disertakan.');
+  const buffer = Buffer.from(image.slice(image.indexOf(',') + 1), 'base64');
+  if (buffer.length > 15 * 1024 * 1024) throw new HttpError(400, 'Ukuran gambar melebihi batas maksimal 15 MB.');
+  const meta = await sharp(buffer).metadata().catch(() => null);
+  if (!meta?.width || !meta.height || !['jpeg', 'png', 'webp'].includes(meta.format ?? '')) {
+    throw new HttpError(400, 'Format file tidak didukung. Gunakan gambar JPG, PNG, atau WEBP.');
+  }
+  // Rasio 4:5 wajib sama dengan kanvas panduan; selain itu teks akan jatuh di luar area yang dirancang.
+  if (meta.width < ITINERARY_CANVAS.width || Math.abs(meta.width / meta.height - ITINERARY_CANVAS.width / ITINERARY_CANVAS.height) > 0.01) {
+    throw new HttpError(422, `Ukuran template harus rasio 4:5 dan minimal ${ITINERARY_CANVAS.width}×${ITINERARY_CANVAS.height} px (terbaca ${meta.width}×${meta.height} px).`);
+  }
+
+  const normalized = await sharp(buffer).resize(ITINERARY_CANVAS.width, ITINERARY_CANVAS.height, { fit: 'fill' }).png({ compressionLevel: 9 }).toBuffer();
+  const dir = path.resolve(process.cwd(), 'uploads', 'itinerary');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const fileName = `brand-${id}-${Date.now()}.png`;
+  await fs.promises.writeFile(path.join(dir, fileName), normalized);
+  const data = await prisma.brand.update({ where: { id }, data: { itineraryTemplate: `/uploads/itinerary/${fileName}` }, select: { id: true, name: true, itineraryTemplate: true } });
+  if (brand.itineraryTemplate && ITINERARY_TEMPLATE_URL.test(brand.itineraryTemplate)) {
+    await fs.promises.unlink(path.join(dir, path.basename(brand.itineraryTemplate))).catch(() => {});
+  }
+  res.json({ success: true, data });
+}));
+
 catalogRouter.post('/brands', requireRole('superadmin'), asyncHandler(async (req, res) => {
   const input = z.object({
     name: z.string().min(2, 'Nama brand minimal 2 karakter').max(100),
@@ -251,6 +293,16 @@ function assertCanManagePackages(user: { role: string; brandId: number | null; u
   if (user.role === 'superadmin') return;
   const assigned = [user.brandId, ...(user.userBrands ?? []).map((ub) => ub.brand?.id)].filter((id): id is number => Boolean(id));
   if (assigned.length && !assigned.includes(brandId)) throw new HttpError(403, 'Admin hanya dapat mengelola paket pada brand yang ditugaskan kepadanya.');
+}
+
+/** Itinerary harus muat utuh di gambar itinerary; jumlah baris, bukan hanya karakter, yang menentukan. */
+async function assertItineraryFits(itinerary: string | null | undefined) {
+  if (!itinerary?.trim()) return;
+  // Batas karakter hanya untuk teks yang diubah/dibuat: itinerary lama yang terlanjur panjang tidak memblokir edit field lain.
+  if (itinerary.length > ITINERARY_MAX_CHARS) throw new HttpError(422, `Itinerary maksimal ${ITINERARY_MAX_CHARS} karakter agar muat di gambar itinerary.`);
+  if (!(await itineraryFits(itinerary))) {
+    throw new HttpError(422, 'Itinerary terlalu panjang untuk gambar itinerary. Ringkas penjelasan tiap hari (usahakan maksimal 2 baris per hari) atau kurangi jumlah barisnya.');
+  }
 }
 
 const packageInputSchema = z.object({
@@ -427,6 +479,25 @@ async function storeFlyer(image: unknown) {
   return { url: `/uploads/packages/${safeName}`, size: buffer.length, filename: safeName };
 }
 
+// Itinerary paket sebagai gambar: template brand + nama, tanggal berangkat, dan agenda paket di area tetap.
+catalogRouter.get('/packages/:id/itinerary-image', asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const pkg = await prisma.package.findUnique({ where: { id }, include: { brand: { select: { itineraryTemplate: true } } } });
+  if (!pkg) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
+  if (req.user!.role !== 'superadmin' && req.user!.role !== 'designer') {
+    try { scopedBrandId(req, pkg.brandId); } catch { throw new HttpError(403, 'Akses paket antar-brand dibatasi.'); }
+  }
+  if (!pkg.itinerary?.trim()) throw new HttpError(422, 'Itinerary paket belum diisi di katalog.');
+  const template = pkg.brand.itineraryTemplate;
+  if (!template || !ITINERARY_TEMPLATE_URL.test(template)) throw new HttpError(409, 'Template itinerary brand ini belum diunggah designer.');
+  const templatePath = path.resolve(process.cwd(), 'uploads', 'itinerary', path.basename(template));
+  if (!fs.existsSync(templatePath)) throw new HttpError(409, 'File template itinerary brand ini tidak ditemukan; minta designer mengunggah ulang.');
+
+  const { image, truncated } = await renderItineraryImage(templatePath, { name: pkg.name, dateText: itineraryDateText(pkg), itinerary: pkg.itinerary });
+  res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Itinerary-Truncated': truncated ? '1' : '0' });
+  res.send(image);
+}));
+
 catalogRouter.post('/packages/upload-flyer', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
   res.json({ success: true, data: await storeFlyer(req.body.image) });
 }));
@@ -452,6 +523,7 @@ catalogRouter.post('/packages', requireRole('superadmin', 'admin'), asyncHandler
   const input = packageInputSchema.parse(req.body);
   const brandId = scopedBrandId(req, input.brandId);
   assertCanManagePackages(req.user!, brandId);
+  await assertItineraryFits(input.itinerary);
 
   // Generate departure info string if date supplied and info empty
   let departureInfo = input.departureInfo;
@@ -498,6 +570,8 @@ catalogRouter.patch('/packages/:id', requireRole('superadmin', 'admin'), asyncHa
 
   const schema = packageInputSchema.partial();
   const input = schema.parse(req.body);
+  // Itinerary lama yang sudah terlanjur panjang tidak memblokir edit field lain; hanya teks yang diubah yang diperiksa.
+  if (input.itinerary !== existing.itinerary) await assertItineraryFits(input.itinerary);
   // Memindahkan paket ke brand lain: brand tujuan juga harus brand yang boleh ia kelola.
   if (input.brandId !== undefined && input.brandId !== existing.brandId) assertCanManagePackages(req.user!, input.brandId);
 

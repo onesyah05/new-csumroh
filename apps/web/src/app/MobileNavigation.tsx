@@ -1,4 +1,4 @@
-import { Home, Inbox, KanbanSquare, MoreHorizontal, PackageOpen, ShieldCheck, SlidersHorizontal, Bell } from 'lucide-react';
+import { Home, Image as ImageIcon, Inbox, KanbanSquare, MoreHorizontal, PackageOpen, ShieldCheck, SlidersHorizontal, Bell } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
 import { cn } from '../lib/cn';
@@ -10,6 +10,7 @@ export function mobileDestinations(role?: string) {
   ];
   if (role === 'designer') return [
     { to: '/packages', label: 'Paket', icon: PackageOpen },
+    { to: '/template-itinerary', label: 'Template', icon: ImageIcon },
   ];
   // Finance mulai dari Verifikasi (tanpa Beranda: isinya sama dengan Verifikasi).
   if (role === 'finance') return [

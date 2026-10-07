@@ -24,14 +24,14 @@ describe('Navigasi sidebar per role', () => {
 
   it('Admin & Superadmin: Pengaturan cukup Staf & Brand (perangkat/Meta ada di detail Brand)', () => {
     expect(shape('admin')).toEqual([
-      ['Utama', ['Ringkasan', 'Laporan', 'Kotak masuk', 'Pipeline', 'Status custom', 'Paket Umroh', 'Akademi CS']],
+      ['Utama', ['Ringkasan', 'Laporan', 'Kotak masuk', 'Pipeline', 'Status custom', 'Paket Umroh', 'Template itinerary', 'Akademi CS']],
       ['Operasional', ['Verifikasi']],
       ['Pengaturan', ['Staf', 'Brand Travel']],
     ]);
     expect(shape('superadmin')[1]).toEqual(['Operasional', ['Layanan custom', 'Verifikasi']]);
   });
 
-  it('Designer hanya Paket Umroh', () => {
-    expect(shape('designer')).toEqual([['Utama', ['Paket Umroh']]]);
+  it('Designer hanya Paket Umroh & Template itinerary', () => {
+    expect(shape('designer')).toEqual([['Utama', ['Paket Umroh', 'Template itinerary']]]);
   });
 });

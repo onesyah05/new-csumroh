@@ -26,6 +26,9 @@ import { StatusBadge } from '../../components/ui/status-badge';
 import type { PackageItem } from './PackageDetailPage';
 import { compressImageToWebp } from './compressImage';
 
+/** Sama dengan ITINERARY_MAX_CHARS di API (itinerary-image.ts); API juga memeriksa muat-tidaknya di gambar. */
+const ITINERARY_MAX_CHARS = 1600;
+
 function toRupiah(val: string | number): string {
   const digits = String(val).replace(/\D/g, '');
   if (!digits) return '';
@@ -632,11 +635,19 @@ export function PackageFormPage() {
               </h3>
               <textarea
                 rows={7}
+                maxLength={ITINERARY_MAX_CHARS}
                 value={form.itinerary}
                 onChange={(e) => setForm({ ...form, itinerary: e.target.value })}
                 placeholder="Rundown harian agenda perjalanan..."
+                aria-describedby="itinerary-hint"
                 className="w-full rounded-lg border border-zinc-200 p-2.5 text-xs leading-relaxed focus:border-zinc-950 focus:outline-none"
               />
+              <div id="itinerary-hint" className="flex items-start justify-between gap-3 text-xs text-zinc-500">
+                <span>Satu baris per hari ("Hari 1: ..."). Tulis ringkas, usahakan maksimal 2 baris per hari; teks ini dicetak di gambar itinerary.</span>
+                <span className={`shrink-0 tabular-nums ${form.itinerary.length >= ITINERARY_MAX_CHARS * 0.9 ? 'font-semibold text-amber-700' : ''}`}>
+                  {form.itinerary.length}/{ITINERARY_MAX_CHARS}
+                </span>
+              </div>
             </div>
           </Card>
         </div>

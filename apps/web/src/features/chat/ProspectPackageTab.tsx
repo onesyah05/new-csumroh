@@ -96,7 +96,7 @@ function PackageDetails({ pkg }: { pkg: Pkg }) {
  */
 export function ProspectPackageTab({
   packages, packagesLoading = false, brandName, selected, qualification, locked, saving, connected,
-  onSelect, onSendFlyer, onInsertSummary, onInsertItinerary, onOpenGallery, onOpenQualification, onPreviewImage, footer,
+  onSelect, onSendFlyer, onInsertSummary, onInsertItinerary, onSendItineraryImage, onOpenGallery, onOpenQualification, onPreviewImage, footer,
 }: {
   packages: Pkg[];
   /** Paket brand aktif masih dimuat (mis. baru ganti brand): jangan tampilkan "tidak ada paket". */
@@ -113,6 +113,8 @@ export function ProspectPackageTab({
   onSendFlyer(pkg: Pkg): void;
   onInsertSummary(): void;
   onInsertItinerary(): void;
+  /** Hanya ada bila brand sudah punya template itinerary dari designer. */
+  onSendItineraryImage?(pkg: Pkg): void;
   onOpenGallery(): void;
   onOpenQualification(): void;
   onPreviewImage?(url: string): void;
@@ -244,6 +246,7 @@ export function ProspectPackageTab({
     ...(selected.flyerImage ? [{ label: 'Flyer', icon: ImageIcon, disabled: !connected, onClick: () => onSendFlyer(selected) }] : []),
     { label: 'Harga', icon: FileText, disabled: false, onClick: onInsertSummary },
     ...(selected.itinerary ? [{ label: 'Itinerary', icon: Plane, disabled: false, onClick: onInsertItinerary }] : []),
+    ...(selected.itinerary && onSendItineraryImage ? [{ label: 'Itinerary gambar', icon: ImageIcon, disabled: !connected, onClick: () => onSendItineraryImage(selected) }] : []),
   ];
 
   return (
