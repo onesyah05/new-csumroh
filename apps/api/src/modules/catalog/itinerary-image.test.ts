@@ -39,3 +39,17 @@ describe('itineraryFits', { timeout: 30_000 }, () => {
     expect(await itineraryFits(Array.from({ length: 14 }, (_, i) => `Hari ${i + 1}: ${'agenda panjang '.repeat(10)}`).join('\n'))).toBe(false);
   });
 });
+
+describe('tone banner', { timeout: 30_000 }, () => {
+  it('banner gelap memakai teks terang, banner terang memakai teks gelap', async () => {
+    const { ITINERARY_SAMPLE, renderItineraryImage: render } = await import('./itinerary-image.js');
+    const mean = async (tone: 'light' | 'dark', background: string) => {
+      const template = await sharp({ create: { width: ITINERARY_CANVAS.width, height: ITINERARY_CANVAS.height, channels: 3, background } }).png().toBuffer();
+      const { image } = await render(template, ITINERARY_SAMPLE, tone);
+      const { channels } = await sharp(image).extract({ left: 60, top: 415, width: 960, height: 400 }).stats();
+      return channels[0]!.mean;
+    };
+    expect(await mean('light', '#ffffff')).toBeLessThan(250); // teks gelap di atas putih
+    expect(await mean('dark', '#0f172a')).toBeGreaterThan(25); // teks terang di atas gelap
+  });
+});

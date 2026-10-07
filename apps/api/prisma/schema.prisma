@@ -72,6 +72,7 @@ model Brand {
   code               String                  @unique @db.VarChar(30)
   logoUrl            String?                 @map("logo_url") @db.VarChar(255)
   itineraryTemplate  String?                 @map("itinerary_template") @db.VarChar(255)
+  itineraryTone      String                  @default("light") @map("itinerary_tone") @db.VarChar(10)
   ppiuNumber         String?                 @map("ppiu_number") @db.VarChar(100)
   bankName           String?                 @map("bank_name") @db.VarChar(50)
   bankAccountNumber  String?                 @map("bank_account_number") @db.VarChar(50)

@@ -5,7 +5,7 @@ import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { businessDateKey, isLostStatus, isTakeoverOpen, isWonStatus, waDisconnectReasonText } from '@csumroh/shared-types';
+import { businessDateKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle,
@@ -77,7 +77,7 @@ import { StatusBadge } from '../../components/ui/status-badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
-import { formatWaFlyerCaption, formatWaItineraryCaption, formatWaPackageSummary } from '../packages/packageQuote';
+import { formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
 import { unresolvedScript } from './scriptLibrary';
 import { customBadge } from '../custom/customApi';
 import { EmojiPicker } from './EmojiPicker';
@@ -886,12 +886,7 @@ export function InboxPage() {
       });
 
       setMessage(previous => appendFlyerCaption(previous, captionText));
-      requestAnimationFrame(() => {
-        if (composerRef.current) {
-          adjustTextareaHeight(composerRef.current);
-          composerRef.current.focus();
-        }
-      });
+      revealComposer();
       showToast(`Flyer ${pkg.name} siap dikirim dengan format resmi`);
     } catch (err: any) {
       console.warn('Fallback loading flyer:', err);
@@ -908,6 +903,20 @@ export function InboxPage() {
     } finally {
       setIsCompressing(false);
     }
+  }
+
+  /** Di HP panel profil menutupi chat: tutup agar pratinjau media dan kolom pesan langsung terlihat dan bisa dikirim. */
+  function revealComposer() {
+    if (mobile && sidePanelTab) {
+      focusDraftAfterPanel.current = true;
+      setSidePanelTab(null);
+    }
+    requestAnimationFrame(() => {
+      if (composerRef.current) {
+        adjustTextareaHeight(composerRef.current);
+        composerRef.current.focus();
+      }
+    });
   }
 
   /** Itinerary paket sebagai gambar: dirender server di atas template brand, lalu masuk pratinjau media seperti flyer. */
@@ -932,13 +941,8 @@ export function InboxPage() {
         packageName: pkg.name,
         packageId: pkg.id,
       });
-      setMessage(previous => appendFlyerCaption(previous, formatWaItineraryCaption(pkg)));
-      requestAnimationFrame(() => {
-        if (composerRef.current) {
-          adjustTextareaHeight(composerRef.current);
-          composerRef.current.focus();
-        }
-      });
+      // Gambar saja, tanpa caption: nama paket dan tanggal sudah ada di gambar.
+      revealComposer();
       showToast(`Itinerary ${pkg.name} siap dikirim sebagai gambar`);
     } catch (err: any) {
       showToast(err?.message || 'Gagal membuat gambar itinerary.');
@@ -2449,7 +2453,7 @@ export function InboxPage() {
                                   URL.revokeObjectURL(mediaPreview.url);
                                   setMediaPreview(null);
                                 }}
-                                className="rounded-lg px-3 py-1 text-xs font-semibold text-zinc-600 border border-zinc-200 bg-white hover:bg-zinc-50 transition cursor-pointer"
+                                className="mobile-compact-control rounded-lg px-3 py-1 text-xs font-semibold text-zinc-600 border border-zinc-200 bg-white hover:bg-zinc-50 transition cursor-pointer"
                               >
                                 Batal
                               </button>
@@ -2457,7 +2461,7 @@ export function InboxPage() {
                                 <button
                                   type="button"
                                   onClick={() => setShowPackagePickerModal(true)}
-                                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 transition cursor-pointer"
+                                  className="mobile-compact-control rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 transition cursor-pointer"
                                 >
                                   Ganti Paket
                                 </button>
@@ -2466,7 +2470,7 @@ export function InboxPage() {
                                 type="button"
                                 disabled={uploadingMedia}
                                 onClick={() => void handleSendMedia()}
-                                className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1 text-xs font-bold text-white bg-[#00a884] hover:bg-[#008f6f] active:scale-95 transition cursor-pointer disabled:opacity-60 shadow-xs"
+                                className="mobile-compact-control inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1 text-xs font-bold text-white bg-[#00a884] hover:bg-[#008f6f] active:scale-95 transition cursor-pointer disabled:opacity-60 shadow-xs"
                               >
                                 {uploadingMedia ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
                                 <span>{uploadingMedia ? 'Mengirim...' : 'Kirim'}</span>
@@ -2784,7 +2788,7 @@ export function InboxPage() {
       <ModalFrame open={showPackagePickerModal} onClose={() => setShowPackagePickerModal(false)} title="Kirim flyer brosur paket umroh">
           <div className="relative flex flex-col max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 bg-[#f0f2f5]">
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 sm:px-6 sm:py-4 bg-[#f0f2f5]">
               <div className="flex items-center gap-3">
                 <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-600 text-white shadow-sm">
                   <ImageIcon size={20} />
@@ -2793,7 +2797,7 @@ export function InboxPage() {
                   <p aria-hidden="true" className="font-display text-base font-bold text-zinc-900">
                     Kirim Flyer Brosur Paket Umroh
                   </p>
-                  <p className="text-xs text-zinc-500">
+                  <p className="hidden text-xs text-zinc-500 sm:block">
                     Pilih paket umroh untuk menyiapkan flyer resmi & rincian jadwal ke WhatsApp prospek
                   </p>
                 </div>
@@ -2855,7 +2859,7 @@ export function InboxPage() {
                     <div
                       key={pkg.id}
                       className={cn(
-                        'group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border p-4 transition duration-150',
+                        'group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 rounded-2xl border p-3 sm:p-4 transition duration-150',
                         isCurrent
                           ? 'border-emerald-300 bg-emerald-50/40 shadow-xs'
                           : 'border-zinc-200 bg-white hover:border-emerald-300 hover:shadow-xs'
@@ -2906,12 +2910,12 @@ export function InboxPage() {
                           </div>
 
                           <div className="mt-1 text-xs font-bold text-[#00a884]">
-                            Quad Mulai: Rp {pkg.priceQuad || pkg.price}
+                            Quad mulai {formatCatalogRupiah(pkg.priceQuad || pkg.price) ?? `Rp ${pkg.priceQuad || pkg.price}`}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
+                      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
                         <Button
                           type="button"
                           size="sm"
@@ -2934,10 +2938,10 @@ export function InboxPage() {
                                 });
                             }
                           }}
-                          className="w-full sm:w-auto gap-1 text-xs font-bold border-zinc-300 hover:bg-zinc-100 cursor-pointer"
+                          className="mobile-compact-control w-full sm:w-auto gap-1 text-xs font-bold border-zinc-300 hover:bg-zinc-100 cursor-pointer"
                         >
                           <Check size={14} className="text-[#00a884]" />
-                          <span>Pilih Paket Ini</span>
+                          <span>Pilih Paket</span>
                         </Button>
 
                         <Button
@@ -2959,10 +2963,10 @@ export function InboxPage() {
                             setShowPackagePickerModal(false);
                             void loadFlyerAsMediaPreview(pkg);
                           }}
-                          className="w-full sm:w-auto gap-1.5 bg-[#00a884] hover:bg-[#008f6f] text-white font-bold text-xs shadow-xs cursor-pointer"
+                          className="mobile-compact-control w-full sm:w-auto gap-1.5 bg-[#00a884] hover:bg-[#008f6f] text-white font-bold text-xs shadow-xs cursor-pointer"
                         >
                           <ImageIcon size={14} />
-                          <span>Pilih & Siapkan Flyer</span>
+                          <span>Siapkan Flyer</span>
                         </Button>
                       </div>
                     </div>
@@ -2974,7 +2978,7 @@ export function InboxPage() {
             {/* Footer */}
             <div className="flex items-center justify-between border-t border-zinc-200 px-6 py-3 bg-zinc-50 text-xs text-zinc-500">
               <span>Total paket aktif: <strong>{packages.data?.filter((p: any) => p.isActive).length ?? 0}</strong></span>
-              <Button variant="ghost" size="sm" onClick={() => setShowPackagePickerModal(false)}>
+              <Button variant="ghost" size="sm" className="mobile-compact-control" onClick={() => setShowPackagePickerModal(false)}>
                 Tutup
               </Button>
             </div>

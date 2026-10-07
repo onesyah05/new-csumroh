@@ -46,14 +46,6 @@ export function formatWaPackageItinerary(pkg: any, _brandName?: string): string 
   );
 }
 
-export function formatWaItineraryCaption(pkg: any): string {
-  if (!pkg) return '';
-  return waMessage(
-    [`*Itinerary ${waTitle(pkg.name)}*`, departure(pkg) && `Berangkat ${departure(pkg)}`],
-    '_Jadwal dapat menyesuaikan kondisi di lapangan._',
-  );
-}
-
 export function formatWaFlyerCaption(pkg: any, _brandName?: string): string {
   if (!pkg) return '';
   const from = packageFromPrice(pkg);
