@@ -355,7 +355,7 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
                               <span className={cn('block text-sm leading-5', unread ? 'font-semibold text-zinc-950' : 'text-zinc-700')}>
                                 {item.title}
                               </span>
-                              {item.body && <span className="mt-0.5 line-clamp-2 block text-xs text-zinc-600">{item.body}</span>}
+                              {item.body && <span className="mt-0.5 line-clamp-2 text-xs text-zinc-600">{item.body}</span>}
                               <span className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
                                 {/* Nama brand sebagai label, bukan bagian judul (ringkasan per brand). */}
                                 {brandLabel(item.brandId) && (
