@@ -103,10 +103,10 @@ export function CustomRequestsPage() {
   });
 
   return <div className="app-page">
-    <PageHeader title={canPrice ? 'Layanan custom' : 'Status layanan custom'} subtitle={canPrice ? 'Hitung harga kebutuhan khusus jamaah dari semua brand, atau kembalikan ke CS bila datanya kurang.' : 'Status permintaan layanan custom jamaah Anda.'} />
+    <PageHeader className="hidden md:flex" title={canPrice ? 'Layanan custom' : 'Status layanan custom'} subtitle={canPrice ? 'Hitung harga kebutuhan khusus jamaah dari semua brand, atau kembalikan ke CS bila datanya kurang.' : 'Status permintaan layanan custom jamaah Anda.'} />
     <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
       <section aria-label="Daftar permintaan" className={cn('surface overflow-hidden', selectedId && 'hidden lg:block')}>
-        <div role="tablist" aria-label="Status permintaan" className="flex flex-wrap gap-1 border-b border-zinc-200 p-2" onKeyDown={(e) => onRovingKey(e, GROUPS.map((g) => g.id), group, setGroup)}>
+        <div role="tablist" aria-label="Status permintaan" className="scroll-row flex gap-1 border-b border-zinc-200 p-2 md:flex-wrap" onKeyDown={(e) => onRovingKey(e, GROUPS.map((g) => g.id), group, setGroup)}>
           {GROUPS.map((item) => <button key={item.id} id={`custom-tab-${item.id}`} type="button" role="tab" aria-selected={group === item.id} aria-controls="custom-queue"
             tabIndex={group === item.id ? 0 : -1} onClick={() => setGroup(item.id)}
             className={cn('shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold', group === item.id ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100')}>
