@@ -141,13 +141,26 @@
 @media (prefers-reduced-motion: reduce) { .sales-panel *, .sales-panel *::before, .sales-panel *::after { animation: none !important; transition: none !important; } }
 
 /* Mobile application shell: one screen, one primary scroll area. */
-:root { --mobile-nav-height: calc(64px + env(safe-area-inset-bottom, 0px)); }
+:root {
+  --mobile-nav-height: calc(64px + env(safe-area-inset-bottom, 0px));
+  /* Token tinggi kontrol (desktop). Komponen dasar (Button, kolom isian) memakai token ini; mobile menggantinya di bawah. */
+  --ctl-sm: 32px;
+  --ctl-md: 36px;
+  --ctl-lg: 40px;
+  --ctl-icon: 36px;
+  --ctl-field: 36px;
+}
 .mobile-navigation { padding-bottom: env(safe-area-inset-bottom, 0px); }
 @media (max-width: 767px) {
+  :root { --ctl-sm: 34px; --ctl-md: 40px; --ctl-lg: 42px; --ctl-icon: 36px; --ctl-field: 40px; }
   html { scroll-padding-top: 72px; }
   body { overflow-wrap: break-word; }
   .app-content > header { padding-top: env(safe-area-inset-top, 0px); height: calc(56px + env(safe-area-inset-top, 0px)); }
   .mobile-page { padding-bottom: calc(var(--mobile-nav-height) + 24px); }
+  /* Header halaman yang disembunyikan di mobile (class hidden pada anak pertama) tidak boleh memberi jarak atas ke elemen setelahnya. */
+  .app-page > .hidden:first-child + *,
+  .app-page > .hidden:first-child + .hidden + *,
+  .app-page > .hidden:first-child + .hidden + .hidden + * { margin-top: 0 !important; }
   .app-content { min-width: 0; }
   .inbox-main { height: var(--app-height, 100dvh); }
   .inbox-mobile-root { height: 100%; padding-top: env(safe-area-inset-top, 0px); }
@@ -160,26 +173,23 @@
   .inbox-copilot.is-open { width: 100%; max-width: 100%; height: var(--app-height, 100dvh) !important; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); border-left: 0; }
   .chat-composer { padding-bottom: max(10px, env(safe-area-inset-bottom, 0px)); }
   .wa-chat-bg { overscroll-behavior-y: contain; }
-  input:not([type='checkbox']):not([type='radio']):not([type='file']), textarea, [role='combobox'] { font-size: max(16px, 1rem) !important; }
-  input:not([type='checkbox']):not([type='radio']):not([type='file']), [role='combobox'] { min-height: 44px; }
-  button, [role='button'], [role='menuitem'], [role='option'] { min-height: 44px; }
-  button:has(> svg:only-child), a:has(> svg:only-child) { min-width: 44px; min-height: 44px; }
+  /* Font 16px hanya untuk iOS Safari: di bawah 16px ia memperbesar halaman saat isian difokuskan. Platform lain memakai ukuran font komponen. */
+  @supports (-webkit-touch-callout: none) {
+    input:not([type='checkbox']):not([type='radio']):not([type='file']), textarea, [role='combobox'] { font-size: max(16px, 1rem) !important; }
+  }
+  /* Tinggi kontrol berasal dari komponen dan token --ctl-*, bukan lantai global untuk semua <button>.
+     Hanya kolom isian dan baris menu yang diberi tinggi minimal di sini (keduanya selalu kontrol penuh). */
+  input:not([type='checkbox']):not([type='radio']):not([type='file']), [role='combobox'] { min-height: var(--ctl-field); }
+  [role='menuitem'], [role='option'] { min-height: var(--ctl-field); }
+  /* Toggle dan checkbox kecil: area sentuh diperluas tanpa mengubah bentuk visual. */
+  button[role='switch']::after, button[role='checkbox']::after { content: ''; position: absolute; inset: -9px -4px; }
   /* Dense web toolbars use a smaller visual target than primary actions.
      Keep an 8px gap between filter chips; do not shrink inputs or icon actions. */
   button.mobile-compact-control,
-  button.mobile-compact-control:has(> svg:only-child) { min-height: 36px; height: auto; padding-block: 6px; line-height: 1rem; }
+  button.mobile-compact-control:has(> svg:only-child) { min-height: 34px; height: auto; padding-block: 6px; line-height: 1rem; }
   .mobile-compact-filters { gap: 8px; }
-  /* Komponen Button: tinggi mobile mengikuti ukurannya (sm 36 / md 40 / lg 44 / ikon 40), bukan lantai 44px untuk semua. */
-  button.ui-btn.ui-btn-sm, button.ui-btn.ui-btn-sm:has(> svg:only-child), a.ui-btn.ui-btn-sm { min-width: 0; min-height: 36px; }
-  button.ui-btn.ui-btn-md, button.ui-btn.ui-btn-md:has(> svg:only-child), a.ui-btn.ui-btn-md { min-width: 0; min-height: 40px; }
-  button.ui-btn.ui-btn-lg, button.ui-btn.ui-btn-lg:has(> svg:only-child), a.ui-btn.ui-btn-lg { min-width: 0; min-height: 44px; }
-  button.ui-btn.ui-btn-icon, button.ui-btn.ui-btn-icon:has(> svg:only-child), a.ui-btn.ui-btn-icon { min-width: 40px; min-height: 40px; }
-  /* Tombol di dalam toast (judul yang bisa diklik, tutup) tidak boleh menggemukkan toast satu baris jadi 69px. */
-  button.toast-btn, button.toast-btn:has(> svg:only-child) { min-width: 0; min-height: 0; }
-  button.toast-btn:has(> svg:only-child) { min-height: 32px; }
-  /* Tab/pill segmented (Semua / WA Terhubung / ...): tombol 39px + bingkai = 44px, sama dengan kolom cari di sebelahnya.
-     Tanpa ini aturan button 44px membuat tiap tombol 44px dan bingkainya 49px, lebih tinggi dari kolom cari. */
-  .segmented button, .segmented button:has(> svg:only-child), .segmented [role='radio'], .segmented [role='tab'] { min-width: 0; min-height: 39px; height: auto; padding-block: 6px; line-height: 1rem; }
+  /* Tab/pill segmented: bingkai selalu setinggi kolom isian di sebelahnya (token --ctl-field). */
+  .segmented button, .segmented [role='radio'], .segmented [role='tab'] { min-height: calc(var(--ctl-field) - 6px); height: auto; padding-block: 6px; line-height: 1rem; }
   /* Baris tombol cepat di atas kolom pesan: ringkas (32px) agar tidak memakan tinggi layar chat; jarak 6px tetap. */
   .quick-reply-row { scrollbar-width: none; padding-bottom: 0; }
   .quick-reply-row::-webkit-scrollbar { display: none; }

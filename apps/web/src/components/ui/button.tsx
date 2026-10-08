@@ -27,7 +27,7 @@ export function buttonVariants({
   className?: string;
 } = {}) {
   return cn(
-    'ui-btn inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-semibold transition-all select-none cursor-pointer',
+    'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-semibold transition-all select-none cursor-pointer',
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2',
     'disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]',
     {
@@ -40,10 +40,10 @@ export function buttonVariants({
       'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-xs': variant === 'success',
 
       // Sizes
-      'ui-btn-sm h-8 px-2.5 text-xs rounded-lg': size === 'sm',
-      'ui-btn-md h-9 px-3.5 text-xs rounded-xl': size === 'md',
-      'ui-btn-lg h-10 px-4 text-sm rounded-xl': size === 'lg',
-      'ui-btn-icon h-9 w-9 rounded-xl p-0 shrink-0': size === 'icon',
+      'h-8 min-h-[var(--ctl-sm)] px-2.5 text-xs rounded-lg': size === 'sm',
+      'h-9 min-h-[var(--ctl-md)] px-3.5 text-xs rounded-xl': size === 'md',
+      'h-10 min-h-[var(--ctl-lg)] px-4 text-sm rounded-xl': size === 'lg',
+      'h-9 w-9 min-h-[var(--ctl-icon)] min-w-[var(--ctl-icon)] rounded-xl p-0 shrink-0': size === 'icon',
     },
     className
   );

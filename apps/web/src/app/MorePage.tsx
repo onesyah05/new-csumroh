@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from './auth';
 import { InstallApp } from './pwa';
 
+const ROLE_LABEL: Record<string, string> = { superadmin: 'Superadmin', admin: 'Admin', cs: 'CS', finance: 'Finance', product: 'Tim LA', designer: 'Designer' };
+
 export function MorePage() {
   const { user, logout } = useAuth();
   const manager = user?.role === 'admin' || user?.role === 'superadmin';
@@ -23,9 +25,9 @@ export function MorePage() {
     ...(!designer ? [{ to: '/pengaturan/notifikasi', label: 'Pengaturan notifikasi', icon: Bell }] : []),
   ];
   return <div className="app-page max-w-2xl">
-    <div><h1 className="page-title">Lainnya</h1><p className="mt-2 text-sm text-zinc-600">{user?.name} · CRM Azhan</p></div>
-    <div className="surface divide-y divide-zinc-100 overflow-hidden">{items.map(({ to, label, icon: Icon }) => <Link key={to} to={to} className="flex min-h-14 items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-zinc-50"><Icon size={20} aria-hidden="true" /><span className="flex-1">{label}</span><ChevronRight size={18} aria-hidden="true" className="text-zinc-500" /></Link>)}</div>
+    <div className="flex items-center gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-zinc-950 text-sm font-bold text-white" aria-hidden="true">{(user?.name ?? '?').split(/s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}</span><div className="min-w-0"><h1 className="truncate text-base font-bold text-zinc-950">{user?.name}</h1><p className="text-xs text-zinc-500">{ROLE_LABEL[user?.role ?? ''] ?? ''}</p></div></div>
+    <div className="surface divide-y divide-zinc-100 overflow-hidden">{items.map(({ to, label, icon: Icon }) => <Link key={to} to={to} className="flex min-h-12 items-center gap-3 px-4 py-2.5 text-sm font-medium hover:bg-zinc-50"><Icon size={20} aria-hidden="true" /><span className="flex-1">{label}</span><ChevronRight size={18} aria-hidden="true" className="text-zinc-500" /></Link>)}</div>
     <InstallApp />
-    <button type="button" onClick={() => void logout()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium"><LogOut size={18} aria-hidden="true" />Keluar dari akun</button>
+    <button type="button" onClick={() => void logout()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium text-rose-700"><LogOut size={18} aria-hidden="true" />Keluar dari akun</button>
   </div>;
 }

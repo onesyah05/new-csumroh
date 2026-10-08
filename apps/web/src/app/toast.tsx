@@ -14,6 +14,8 @@ export type AppToast = {
   /** `notification` = notifikasi in-app (ikon lonceng); `feedback` = hasil tindakan di halaman ini. */
   kind?: 'notification' | 'feedback';
   onOpen?(): void;
+  /** Tidak hilang sendiri; hanya ditutup pengguna. */
+  persistent?: boolean;
 };
 
 const MAX_TOASTS = 3;
@@ -52,10 +54,10 @@ function ToastItem({ toast }: { toast: AppToast }) {
 
   useEffect(() => {
     // Mendesak tetap tampil sampai ditutup; lainnya hilang sendiri.
-    if (urgent) return;
+    if (urgent || toast.persistent) return;
     const timer = setTimeout(() => dismiss(toast.id), AUTO_DISMISS_MS);
     return () => clearTimeout(timer);
-  }, [dismiss, toast.id, urgent]);
+  }, [dismiss, toast.id, urgent, toast.persistent]);
 
   const open = () => {
     toast.onOpen?.();
@@ -79,7 +81,7 @@ function ToastItem({ toast }: { toast: AppToast }) {
           : <Bell size={16} className={cn("shrink-0 text-zinc-600", toast.body && "mt-0.5")} aria-hidden="true" />}
       <div className="min-w-0 flex-1">
         {toast.link || toast.onOpen ? (
-          <button type="button" onClick={open} className="toast-btn text-left text-sm font-semibold hover:underline">{toast.title}</button>
+          <button type="button" onClick={open} className="text-left text-sm font-semibold hover:underline">{toast.title}</button>
         ) : (
           <p className="text-sm font-semibold">{toast.title}</p>
         )}
@@ -89,7 +91,7 @@ function ToastItem({ toast }: { toast: AppToast }) {
         type="button"
         onClick={() => dismiss(toast.id)}
         aria-label="Tutup notifikasi"
-        className={cn('toast-btn grid h-6 w-8 shrink-0 place-items-center rounded-md', urgent ? 'hover:bg-rose-800' : 'text-zinc-500 hover:bg-zinc-100')}
+        className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-md', urgent ? 'hover:bg-rose-800' : 'text-zinc-500 hover:bg-zinc-100')}
       >
         <X size={14} />
       </button>
