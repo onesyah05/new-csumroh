@@ -241,6 +241,7 @@ export function BrandFormPage() {
     <div className="app-page max-w-4xl pb-16">
       {/* Header */}
       <PageHeader
+        className="hidden md:flex"
         backUrl={backUrl}
         title={isEditing ? `Ubah Profil: ${currentBrand?.name ?? ''}` : 'Tambah Brand Baru'}
         subtitle={
@@ -288,7 +289,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Identitas Brand
                 </h3>
-                <p className="text-xs text-zinc-500">Nama resmi biro dan kode identifikasi sistem.</p>
+                <p className="hidden text-xs text-zinc-500 sm:block">Nama resmi biro dan kode identifikasi sistem.</p>
               </div>
             </div>
 
@@ -338,7 +339,7 @@ export function BrandFormPage() {
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); removeLogo(); }}
-                    className="inline-flex items-center gap-1 text-xs text-rose-600 hover:text-rose-800 font-medium cursor-pointer transition"
+                    className="inline-flex items-center gap-1 text-xs text-rose-600 hover:text-rose-800 font-medium cursor-pointer transition max-md:min-h-9"
                   >
                     <X size={11} />
                     Hapus
@@ -397,7 +398,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Legalitas & Kontak Resmi
                 </h3>
-                <p className="text-xs text-zinc-500">Izin Kemenag dan kontak layanan jamaah.</p>
+                <p className="hidden text-xs text-zinc-500 sm:block">Izin Kemenag dan kontak layanan jamaah.</p>
               </div>
             </div>
 
@@ -444,7 +445,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Rekening Resmi Bank
                 </h3>
-                <p className="text-xs text-zinc-500">Rekening tujuan pembayaran jamaah (DP atau lunas).</p>
+                <p className="hidden text-xs text-zinc-500 sm:block">Rekening tujuan pembayaran jamaah (DP atau lunas).</p>
               </div>
             </div>
 
@@ -498,7 +499,7 @@ export function BrandFormPage() {
                 <h3 className="font-display text-xs font-extrabold text-zinc-700">
                   Alamat Kantor & Lokasi Google Maps
                 </h3>
-                <p className="text-xs text-zinc-500">Alamat kantor biro dan tautan peta lokasi.</p>
+                <p className="hidden text-xs text-zinc-500 sm:block">Alamat kantor biro dan tautan peta lokasi.</p>
               </div>
             </div>
 

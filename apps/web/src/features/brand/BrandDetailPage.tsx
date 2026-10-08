@@ -148,44 +148,33 @@ export function BrandDetailPage() {
       {/* Header */}
       {/* Mobile: layar detail ala aplikasi (app bar + kartu profil); desktop memakai PageHeader di bawah. */}
       <div className="space-y-3 md:hidden">
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => navigate('/brands')}
-            className="-ml-2 grid h-11 w-11 place-items-center rounded-full text-zinc-900 transition active:bg-zinc-200"
-            aria-label="Kembali"
-          >
-            <ArrowLeft size={22} aria-hidden="true" />
-          </button>
-          <span className="text-base font-semibold text-zinc-950">Detail brand</span>
-          {canManage ? (
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <button
-                  type="button"
-                  className="-mr-2 grid h-11 w-11 place-items-center rounded-full text-zinc-900 transition active:bg-zinc-200"
-                  aria-label="Menu brand"
-                >
-                  <MoreVertical size={22} aria-hidden="true" />
-                </button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content align="end" sideOffset={4} className="z-50 w-52 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl">
-                  <DropdownMenu.Item
-                    onSelect={() => setDeleteConfirmOpen(true)}
-                    className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-rose-700 outline-none data-[highlighted]:bg-rose-50"
-                  >
-                    <Trash2 size={16} aria-hidden="true" />Hapus brand
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          ) : (
-            <span className="h-11 w-11" aria-hidden="true" />
-          )}
-        </div>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-xs">
+        <section className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-xs">
+          {canManage && (
+            <div className="absolute right-2 top-2">
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      className="grid h-9 w-9 place-items-center rounded-full text-zinc-900 transition active:bg-zinc-200"
+                      aria-label="Menu brand"
+                    >
+                      <MoreVertical size={20} aria-hidden="true" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content align="end" sideOffset={4} className="z-50 w-52 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl">
+                      <DropdownMenu.Item
+                        onSelect={() => setDeleteConfirmOpen(true)}
+                        className="flex min-h-10 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-rose-700 outline-none data-[highlighted]:bg-rose-50"
+                      >
+                        <Trash2 size={16} aria-hidden="true" />Hapus brand
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+            </div>
+          )}
           <div className="flex items-center gap-3.5">
             {brand.logoUrl ? (
               <img src={resolveMediaUrl(brand.logoUrl)} alt="" className="h-14 w-14 shrink-0 rounded-2xl border border-zinc-200 object-cover" />
@@ -359,7 +348,7 @@ export function BrandDetailPage() {
             </li>
             {brand.gmapsUrl && /^https?:\/\//i.test(brand.gmapsUrl) && (
               <li>
-                <a href={brand.gmapsUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-12 items-center justify-between gap-3 px-4 text-sm font-semibold text-zinc-950 active:bg-zinc-50">
+                <a href={brand.gmapsUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-between gap-3 px-4 text-sm font-semibold text-zinc-950 active:bg-zinc-50">
                   <span className="flex items-center gap-2.5"><MapPin size={18} className="text-zinc-500" aria-hidden="true" />Buka di Google Maps</span>
                   <ExternalLink size={16} className="text-zinc-400" aria-hidden="true" />
                 </a>
@@ -398,7 +387,7 @@ export function BrandDetailPage() {
               </div>
               <StatusBadge status={waConnected ? 'active' : 'neutral'} label={waConnected ? 'Aktif' : 'Terputus'} dot />
             </div>
-            <button type="button" onClick={() => setTab('perangkat')} className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left text-sm font-semibold text-zinc-950 active:bg-zinc-50">
+            <button type="button" onClick={() => setTab('perangkat')} className="flex min-h-11 w-full items-center justify-between gap-3 px-4 text-left text-sm font-semibold text-zinc-950 active:bg-zinc-50">
               <span className="flex items-center gap-2.5"><Smartphone size={18} className="text-zinc-500" aria-hidden="true" />Pengaturan perangkat</span>
               <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
             </button>
@@ -408,7 +397,7 @@ export function BrandDetailPage() {
         <section aria-label="Staf tim" className="space-y-2">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Staf tim ({brand.users?.length ?? 0})</h2>
-            <Link to="/staff" className="flex min-h-11 items-center text-sm font-semibold text-zinc-950">Kelola</Link>
+            <Link to="/staff" className="flex min-h-10 items-center text-sm font-semibold text-zinc-950">Kelola</Link>
           </div>
           {brand.users && brand.users.length > 0 ? (
             <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">

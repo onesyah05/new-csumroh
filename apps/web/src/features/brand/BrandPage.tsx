@@ -158,6 +158,7 @@ export function BrandPage() {
     <div className="app-page space-y-6 pb-16">
       {/* Header */}
       <PageHeader
+        className="hidden md:flex"
         title="Brand Travel"
         subtitle="Profil biro travel umroh, legalitas PPIU, rekening resmi, dan status gateway WhatsApp."
         actions={
@@ -170,7 +171,7 @@ export function BrandPage() {
       />
 
       {/* 4 Metric Stats */}
-      <StatGrid cols={4}>
+      <StatGrid cols={4} className="hidden md:grid">
         <StatCard label="Total Brand" value={brands.length} note="Biro terdaftar" />
         <StatCard label="Total Staf Tim" value={totalUsers} note="Tim sales & CS" />
         <StatCard label="Total Paket Umroh" value={totalPackages} note="Katalog program" />
@@ -180,21 +181,28 @@ export function BrandPage() {
       {/* Search & Filters Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {/* Search Input */}
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
-          <input
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
-            placeholder="Cari nama atau kode brand…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
+        <div className="flex items-center gap-2 sm:contents">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            <input
+              className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
+              placeholder="Cari brand"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+          {canManage && (
+            <Button variant="primary" size="icon" to="/brands/new" className="md:hidden" aria-label="Tambah brand">
+              <Plus size={18} />
+            </Button>
+          )}
         </div>
 
         {/* WhatsApp Status Pills */}
-        <div className="segmented flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
+        <div className="segmented flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs sm:shrink-0 [&>button]:flex-1 sm:[&>button]:flex-none">
           {(['all', 'connected', 'disconnected'] as const).map((s) => (
             <button
               key={s}
@@ -237,7 +245,7 @@ export function BrandPage() {
           <EmptyState
             icon={Building2}
             title="Tidak ada brand travel ditemukan"
-            description={hasActiveFilters ? 'Coba sesuaikan kata kunci pencarian atau filter yang aktif.' : 'Belum ada biro travel yang didaftarkan ke sistem.'}
+            description={hasActiveFilters ? 'Ubah pencarian atau filter.' : 'Belum ada brand.'}
             action={hasActiveFilters ? (
                 <Button
                   type="button"
@@ -255,7 +263,36 @@ export function BrandPage() {
           />
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <ul className="divide-y divide-zinc-100 md:hidden">
+              {pagedBrands.map((brand) => {
+                const waConnected = brand.whatsappSession?.status === 'connected';
+                return (
+                  <li key={brand.id} className="flex items-center gap-3 px-4 py-3">
+                    {brand.logoUrl ? (
+                      <img src={resolveMediaUrl(brand.logoUrl)} alt="" className="h-11 w-11 shrink-0 rounded-xl border border-zinc-200 object-cover" />
+                    ) : (
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-zinc-950 text-xs font-extrabold text-white">{String(brand.code ?? 'BRD').slice(0, 3)}</span>
+                    )}
+                    <Link to={`/brands/${brand.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-zinc-950">{brand.name}</p>
+                      <p className="truncate text-xs text-zinc-500">{brand.phone || '-'}</p>
+                      <p className="mt-0.5 flex items-center gap-2 text-xs text-zinc-600">
+                        <span className={`h-1.5 w-1.5 rounded-full ${waConnected ? 'bg-emerald-500' : 'bg-zinc-400'}`} aria-hidden="true" />
+                        <span>{waConnected ? 'Terhubung' : 'Terputus'}</span>
+                        <span className="text-zinc-500">· {brand._count?.users ?? 0} staf · {brand._count?.packages ?? 0} paket</span>
+                      </p>
+                    </Link>
+                    <RowActions label={`Aksi brand ${brand.name}`} actions={[
+                      { label: 'Lihat detail', icon: Eye, to: `/brands/${brand.id}` },
+                      { label: 'Kelola perangkat WhatsApp', icon: Smartphone, to: `/brands/${brand.id}?tab=perangkat` },
+                      { label: 'Edit brand', icon: Pencil, to: `/brands/${brand.id}/edit`, hidden: !canManage },
+                      { label: 'Hapus brand', icon: Trash2, onSelect: () => setDeleteTarget(brand), danger: true, hidden: !canManage },
+                    ]} />
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
               {/* Di bawah lg (split-screen ±700 px) kolom legalitas & rekening disembunyikan; lengkap di Detail Brand. */}
               <table className="w-full text-left text-xs lg:min-w-[820px]">
                 <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-500">
@@ -369,8 +406,8 @@ export function BrandPage() {
             </div>
 
             {/* Pagination & Count Footer */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-600">
-              <span className="text-xs text-zinc-500">
+            <div className={`flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-600 ${totalPages <= 1 ? "max-sm:hidden" : ""}`}>
+              <span className="hidden text-xs text-zinc-500 sm:inline">
                 Menampilkan <strong className="font-semibold text-zinc-900">{totalItems === 0 ? 0 : startIndex + 1}</strong>
                 –<strong className="font-semibold text-zinc-900">{Math.min(startIndex + pageSize, totalItems)}</strong> dari{' '}
                 <strong className="font-semibold text-zinc-900">{totalItems}</strong> brand
