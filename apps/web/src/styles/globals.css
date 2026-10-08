@@ -194,5 +194,10 @@
      yang memang ditumpuk (nama lalu telepon di bawahnya) tetap bertumpuk; tabel digulir horizontal. */
   table th, table td { white-space: nowrap; }
   .network-banner { top: calc(8px + env(safe-area-inset-top, 0px)); }
-  .app-toasts { top: calc(64px + env(safe-area-inset-top, 0px)); bottom: auto; max-height: 40dvh; overflow-y: auto; }
+  /* Kiri-kanan simetris 16px: lebar toast tidak boleh memakai 100vw (termasuk scrollbar), kalau tidak toast menempel ke kiri. */
+  .app-toasts { top: calc(64px + env(safe-area-inset-top, 0px)); bottom: auto; left: 16px; right: 16px; align-items: stretch; max-height: 40dvh; overflow-y: auto; }
+  .app-toasts > div { width: 100%; max-width: 100%; }
+  /* Animasi masuk menggeser toast sesaat dan memicu scrollbar yang menyempitkan toast: sembunyikan scrollbar kontainer. */
+  .app-toasts { scrollbar-width: none; }
+  .app-toasts::-webkit-scrollbar { display: none; }
 }
