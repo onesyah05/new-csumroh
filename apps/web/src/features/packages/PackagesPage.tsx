@@ -64,6 +64,96 @@ function PackageThumbnail({
   );
 }
 
+/** Nilai turunan baris paket, dipakai tabel (desktop) dan daftar kartu (mobile). */
+function packageRowMeta(item: PackageItem) {
+  const departureStr =
+    item.departureInfo ||
+    (item.departureDate
+      ? new Date(item.departureDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'Jadwal menyusul');
+  const quadPrice = item.priceQuad || item.price || '-';
+  const isLowSeat = item.quotaRemaining !== null && item.quotaRemaining !== undefined && item.quotaRemaining <= 5;
+  return { departureStr, quadPrice, isLowSeat };
+}
+
+function PackageMenu({ item, canManage, onOpen, onEdit, onToggle, onDelete }: {
+  item: PackageItem;
+  canManage: boolean;
+  onOpen(): void;
+  onEdit(): void;
+  onToggle(): void;
+  onDelete(): void;
+}) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-950/15"
+          title="Menu opsi paket"
+          aria-label={`Aksi paket ${item.name}`}
+        >
+          <MoreHorizontal size={16} />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={4}
+          className="z-50 min-w-[165px] rounded-xl border border-zinc-200 bg-white p-1 text-xs shadow-lg shadow-zinc-950/5 animate-in fade-in-80"
+        >
+          <DropdownMenu.Item
+            onSelect={onOpen}
+            className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 outline-none hover:bg-zinc-100 hover:text-zinc-950 transition-colors"
+          >
+            <Eye size={13} className="text-zinc-500" />
+            <span>Lihat Detail</span>
+          </DropdownMenu.Item>
+
+          {canManage && (
+            <>
+              <DropdownMenu.Item
+                onSelect={onEdit}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 outline-none hover:bg-zinc-100 hover:text-zinc-950 transition-colors"
+              >
+                <Pencil size={13} className="text-zinc-500" />
+                <span>Edit Paket</span>
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Item
+                onSelect={onToggle}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 outline-none hover:bg-zinc-100 hover:text-zinc-950 transition-colors"
+              >
+                {item.isActive ? (
+                  <>
+                    <ToggleLeft size={14} className="text-zinc-500" />
+                    <span>Arsipkan Paket</span>
+                  </>
+                ) : (
+                  <>
+                    <ToggleRight size={14} className="text-emerald-600" />
+                    <span>Aktifkan Paket</span>
+                  </>
+                )}
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Separator className="my-1 border-t border-zinc-100" />
+
+              <DropdownMenu.Item
+                onSelect={onDelete}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 outline-none hover:bg-rose-50 hover:text-rose-700 transition-colors"
+              >
+                <Trash2 size={13} className="text-rose-500" />
+                <span>Hapus Paket</span>
+              </DropdownMenu.Item>
+            </>
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
 export function PackagesPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -218,6 +308,7 @@ export function PackagesPage() {
     <div className="app-page space-y-6">
       {/* Header */}
       <PageHeader
+        className="hidden md:flex"
         title="Paket Umroh"
         subtitle="Kelola program perjalanan umroh, kuota seat, dan harga paket."
         actions={
@@ -235,7 +326,7 @@ export function PackagesPage() {
       />
 
       {/* 4 Metric Stats */}
-      <StatGrid cols={4}>
+      <StatGrid cols={4} className="hidden md:grid">
         <StatCard label="Total Paket" value={packages.length} note="Semua program" />
         <StatCard label="Sisa Kuota" value={`${totalSeats} Seat`} note="Seat tersedia" />
         <StatCard label="Paket Promo" value={totalPromo} note="Program promo" />
@@ -243,19 +334,26 @@ export function PackagesPage() {
       </StatGrid>
 
       {/* Search & Filters Toolbar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:items-center sm:gap-3">
         {/* Search */}
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
-          <input
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
-            placeholder="Cari nama paket, maskapai, hotel…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
+        <div className="col-span-2 flex items-center gap-2 sm:contents">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            <input
+              className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
+              placeholder="Cari paket"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+          {canManage && (
+            <Button type="button" variant="primary" size="icon" className="md:hidden" aria-label="Tambah paket" onClick={() => navigate('/packages/new')}>
+              <Plus size={18} />
+            </Button>
+          )}
         </div>
 
         {/* Brand Filter */}
@@ -277,7 +375,7 @@ export function PackagesPage() {
                 iconInitials: b.name.substring(0, 2).toUpperCase(),
               })),
             ]}
-            className="h-9 min-w-[200px] text-xs font-medium rounded-lg border-zinc-200 shadow-xs focus:ring-1 focus:ring-zinc-950 py-0"
+            className="col-span-2 h-9 text-xs font-medium rounded-lg border-zinc-200 shadow-xs focus:ring-1 focus:ring-zinc-950 py-0 sm:min-w-[200px]"
           />
         )}
 
@@ -300,7 +398,7 @@ export function PackagesPage() {
                 };
               }),
             ]}
-            className="h-9 min-w-[130px] text-xs font-medium rounded-lg border-zinc-200 shadow-xs focus:ring-1 focus:ring-zinc-950 py-0"
+            className="h-9 text-xs font-medium rounded-lg border-zinc-200 shadow-xs focus:ring-1 focus:ring-zinc-950 py-0 sm:min-w-[130px]"
           />
         )}
 
@@ -317,11 +415,11 @@ export function PackagesPage() {
             { value: 'low', label: 'Menipis (≤5)' },
             { value: 'sold_out', label: 'Habis (0)' },
           ]}
-          className="h-9 min-w-[130px] text-xs font-medium rounded-lg border-zinc-200 shadow-xs focus:ring-1 focus:ring-zinc-950 py-0"
+          className="h-9 text-xs font-medium rounded-lg border-zinc-200 shadow-xs focus:ring-1 focus:ring-zinc-950 py-0 sm:min-w-[130px]"
         />
 
         {/* Status Pills Filter */}
-        <div className="segmented flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
+        <div className="segmented col-span-2 flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs sm:shrink-0 [&>button]:flex-1 sm:[&>button]:flex-none">
           {(['all', 'active', 'archived'] as const).map((s) => (
             <button
               key={s}
@@ -346,7 +444,7 @@ export function PackagesPage() {
           <button
             type="button"
             onClick={resetFilters}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:border-zinc-950 hover:text-black transition shadow-xs shrink-0 cursor-pointer"
+            className="col-span-2 inline-flex h-9 items-center justify-center sm:col-span-1 gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:border-zinc-950 hover:text-black transition shadow-xs shrink-0 cursor-pointer"
             title="Reset filter"
           >
             <RotateCcw size={12} />
@@ -366,7 +464,7 @@ export function PackagesPage() {
           <EmptyState
             icon={PackageOpen}
             title="Tidak ada paket ditemukan"
-            description={hasActiveFilters ? 'Coba sesuaikan kata kunci pencarian atau filter yang aktif.' : 'Belum ada paket umroh yang terdaftar.'}
+            description={hasActiveFilters ? 'Ubah pencarian atau filter.' : 'Belum ada paket.'}
             action={hasActiveFilters ? (
                 <Button
                   type="button"
@@ -390,7 +488,34 @@ export function PackagesPage() {
           />
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <ul className="divide-y divide-zinc-100 md:hidden">
+              {pagedPackages.map((item) => {
+                const { departureStr, quadPrice, isLowSeat } = packageRowMeta(item);
+                return (
+                  <li key={item.id} className="flex items-center gap-3 px-4 py-3">
+                    <PackageThumbnail src={item.flyerImage} alt={item.name} onClick={() => navigate(`/packages/${item.id}`)} />
+                    <button type="button" onClick={() => navigate(`/packages/${item.id}`)} className="min-w-0 flex-1 text-left">
+                      <p className="truncate text-sm font-semibold text-zinc-950">{item.name}</p>
+                      <p className="truncate text-xs text-zinc-500">{departureStr} · {item.duration || '9 Hari'}</p>
+                      <p className="mt-0.5 flex items-center gap-2 text-xs">
+                        <span className="font-mono font-semibold text-zinc-950">{quadPrice}</span>
+                        <span className={isLowSeat ? 'font-semibold text-rose-700' : 'text-zinc-600'}>{item.quotaRemaining ?? 0} seat</span>
+                        {!item.isActive && <span className="text-zinc-500">Arsip</span>}
+                      </p>
+                    </button>
+                    <PackageMenu
+                      item={item}
+                      canManage={canManage}
+                      onOpen={() => navigate(`/packages/${item.id}`)}
+                      onEdit={() => navigate(`/packages/${item.id}/edit`)}
+                      onToggle={() => toggleMutation.mutate(item.id)}
+                      onDelete={() => setDeleteConfirmItem(item)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
               {/* Di bawah lg kolom Brand & Promo disembunyikan agar nyaman di split-screen; lengkap di Detail Paket. */}
               <table className="w-full text-left text-xs lg:min-w-[940px]">
                 <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-500">
@@ -512,72 +637,14 @@ export function PackagesPage() {
 
                         {/* Actions */}
                         <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild>
-                              <button
-                                type="button"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-950/15"
-                                title="Menu opsi paket"
-                                aria-label={`Aksi paket ${item.name}`}
-                              >
-                                <MoreHorizontal size={16} />
-                              </button>
-                            </DropdownMenu.Trigger>
-                            <DropdownMenu.Portal>
-                              <DropdownMenu.Content
-                                align="end"
-                                sideOffset={4}
-                                className="z-50 min-w-[165px] rounded-xl border border-zinc-200 bg-white p-1 text-xs shadow-lg shadow-zinc-950/5 animate-in fade-in-80"
-                              >
-                                <DropdownMenu.Item
-                                  onSelect={() => navigate(`/packages/${item.id}`)}
-                                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 outline-none hover:bg-zinc-100 hover:text-zinc-950 transition-colors"
-                                >
-                                  <Eye size={13} className="text-zinc-500" />
-                                  <span>Lihat Detail</span>
-                                </DropdownMenu.Item>
-
-                                {canManage && (
-                                  <>
-                                    <DropdownMenu.Item
-                                      onSelect={() => navigate(`/packages/${item.id}/edit`)}
-                                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 outline-none hover:bg-zinc-100 hover:text-zinc-950 transition-colors"
-                                    >
-                                      <Pencil size={13} className="text-zinc-500" />
-                                      <span>Edit Paket</span>
-                                    </DropdownMenu.Item>
-
-                                    <DropdownMenu.Item
-                                      onSelect={() => toggleMutation.mutate(item.id)}
-                                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-700 outline-none hover:bg-zinc-100 hover:text-zinc-950 transition-colors"
-                                    >
-                                      {item.isActive ? (
-                                        <>
-                                          <ToggleLeft size={14} className="text-zinc-500" />
-                                          <span>Arsipkan Paket</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <ToggleRight size={14} className="text-emerald-600" />
-                                          <span>Aktifkan Paket</span>
-                                        </>
-                                      )}
-                                    </DropdownMenu.Item>
-
-                                    <DropdownMenu.Separator className="my-1 border-t border-zinc-100" />
-
-                                    <DropdownMenu.Item
-                                      onSelect={() => setDeleteConfirmItem(item)}
-                                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 outline-none hover:bg-rose-50 hover:text-rose-700 transition-colors"
-                                    >
-                                      <Trash2 size={13} className="text-rose-500" />
-                                      <span>Hapus Paket</span>
-                                    </DropdownMenu.Item>
-                                  </>
-                                )}
-                              </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                          </DropdownMenu.Root>
+                          <PackageMenu
+                            item={item}
+                            canManage={canManage}
+                            onOpen={() => navigate(`/packages/${item.id}`)}
+                            onEdit={() => navigate(`/packages/${item.id}/edit`)}
+                            onToggle={() => toggleMutation.mutate(item.id)}
+                            onDelete={() => setDeleteConfirmItem(item)}
+                          />
                         </td>
                       </tr>
                     );
@@ -587,8 +654,8 @@ export function PackagesPage() {
             </div>
 
             {/* Pagination & Count Footer */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-600">
-              <span className="text-xs text-zinc-500">
+            <div className={`flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-600 ${totalPages <= 1 ? "max-sm:hidden" : ""}`}>
+              <span className="hidden text-xs text-zinc-500 sm:inline">
                 Menampilkan <strong className="font-semibold text-zinc-900">{totalItems === 0 ? 0 : startIndex + 1}</strong>
                 –<strong className="font-semibold text-zinc-900">{Math.min(startIndex + pageSize, totalItems)}</strong> dari{' '}
                 <strong className="font-semibold text-zinc-900">{totalItems}</strong> paket
