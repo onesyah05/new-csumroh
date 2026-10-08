@@ -40,7 +40,7 @@ export const pushToast = (toast: Omit<AppToast, 'id'> & { id?: string }) => useT
  */
 export function showFeedback(message: string, options?: { error?: boolean }) {
   // Pesan yang diawali "Gagal" selalu tampil sebagai error, juga saat pemanggil tidak menandainya.
-  const error = options?.error ?? /^gagal/i.test(message);
+  const error = options?.error ?? /^gagal/i.test(message);
   pushToast({ title: message, priority: error ? 'urgent' : 'info', kind: 'feedback' });
 }
 
