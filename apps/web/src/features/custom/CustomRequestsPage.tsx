@@ -317,7 +317,7 @@ function QuoteForm({ request, claimedByOther }: { request: CustomRequest; claime
     </div>
     <div className="flex flex-wrap items-center gap-3 text-xs">
       <span className="font-medium text-zinc-700">Berlaku</span>
-      <div role="radiogroup" aria-label="Masa berlaku harga" className="inline-flex rounded-lg border border-zinc-200 p-0.5" onKeyDown={(e) => onRovingKey(e, ['default', 'date'] as const, validity, setValidity)}>
+      <div role="radiogroup" aria-label="Masa berlaku harga" className="segmented inline-flex rounded-lg border border-zinc-200 p-0.5" onKeyDown={(e) => onRovingKey(e, ['default', 'date'] as const, validity, setValidity)}>
         {([['default', `${CUSTOM_DEFAULT_VALIDITY_DAYS} hari`], ['date', 'Sampai tanggal']] as const).map(([value, label]) =>
           <button key={value} type="button" role="radio" aria-checked={validity === value} tabIndex={rovingTabIndex(value, validity, 'default')} onClick={() => setValidity(value)}
             className={cn('rounded-md px-3 py-1.5 font-semibold', validity === value ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100')}>{label}</button>)}

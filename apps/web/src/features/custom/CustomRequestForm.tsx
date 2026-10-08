@@ -29,7 +29,7 @@ function Field({ label, children, className }: { label: string; children: ReactN
 /** Pilihan dua/tiga nilai sebagai tombol (bukan native select). */
 function Segmented<T extends string>({ value, options, onChange, label }: { value: T | null; options: readonly { value: T; label: string }[]; onChange(value: T | null): void; label: string }) {
   const values = options.map((option) => option.value);
-  return <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-zinc-200 p-0.5" onKeyDown={(e) => onRovingKey(e, values, value, onChange)}>
+  return <div role="radiogroup" aria-label={label} className="segmented inline-flex rounded-lg border border-zinc-200 p-0.5" onKeyDown={(e) => onRovingKey(e, values, value, onChange)}>
     {options.map((option) => <button key={option.value} type="button" role="radio" aria-checked={value === option.value} tabIndex={rovingTabIndex(option.value, value, values[0])}
       onClick={() => onChange(value === option.value ? null : option.value)}
       className={cn('rounded-md px-3 py-1.5 text-xs font-semibold transition', value === option.value ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100')}>{option.label}</button>)}

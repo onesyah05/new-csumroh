@@ -606,7 +606,7 @@ export function StaffPage() {
         )}
 
         {/* Role Pills Filter */}
-        <div className="flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
+        <div className="segmented flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
           {(['all', 'cs', 'admin', 'finance', 'product'] as const).map((r) => (
             <button
               key={r}

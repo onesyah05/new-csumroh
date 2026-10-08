@@ -62,7 +62,7 @@ export function DealsList({ query }: { query: string }) {
         <h2 className="text-xs font-semibold text-zinc-600">
           Daftar deal{data ? ` · ${data.summary.deals} deal · ${rupiah(data.summary.dealValue)}` : ''}
         </h2>
-        <div role="radiogroup" aria-label="Hitung deal berdasarkan" className="ml-auto flex rounded-lg border border-zinc-200 bg-white p-0.5">
+        <div role="radiogroup" aria-label="Hitung deal berdasarkan" className="segmented ml-auto flex rounded-lg border border-zinc-200 bg-white p-0.5">
           {BASIS_OPTIONS.map((option) => (
             <button
               key={option.value}

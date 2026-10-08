@@ -542,7 +542,7 @@ export function PackageDetailPage() {
           {/* Card 2: Template WhatsApp */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-              <div className="flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+              <div className="segmented flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
                 <button
                   type="button"
                   onClick={() => setCopyTab('summary')}

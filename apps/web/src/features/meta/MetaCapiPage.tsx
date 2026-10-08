@@ -413,7 +413,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
       </StatGrid>
 
       {/* Segmented Navigation Bar */}
-      <div role="tablist" aria-label="Meta CAPI" className="scroll-row flex min-h-9 max-w-full w-fit items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
+      <div role="tablist" aria-label="Meta CAPI" className="segmented scroll-row flex min-h-9 max-w-full w-fit items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
         {[
           { id: 'settings', label: 'Konfigurasi & token', icon: KeyRound },
           { id: 'logs', label: `Log event (${logSummary.total})`, icon: Activity },
@@ -690,7 +690,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
               </div>
 
               {/* Event Filter Pills */}
-              <div className="scroll-row flex min-h-9 max-w-full items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
+              <div className="segmented scroll-row flex min-h-9 max-w-full items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
                 {['all', 'LeadSubmitted', 'QualifiedLead', 'AddToCart', 'InitiateCheckout', 'Purchase'].map((ev) => (
                   <button
                     key={ev}
@@ -708,7 +708,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
               </div>
 
               {/* Status Filter Pills */}
-              <div className="scroll-row flex min-h-9 max-w-full items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
+              <div className="segmented scroll-row flex min-h-9 max-w-full items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
                 {['all', 'success', 'failed'].map((st) => (
                   <button
                     key={st}

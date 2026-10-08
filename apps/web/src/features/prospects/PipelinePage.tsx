@@ -514,14 +514,14 @@ export function PipelinePage() {
         subtitle="Kelola perjalanan setiap calon jamaah dari sapaan pertama hingga deal."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs" role="group" aria-label="Tampilan pipeline">
+            <div className="segmented flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs" role="group" aria-label="Tampilan pipeline">
               {([['kanban', 'Papan', KanbanSquare], ['table', 'Tabel', List]] as const).map(([id, label, Icon]) => (
                 <button
                   key={id}
                   aria-pressed={view === id}
                   onClick={() => setParam('view', id)}
                   className={cn(
-                    'mobile-compact-control flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
+                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
                     view === id ? 'bg-zinc-950 text-white font-semibold shadow-xs' : 'text-zinc-600 hover:text-zinc-950',
                   )}
                 >

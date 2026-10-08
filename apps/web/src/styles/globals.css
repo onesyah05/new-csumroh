@@ -169,6 +169,9 @@
   button.mobile-compact-control,
   button.mobile-compact-control:has(> svg:only-child) { min-height: 36px; height: auto; padding-block: 6px; line-height: 1rem; }
   .mobile-compact-filters { gap: 8px; }
+  /* Tab/pill segmented (Semua / WA Terhubung / ...): tombol 39px + bingkai = 44px, sama dengan kolom cari di sebelahnya.
+     Tanpa ini aturan button 44px membuat tiap tombol 44px dan bingkainya 49px, lebih tinggi dari kolom cari. */
+  .segmented button, .segmented button:has(> svg:only-child), .segmented [role='radio'], .segmented [role='tab'] { min-width: 0; min-height: 39px; height: auto; padding-block: 6px; line-height: 1rem; }
   /* Baris tombol cepat di atas kolom pesan: ringkas (32px) agar tidak memakan tinggi layar chat; jarak 6px tetap. */
   .quick-reply-row { scrollbar-width: none; padding-bottom: 0; }
   .quick-reply-row::-webkit-scrollbar { display: none; }

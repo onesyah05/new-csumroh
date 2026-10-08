@@ -194,7 +194,7 @@ export function BrandPage() {
         </div>
 
         {/* WhatsApp Status Pills */}
-        <div className="flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
+        <div className="segmented flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
           {(['all', 'connected', 'disconnected'] as const).map((s) => (
             <button
               key={s}
