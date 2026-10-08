@@ -127,8 +127,9 @@ export function ReportsPage() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="app-page space-y-5">
       <PageHeader
+        className="hidden md:flex"
         kicker="Manajemen"
         kickerIcon={<BarChart3 size={13} />}
         title="Laporan"
@@ -145,6 +146,20 @@ export function ReportsPage() {
           />
         }
       />
+
+      <div className="grid grid-cols-2 gap-2 md:hidden">
+        <Select
+          value={brandScope}
+          onValueChange={setBrandScope}
+          aria-label="Cakupan brand"
+          className="w-full"
+          options={[
+            { value: 'all', label: 'Semua brand' },
+            ...(brands.data ?? []).map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() })),
+          ]}
+        />
+        <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={PERIOD_OPTIONS} className="w-full" />
+      </div>
 
       <div role="tablist" aria-label="Jenis laporan" className="scroll-row flex gap-1 border-b border-zinc-200" onKeyDown={(e) => onRovingKey(e, REPORT_TABS.map((t) => t.key), tab, setTab)}>
         {REPORT_TABS.map((t) => (
@@ -165,7 +180,9 @@ export function ReportsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={PERIOD_OPTIONS} className="w-44" />
+        <div className="hidden md:block">
+          <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={PERIOD_OPTIONS} className="w-44" />
+        </div>
         {period === 'custom' ? (
           <>
             <input type="date" value={custom.from} max={custom.to} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} className="field w-[9.75rem]" aria-label="Dari tanggal" />
@@ -248,7 +265,7 @@ function ReportTable<T>({ title, rows, columns, empty, rowKey }: { title: string
 
 function Bar({ value, max, tone = 'bg-zinc-900' }: { value: number; max: number; tone?: string }) {
   return (
-    <span className="block h-1.5 w-full min-w-16 overflow-hidden rounded-full bg-zinc-100">
+    <span className="block h-2 w-full min-w-16 overflow-hidden rounded-full bg-zinc-100">
       <span className={cn('block h-full rounded-full', tone)} style={{ width: `${max > 0 ? Math.max(2, (value / max) * 100) : 0}%` }} />
     </span>
   );
@@ -281,10 +298,10 @@ function SalesView({ data }: { data: SalesReport }) {
         ) : (
           <ul className="space-y-2.5 px-4 py-3">
             {data.stages.map((stage) => (
-              <li key={stage.key} className="grid grid-cols-[7.5rem_minmax(0,1fr)_4.5rem] items-center gap-3 text-sm">
-                <span className="truncate text-zinc-700">{stage.label}</span>
-                <Bar value={stage.count} max={maxStage} tone={stage.key === 'deal' ? 'bg-emerald-600' : stage.key === 'lose' ? 'bg-rose-500' : 'bg-zinc-800'} />
-                <span className="text-right tabular-nums text-zinc-950">{num(stage.count)} <span className="text-xs text-zinc-500">{s.leads ? `${Math.round((stage.count / s.leads) * 100)}%` : ''}</span></span>
+              <li key={stage.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1.5 text-sm sm:grid-cols-[7.5rem_minmax(0,1fr)_4.5rem] sm:items-center">
+                <span className="truncate text-zinc-700 sm:col-start-1">{stage.label}</span>
+                <div className="col-span-2 row-start-2 sm:col-span-1 sm:col-start-2 sm:row-start-1"><Bar value={stage.count} max={maxStage} tone={stage.key === 'deal' ? 'bg-emerald-600' : stage.key === 'lose' ? 'bg-rose-500' : 'bg-zinc-800'} /></div>
+                <span className="text-right tabular-nums text-zinc-950 sm:col-start-3 sm:row-start-1">{num(stage.count)} <span className="text-xs text-zinc-500">{s.leads ? `${Math.round((stage.count / s.leads) * 100)}%` : ''}</span></span>
               </li>
             ))}
           </ul>

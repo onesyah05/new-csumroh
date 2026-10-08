@@ -56,26 +56,28 @@ export function formatRange(fromIso: string, toIso: string) {
 
 function Delta({ value, previous }: Trend) {
   if (value === previous) {
-    return <span className="inline-flex items-center gap-0.5 text-xs font-medium text-zinc-500"><Minus size={12} aria-hidden="true" />Sama</span>;
+    return <span className="hidden items-center gap-0.5 text-xs font-medium text-zinc-500 sm:inline-flex"><Minus size={12} aria-hidden="true" />Sama</span>;
   }
   const up = value > previous;
   const label = previous === 0 ? 'Baru' : `${up ? '+' : '−'}${Math.round((Math.abs(value - previous) / previous) * 100)}%`;
   const Icon = up ? ArrowUpRight : ArrowDownRight;
   return (
-    <span className={cn('inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums', up ? 'text-emerald-700' : 'text-rose-700')}>
+    <span className={cn('items-center gap-0.5 text-xs font-semibold tabular-nums', previous === 0 ? 'hidden sm:inline-flex' : 'inline-flex', up ? 'text-emerald-700' : 'text-rose-700')}>
       <Icon size={13} aria-hidden="true" />{label}
     </span>
   );
 }
 
-function Kpi({ label, value, note, trend, previousLabel }: { label: string; value: string; note?: ReactNode; trend?: Trend; previousLabel?: string }) {
+function Kpi({ label, value, unit, note, trend, previousLabel }: { label: string; value: string; unit?: string; note?: ReactNode; trend?: Trend; previousLabel?: string }) {
   return (
-    <div className="min-w-0 px-5 py-4">
+    <div className="min-w-0 px-4 py-3.5 sm:px-5 sm:py-4">
       <p className="text-xs font-medium text-zinc-600">{label}</p>
-      <p className="mt-1.5 truncate text-2xl font-bold leading-none tracking-tight text-zinc-950 tabular-nums">{value}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-600">
+      <p className="mt-1 truncate text-2xl font-bold leading-none tracking-tight text-zinc-950 tabular-nums">
+        {value}{unit && <span className="ml-1 text-sm font-medium tracking-normal text-zinc-500">{unit}</span>}
+      </p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-600">
         {trend && <Delta {...trend} />}
-        {trend && previousLabel && <span className="tabular-nums">sebelumnya {previousLabel}</span>}
+        {trend && previousLabel && <span className="hidden tabular-nums sm:inline">sebelumnya {previousLabel}</span>}
         {note}
       </div>
     </div>
@@ -85,10 +87,10 @@ function Kpi({ label, value, note, trend, previousLabel }: { label: string; valu
 function Panel({ title, subtitle, aside, children, className }: { title: string; subtitle?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cn('surface overflow-hidden', className)} aria-label={title}>
-      <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-5 py-3">
+      <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-3 sm:px-5">
         <div className="min-w-0">
           <h2 className="text-sm font-bold text-zinc-950">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs text-zinc-600">{subtitle}</p>}
+          {subtitle && <p className="mt-0.5 hidden text-xs text-zinc-600 sm:block">{subtitle}</p>}
         </div>
         {aside && <div className="shrink-0 text-xs">{aside}</div>}
       </div>
@@ -138,6 +140,7 @@ export function DashboardPage() {
   return (
     <div className="app-page space-y-5">
       <PageHeader
+        className="hidden md:flex"
         title={mobile ? (isCs ? "Pekerjaan hari ini" : "Ringkasan holding") : "Ringkasan"}
         subtitle={isCs ? `Jamaah yang Anda tangani di ${brandName} · ${rangeLabel}` : `${scopeLabel} · ${rangeLabel}`}
         actions={
@@ -157,6 +160,21 @@ export function DashboardPage() {
         }
       />
 
+      {/* Mobile: hanya filter, tanpa judul (app bar sudah memberi konteks). */}
+      <div className="flex items-center gap-2 md:hidden">
+        <Select value={period} onValueChange={setPeriod} size="sm" aria-label="Periode" className="w-auto text-xs" options={PERIODS} />
+        {isHolding && (
+          <Select
+            value={holdingScope}
+            onValueChange={setHoldingScope}
+            size="sm"
+            aria-label="Cakupan brand"
+            className="w-auto text-xs"
+            options={[{ value: 'all', label: 'Semua brand' }, ...data.scope.brands.map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() }))]}
+          />
+        )}
+      </div>
+
       <TodayTasks scope={scopeParam} />
       {mobile && isCs && <Link to="/inbox" className="flex min-h-12 items-center justify-center rounded-xl bg-zinc-950 px-4 py-3 text-sm font-semibold text-white">Buka Inbox</Link>}
 
@@ -167,14 +185,15 @@ export function DashboardPage() {
           <Kpi label={isCs ? 'Lead baru saya' : 'Lead masuk'} value={kpis.leads.value.toLocaleString('id-ID')} trend={kpis.leads} previousLabel={String(kpis.leads.previous)} />
           <Kpi
             label="Deal"
-            value={`${kpis.deals.value} booking`}
+            value={String(kpis.deals.value)}
+            unit="booking"
             trend={kpis.deals}
             previousLabel={String(kpis.deals.previous)}
             note={<span className="font-medium text-zinc-700">{kpis.deals.jamaah} jamaah</span>}
           />
           <Kpi label="Nilai deal" value={money(kpis.bookingValue.value)} trend={kpis.bookingValue} previousLabel={money(kpis.bookingValue.previous)} />
         </div>
-        <p className="border-t border-zinc-100 bg-white px-5 py-2 text-xs text-zinc-500">
+        <p className="hidden border-t border-zinc-100 bg-white px-4 sm:px-5 py-2 text-xs text-zinc-500 sm:block">
           Perbandingan dengan {data.period.comparison} ({prevRange}).
         </p>
       </section>
@@ -187,19 +206,20 @@ export function DashboardPage() {
           aside={<span className="font-semibold text-zinc-900">Konversi {funnel.conversion}%</span>}
         >
           {leadsTotal === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-zinc-600">Belum ada lead masuk pada periode ini.</p>
+            <p className="px-4 sm:px-5 py-8 text-center text-sm text-zinc-600">Belum ada lead masuk pada periode ini.</p>
           ) : (
-            <div className="space-y-4 px-5 py-5">
+            <div className="space-y-3.5 px-4 py-4 sm:space-y-4 sm:px-5 sm:py-5">
               {funnel.stages.map((stage, index) => {
                 const share = Math.round((stage.count / leadsTotal) * 100);
                 const isDeal = index === funnel.stages.length - 1;
                 return (
-                  <div key={stage.label} className="grid grid-cols-[112px_minmax(0,1fr)_76px] items-center gap-3 text-xs">
-                    <span className="font-medium text-zinc-700">{stage.label}</span>
-                    <span className="h-3 overflow-hidden rounded-full bg-zinc-100" aria-hidden="true">
+                  // Mobile: label dan angka satu baris, batang penuh lebar di bawahnya; sm ke atas: tiga kolom.
+                  <div key={stage.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1.5 text-xs sm:grid-cols-[112px_minmax(0,1fr)_76px] sm:items-center">
+                    <span className="font-medium text-zinc-700 sm:col-start-1">{stage.label}</span>
+                    <span className="col-span-2 row-start-2 h-2 overflow-hidden rounded-full bg-zinc-100 sm:col-span-1 sm:col-start-2 sm:row-start-1" aria-hidden="true">
                       <span className={cn('block h-full rounded-full', isDeal ? 'bg-emerald-600' : 'bg-zinc-800')} style={{ width: `${Math.max(share, stage.count ? 2 : 0)}%` }} />
                     </span>
-                    <span className="text-right tabular-nums">
+                    <span className="text-right tabular-nums sm:col-start-3 sm:row-start-1">
                       <b className="text-zinc-950">{stage.count}</b> <span className="text-zinc-500">· {share}%</span>
                     </span>
                   </div>
@@ -208,7 +228,7 @@ export function DashboardPage() {
             </div>
           )}
           {leadsTotal > 0 && (
-            <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-zinc-100 px-5 py-2.5 text-xs text-zinc-600">
+            <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-zinc-100 px-4 sm:px-5 py-2.5 text-xs text-zinc-600">
               {funnel.sources.map((s) => (
                 <span key={s.source}>
                   <b className="font-semibold text-zinc-800">{SOURCE_LABELS[s.source] ?? s.source}</b> {s.leads} lead · {s.deals} deal
@@ -226,14 +246,14 @@ export function DashboardPage() {
           aside={<Link to="/packages" className="font-medium text-zinc-700 hover:text-zinc-950 hover:underline">Semua paket</Link>}
         >
           {data.departures.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-zinc-600">Belum ada keberangkatan terjadwal.</p>
+            <p className="px-4 sm:px-5 py-8 text-center text-sm text-zinc-600">Belum ada keberangkatan terjadwal.</p>
           ) : (
             <ul className="divide-y divide-zinc-100">
               {data.departures.map((d) => {
                 const fill = d.capacity ? Math.round((d.sold / d.capacity) * 100) : 0;
                 const date = new Intl.DateTimeFormat('id-ID', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(d.departureDate));
                 return (
-                  <li key={d.id} className="px-5 py-3">
+                  <li key={d.id} className="px-4 sm:px-5 py-3">
                     <div className="flex items-baseline justify-between gap-3">
                       <p className="min-w-0 truncate text-sm font-semibold text-zinc-900" title={d.name}>{d.name}</p>
                       <p className="shrink-0 text-xs tabular-nums text-zinc-700">
@@ -251,7 +271,7 @@ export function DashboardPage() {
                       ) : null}
                     </div>
                     {d.capacity !== null && (
-                      <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-zinc-100" aria-hidden="true">
+                      <span className="mt-2 block h-2 overflow-hidden rounded-full bg-zinc-100" aria-hidden="true">
                         <span className="block h-full rounded-full bg-zinc-800" style={{ width: `${Math.max(fill, d.sold ? 2 : 0)}%` }} />
                       </span>
                     )}
@@ -268,7 +288,7 @@ export function DashboardPage() {
       {data.scope.isHoldingView && data.brands.length > 1 && (
         <Panel title="Per brand" subtitle={`Kinerja ${rangeLabel}. Klik nama brand untuk melihat rinciannya.`}>
           {mobile ? <div className="divide-y divide-zinc-100">{data.brands.map(b => <article key={b.id} className="space-y-3 p-4">
-            <button type="button" onClick={() => setHoldingScope(String(b.id))} className="text-left text-base font-semibold">{b.name}</button>
+            <button type="button" onClick={() => setHoldingScope(String(b.id))} className="py-1.5 text-left text-base font-semibold">{b.name}</button>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div><dt className="text-zinc-600">Lead masuk</dt><dd className="font-semibold">{b.leads}</dd></div>
               <div><dt className="text-zinc-600">Deal</dt><dd className="font-semibold">{b.deals} · {b.jamaah} jamaah</dd></div>
@@ -317,7 +337,7 @@ export function DashboardPage() {
           aside={<Link to="/staff" className="font-medium text-zinc-700 hover:text-zinc-950 hover:underline">Kelola staf</Link>}
         >
           {data.team.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-zinc-600">
+            <p className="px-4 sm:px-5 py-8 text-center text-sm text-zinc-600">
               Belum ada CS aktif pada cakupan ini. <Link to="/staff" className="font-semibold text-zinc-900 underline">Tambah CS</Link>
             </p>
           ) : mobile ? <div className="divide-y divide-zinc-100">{data.team.map(cs => <article key={cs.id} className="space-y-2 p-4">
