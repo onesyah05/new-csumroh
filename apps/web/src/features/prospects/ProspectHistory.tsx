@@ -201,7 +201,7 @@ export function ProspectTimeline({ prospectId, brandId }: { prospectId: number; 
   return <section className="space-y-3" aria-label="Riwayat prospek">
     <div role="radiogroup" aria-label="Saring riwayat" className="flex gap-1">
       {FILTERS.map((item) => <button key={item.id} type="button" role="radio" aria-checked={filter === item.id} onClick={() => setFilter(item.id)}
-        className={cn('rounded-full px-2.5 py-1 text-xs font-semibold transition', filter === item.id ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200')}>{item.label}</button>)}
+        className={cn('quick-reply-chip rounded-full px-3 py-1 text-xs font-semibold transition', filter === item.id ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200')}>{item.label}</button>)}
     </div>
     {history.isLoading ? <p role="status" className="text-xs text-zinc-600">Memuat riwayat…</p>
       : history.isError ? <p role="alert" className="text-xs text-rose-700">Riwayat tidak dapat dimuat. <button type="button" className="underline" onClick={() => void history.refetch()}>Coba lagi</button></p>
