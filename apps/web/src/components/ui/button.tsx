@@ -40,9 +40,9 @@ export function buttonVariants({
       'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-xs': variant === 'success',
 
       // Sizes
-      'h-8 px-2.5 text-xs rounded-lg': size === 'sm',
-      'h-9 px-3.5 text-xs rounded-xl': size === 'md',
-      'h-10 px-4 text-sm rounded-xl': size === 'lg',
+      'ui-btn-sm h-8 px-2.5 text-xs rounded-lg': size === 'sm',
+      'ui-btn-md h-9 px-3.5 text-xs rounded-xl': size === 'md',
+      'ui-btn-lg h-10 px-4 text-sm rounded-xl': size === 'lg',
       'ui-btn-icon h-9 w-9 rounded-xl p-0 shrink-0': size === 'icon',
     },
     className
