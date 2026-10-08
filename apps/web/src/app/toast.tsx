@@ -39,7 +39,9 @@ export const pushToast = (toast: Omit<AppToast, 'id'> & { id?: string }) => useT
  * dengan notifikasi agar posisinya tidak saling menimpa. Error tetap tampil sampai ditutup.
  */
 export function showFeedback(message: string, options?: { error?: boolean }) {
-  pushToast({ title: message, priority: options?.error ? 'urgent' : 'info', kind: 'feedback' });
+  // Pesan yang diawali "Gagal" selalu tampil sebagai error, juga saat pemanggil tidak menandainya.
+  const error = options?.error ?? /^gagal/i.test(message);
+  pushToast({ title: message, priority: error ? 'urgent' : 'info', kind: 'feedback' });
 }
 
 function ToastItem({ toast }: { toast: AppToast }) {
@@ -65,18 +67,19 @@ function ToastItem({ toast }: { toast: AppToast }) {
     <div
       role={urgent ? 'alert' : 'status'}
       className={cn(
-        'pointer-events-auto flex w-[360px] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-xl border px-4 py-3 shadow-lift animate-fade-up',
+        'pointer-events-auto flex w-[360px] max-w-[calc(100vw-2rem)] gap-3 rounded-xl border px-4 py-3 shadow-lift animate-fade-up',
+        toast.body ? 'items-start' : 'items-center',
         urgent ? 'border-rose-700 bg-rose-700 text-white' : 'border-zinc-200 bg-white text-zinc-900',
       )}
     >
       {urgent
-        ? <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+        ? <AlertTriangle size={16} className={cn("shrink-0", toast.body && "mt-0.5")} aria-hidden="true" />
         : feedback
-          ? <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" aria-hidden="true" />
-          : <Bell size={16} className="mt-0.5 shrink-0 text-zinc-600" aria-hidden="true" />}
+          ? <CheckCircle2 size={16} className={cn("shrink-0 text-emerald-600", toast.body && "mt-0.5")} aria-hidden="true" />
+          : <Bell size={16} className={cn("shrink-0 text-zinc-600", toast.body && "mt-0.5")} aria-hidden="true" />}
       <div className="min-w-0 flex-1">
         {toast.link || toast.onOpen ? (
-          <button type="button" onClick={open} className="text-left text-sm font-semibold hover:underline">{toast.title}</button>
+          <button type="button" onClick={open} className="toast-btn text-left text-sm font-semibold hover:underline">{toast.title}</button>
         ) : (
           <p className="text-sm font-semibold">{toast.title}</p>
         )}
@@ -86,7 +89,7 @@ function ToastItem({ toast }: { toast: AppToast }) {
         type="button"
         onClick={() => dismiss(toast.id)}
         aria-label="Tutup notifikasi"
-        className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-md', urgent ? 'hover:bg-rose-800' : 'text-zinc-500 hover:bg-zinc-100')}
+        className={cn('toast-btn grid h-6 w-8 shrink-0 place-items-center rounded-md', urgent ? 'hover:bg-rose-800' : 'text-zinc-500 hover:bg-zinc-100')}
       >
         <X size={14} />
       </button>
