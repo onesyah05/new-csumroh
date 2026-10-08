@@ -157,11 +157,23 @@ export async function sendTextToProspect(input: OutboundTextInput) {
   const isNewClaim = !prospect.userId && user.role === 'cs';
   let claimed = false;
   const message = await prisma.$transaction(async (tx) => {
-    const created = await tx.chatMessage.create({
-      data: {
+    // Upsert: gema pesan dari gateway bisa tersimpan lebih dulu; create biasa gagal P2002 padahal pesan terkirim.
+    const messageId = gatewayResult.data?.messageId ?? `local-${randomUUID()}`;
+    const created = await tx.chatMessage.upsert({
+      where: { brandId_messageId: { brandId, messageId } },
+      update: {
+        prospectId: prospect.id,
+        devicePhone,
+        senderName: user.name,
+        messageText: input.text,
+        quotedMessageId,
+        quotedText,
+        quotedSender,
+      },
+      create: {
         brandId,
         prospectId: prospect.id,
-        messageId: gatewayResult.data?.messageId ?? `local-${randomUUID()}`,
+        messageId,
         remoteJid,
         phone,
         devicePhone,

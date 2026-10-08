@@ -698,19 +698,36 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   const isNewClaim = !prospect.userId && req.user!.role === 'cs';
   let claimed = false;
   const message = await prisma.$transaction(async (tx) => {
-    const created = await tx.chatMessage.create({
-      data: {
+    // Upsert: gema pesan dari gateway bisa tiba dan tersimpan lebih dulu; create biasa gagal P2002 (409) padahal
+    // media sudah terkirim, lalu CS mengulang dan jamaah menerima dobel. Status tidak diubah agar tidak mundur.
+    const messageId = gatewayResult.data?.messageId ?? `local-${randomUUID()}`;
+    const mediaUrl = resolvedLocalUrl || (gatewayResult.data?.mediaUrl ?? null);
+    const messageText = input.caption || resolvedFileName;
+    const created = await tx.chatMessage.upsert({
+      where: { brandId_messageId: { brandId, messageId } },
+      update: {
+        prospectId: prospect.id,
+        devicePhone,
+        senderName: req.user!.name,
+        messageText,
+        messageType: input.mediaType,
+        mediaUrl,
+        quotedMessageId,
+        quotedText,
+        quotedSender,
+      },
+      create: {
         brandId,
         prospectId: prospect.id,
-        messageId: gatewayResult.data?.messageId ?? `local-${randomUUID()}`,
+        messageId,
         remoteJid,
         phone,
         devicePhone,
         senderName: req.user!.name,
         isFromMe: true,
-        messageText: input.caption || resolvedFileName,
+        messageText,
         messageType: input.mediaType,
-        mediaUrl: resolvedLocalUrl || (gatewayResult.data?.mediaUrl ?? null),
+        mediaUrl,
         status: 'sent',
         timestamp: Math.floor(Date.now() / 1000),
         quotedMessageId,

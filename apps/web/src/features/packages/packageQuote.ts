@@ -46,11 +46,14 @@ export function formatWaPackageItinerary(pkg: any, _brandName?: string): string 
   );
 }
 
+/** Kalimat penutup caption flyer: dipakai juga untuk mengenali caption flyer yang tertinggal tanpa gambarnya. */
+export const FLYER_CAPTION_CLOSING = 'Silakan dipelajari brosurnya. Kalau ada yang ingin ditanyakan, balas saja di chat ini.';
+
 export function formatWaFlyerCaption(pkg: any, _brandName?: string): string {
   if (!pkg) return '';
   const from = packageFromPrice(pkg);
   return waMessage(
     [`*${waTitle(pkg.name)}*`, departure(pkg) && `Berangkat ${departure(pkg)}`, from > 0 && `Harga mulai ${formatRupiah(from)} per orang`],
-    'Silakan dipelajari brosurnya. Kalau ada yang ingin ditanyakan, balas saja di chat ini.',
+    FLYER_CAPTION_CLOSING,
   );
 }
