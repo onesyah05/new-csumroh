@@ -261,7 +261,7 @@ export async function notifyQuotaAfterBooking(packageId: number, actor: Actor, l
   await notify({
     type: 'package.quota_low', priority: 'action', brandId: pkg.brandId, actorId: actor.id, userIds: pics,
     title: empty ? `Kuota ${pkg.name} habis` : `Kuota ${pkg.name} tinggal ${pkg.quotaRemaining} seat`,
-    body: empty ? 'Tawarkan paket lain kepada jamaah yang sedang Anda tangani.' : 'Segera arahkan jamaah yang sedang Anda tawari untuk membayar DP.',
+    body: empty ? 'Tawarkan paket lain ke jamaah Anda.' : 'Arahkan jamaah yang Anda tawari untuk bayar DP.',
     link: `/packages/${pkg.id}`, entity, activeKey: `package.quota_low:k${pkg.id}`,
   });
   if (empty) {
@@ -326,7 +326,7 @@ export async function notifyWhatsappDisconnected(brandId: number) {
     type: 'wa.disconnected', priority: 'urgent', brandId,
     userIds: await adminsOf(brandId),
     title: `WhatsApp ${await brandName(brandId)} terputus`,
-    body: `Perangkat tidak terhubung lebih dari 2 menit. Pesan jamaah dan balasan CS tertunda.${reason ? ` ${reason}` : ''}`,
+    body: reason ?? 'Pesan jamaah dan balasan tertunda.',
     link: `/brands/${brandId}?tab=perangkat`, entity: { type: 'brand', id: brandId }, activeKey: `wa.disconnected:b${brandId}`,
   });
 }
@@ -351,7 +351,7 @@ export async function notifyCapiFailed(brandId: number, reason: string) {
     type: 'capi.failed', priority: 'info', brandId,
     userIds: await adminsOf(brandId),
     title: `Event Meta CAPI gagal (${await brandName(brandId)})`,
-    body: reason.length > 160 ? `${reason.slice(0, 159)}…` : reason,
+    body: reason.length > 100 ? `${reason.slice(0, 99)}…` : reason,
     link: `/brands/${brandId}?tab=meta`, entity: { type: 'brand', id: brandId }, activeKey: `capi.failed:b${brandId}`,
   });
 }

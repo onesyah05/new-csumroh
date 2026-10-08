@@ -80,7 +80,7 @@ function ToastItem({ toast }: { toast: AppToast }) {
         ) : (
           <p className="text-sm font-semibold">{toast.title}</p>
         )}
-        {toast.body && <p className={cn('mt-0.5 text-xs', urgent ? 'text-rose-50' : 'text-zinc-600')}>{toast.body}</p>}
+        {toast.body && <p className={cn('mt-0.5 line-clamp-2 text-xs', urgent ? 'text-rose-50' : 'text-zinc-600')}>{toast.body}</p>}
       </div>
       <button
         type="button"

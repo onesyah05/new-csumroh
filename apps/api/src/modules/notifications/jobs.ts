@@ -83,7 +83,7 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
         title: `${c.name} menunggu balasan ${waited} menit`,
         // Di luar jam operasional prospek tidak bisa diambil alih: pengingat tetap dikirim tanpa ancaman itu.
         body: isTakeoverOpen(since, (since + SLA.takeoverMinutes * 60) * 1000)
-          ? `Balas sebelum ${SLA.takeoverMinutes} menit agar prospek tidak bisa diambil alih CS lain.`
+          ? `Balas sebelum ${SLA.takeoverMinutes} menit agar tidak diambil alih CS lain.`
           : 'Jamaah menunggu balasan Anda.',
         link: inboxLink(ref), entity: { type: 'prospect', id: c.id },
         dedupeKey: `reply.sla_warning:p${c.id}:${since}`,
@@ -182,7 +182,7 @@ export async function gatewayHealthJob(now = new Date(), probe = defaultProbe) {
   await notify({
     type: 'system.gateway_down', priority: 'urgent', userIds: await superadmins(),
     title: 'Gateway WhatsApp tidak merespons',
-    body: 'Semua brand tidak dapat menerima atau mengirim pesan WhatsApp. Periksa proses wa-gateway.',
+    body: 'Semua brand tidak bisa kirim atau terima WhatsApp. Periksa wa-gateway.',
     link: '/brands', entity: { type: 'system', id: 0 }, activeKey: 'system.gateway_down',
   });
 }
@@ -228,7 +228,7 @@ export async function proofStaleJob(now = new Date()) {
       type: 'payment.proof_stale', priority: 'urgent', brandId: p.brandId,
       userIds: escalate ? [...await financeUsers(), ...await adminsOf(p.brandId)] : await financeUsers(),
       title: `Bukti transfer ${p.name} menunggu ${hours} jam`,
-      body: `${p.brand.name} · ${escalate ? 'lewat 1 hari, perlu perhatian Admin' : `lewat ${SLA.proofStaleHours} jam`}. Verifikasi atau tolak dengan alasan.`,
+      body: `${p.brand.name} · ${escalate ? 'lewat 1 hari' : `lewat ${SLA.proofStaleHours} jam`}. Verifikasi atau tolak.`,
       link: '/verifikasi', entity: { type: 'prospect', id: p.id },
       dedupeKey: `payment.proof_stale:p${p.id}:${submittedAt.getTime()}:${escalate ? 2 : 1}`,
     });
@@ -249,7 +249,7 @@ export async function customExpiringJob(now = new Date()) {
       // Tanpa PIC aktif: pengingat ke Admin brand agar harga tidak kedaluwarsa tanpa ada yang tahu.
       userIds: await picOf({ userId: r.prospect.userId, brandId: r.prospect.brandId }).then((ids) => (ids.length ? ids : adminsOf(r.prospect.brandId))),
       title: `Harga custom ${r.prospect.name} berakhir ${hours} jam lagi`,
-      body: 'Sepakati nilai deal dengan jamaah sebelum harga kedaluwarsa, atau minta hitung ulang.',
+      body: 'Sepakati nilai deal sebelum harga kedaluwarsa, atau minta hitung ulang.',
       link: `/inbox?prospectId=${r.prospect.id}&brandId=${r.prospect.brandId}`, entity: { type: 'prospect', id: r.prospect.id },
       dedupeKey: `custom.expiring:r${r.id}:${r.quoteCount}`,
     });
@@ -286,7 +286,7 @@ export async function morningDigestJob(now = new Date()) {
     if (counts.overdue) {
       await notify({
         type: 'followup.overdue', priority: 'action', userIds: [userId],
-        title: `${counts.overdue} follow-up terlambat`, body: 'Hubungi jamaah lalu perbarui tanggal follow-up berikutnya.',
+        title: `${counts.overdue} follow-up terlambat`, body: 'Hubungi jamaah, lalu perbarui tanggal follow-up.',
         link: '/pipeline?quick=overdue&pic=mine', dedupeKey: `followup.overdue:u${userId}:${today}`,
       });
     }
@@ -317,7 +317,7 @@ export async function morningDigestJob(now = new Date()) {
     await notify({
       type: 'brand.no_active_cs', priority: 'action', brandId: brand.id, userIds: await adminsOf(brand.id),
       title: `${brand.name} tidak punya CS aktif`,
-      body: 'Lead baru dari WhatsApp tidak akan punya PIC. Tambahkan atau aktifkan CS di menu Staff.',
+      body: 'Lead baru tidak punya PIC. Tambahkan atau aktifkan CS di menu Staff.',
       link: '/staff', entity: { type: 'brand', id: brand.id },
       dedupeKey: `brand.no_active_cs:b${brand.id}:${today}`,
     });
