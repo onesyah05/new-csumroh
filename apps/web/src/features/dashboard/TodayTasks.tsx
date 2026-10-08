@@ -68,7 +68,8 @@ export function TodayTasks({ scope }: { scope: string }) {
                 <Link to={t.link} className="group flex items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5 sm:py-3 transition hover:bg-zinc-50">
                   <span
                     className={cn(
-                      'w-10 shrink-0 text-right text-xl font-bold leading-none tabular-nums',
+                      // Angka tidak boleh terpotong ke baris kedua (2842 → "284" / "2"): kolom cukup untuk 4 digit dan tumbuh bila lebih.
+                      'min-w-14 shrink-0 whitespace-nowrap text-right text-xl font-bold leading-none tabular-nums',
                       t.tone === 'urgent' ? 'text-rose-700' : 'text-zinc-950',
                     )}
                   >
