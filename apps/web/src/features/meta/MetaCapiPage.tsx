@@ -3,23 +3,17 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import {
   Activity,
   AlertCircle,
-  AlertTriangle,
-  ArrowRight,
   Check,
   CheckCircle2,
   Copy,
   Eye,
   EyeOff,
   KeyRound,
-  Layers,
-  Lock,
   Play,
   Radio,
   RefreshCw,
   Search,
   Send,
-  ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { SpamAudienceCard } from './SpamAudienceCard';
@@ -29,7 +23,6 @@ import { useUiStore } from '../../app/store';
 import { PageHeader } from '../../components/ui/page-header';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
-import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { Select } from '../../components/ui/select';
 import { StatusBadge } from '../../components/ui/status-badge';
 import { PageError, PageLoading, SectionEmpty } from '../../components/ui/page-feedback';
@@ -135,7 +128,6 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
   }, [scopedId, brands.data]);
 
   const currentBrandId = fixedBrandId ?? selectedBrandId ?? scopedId ?? (brands.data?.[0]?.id ?? 0);
-  const currentBrand = brands.data?.find((b) => b.id === currentBrandId);
 
   // Meta Settings Query
   const settingsQuery = useQuery({
@@ -169,7 +161,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
   });
 
   // Tabs: 'settings' | 'logs' | 'funnel'
-  const [activeTab, setActiveTab] = useState<'settings' | 'logs' | 'funnel'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'logs'>('settings');
 
   // Form state
   const [form, setForm] = useState(emptyForm);
@@ -293,7 +285,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
     <div className={embedded ? 'space-y-6' : 'app-page space-y-6 pb-16'}>
 
       {embedded ? (
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
             {/* Quick Test Event Button */}
             <Button
               type="button"
@@ -324,7 +316,6 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
       ) : (
       <PageHeader
         title="Meta Conversions API"
-        subtitle="Pelacakan konversi iklan dan event server-side."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* Brand Switcher */}
@@ -373,78 +364,48 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
       />
       )}
 
-      {/* 4 Metric Stats Grid */}
-      <StatGrid cols={4}>
-        <StatCard
-          label="Koneksi Pixel / Dataset"
-          value={
-            settings?.verifiedAt
-              ? 'Terhubung'
-              : settings?.connectionConfigured
-              ? 'Terkonfigurasi'
-              : 'Belum Diatur'
-          }
-          note={settings?.pixelId ? `ID: ${settings.pixelId}` : 'Pixel ID belum disimpan'}
-          valueColor={
-            settings?.verifiedAt
-              ? 'text-emerald-700'
-              : settings?.connectionConfigured
-              ? 'text-amber-700'
-              : 'text-zinc-500'
-          }
-        />
-        <StatCard
-          label="Tracking CTWA"
-          value={settings?.ctwaReady ? 'Aktif' : 'Belum Lengkap'}
-          note={settings?.ctwaReady ? 'Page ID tersimpan' : 'Lengkapi Facebook Page ID'}
-          valueColor={settings?.ctwaReady ? 'text-emerald-700' : 'text-amber-700'}
-        />
-        <StatCard
-          label="Access Token"
-          value={settings?.accessTokenConfigured ? 'Tersimpan' : 'Belum Ada'}
-          note={settings?.maskedAccessToken ? settings.maskedAccessToken : 'Terenkripsi AES-GCM'}
-          valueColor={settings?.accessTokenConfigured ? 'text-zinc-950' : 'text-zinc-500'}
-        />
-        <StatCard
-          label="Event Audit Terkirim"
-          value={`${logSummary.total} Event`}
-          note={`${logSummary.success} berhasil · ${logSummary.failed} gagal`}
-        />
-      </StatGrid>
-
-      {/* Segmented Navigation Bar */}
-      <div role="tablist" aria-label="Meta CAPI" className="segmented scroll-row flex min-h-9 max-w-full w-fit items-stretch rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs">
+      {/* Ringkasan status */}
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-200 bg-zinc-200 sm:grid-cols-4">
         {[
-          { id: 'settings', label: 'Konfigurasi & token', icon: KeyRound },
-          { id: 'logs', label: `Log event (${logSummary.total})`, icon: Activity },
-          { id: 'funnel', label: 'Alur & atribusi', icon: Layers },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const active = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3.5 text-xs font-semibold transition cursor-pointer ${
-                active
-                  ? 'bg-zinc-950 text-white shadow-xs'
-                  : 'text-zinc-600 hover:text-zinc-950'
-              }`}
-            >
-              <Icon size={13} className={active ? 'text-white' : 'text-zinc-500'} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+          {
+            label: 'Dataset',
+            value: settings?.verifiedAt ? 'Terhubung' : settings?.connectionConfigured ? 'Belum diverifikasi' : 'Belum diatur',
+            tone: settings?.verifiedAt ? 'text-emerald-700' : settings?.connectionConfigured ? 'text-amber-700' : 'text-zinc-500',
+          },
+          { label: 'CTWA', value: settings?.ctwaReady ? 'Aktif' : 'Belum lengkap', tone: settings?.ctwaReady ? 'text-emerald-700' : 'text-amber-700' },
+          { label: 'Token', value: settings?.accessTokenConfigured ? 'Tersimpan' : 'Belum ada', tone: settings?.accessTokenConfigured ? 'text-zinc-950' : 'text-zinc-500' },
+          { label: 'Event', value: `${logSummary.total}${logSummary.failed ? ` · ${logSummary.failed} gagal` : ''}`, tone: logSummary.failed ? 'text-rose-700' : 'text-zinc-950' },
+        ].map((cell) => (
+          <div key={cell.label} className="bg-white px-4 py-3">
+            <dt className="text-xs text-zinc-500">{cell.label}</dt>
+            <dd className={`mt-0.5 text-sm font-semibold ${cell.tone}`}>{cell.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {/* Navigasi: dua bagian */}
+      <div role="tablist" aria-label="Meta CAPI" className="segmented grid grid-cols-2 gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1 sm:max-w-xs">
+        {([
+          { id: 'settings', label: 'Pengaturan' },
+          { id: 'logs', label: `Log (${logSummary.total})` },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`rounded-lg text-sm font-medium transition cursor-pointer ${activeTab === tab.id ? 'bg-white font-semibold text-zinc-950 shadow-xs' : 'text-zinc-600'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* TAB 1: SETTINGS */}
       {activeTab === 'settings' && (
         <div className="max-w-4xl space-y-6">
-          <Card className="p-6 space-y-6">
+          <Card className="p-4 space-y-6 sm:p-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Section 1: Kredensial Meta & Dataset */}
               <div className="space-y-4">
@@ -452,7 +413,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                   <Radio size={16} className="text-zinc-600" />
                   <div>
                     <h3 className="text-xs font-extrabold text-zinc-700">
-                      Kredensial Meta & Dataset · {currentBrand?.name ?? 'Brand'}
+                      Kredensial & dataset
                     </h3>
                   </div>
                 </div>
@@ -491,7 +452,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
 
                   <div className="space-y-1.5">
                     <label htmlFor="meta-waba" className="label text-xs font-semibold">
-                      WhatsApp Business Account (WABA) ID (Opsional)
+                      WABA ID (opsional)
                     </label>
                     <input
                       id="meta-waba"
@@ -514,15 +475,13 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       className="field"
                       value={form.adAccountId}
                       onChange={(e) => setForm({ ...form, adAccountId: e.target.value.trim().replace(/^act_/i, '').replace(/\D/g, '') })}
-                      placeholder="Contoh: 1234567890 (tanpa act_)"
-                      aria-describedby="meta-ad-account-hint"
+                      placeholder="1234567890"
                     />
-                    <p id="meta-ad-account-hint" className="text-xs text-zinc-500">Untuk biaya & kreatif iklan di Laporan. Butuh Token Laporan Iklan (ads_read) di bawah.</p>
                   </div>
 
                   <div className="space-y-1.5">
                     <label htmlFor="meta-test-code" className="label text-xs font-semibold">
-                      Test Event Code (Opsional)
+                      Test Event Code (opsional)
                     </label>
                     <input
                       id="meta-test-code"
@@ -531,9 +490,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       value={form.testEventCode}
                       onChange={(e) => setForm({ ...form, testEventCode: e.target.value.trim().toUpperCase() })}
                       placeholder="TEST12345"
-                      aria-describedby="meta-test-code-hint"
                     />
-                    <p id="meta-test-code-hint" className="text-xs text-zinc-500">Hanya untuk tombol Uji Coba Event. Event dari prospek sungguhan tidak pernah memakai kode ini.</p>
                   </div>
                 </div>
               </div>
@@ -557,12 +514,12 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                     {settings?.accessTokenConfigured && (
                       <span className="font-mono text-xs text-emerald-600 font-semibold flex items-center gap-1">
                         <CheckCircle2 size={12} />
-                        Token tersimpan terenkripsi
+                        Tersimpan
                       </span>
                     )}
                   </div>
 
-                  <div className="relative flex gap-2">
+                  <div className="relative flex flex-col gap-2 sm:flex-row">
                     <div className="relative flex-1">
                       <input
                         id="meta-token"
@@ -572,8 +529,8 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                         onChange={(e) => setForm({ ...form, accessToken: e.target.value.trim() })}
                         placeholder={
                           settings?.accessTokenConfigured
-                            ? 'Token sudah tersimpan aman. Ketik baru jika ingin mengganti.'
-                            : 'Tempel token dari Events Manager → dataset → Settings → Generate access token'
+                            ? 'Token baru'
+                            : 'Tempel token'
                         }
                       />
                       <button
@@ -591,6 +548,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                         type="button"
                         variant="danger"
                         size="md"
+                        className="w-full sm:w-auto"
                         disabled={saveMutation.isPending}
                         onClick={() => setConfirmTokenOpen(true)}
                       >
@@ -603,12 +561,12 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <label htmlFor="meta-ads-token" className="label font-semibold">
-                      Token Laporan Iklan · ads_read (Opsional)
+                      Token laporan iklan (opsional)
                     </label>
                     {settings?.adsAccessTokenConfigured && (
                       <span className="font-mono text-xs text-emerald-600 font-semibold flex items-center gap-1">
                         <CheckCircle2 size={12} />
-                        Token tersimpan terenkripsi
+                        Tersimpan
                       </span>
                     )}
                   </div>
@@ -618,16 +576,8 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                     className="field font-mono text-xs"
                     value={form.adsAccessToken}
                     onChange={(e) => setForm({ ...form, adsAccessToken: e.target.value.trim() })}
-                    aria-describedby="meta-ads-token-hint"
-                    placeholder={
-                      settings?.adsAccessTokenConfigured
-                        ? 'Token sudah tersimpan aman. Ketik baru jika ingin mengganti.'
-                        : 'Token System User dengan izin ads_read (dan ads_management untuk audiens spam)'
-                    }
+                    placeholder={settings?.adsAccessTokenConfigured ? 'Token baru' : 'ads_read'}
                   />
-                  <p id="meta-ads-token-hint" className="text-xs text-zinc-500">
-                    Untuk nama, biaya, dan gambar iklan di Laporan serta audiens spam. Token CAPI dari Events Manager tidak bisa membaca data iklan. Kosong = memakai token CAPI.
-                  </p>
                 </div>
               </div>
 
@@ -636,34 +586,27 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                 <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-xs text-rose-800">
                   <AlertCircle size={15} className="mt-0.5 text-rose-600 shrink-0" />
                   <div className="space-y-0.5">
-                    <p className="font-semibold text-rose-900">Perhatian: Error Terakhir dari Meta</p>
-                    <p className="font-mono text-xs text-rose-700 break-all">{settings.lastError}</p>
+                    <p className="font-semibold text-rose-900">Error terakhir dari Meta</p>
+                    <p className="line-clamp-3 break-all font-mono text-xs text-rose-700" title={settings.lastError}>{settings.lastError}</p>
                   </div>
                 </div>
               )}
 
               {/* Action Footer */}
-              <div className="flex items-center justify-between border-t border-zinc-100 pt-5">
-                <div className="text-xs text-zinc-500">
-                  {settings?.verifiedAt ? (
-                    <span className="text-emerald-600 font-medium">
-                      Terakhir diverifikasi: {new Date(settings.verifiedAt).toLocaleString('id-ID')}
-                    </span>
-                  ) : (
-                    <span>Konfigurasi disimpan terisolasi per-brand.</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="md"
-                    loading={saveMutation.isPending}
-                    disabled={saveMutation.isPending}
-                  >
-                    Simpan Konfigurasi CAPI
-                  </Button>
-                </div>
+              <div className="flex flex-col gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-emerald-600 font-medium">
+                  {settings?.verifiedAt ? `Diverifikasi ${new Date(settings.verifiedAt).toLocaleString('id-ID')}` : ''}
+                </p>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  loading={saveMutation.isPending}
+                  disabled={saveMutation.isPending}
+                  className="w-full sm:w-auto"
+                >
+                  Simpan
+                </Button>
               </div>
             </form>
           </Card>
@@ -748,7 +691,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
               loading={logsQuery.isFetching}
               icon={<RefreshCw size={13} />}
             >
-              Refresh Log
+              Refresh
             </Button>
           </div>
 
@@ -759,16 +702,47 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
             ) : filteredLogs.length === 0 ? (
               <div className="py-16 text-center text-xs text-zinc-500">
                 <Activity size={32} className="mx-auto mb-2 opacity-25" />
-                <p className="font-bold text-zinc-700">Belum Ada Log Audit</p>
-                <p className="mt-1 text-zinc-500">
-                  {logSearch || logEventFilter !== 'all' || logStatusFilter !== 'all'
-                    ? 'Tidak ada log event yang sesuai dengan filter pencarian.'
-                    : 'Log akan tercatat secara otomatis saat prospek bergerak di pipeline atau saat event diuji.'}
-                </p>
+                <p className="font-bold text-zinc-700">Belum ada log</p>
+                {(logSearch || logEventFilter !== 'all' || logStatusFilter !== 'all') && (
+                  <p className="mt-1 text-zinc-500">Tidak ada log yang cocok.</p>
+                )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                {/* Di bawah lg kolom respons Meta disembunyikan; lengkap di modal detail log (tombol Aksi). */}
+              <>
+              {/* Mobile: daftar kartu; md ke atas: tabel. Respons lengkap ada di modal detail log. */}
+              <ul className="divide-y divide-zinc-100 md:hidden">
+                {filteredLogs.map((log) => {
+                  const isSuccess = log.status === 'success';
+                  const isFailed = log.status === 'failed';
+                  return (
+                    <li key={log.id} className="space-y-2 px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-zinc-950">{log.eventName}</p>
+                          <p className="truncate text-xs text-zinc-500">{log.prospect?.name ?? '—'}{log.prospect?.phone ? ` · ${log.prospect.phone}` : ''}</p>
+                        </div>
+                        <StatusBadge status={isSuccess ? 'active' : isFailed ? 'danger' : 'warning'} label={isSuccess ? 'Sukses' : isFailed ? 'Gagal' : 'Pending'} dot />
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-zinc-500">
+                          {new Date(log.createdAt).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {isFailed && (
+                            <Button type="button" variant="secondary" size="sm" onClick={() => resendMutation.mutate(log.id)} loading={resendMutation.isPending && resendMutation.variables === log.id} icon={<Send size={12} />}>
+                              Kirim ulang
+                            </Button>
+                          )}
+                          <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedLog(log)} icon={<Eye size={12} />}>
+                            Detail
+                          </Button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full text-left text-xs lg:min-w-[760px]">
                   <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-500">
                     <tr>
@@ -879,119 +853,10 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
 
             {logsPage && <Pager page={logsPage.page} pageSize={logsPage.pageSize} total={logsPage.total} onPage={setLogPage} label="log event" />}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: FUNNEL & ARCHITECTURE GUIDE */}
-      {activeTab === 'funnel' && (
-        <div className="space-y-6">
-          {/* Funnel 4-Stage Cards Grid */}
-          <div className="space-y-3">
-            <div>
-              <h3 className="text-sm font-bold text-zinc-950 font-display">Alur Konversi & Pelacakan Otomatis</h3>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                Pergerakan status prospek di CRM diterjemahkan menjadi event Meta Conversions API secara server-side:
-              </p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-              {[
-                {
-                  step: '01',
-                  event: 'LeadSubmitted',
-                  trigger: 'Prospek Baru Masuk',
-                  desc: 'Prospek mengirim pesan pertama via iklan CTWA. Server mengunci nomor HP dan ctwa_clid.',
-                },
-                {
-                  step: '02',
-                  event: 'QualifiedLead',
-                  trigger: 'Terkualifikasi',
-                  desc: 'Bulan keberangkatan dan jumlah jamaah terisi. Dikirim sekali; chat spam tidak pernah dikirim.',
-                },
-                {
-                  step: '03',
-                  event: 'AddToCart',
-                  trigger: 'Penawaran Program',
-                  desc: 'CS mengirimkan paket umroh ke prospek. Server mendispatch estimasi nilai paket ke Meta.',
-                },
-                {
-                  step: '04',
-                  event: 'InitiateCheckout',
-                  trigger: 'Tahap Booking / DP',
-                  desc: 'Prospek menyetujui booking dan diarahkan bayar DP. Mengirimkan nominal uang muka.',
-                },
-                {
-                  step: '05',
-                  event: 'Purchase',
-                  trigger: 'Deal (diverifikasi Finance)',
-                  desc: 'Prospek resmi terdaftar (Closed Won). Mengirimkan total nilai transaksi riil paket umroh.',
-                },
-              ].map((stage) => (
-                <Card key={stage.step} className="p-4 space-y-3 flex flex-col justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
-                      <span className="font-mono text-xs font-bold text-zinc-500">TAHAP {stage.step}</span>
-                      <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-xs font-bold text-zinc-800">
-                        {stage.event}
-                      </span>
-                    </div>
-                    <h4 className="text-xs font-bold text-zinc-950">{stage.trigger}</h4>
-                    <p className="text-xs text-zinc-500 leading-relaxed">{stage.desc}</p>
-                  </div>
-                  <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-xs font-medium text-zinc-600">
-                    <span>Server-Side CAPI</span>
-                    <ArrowRight size={12} className="text-zinc-500" />
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-
-          {/* 2 Proportional Technical Cards */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="p-5 space-y-3">
-              <h4 className="text-xs font-bold text-zinc-950">
-                Keunggulan Server-Side CAPI
-              </h4>
-              <ul className="space-y-2.5 text-xs leading-relaxed text-zinc-600">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-600" />
-                  <span><strong>Bebas Ad-Blocker & Cookie Safari:</strong> Pengiriman langsung via backend menghindari pemblokiran skrip browser di sisi klien.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-600" />
-                  <span><strong>Optimasi ROAS Iklan:</strong> Algoritma Meta menerima sinyal akurat mengenai prospek mana yang benar-benar membayar DP dan melunasi paket.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-600" />
-                  <span><strong>Deduplikasi Event:</strong> ID deterministik (format <code>csumroh_prospect_*</code>) mencegah penggandaan data di Events Manager.</span>
-                </li>
-              </ul>
-            </Card>
-
-            <Card className="p-5 space-y-3">
-              <h4 className="text-xs font-bold text-zinc-950">
-                Standar Keamanan & Enkripsi
-              </h4>
-              <ul className="space-y-2.5 text-xs leading-relaxed text-zinc-600">
-                <li className="flex items-start gap-2">
-                  <ShieldCheck size={14} className="mt-0.5 shrink-0 text-zinc-800" />
-                  <span><strong>SHA-256 Hashing:</strong> Nomor telepon dinormalisasi ke format internasional E.164 (62xxx) dan di-hash SHA-256 sebelum dikirim.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <ShieldCheck size={14} className="mt-0.5 shrink-0 text-zinc-800" />
-                  <span><strong>Enkripsi AES-GCM:</strong> System User Access Token tersimpan aman di database dengan enkripsi kriptografis tingkat enterprise.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <ShieldCheck size={14} className="mt-0.5 shrink-0 text-zinc-800" />
-                  <span><strong>Log Audit Lengkap:</strong> Setiap dispatch mencatat status HTTP dan respon dari Meta untuk kemudahan monitoring dan troubleshooting.</span>
-                </li>
-              </ul>
-            </Card>
           </div>
         </div>
       )}
@@ -1107,7 +972,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
         onClose={() => setTestModalOpen(false)}
         size="lg"
         title="Kirim event uji coba Meta CAPI"
-        description="Memakai klik iklan asli terakhir di brand ini dan Test Event Code, jadi tidak dihitung sebagai konversi nyata."
+        description="Event uji, tidak dihitung sebagai konversi."
         footer={
           <>
             <Button variant="secondary" size="sm" onClick={() => setTestModalOpen(false)}>Tutup</Button>
@@ -1151,7 +1016,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                   className="field font-mono uppercase"
                 />
                 <p className="text-xs text-zinc-500">
-                  Dapatkan kode ini dari tab <strong>Test Events</strong> di Meta Events Manager agar event muncul langsung.
+                  Dari tab <strong>Test Events</strong> di Events Manager.
                 </p>
               </div>
 
