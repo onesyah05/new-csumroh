@@ -77,7 +77,7 @@ import { StatusBadge } from '../../components/ui/status-badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
-import { formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
+import { FLYER_CAPTION_CLOSING, formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
 import { unresolvedScript } from './scriptLibrary';
 import { customBadge } from '../custom/customApi';
 import { EmojiPicker } from './EmojiPicker';
@@ -145,6 +145,20 @@ function formatBubbleTime(timestampSeconds?: number): string {
   const date = new Date(timestampSeconds * 1000);
   return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
 }
+
+type MediaPreviewState = {
+  file: File;
+  url: string;
+  type: string;
+  name: string;
+  originalSize: number;
+  compressedSize: number;
+  savingsPercent: number;
+  isCompressed: boolean;
+  isPackageFlyer?: boolean;
+  packageName?: string;
+  packageId?: number;
+};
 
 /** Elemen non-tombol yang bisa diklik juga harus bisa diaktifkan dengan Enter/Spasi (WCAG 2.1.1). */
 function activateWithKeyboard(event: ReactKeyboardEvent<HTMLElement>, action: () => void) {
@@ -256,19 +270,14 @@ export function InboxPage() {
   const [showPackagePickerModal, setShowPackagePickerModal] = useState(false);
   const [packageSearch, setPackageSearch] = useState('');
   const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
-  const [mediaPreview, setMediaPreview] = useState<{
-    file: File;
-    url: string;
-    type: string;
-    name: string;
-    originalSize: number;
-    compressedSize: number;
-    savingsPercent: number;
-    isCompressed: boolean;
-    isPackageFlyer?: boolean;
-    packageName?: string;
-    packageId?: number;
-  } | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<MediaPreviewState | null>(null);
+  // Lampiran yang belum terkirim disimpan per chat: caption flyer ada di draf chat itu, jadi lampirannya harus ikut
+  // kembali saat CS membuka chat itu lagi (kalau tidak, caption terkirim tanpa gambar).
+  const mediaPreviewRef = useRef(mediaPreview);
+  mediaPreviewRef.current = mediaPreview;
+  const stashedMedia = useRef(new Map<number, MediaPreviewState>());
+  const previousChatRef = useRef<number | null>(null);
+  const pendingFlyerChatRef = useRef<number | null>(null);
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
   // Chat yang terbuka saat ini, untuk kiriman yang selesai setelah CS pindah chat.
   const selectedIdRef = useRef(selectedId);
@@ -584,12 +593,35 @@ export function InboxPage() {
   const resetSend = send.reset;
   useEffect(() => {
     setReplyingTo(null);
-    setMediaPreview((previous) => {
-      if (previous?.url) URL.revokeObjectURL(previous.url);
-      return null;
-    });
+    // Lampiran chat yang ditinggalkan disimpan (bukan dibuang) dan dikembalikan saat chat itu dibuka lagi.
+    const leaving = previousChatRef.current;
+    const current = mediaPreviewRef.current;
+    if (current && leaving != null && leaving !== selectedId) stashedMedia.current.set(leaving, current);
+    else if (current) URL.revokeObjectURL(current.url);
+    previousChatRef.current = selectedId;
+    const restored = selectedId != null ? stashedMedia.current.get(selectedId) ?? null : null;
+    if (selectedId != null) stashedMedia.current.delete(selectedId);
+    setMediaPreview(restored);
     resetSend();
   }, [selectedId, brandId, resetSend]);
+
+  useEffect(() => () => {
+    for (const item of stashedMedia.current.values()) URL.revokeObjectURL(item.url);
+    stashedMedia.current.clear();
+  }, []);
+
+  /** Lampiran selesai disiapkan (async): masuk ke chat asalnya, bukan chat yang kebetulan terbuka sekarang. */
+  function attachPreview(chatId: number, preview: MediaPreviewState) {
+    if (selectedIdRef.current === chatId) {
+      const previous = mediaPreviewRef.current;
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      setMediaPreview(preview);
+      return;
+    }
+    const stale = stashedMedia.current.get(chatId);
+    if (stale) URL.revokeObjectURL(stale.url);
+    stashedMedia.current.set(chatId, preview);
+  }
 
   // Tinggi kotak ketik mengikuti draf chat yang sedang terbuka. Tanpa ini tinggi dari draf panjang chat sebelumnya
   // (mis. caption flyer) terbawa ke chat lain yang draftnya kosong. Dihitung sebelum paint agar tidak berkedip.
@@ -799,6 +831,11 @@ export function InboxPage() {
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSend) return;
+    // Lampiran masih disiapkan (kompres/unduh): kirim sekarang hanya mengirim teksnya tanpa gambar.
+    if (isCompressing) {
+      showToast('Gambar masih disiapkan, tunggu sebentar lalu kirim lagi.');
+      return;
+    }
     if (mediaPreview) {
       void handleSendMedia();
     } else if (message.trim() && !send.isPending) {
@@ -811,6 +848,11 @@ export function InboxPage() {
     if (!canSend) return;
     const text = message.trim();
     if (!text) return;
+    // Draf tersimpan di sessionStorage, lampiran tidak: setelah muat ulang, caption flyer bisa tertinggal tanpa gambar.
+    if (text.includes(FLYER_CAPTION_CLOSING)) {
+      showToast('Caption flyer belum ada gambarnya. Pilih flyer lagi, atau hapus caption bila hanya ingin mengirim teks.');
+      return;
+    }
     if (unresolvedScript(text)) {
       showToast('Draft masih memuat data yang belum terisi (tanda {{…}}). Lengkapi dulu sebelum mengirim.');
       return;
@@ -840,20 +882,17 @@ export function InboxPage() {
     const travelName = activeBrand?.name || 'Layanan Resmi Umroh';
     const captionText = formatWaFlyerCaption(pkg, travelName);
 
+    // Caption baru masuk draf setelah gambarnya siap (handleProcessFlyerFile): batal memilih berkas tidak
+    // boleh meninggalkan caption flyer tanpa gambar.
     if (!pkg.flyerImage) {
+      pendingFlyerChatRef.current = selectedId;
       pendingFlyerPackageRef.current = pkg;
-      setMessage(previous => appendFlyerCaption(previous, captionText));
-      requestAnimationFrame(() => {
-        if (composerRef.current) {
-          adjustTextareaHeight(composerRef.current);
-          composerRef.current.focus();
-        }
-      });
       flyerInputRef.current?.click();
       showToast(`Pilih berkas flyer dari komputer untuk ${pkg.name}`);
       return;
     }
 
+    const chatId = selectedId;
     setIsCompressing(true);
     try {
       const fullUrl = resolveMediaUrl(pkg.flyerImage);
@@ -867,11 +906,7 @@ export function InboxPage() {
       const result = await autoCompressMedia(file);
       const objectUrl = URL.createObjectURL(result.file);
 
-      if (mediaPreview?.url) {
-        URL.revokeObjectURL(mediaPreview.url);
-      }
-
-      setMediaPreview({
+      attachPreview(chatId, {
         file: result.file,
         url: objectUrl,
         type: result.file.type,
@@ -885,19 +920,16 @@ export function InboxPage() {
         packageId: pkg.id,
       });
 
+      // setMessage terikat ke chat asal (lihat useConversationDraft): caption masuk ke draf chat itu walau CS sudah pindah.
       setMessage(previous => appendFlyerCaption(previous, captionText));
-      revealComposer();
-      showToast(`Flyer ${pkg.name} siap dikirim dengan format resmi`);
+      if (selectedIdRef.current === chatId) {
+        revealComposer();
+        showToast(`Flyer ${pkg.name} siap dikirim dengan format resmi`);
+      }
     } catch (err: any) {
       console.warn('Fallback loading flyer:', err);
+      pendingFlyerChatRef.current = chatId;
       pendingFlyerPackageRef.current = pkg;
-      setMessage(previous => appendFlyerCaption(previous, captionText));
-      requestAnimationFrame(() => {
-        if (composerRef.current) {
-          adjustTextareaHeight(composerRef.current);
-          composerRef.current.focus();
-        }
-      });
       flyerInputRef.current?.click();
       showToast('Pilih gambar flyer manual');
     } finally {
@@ -922,13 +954,13 @@ export function InboxPage() {
   /** Itinerary paket sebagai gambar: dirender server di atas template brand, lalu masuk pratinjau media seperti flyer. */
   async function loadItineraryImageAsMediaPreview(pkg: any) {
     if (!pkg || !selectedId) return;
+    const chatId = selectedId;
     setIsCompressing(true);
     try {
       const blob = await api.blob(`/api/v1/catalog/packages/${pkg.id}/itinerary-image`);
       const cleanName = (pkg.name || 'paket').replace(/[^a-zA-Z0-9_-]/g, '_');
       const file = new File([blob], `Itinerary_${cleanName}.png`, { type: 'image/png' });
-      if (mediaPreview?.url) URL.revokeObjectURL(mediaPreview.url);
-      setMediaPreview({
+      attachPreview(chatId, {
         file,
         url: URL.createObjectURL(file),
         type: file.type,
@@ -942,8 +974,10 @@ export function InboxPage() {
         packageId: pkg.id,
       });
       // Gambar saja, tanpa caption: nama paket dan tanggal sudah ada di gambar.
-      revealComposer();
-      showToast(`Itinerary ${pkg.name} siap dikirim sebagai gambar`);
+      if (selectedIdRef.current === chatId) {
+        revealComposer();
+        showToast(`Itinerary ${pkg.name} siap dikirim sebagai gambar`);
+      }
     } catch (err: any) {
       showToast(err?.message || 'Gagal membuat gambar itinerary.');
     } finally {
@@ -953,20 +987,19 @@ export function InboxPage() {
 
   async function handleProcessFlyerFile(file: File) {
     if (!file || !selectedId) return;
-    const pkg = pendingFlyerPackageRef.current || currentPackage;
+    // Paket yang dipilih di chat lain tidak boleh ikut ke chat ini.
+    const pendingPkg = pendingFlyerChatRef.current === selectedId ? pendingFlyerPackageRef.current : null;
+    const pkg = pendingPkg || currentPackage;
     const travelName = activeBrand?.name || 'Layanan Resmi Umroh';
-    const captionText = pkg ? formatWaFlyerCaption(pkg, travelName) : message;
+    const captionText = pkg ? formatWaFlyerCaption(pkg, travelName) : '';
+    const chatId = selectedId;
 
     setIsCompressing(true);
     try {
       const result = await autoCompressMedia(file);
       const objectUrl = URL.createObjectURL(result.file);
 
-      if (mediaPreview?.url) {
-        URL.revokeObjectURL(mediaPreview.url);
-      }
-
-      setMediaPreview({
+      attachPreview(chatId, {
         file: result.file,
         url: objectUrl,
         type: result.file.type,
@@ -980,16 +1013,17 @@ export function InboxPage() {
         packageId: pkg?.id,
       });
 
-      if (captionText) {
-        setMessage(previous => appendFlyerCaption(previous, captionText));
+      if (captionText) setMessage(previous => appendFlyerCaption(previous, captionText));
+      if (selectedIdRef.current === chatId) {
         requestAnimationFrame(() => {
           if (composerRef.current) adjustTextareaHeight(composerRef.current);
         });
+        showToast('Flyer berhasil disiapkan');
       }
-      showToast('Flyer berhasil disiapkan');
     } finally {
       setIsCompressing(false);
       pendingFlyerPackageRef.current = null;
+      pendingFlyerChatRef.current = null;
     }
   }
 
@@ -1003,13 +1037,14 @@ export function InboxPage() {
       return;
     }
 
+    const chatId = selectedId;
     // Auto-compress image to reduce server load
     if (file.type.startsWith('image/') && file.type !== 'image/gif' && file.type !== 'image/svg+xml') {
       setIsCompressing(true);
       try {
         const result = await autoCompressMedia(file);
         const objectUrl = URL.createObjectURL(result.file);
-        setMediaPreview({
+        attachPreview(chatId, {
           file: result.file,
           url: objectUrl,
           type: result.file.type,
@@ -1019,7 +1054,7 @@ export function InboxPage() {
           savingsPercent: result.savingsPercent,
           isCompressed: result.isCompressed,
         });
-        if (result.isCompressed && result.savingsPercent > 5) {
+        if (result.isCompressed && result.savingsPercent > 5 && selectedIdRef.current === chatId) {
           showToast(`Kompresi otomatis: hemat ${result.savingsPercent}%`);
         }
       } finally {
@@ -1027,7 +1062,7 @@ export function InboxPage() {
       }
     } else {
       const objectUrl = URL.createObjectURL(file);
-      setMediaPreview({
+      attachPreview(chatId, {
         file,
         url: objectUrl,
         type: file.type,
@@ -1092,6 +1127,11 @@ export function InboxPage() {
         setMediaPreview(null);
         setReplyingTo(null);
         if (composerRef.current) composerRef.current.style.height = '44px';
+      } else {
+        // CS pindah chat saat mengunggah: lampiran yang baru terkirim tersimpan di chat asal dan harus dibuang.
+        const sent = stashedMedia.current.get(selectedId);
+        if (sent) URL.revokeObjectURL(sent.url);
+        stashedMedia.current.delete(selectedId);
       }
       void queryClient.invalidateQueries({ queryKey: ['messages', selectedId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
@@ -2640,7 +2680,7 @@ export function InboxPage() {
 
                     <button
                       type="submit"
-                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia}
+                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia || isCompressing}
                       style={mobile ? { order: 3 } : undefined}
                       aria-label="Kirim pesan WhatsApp"
                       title={mobile ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
