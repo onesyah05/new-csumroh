@@ -169,7 +169,12 @@ export function BrandDetailPage() {
             />
           </>
         }
-        subtitle={`${brand.address || 'Kantor Pusat'} · ${brand.phone || 'Nomor resmi belum diisi'}`}
+        subtitle={
+          <span className="flex flex-col gap-0.5">
+            <span className="line-clamp-2">{brand.address || 'Kantor Pusat'}</span>
+            <span className="tabular-nums">{brand.phone || 'Nomor resmi belum diisi'}</span>
+          </span>
+        }
         actions={
           <>
             {canManage && (

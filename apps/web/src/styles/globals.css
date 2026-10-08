@@ -169,6 +169,10 @@
   button.mobile-compact-control,
   button.mobile-compact-control:has(> svg:only-child) { min-height: 36px; height: auto; padding-block: 6px; line-height: 1rem; }
   .mobile-compact-filters { gap: 8px; }
+  /* Tombol komponen Button yang dirender sebagai tautan (<a>, Button to=...) tidak kena aturan button di atas: samakan 44px
+     agar berdampingan dengan <button> tidak berbeda tinggi. */
+  a.ui-btn { min-height: 44px; }
+  a.ui-btn-icon { min-width: 44px; }
   /* Tab/pill segmented (Semua / WA Terhubung / ...): tombol 39px + bingkai = 44px, sama dengan kolom cari di sebelahnya.
      Tanpa ini aturan button 44px membuat tiap tombol 44px dan bingkainya 49px, lebih tinggi dari kolom cari. */
   .segmented button, .segmented button:has(> svg:only-child), .segmented [role='radio'], .segmented [role='tab'] { min-width: 0; min-height: 39px; height: auto; padding-block: 6px; line-height: 1rem; }

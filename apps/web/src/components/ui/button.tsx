@@ -27,7 +27,7 @@ export function buttonVariants({
   className?: string;
 } = {}) {
   return cn(
-    'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-semibold transition-all select-none cursor-pointer',
+    'ui-btn inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-semibold transition-all select-none cursor-pointer',
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2',
     'disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]',
     {
@@ -43,7 +43,7 @@ export function buttonVariants({
       'h-8 px-2.5 text-xs rounded-lg': size === 'sm',
       'h-9 px-3.5 text-xs rounded-xl': size === 'md',
       'h-10 px-4 text-sm rounded-xl': size === 'lg',
-      'h-9 w-9 rounded-xl p-0 shrink-0': size === 'icon',
+      'ui-btn-icon h-9 w-9 rounded-xl p-0 shrink-0': size === 'icon',
     },
     className
   );
