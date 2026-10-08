@@ -17,7 +17,6 @@ import {
   CalendarDays,
   Check,
   CheckCheck,
-  CheckCircle2,
   ChevronDown,
   Clock,
   Copy,
@@ -29,7 +28,6 @@ import {
   HandCoins,
   ImageIcon,
   Lock,
-  Luggage,
   Menu,
   MessageSquareText,
   Megaphone,
@@ -50,7 +48,6 @@ import {
   Sparkles,
   Star,
   Trash2,
-  TrendingDown,
   Upload,
   User,
   UserPlus2,
@@ -1054,9 +1051,6 @@ export function InboxPage() {
           savingsPercent: result.savingsPercent,
           isCompressed: result.isCompressed,
         });
-        if (result.isCompressed && result.savingsPercent > 5 && selectedIdRef.current === chatId) {
-          showToast(`Kompresi otomatis: hemat ${result.savingsPercent}%`);
-        }
       } finally {
         setIsCompressing(false);
       }
@@ -2425,99 +2419,45 @@ export function InboxPage() {
                   {/* WhatsApp Web Media Preview Card (before sending) */}
                   {mediaPreview && (
                     <div className="mx-auto mb-2 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-150">
-                      <div className="relative rounded-2xl border border-[#e9edef] bg-white p-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-2.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-bold text-zinc-800">Pratinjau Media</span>
-                            {mediaPreview.isPackageFlyer && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300/60">
-                                <Luggage size={12} className="shrink-0" aria-hidden="true" />{mediaPreview.packageName}
-                              </span>
-                            )}
-                            {mediaPreview.isCompressed ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
-                                <TrendingDown size={12} className="shrink-0" aria-hidden="true" />Dikompres: {formatFileSize(mediaPreview.originalSize)} ➔ {formatFileSize(mediaPreview.compressedSize)} (Hemat {mediaPreview.savingsPercent}%)
-                              </span>
-                            ) : (
-                              <span className="text-xs text-zinc-500 font-medium">
-                                Ukuran: {formatFileSize(mediaPreview.compressedSize)}
-                              </span>
-                            )}
+                      <div className="relative flex items-center gap-3 rounded-2xl border border-[#e9edef] bg-white p-2.5 shadow-sm">
+                        {mediaPreview.type.startsWith('image/') ? (
+                          <div className="h-14 w-14 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-zinc-100">
+                            <img src={mediaPreview.url} alt="Pratinjau" className="h-full w-full object-cover" />
                           </div>
+                        ) : mediaPreview.type.startsWith('video/') ? (
+                          <div className="h-14 w-14 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-black">
+                            <video src={mediaPreview.url} className="h-full w-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="grid h-14 w-14 place-items-center rounded-xl bg-purple-50 border border-purple-200 shrink-0">
+                            <FileText size={24} className="text-purple-600" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-zinc-900 truncate">{mediaPreview.isPackageFlyer && mediaPreview.packageName ? mediaPreview.packageName : mediaPreview.name}</p>
+                          <p className="text-xs text-zinc-500">{formatFileSize(mediaPreview.compressedSize)}</p>
+                        </div>
+                        {mediaPreview.isPackageFlyer && (
                           <button
                             type="button"
-                            onClick={() => {
-                              URL.revokeObjectURL(mediaPreview.url);
-                              setMediaPreview(null);
-                            }}
-                            className="h-6 w-6 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer"
-                            title="Batal"
+                            onClick={() => setShowPackagePickerModal(true)}
+                            className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
                           >
-                            <X size={15} />
+                            Ganti paket
                           </button>
-                        </div>
-
-                        <div className="flex items-start gap-3.5">
-                          {mediaPreview.type.startsWith('image/') ? (
-                            <div className="relative h-20 w-20 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-zinc-100">
-                              <img src={mediaPreview.url} alt="Preview" className="h-full w-full object-cover" />
-                            </div>
-                          ) : mediaPreview.type.startsWith('video/') ? (
-                            <div className="relative h-20 w-20 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-black">
-                              <video src={mediaPreview.url} className="h-full w-full object-cover" />
-                            </div>
-                          ) : (
-                            <div className="grid h-20 w-20 place-items-center rounded-xl bg-purple-50 border border-purple-200 shrink-0">
-                              <FileText size={30} className="text-purple-600" />
-                            </div>
-                          )}
-
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-zinc-900 truncate">{mediaPreview.name}</p>
-                            <p className="text-xs text-zinc-500 mt-0.5">{mediaPreview.type || 'Dokumen'}</p>
-                            {mediaPreview.isPackageFlyer && (
-                              <p className="flex items-start gap-1 text-xs text-emerald-800 mt-1 font-medium">
-                                <FileText size={12} className="mt-0.5 shrink-0" aria-hidden="true" />Flyer resmi umroh siap dikirim dengan rincian jadwal, maskapai, hotel, dan rincian harga.
-                              </p>
-                            )}
-                            {mediaPreview.isCompressed && (
-                              <p className="flex items-start gap-1 text-xs text-emerald-700 mt-0.5">
-                                <CheckCircle2 size={12} className="mt-0.5 shrink-0" aria-hidden="true" />Resolusi dan ukuran telah dioptimalkan otomatis agar server tetap cepat dan hemat penyimpanan.
-                              </p>
-                            )}
-
-                            <div className="mt-2.5 flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  URL.revokeObjectURL(mediaPreview.url);
-                                  setMediaPreview(null);
-                                }}
-                                className="mobile-compact-control rounded-lg px-3 py-1 text-xs font-semibold text-zinc-600 border border-zinc-200 bg-white hover:bg-zinc-50 transition cursor-pointer"
-                              >
-                                Batal
-                              </button>
-                              {mediaPreview.isPackageFlyer && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowPackagePickerModal(true)}
-                                  className="mobile-compact-control rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 transition cursor-pointer"
-                                >
-                                  Ganti Paket
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                disabled={uploadingMedia}
-                                onClick={() => void handleSendMedia()}
-                                className="mobile-compact-control inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1 text-xs font-bold text-white bg-[#00a884] hover:bg-[#008f6f] active:scale-95 transition cursor-pointer disabled:opacity-60 shadow-xs"
-                              >
-                                {uploadingMedia ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
-                                <span>{uploadingMedia ? 'Mengirim...' : 'Kirim'}</span>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            URL.revokeObjectURL(mediaPreview.url);
+                            setMediaPreview(null);
+                          }}
+                          className="h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer"
+                          title="Hapus lampiran"
+                          aria-label="Hapus lampiran"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
                     </div>
                   )}
