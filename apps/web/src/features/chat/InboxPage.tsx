@@ -1363,14 +1363,13 @@ export function InboxPage() {
             <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900" role="status">
               <WifiOff size={14} className="mt-0.5 shrink-0 text-amber-600" />
               <div className="min-w-0">
-                <p className="font-semibold">WhatsApp terputus — mode baca</p>
-                <p className="text-amber-800">Riwayat tetap bisa dibaca; pesan baru belum masuk dan belum bisa dikirim.</p>
+                <p className="font-semibold">WhatsApp terputus</p>
                 {waDisconnectReasonText(sessionQuery.data?.disconnectReason) && (
                   <p className="mt-0.5 text-amber-800">{waDisconnectReasonText(sessionQuery.data?.disconnectReason)}</p>
                 )}
                 {canManageDevice && (
                   <Link to={`/devices/${brandId}`} className="mt-1 inline-flex items-center gap-1 font-semibold underline">
-                    <Smartphone size={12} /> Hubungkan WA
+                    <Smartphone size={12} /> Hubungkan
                   </Link>
                 )}
               </div>
@@ -1381,10 +1380,9 @@ export function InboxPage() {
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#8696a0]">
                 <p className="font-semibold text-[#54656f]">
-                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : 'Tidak ada percakapan pada pilihan PIC ini'}
+                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : 'Tidak ada percakapan'}
                 </p>
-                <p className="mt-1">Hasil mengikuti pencarian dan PIC yang dipilih.</p>
-                <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua percakapan</button>
+                <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua</button>
               </div>
             ) : (
               filtered.map((item) => {
@@ -2368,7 +2366,7 @@ export function InboxPage() {
                 <div className="border-t border-[#e9edef] bg-[#f0f2f5] p-3.5 shrink-0" role="status">
                   <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                     <WifiOff size={16} className="shrink-0 text-amber-600" />
-                    <span>Pengiriman dinonaktifkan karena WhatsApp brand terputus. Riwayat dan profil tetap dapat dibaca.</span>
+                    <span>WhatsApp terputus, pesan tidak bisa dikirim.</span>
                   </div>
                 </div>
               ) : canReply ? (
