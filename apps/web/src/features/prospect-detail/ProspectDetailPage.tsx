@@ -177,7 +177,7 @@ export function ProspectDetailPage() {
       />
 
       {/* Jalur tahap: posisi prospek dan langkah berikutnya dalam satu baris. */}
-      <section aria-label={`Tahap ${lost ? 'batal' : `${stage} dari 5`}`} className="surface px-5 py-4">
+      <section aria-label={`Tahap ${lost ? 'batal' : `${stage} dari 5`}`} className="surface px-4 py-3 sm:px-5 sm:py-4">
         <ol className="grid grid-cols-5 gap-1.5">
           {STAGES.map((label, index) => {
             const reached = !lost && index < stage;
@@ -193,33 +193,33 @@ export function ProspectDetailPage() {
           })}
         </ol>
         <p className={cn('mt-2 text-sm font-medium', lost ? 'text-rose-700' : won ? 'text-emerald-700' : p.status === 'objection' ? 'text-amber-800' : 'text-zinc-900')}>
-          <span className="sm:hidden">{lost ? '' : `${STAGES[Math.max(stage - 1, 0)]} · `}</span>{stageNote}
+          <span className="sm:hidden">{lost || won ? '' : `${STAGES[Math.max(stage - 1, 0)]} · `}</span>{stageNote}
         </p>
       </section>
 
       {/* Empat angka dalam satu permukaan (pola Ringkasan). */}
       <section aria-label="Ringkasan" className="surface overflow-hidden">
-        <dl className="grid grid-cols-2 gap-px bg-zinc-100 lg:grid-cols-4 [&>div]:bg-white [&>div]:px-5 [&>div]:py-4">
+        <dl className="grid grid-cols-2 gap-px bg-zinc-100 lg:grid-cols-4 [&>div]:bg-white [&>div]:px-4 [&>div]:py-3 sm:[&>div]:px-5 sm:[&>div]:py-4">
           <div>
             <dt className="text-xs font-semibold text-zinc-600">{value.label}</dt>
-            <dd className="mt-1 text-xl font-bold tabular-nums text-zinc-950">{value.amount !== null ? rupiah(value.amount) : '—'}</dd>
+            <dd className="mt-1 text-lg font-bold tabular-nums text-zinc-950 sm:text-xl">{value.amount !== null ? rupiah(value.amount) : '—'}</dd>
             {outdated && <dd className="mt-0.5 text-xs font-medium text-amber-800">Perlu kirim ulang penawaran</dd>}
           </div>
           <div>
             <dt className="text-xs font-semibold text-zinc-600">Jamaah</dt>
-            <dd className="mt-1 text-xl font-bold tabular-nums text-zinc-950">{adults ? `${adults} dewasa` : '—'}</dd>
+            <dd className="mt-1 text-lg font-bold tabular-nums text-zinc-950 sm:text-xl">{adults ? `${adults} dewasa` : '—'}</dd>
             {Number(form.paxInfant) > 0 && <dd className="mt-0.5 text-xs text-zinc-600">+ {form.paxInfant} bayi</dd>}
           </div>
           <div>
             <dt className="text-xs font-semibold text-zinc-600">Berangkat</dt>
-            <dd className="mt-1 text-xl font-bold tabular-nums text-zinc-950">
+            <dd className="mt-1 text-lg font-bold tabular-nums text-zinc-950 sm:text-xl">
               {departure ? dateText(departure, true) : form.targetMonth ? targetMonthLabel(form.targetMonth) ?? '—' : '—'}
             </dd>
             {!departure && form.targetMonth && <dd className="mt-0.5 text-xs text-zinc-600">Target, paket belum dipilih</dd>}
           </div>
           <div>
             <dt className="text-xs font-semibold text-zinc-600">Follow-up</dt>
-            <dd className={cn('mt-1 text-xl font-bold tabular-nums', followupLate ? 'text-rose-700' : 'text-zinc-950')}>{showFollowup ? dateText(followup, true) : '—'}</dd>
+            <dd className={cn('mt-1 text-lg font-bold tabular-nums sm:text-xl', followupLate ? 'text-rose-700' : 'text-zinc-950')}>{showFollowup ? dateText(followup, true) : '—'}</dd>
             {followupLate && <dd className="mt-0.5 text-xs font-medium text-rose-700">Terlambat</dd>}
           </div>
         </dl>
