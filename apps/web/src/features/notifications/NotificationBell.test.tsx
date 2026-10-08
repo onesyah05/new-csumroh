@@ -52,36 +52,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('Filter brand di lonceng', () => {
-  it('tampil bila notifikasi datang dari lebih dari satu brand; memilih brand memfilter daftar', async () => {
-    const base = vi.mocked(fetch).getMockImplementation()!;
-    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes('/notifications/brands')) {
-        return json([{ id: 1, name: 'Hana Tours & Travel', code: 'HANA', actionable: 1 }, { id: 2, name: 'Nava Tours & Travel', code: 'NAVA', actionable: 0 }]);
-      }
-      return base(input, init);
-    });
-    renderBell();
-    fireEvent.click(await screen.findByRole('button', { name: /^Notifikasi, 1/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'NAVA' }));
-    await waitFor(() => {
-      const calls = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
-      expect(calls.some((u) => u.includes('/notifications?filter=action') && u.includes('brandId=2'))).toBe(true);
-    });
-    expect(screen.getByRole('button', { name: 'Perlu tindakan' })).toBeTruthy();
-  });
-
-  it('satu brand saja: filter tidak ditampilkan', async () => {
-    const base = vi.mocked(fetch).getMockImplementation()!;
-    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
-      String(input).includes('/notifications/brands') ? json([{ id: 1, name: 'Hana', code: 'HANA', actionable: 1 }]) : base(input, init));
-    renderBell();
-    fireEvent.click(await screen.findByRole('button', { name: /^Notifikasi, 1/ }));
-    await screen.findByRole('dialog', { name: 'Notifikasi' });
-    expect(screen.queryByRole('group', { name: 'Filter brand' })).toBeNull();
-  });
-});
-
 describe('Lonceng notifikasi', () => {
   it('menampilkan jumlah belum dibaca dan mendesak pada label tombol', async () => {
     renderBell();
@@ -92,7 +62,6 @@ describe('Lonceng notifikasi', () => {
     renderBell();
     fireEvent.click(await screen.findByRole('button', { name: /^Notifikasi, 1/ }));
     expect(await screen.findByRole('dialog', { name: 'Notifikasi' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Perlu tindakan (1)' }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(await screen.findByText('Ibu Aisyah diambil alih Rahma'));
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/prospects/7'));
     const calls = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
@@ -144,11 +113,10 @@ describe('Lencana dan panel (puluhan notifikasi)', () => {
     expect(bell.textContent).not.toContain('12');
   });
 
-  it('tab Semua dikelompokkan per hari; tombol cepat menandai dibaca tanpa membuka halaman', async () => {
+  it('daftar dikelompokkan per hari; tombol cepat menandai dibaca tanpa membuka halaman', async () => {
     counts = { actionable: 0, urgent: 0, info: 1 };
     renderBell();
     fireEvent.click(await screen.findByRole('button', { name: /^Notifikasi/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Semua' }));
     expect(await screen.findByRole('region', { name: 'Hari ini' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Tandai dibaca: Ibu Aisyah diambil alih Rahma' }));
     await waitFor(() => {
@@ -157,13 +125,6 @@ describe('Lencana dan panel (puluhan notifikasi)', () => {
     });
     expect(screen.getByTestId('where').textContent).toBe('/');
     expect(screen.getByRole('dialog', { name: 'Notifikasi' })).toBeTruthy();
-  });
-
-  it('tab Perlu tindakan dikelompokkan Mendesak dulu', async () => {
-    renderBell();
-    fireEvent.click(await screen.findByRole('button', { name: /^Notifikasi, 1/ }));
-    const groups = await screen.findAllByRole('region');
-    expect(groups[0]?.getAttribute('aria-label')).toBe('Mendesak');
   });
 
   it('openNotificationPanel membuka panel lonceng yang terlihat', async () => {
