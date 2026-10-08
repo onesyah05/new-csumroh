@@ -258,7 +258,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
     mutationFn: (logId) => api.post(`/meta/logs/${logId}/resend`),
     onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: ['meta-logs', currentBrandId] });
-      showToast(res.status === 'sent' ? 'Event berhasil diterima Meta.' : res.status === 'skipped' ? 'Event tidak dikirim: sudah terkirim atau lebih dari 7 hari.' : 'Meta masih menolak event ini. Lihat Detail.');
+      showToast(res.status === 'sent' ? 'Event berhasil diterima Meta.' : res.status === 'skipped' ? 'Event tidak dikirim: sudah terkirim atau lebih dari 7 hari.' : 'Meta masih menolak event ini.');
     },
     onError: (error) => showToast(error.message),
   });

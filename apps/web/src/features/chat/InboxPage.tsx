@@ -446,7 +446,7 @@ export function InboxPage() {
       const accNumber = activeBrand?.bankAccountNumber?.trim();
       const accHolder = activeBrand?.bankAccountHolder?.trim();
       if (!bank || !accNumber || accNumber === '-' || !accHolder) {
-        showToast('Rekening resmi brand belum lengkap. Minta Admin melengkapi di menu Brand.');
+        showToast('Rekening resmi brand belum lengkap.');
         return;
       }
       text = `Pembayaran ${travelName} hanya melalui rekening resmi berikut:\n\n${bank} a/n ${accHolder}\n*${accNumber}*\n\nSetelah transfer, kirim foto bukti transfernya di chat ini untuk diverifikasi tim Finance.`;
@@ -460,7 +460,7 @@ export function InboxPage() {
     } else if (type === 'ppiu') {
       const ppiu = activeBrand?.ppiuNumber?.trim();
       if (!ppiu) {
-        showToast('Nomor PPIU brand belum diisi. Minta Admin melengkapi di menu Brand.');
+        showToast('Nomor PPIU brand belum diisi.');
         return;
       }
       text = `${travelName} adalah penyelenggara umroh berizin Kemenag (PPIU) dengan nomor izin *${ppiu}*.\n\nNomor ini bisa dicek di situs resmi Kementerian Agama.`;
@@ -469,7 +469,7 @@ export function InboxPage() {
       const address = activeBrand?.address?.trim();
       const maps = activeBrand?.gmapsUrl?.trim();
       if (!address && !maps) {
-        showToast('Alamat kantor brand belum diisi. Minta Admin melengkapi di menu Brand.');
+        showToast('Alamat kantor brand belum diisi.');
         return;
       }
       text = waMessage(
@@ -680,7 +680,7 @@ export function InboxPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['conversations', brandId] });
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
-      showToast('Anda sekarang PIC percakapan ini. Segera balas jamaah.');
+      showToast('Anda sekarang PIC percakapan ini.');
     },
     onError: (err: any) => showToast(err?.message || 'Gagal mengambil alih percakapan'),
   });
@@ -830,7 +830,7 @@ export function InboxPage() {
     if (!canSend) return;
     // Lampiran masih disiapkan (kompres/unduh): kirim sekarang hanya mengirim teksnya tanpa gambar.
     if (isCompressing) {
-      showToast('Gambar masih disiapkan. Coba lagi sebentar.');
+      showToast('Gambar masih disiapkan.');
       return;
     }
     if (mediaPreview) {
@@ -847,11 +847,11 @@ export function InboxPage() {
     if (!text) return;
     // Draf tersimpan di sessionStorage, lampiran tidak: setelah muat ulang, caption flyer bisa tertinggal tanpa gambar.
     if (text.includes(FLYER_CAPTION_CLOSING)) {
-      showToast('Caption flyer belum ada gambarnya. Pilih flyer lagi atau hapus caption.');
+      showToast('Caption flyer belum ada gambarnya.');
       return;
     }
     if (unresolvedScript(text)) {
-      showToast('Draft masih memuat tanda {{…}}. Lengkapi dulu sebelum kirim.');
+      showToast('Draft masih memuat tanda {{…}}.');
       return;
     }
     send.mutate({ text, prospectId: selectedId, quoted: replyingTo, clearDraft: setMessage });

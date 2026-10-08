@@ -97,7 +97,7 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
         type: 'reply.takeover_open', priority: 'action', brandId,
         userIds: others,
         title: `Jamaah menunggu lebih dari ${SLA.takeoverMinutes} menit: ${c.name}`,
-        body: `PIC ${picName} belum membalas. Anda boleh mengambil alih.`,
+        body: `PIC ${picName} belum membalas, Anda boleh mengambil alih.`,
         link: '/pipeline?quick=reply', entity: { type: 'brand', id: brandId },
         activeKey: `reply.takeover_open:b${brandId}`,
         dedupeKey: `reply.takeover_open:p${c.id}:${since}`,
@@ -116,7 +116,7 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
     activeKey: `reply.escalation:b${brandId}`, count: escalated.length,
     // Nama brand tampil sebagai label di lonceng (dan ada filter brand), jadi judul cukup jumlahnya.
     title: `${escalated.length} jamaah belum dibalas lebih dari ${SLA.escalationMinutes} menit`,
-    body: `${escalated.slice(0, 3).join(', ')}${escalated.length > 3 ? `, dan ${escalated.length - 3} lainnya` : ''}. Tugaskan ulang atau hubungi CS.`,
+    body: `${escalated.slice(0, 3).join(', ')}${escalated.length > 3 ? `, dan ${escalated.length - 3} lainnya` : ''}.`,
     link: '/pipeline?quick=reply',
   });
   // Lead tanpa PIC: yang masih terbuka, bukan spam, dan dari device yang sedang tersambung (daftar Inbox).
@@ -127,7 +127,7 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
     title: `${unassigned.length} lead belum punya PIC`,
     body: (await csOfBrand(brandId)).length
       ? 'CS bisa mengklaim sendiri dari antrean "Belum ada PIC" di Pipeline.'
-      : `${brand} belum punya CS aktif. Tambahkan CS di menu Staf agar lead bisa diklaim.`,
+      : `${brand} belum punya CS aktif.`,
     link: '/pipeline?pic=none',
   });
 }
@@ -182,7 +182,7 @@ export async function gatewayHealthJob(now = new Date(), probe = defaultProbe) {
   await notify({
     type: 'system.gateway_down', priority: 'urgent', userIds: await superadmins(),
     title: 'Gateway WhatsApp tidak merespons',
-    body: 'Semua brand tidak bisa kirim atau terima WhatsApp. Periksa wa-gateway.',
+    body: 'Semua brand tidak bisa kirim atau terima WhatsApp.',
     link: '/brands', entity: { type: 'system', id: 0 }, activeKey: 'system.gateway_down',
   });
 }
@@ -228,7 +228,7 @@ export async function proofStaleJob(now = new Date()) {
       type: 'payment.proof_stale', priority: 'urgent', brandId: p.brandId,
       userIds: escalate ? [...await financeUsers(), ...await adminsOf(p.brandId)] : await financeUsers(),
       title: `Bukti transfer ${p.name} menunggu ${hours} jam`,
-      body: `${p.brand.name} · ${escalate ? 'lewat 1 hari' : `lewat ${SLA.proofStaleHours} jam`}. Verifikasi atau tolak.`,
+      body: `${p.brand.name} · ${escalate ? 'lewat 1 hari' : `lewat ${SLA.proofStaleHours} jam`}.`,
       link: '/verifikasi', entity: { type: 'prospect', id: p.id },
       dedupeKey: `payment.proof_stale:p${p.id}:${submittedAt.getTime()}:${escalate ? 2 : 1}`,
     });
@@ -301,7 +301,7 @@ export async function morningDigestJob(now = new Date()) {
       type: 'invoice.overdue', priority: 'action', brandId: inv.brandId,
       userIds: await picOf({ userId: inv.userId, brandId: inv.brandId }),
       title: `Invoice ${inv.name} lewat jatuh tempo`,
-      body: `${inv.invoiceNumber ?? 'Invoice'} belum dibayar. Ingatkan jamaah atau perbarui jatuh tempo.`,
+      body: `${inv.invoiceNumber ?? 'Invoice'} belum dibayar.`,
       link: inboxLink(inv), entity: { type: 'prospect', id: inv.id },
       dedupeKey: `invoice.overdue:p${inv.id}:${inv.invoiceDueAt!.getTime()}`,
     });
@@ -317,7 +317,7 @@ export async function morningDigestJob(now = new Date()) {
     await notify({
       type: 'brand.no_active_cs', priority: 'action', brandId: brand.id, userIds: await adminsOf(brand.id),
       title: `${brand.name} tidak punya CS aktif`,
-      body: 'Lead baru tidak punya PIC. Tambahkan atau aktifkan CS di menu Staff.',
+      body: 'Lead baru tidak punya PIC, tambahkan CS di menu Staff.',
       link: '/staff', entity: { type: 'brand', id: brand.id },
       dedupeKey: `brand.no_active_cs:b${brand.id}:${today}`,
     });
@@ -347,7 +347,7 @@ export async function eveningDigestJob(now = new Date()) {
     await notify({
       type: 'pic.taken_over_digest', priority: 'info', brandId, userIds: await adminsOf(brandId),
       title: `${total} prospek diambil alih dalam 24 jam terakhir`,
-      body: `Jamaah belum dibalas 15 menit oleh PIC. ${detail}`,
+      body: detail,
       link: '/staff', entity: { type: 'brand', id: brandId },
       dedupeKey: `pic.taken_over_digest:b${brandId}:${today}`,
     });
