@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { businessDateKey, canonicalStatus, isLostStatus, isWonStatus, objectionLabel } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
-import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
+import { authGuard, requireRole, scopedBrandId, visibleBrandIds } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { toCsv } from '../../utils/csv.js';
 import { fetchAdSpend } from './ad-spend.js';
@@ -41,7 +41,14 @@ function parseRange(req: Request) {
   const from = new Date(`${input.from}T00:00:00.000+07:00`);
   const to = new Date(`${input.to}T23:59:59.999+07:00`);
   const brandId = input.brandId === 'all' ? undefined : scopedBrandId(req, Number(input.brandId));
-  return { ...input, range: { gte: from, lte: to }, brandId, brandWhere: brandId ? { brandId } : {} };
+  // "Semua brand" bagi admin yang punya brand = semua brand tugasnya saja.
+  const visible = visibleBrandIds(req.user!);
+  const brandFilter = brandId ?? (visible ? { in: visible } : undefined);
+  return {
+    ...input, range: { gte: from, lte: to }, brandId, visible, brandFilter,
+    brandWhere: brandFilter ? { brandId: brandFilter } : {},
+    brandListWhere: brandFilter ? { id: brandFilter } : {},
+  };
 }
 
 type Table = { header: string[]; rows: unknown[][] };
@@ -247,9 +254,9 @@ reportsRouter.get('/deals', asyncHandler(async (req, res) => {
 
 // ── 2. Kinerja CS ────────────────────────────────────────────────────────────────────────────────────────
 reportsRouter.get('/cs', asyncHandler(async (req, res) => {
-  const { format, range, brandId, brandWhere } = parseRange(req);
+  const { format, range, brandWhere, brandFilter } = parseRange(req);
   const csUsers = await prisma.user.findMany({
-    where: { role: 'cs', ...(brandId ? { OR: [{ brandId }, { userBrands: { some: { brandId } } }] } : {}) },
+    where: { role: 'cs', ...(brandFilter ? { OR: [{ brandId: brandFilter }, { userBrands: { some: { brandId: brandFilter } } }] } : {}) },
     select: { id: true, name: true, isActive: true },
     orderBy: { name: 'asc' },
   });
@@ -260,7 +267,7 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
     verifiedPaymentsInRange(brandWhere, range),
     prisma.prospect.groupBy({ by: ['userId'], where: { ...brandWhere, userId: { in: ids }, ...notSpam, status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] } }, _count: true }),
     prisma.prospect.groupBy({ by: ['userId'], where: { ...brandWhere, userId: { in: ids }, ...notSpam, status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] }, nextFollowupDate: { lt: today } }, _count: true }),
-    prisma.prospectLog.findMany({ where: { actionType: 'pic_taken_over', createdAt: range, ...(brandId ? { prospect: { brandId } } : {}) }, select: { title: true } }),
+    prisma.prospectLog.findMany({ where: { actionType: 'pic_taken_over', createdAt: range, ...(brandFilter ? { prospect: { brandId: brandFilter } } : {}) }, select: { title: true } }),
   ]);
   const deals = await firstDeals(payments, range.gte);
 
@@ -328,8 +335,8 @@ reportsRouter.get('/sources', asyncHandler(async (req, res) => {
 
 // ── 4. Alasan batal & keberatan ─────────────────────────────────────────────────────────────────────────
 reportsRouter.get('/lost', asyncHandler(async (req, res) => {
-  const { format, range, brandId } = parseRange(req);
-  const prospectScope = brandId ? { prospect: { brandId } } : {};
+  const { format, range, brandFilter } = parseRange(req);
+  const prospectScope = brandFilter ? { prospect: { brandId: brandFilter } } : {};
   const [lostLogs, objectionLogs] = await Promise.all([
     prisma.prospectLog.findMany({
       where: { actionType: 'status_changed', title: { in: ['Status menjadi lose', 'Status menjadi closed_lost'] }, createdAt: range, ...prospectScope },
@@ -420,10 +427,10 @@ reportsRouter.get('/payments', asyncHandler(async (req, res) => {
  * nilai purchase untuk ROAS = nilai deal (harga paket atau harga custom yang disepakati), bukan nominal DP/Lunas.
  */
 reportsRouter.get('/ads', asyncHandler(async (req, res) => {
-  const { format, from, to, range, brandId, brandWhere } = parseRange(req);
+  const { format, from, to, range, brandId, brandWhere, brandListWhere } = parseRange(req);
   const [brands, leads, deals] = await Promise.all([
     prisma.brand.findMany({
-      where: brandId ? { id: brandId } : {},
+      where: brandListWhere,
       select: { id: true, name: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true },
       orderBy: { name: 'asc' },
     }),
@@ -515,9 +522,9 @@ export type CreativeRow = {
 };
 
 reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
-  const { format, from, to, range, brandId, brandWhere } = parseRange(req);
+  const { format, from, to, range, brandId, brandWhere, brandListWhere } = parseRange(req);
   const brands = await prisma.brand.findMany({
-    where: brandId ? { id: brandId } : {},
+    where: brandListWhere,
     select: { id: true, name: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true },
     orderBy: { name: 'asc' },
   });
@@ -602,7 +609,7 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
  * tidak teridentifikasi).
  */
 reportsRouter.get('/creatives/:adId/prospects', asyncHandler(async (req, res) => {
-  const { range, brandId } = parseRange(req);
+  const { range, brandId, brandListWhere } = parseRange(req);
   const adId = z.string().regex(/^(\d{5,30}|tanpa-id)$/, 'ID iklan tidak valid.').parse(req.params.adId);
   const isUnknown = adId === UNKNOWN_AD;
   const query = z.object({
@@ -611,7 +618,7 @@ reportsRouter.get('/creatives/:adId/prospects', asyncHandler(async (req, res) =>
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(10).max(100).default(25),
   }).parse(req.query);
-  const brands = await prisma.brand.findMany({ where: brandId ? { id: brandId } : {}, select: { id: true } });
+  const brands = await prisma.brand.findMany({ where: brandListWhere, select: { id: true } });
   const matches = (await prospectAdIds(brands.map((b) => b.id), range)).filter((row) => (isUnknown ? !row.ad_id : row.ad_id === adId));
   const ids = matches.map((row) => Number(row.prospect_id));
   const leadCount = matches.filter((row) => !Number(row.spam)).length;

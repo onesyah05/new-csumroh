@@ -20,7 +20,7 @@ import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { canEditProspect, readOnlyNote } from '../prospects/PicDialog';
-import { assignedBrandIds, isHoldingRole } from '../../lib/scope';
+import { assignedBrandIds, isHoldingUser } from '../../lib/scope';
 import { QualificationFields } from '../prospects/QualificationFields';
 
 const rupiah = (value: unknown) =>
@@ -150,7 +150,7 @@ export function ProspectDetailPage() {
   const source = p.leadSource === 'meta_ads' && adLabel ? `Meta Ads · ${adLabel}` : SOURCE_LABEL[p.leadSource] ?? p.leadSource;
   const phone = p.phone ? (String(p.phone).startsWith('+') ? p.phone : `+${p.phone}`) : 'Nomor belum ada';
   const inboxLink = `/inbox?brandId=${p.brandId}&prospectId=${p.id}${p.phone ? `&phone=${encodeURIComponent(p.phone)}` : ''}${p.remoteJid ? `&jid=${encodeURIComponent(p.remoteJid)}` : ''}`;
-  const multiBrand = isHoldingRole(user?.role) || assignedBrandIds(user).length > 1;
+  const multiBrand = isHoldingUser(user) || assignedBrandIds(user).length > 1;
   const back = () => ((window.history.state as { idx?: number } | null)?.idx ? navigate(-1) : navigate('/pipeline'));
 
   return (

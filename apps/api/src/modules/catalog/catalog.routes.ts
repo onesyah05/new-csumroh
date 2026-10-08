@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import sharp from 'sharp';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
-import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
+import { assignedBrandIds, authGuard, canAccessBrand, isHoldingWide as holdingWide, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { revokeUserSessions } from '../auth/sessions.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { FLYER_URL_PATTERN, LOGO_URL_PATTERN } from '../../utils/safe-path.js';
@@ -30,16 +30,9 @@ export const catalogRouter = Router();
 catalogRouter.use(authGuard);
 
 catalogRouter.get('/brands', asyncHandler(async (req, res) => {
-  const isHoldingWide = req.user!.role === 'superadmin' || req.user!.role === 'admin' || req.user!.role === 'finance' || req.user!.role === 'designer';
-  const allowedBrandIds: number[] = [];
-  if (!isHoldingWide) {
-    if (req.user!.brandId) allowedBrandIds.push(req.user!.brandId);
-    if (req.user!.userBrands && Array.isArray(req.user!.userBrands)) {
-      for (const ub of req.user!.userBrands) {
-        if (ub.brand?.id) allowedBrandIds.push(ub.brand.id);
-      }
-    }
-  }
+  // Admin yang punya brand hanya melihat brand tugasnya (bukan holding-wide).
+  const isHoldingWide = holdingWide(req.user!) || req.user!.role === 'designer';
+  const allowedBrandIds: number[] = isHoldingWide ? [] : assignedBrandIds(req.user!);
 
   // Designer hanya perlu nama brand dan template itinerary: tanpa sesi WhatsApp, nomor, atau hitungan internal.
   if (req.user!.role === 'designer') {
@@ -62,9 +55,7 @@ catalogRouter.get('/brands', asyncHandler(async (req, res) => {
 
 catalogRouter.get('/brands/:id', asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  const isHoldingWide = req.user!.role === 'superadmin' || req.user!.role === 'admin' || req.user!.role === 'finance';
-  const hasAccess = isHoldingWide || req.user!.brandId === id || (req.user!.userBrands?.some((ub) => ub.brand?.id === id));
-  if (!hasAccess) {
+  if (!canAccessBrand(req.user!, id)) {
     throw new HttpError(403, 'Akses brand dibatasi.');
   }
   const brand = await prisma.brand.findUnique({
@@ -692,7 +683,7 @@ catalogRouter.get('/users', requireRole('superadmin', 'admin'), asyncHandler(asy
   const requested = req.query.brandId ? Number(req.query.brandId) : undefined;
   const brandId = req.user!.role === 'superadmin'
     ? requested
-    : requested ? scopedBrandId(req, requested) : req.user!.brandId ?? undefined;
+    : requested ? scopedBrandId(req, requested) : assignedBrandIds(req.user!)[0];
   const data = await prisma.user.findMany({
     where: brandId
       ? {
@@ -778,6 +769,28 @@ catalogRouter.post('/users', requireRole('superadmin', 'admin'), asyncHandler(as
   res.status(201).json({ success: true, data });
 }));
 
+/**
+ * Admin yang punya brand hanya mengelola CS yang SELURUH brand-nya ada di antara brand tugasnya. CS multi-brand yang juga
+ * memegang brand lain tidak boleh diubah, dinonaktifkan, atau dihapus oleh Admin satu brand (itu urusan Superadmin).
+ */
+function assertAdminManagesCs(
+  actor: { role: string; brandId: number | null; userBrands?: { brand?: { id: number } | null }[] },
+  target: { role: string; brandId: number | null; userBrands?: { brandId: number }[] },
+  message: string,
+) {
+  if (actor.role !== 'admin') return;
+  const mine = assignedBrandIds(actor);
+  const theirs = [...new Set([target.brandId, ...(target.userBrands ?? []).map((ub) => ub.brandId)].filter((id): id is number => Boolean(id)))];
+  if (target.role !== 'cs' || !mine.length || !theirs.length || theirs.some((id) => !mine.includes(id))) throw new HttpError(403, message);
+}
+
+/** Brand yang diberikan Admin harus bagian dari brand tugasnya sendiri (tidak bisa memberi akses ke brand lain). */
+function assertAdminGrantsOwnBrands(actor: { role: string; brandId: number | null; userBrands?: { brand?: { id: number } | null }[] }, brandIds: number[]) {
+  if (actor.role !== 'admin') return;
+  const mine = assignedBrandIds(actor);
+  if (brandIds.some((id) => !mine.includes(id))) throw new HttpError(403, 'Admin hanya dapat memberi akses ke brand yang ditugaskan kepadanya.');
+}
+
 // Assign/update brands for a CS user
 catalogRouter.put('/users/:id/brands', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
@@ -785,12 +798,11 @@ catalogRouter.put('/users/:id/brands', requireRole('superadmin', 'admin'), async
     brandIds: z.array(z.number().int().positive()),
   }).parse(req.body);
 
-  const target = await prisma.user.findUnique({ where: { id } });
+  const target = await prisma.user.findUnique({ where: { id }, include: { userBrands: true } });
   if (!target) throw new HttpError(404, 'User tidak ditemukan.');
   if (target.role === 'superadmin') throw new HttpError(400, 'Superadmin tidak terikat pada brand tertentu.');
-  if (req.user!.role === 'admin' && (target.brandId !== req.user!.brandId || target.role !== 'cs')) {
-    throw new HttpError(403, 'Admin hanya dapat mengelola CS pada brand sendiri.');
-  }
+  assertAdminManagesCs(req.user!, target, 'Admin hanya dapat mengelola CS yang seluruh brand-nya adalah brand tugasnya.');
+  assertAdminGrantsOwnBrands(req.user!, input.brandIds);
 
   const uniqueBrandIds = [...new Set(input.brandIds)];
 
@@ -834,11 +846,9 @@ async function assertNotLockingOut(actorId: number, target: { id: number; role: 
 }
 
 catalogRouter.patch('/users/:id/toggle', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
-  const target = await prisma.user.findUnique({ where: { id: Number(req.params.id) } });
+  const target = await prisma.user.findUnique({ where: { id: Number(req.params.id) }, include: { userBrands: true } });
   if (!target) throw new HttpError(404, 'User tidak ditemukan.');
-  if (req.user!.role === 'admin' && (target.brandId !== req.user!.brandId || target.role !== 'cs')) {
-    throw new HttpError(403, 'Admin hanya dapat mengelola CS pada brand sendiri.');
-  }
+  assertAdminManagesCs(req.user!, target, 'Admin hanya dapat mengelola CS yang seluruh brand-nya adalah brand tugasnya.');
   // Menonaktifkan akun sendiri atau Superadmin terakhir mengunci semua orang dari pengelolaan sistem.
   if (target.isActive) await assertNotLockingOut(req.user!.id, target);
   const data = await prisma.user.update({
@@ -873,9 +883,8 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
   if (!target) throw new HttpError(404, 'User tidak ditemukan.');
 
   if (req.user!.role === 'admin') {
-    if (target.brandId !== req.user!.brandId || target.role !== 'cs') {
-      throw new HttpError(403, 'Admin hanya dapat mengelola CS pada brand sendiri.');
-    }
+    assertAdminManagesCs(req.user!, target, 'Admin hanya dapat mengelola CS yang seluruh brand-nya adalah brand tugasnya.');
+    assertAdminGrantsOwnBrands(req.user!, [...(input.brandIds ?? []), ...(input.brandId ? [input.brandId] : [])]);
     if (input.role && input.role !== 'cs') {
       throw new HttpError(403, 'Admin tidak dapat mengubah role menjadi Admin.');
     }
@@ -984,7 +993,7 @@ catalogRouter.patch('/users/:id', requireRole('superadmin', 'admin'), asyncHandl
 
 catalogRouter.delete('/users/:id', requireRole('superadmin', 'admin'), asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  const target = await prisma.user.findUnique({ where: { id } });
+  const target = await prisma.user.findUnique({ where: { id }, include: { userBrands: true } });
   if (!target) throw new HttpError(404, 'User tidak ditemukan.');
 
   if (req.user!.id === id) {
@@ -995,9 +1004,7 @@ catalogRouter.delete('/users/:id', requireRole('superadmin', 'admin'), asyncHand
     throw new HttpError(403, 'Tidak dapat menghapus akun Superadmin.');
   }
 
-  if (req.user!.role === 'admin' && (target.brandId !== req.user!.brandId || target.role !== 'cs')) {
-    throw new HttpError(403, 'Admin hanya dapat menghapus akun CS pada brand sendiri.');
-  }
+  assertAdminManagesCs(req.user!, target, 'Admin hanya dapat menghapus akun CS yang seluruh brand-nya adalah brand tugasnya.');
 
   // Dicatat sebelum hapus: relasi SetNull akan mengosongkan PIC tanpa jejak di riwayat prospek.
   const releasedProspects = await releaseProspectsOf(id, { actor: req.user!, reason: `akun ${target.name} dihapus` });

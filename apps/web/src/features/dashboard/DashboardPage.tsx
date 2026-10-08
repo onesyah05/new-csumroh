@@ -5,7 +5,7 @@ import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
-import { isHoldingRole, useBrandScope } from '../../lib/scope';
+import { isHoldingUser, useBrandScope } from '../../lib/scope';
 import { Select } from '../../components/ui/select';
 import { useAuth } from '../../app/auth';
 import { TodayTasks } from './TodayTasks';
@@ -104,7 +104,7 @@ export function DashboardPage() {
   const mobile = useMobile();
   const { user } = useAuth();
   const { brandId, query } = useBrandScope();
-  const isHolding = isHoldingRole(user?.role);
+  const isHolding = isHoldingUser(user);
   const isCs = user?.role === 'cs';
   const isManager = user?.role === 'admin' || user?.role === 'superadmin';
   const [holdingScope, setHoldingScope] = useState('all');

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { businessDateKey, wonStatuses } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { visibleProspectWhere } from '../chat/device-scope.js';
-import { authGuard, scopedBrandId } from '../../middleware/auth.js';
+import { authGuard, scopedBrandId, visibleBrandIds } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/http.js';
 import { buildSummary, departures, parsePeriod, periodRange } from './summary.service.js';
 import { tasksForCs, tasksForFinance, tasksForManager } from './tasks.service.js';
@@ -24,7 +24,9 @@ dashboardRouter.get('/', asyncHandler(async (req, res) => {
   const isCs = role === 'cs';
   const range = periodRange(parsePeriod(req.query.period));
 
-  const allBrands = await prisma.brand.findMany({ select: { id: true, name: true, logoUrl: true }, orderBy: { id: 'asc' } });
+  // Admin yang punya brand hanya melihat brand tugasnya, juga pada tampilan "semua brand".
+  const visible = visibleBrandIds(req.user!);
+  const allBrands = await prisma.brand.findMany({ where: visible ? { id: { in: visible } } : {}, select: { id: true, name: true, logoUrl: true }, orderBy: { id: 'asc' } });
   const brands = currentBrandId ? allBrands.filter((b) => b.id === currentBrandId) : allBrands;
   const brandIds = brands.map((b) => b.id);
   const ownerFilter = isCs ? { userId: req.user!.id } : {};
@@ -93,8 +95,9 @@ dashboardRouter.get('/tasks', asyncHandler(async (req, res) => {
   const role = req.user!.role;
   const raw = req.query.brandId;
   const isHoldingRole = role === 'superadmin' || role === 'admin' || role === 'finance';
+  const visible = visibleBrandIds(req.user!);
   const brandIds = isHoldingRole && (!raw || raw === 'all')
-    ? (await prisma.brand.findMany({ select: { id: true } })).map((b) => b.id)
+    ? (await prisma.brand.findMany({ where: visible ? { id: { in: visible } } : {}, select: { id: true } })).map((b) => b.id)
     : [scopedBrandId(req, raw && raw !== 'all' ? Number(raw) : undefined)];
   const data = role === 'cs'
     ? await tasksForCs(req.user!, brandIds)

@@ -52,7 +52,7 @@ import { Badge, statusLabels } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { useProfileAutosave } from './profileAutosave';
-import { assignedBrandIds, isHoldingRole } from '../../lib/scope';
+import { assignedBrandIds, isHoldingUser } from '../../lib/scope';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { useWhatsAppAvatars } from '../../lib/avatars';
 import { formatWaPackageSummary, formatWaPackageItinerary } from '../packages/packageQuote';
@@ -260,7 +260,7 @@ export function ChatProspectProfile({
   const isPic = Boolean(p?.userId && p.userId === user?.id);
   const isUnassigned = !p?.userId;
   const lost = p.status === 'lose' || p.status === 'closed_lost';
-  const multiBrand = isHoldingRole(user?.role) || assignedBrandIds(user).length > 1;
+  const multiBrand = isHoldingUser(user) || assignedBrandIds(user).length > 1;
   const today = businessDateKey();
   const followup = form.nextFollowupDate || null;
   const followupLate = Boolean(followup && followup < today);
