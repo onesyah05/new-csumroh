@@ -24,10 +24,10 @@ type WhatsAppSession = {
 };
 
 const statusCopy: Record<WhatsAppStatus, { label: string; description: string }> = {
-  disconnected: { label: 'Belum terhubung', description: 'Belum ada perangkat WhatsApp aktif untuk brand ini.' },
-  connecting: { label: 'Menyiapkan koneksi', description: 'Gateway sedang membuat sesi perangkat baru ke WhatsApp server.' },
-  qr_ready: { label: 'Menunggu scan QR', description: 'Scan kode menggunakan aplikasi WhatsApp pada ponsel biro Anda.' },
-  connected: { label: 'Terhubung', description: 'Sesi WhatsApp aktif. Pesan brand siap diterima dan dikirim melalui shared inbox.' },
+  disconnected: { label: 'Belum terhubung', description: 'Belum ada perangkat aktif.' },
+  connecting: { label: 'Menyiapkan koneksi', description: 'Menyiapkan sesi.' },
+  qr_ready: { label: 'Menunggu scan QR', description: 'Scan QR dengan WhatsApp biro.' },
+  connected: { label: 'Terhubung', description: 'Sesi aktif.' },
 };
 
 const QR_TTL_SECONDS = 25;
@@ -103,12 +103,9 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
       <section className="surface overflow-hidden">
-        <div className="flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center justify-between gap-3 border-b p-4 sm:flex-row sm:items-start sm:p-5">
           <div>
-            <h3 className="font-display text-base font-bold text-zinc-950">Status Koneksi Gateway</h3>
-            <p className="mt-1 text-xs text-zinc-500">
-              Sesi Baileys terisolasi. Pesan masuk otomatis didistribusikan ke shared inbox tim CS.
-            </p>
+            <h3 className="font-display text-base font-bold text-zinc-950">Status koneksi</h3>
           </div>
           <div className="flex items-center gap-2">
             {!canManage && (
@@ -129,29 +126,29 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
           </div>
         </div>
 
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <InfoCard icon={ShieldCheck} label="Isolasi Sesi" value={`Khusus ${brandName}`} />
-          <InfoCard icon={Smartphone} label="Nomor Terhubung" value={formatPhoneNumber(currentData.phoneNumber)} />
-          <InfoCard icon={Clock3} label="Terakhir Terhubung" value={currentData.lastConnectedAt ? new Date(currentData.lastConnectedAt).toLocaleString('id-ID') : 'Belum pernah'} />
-          <InfoCard icon={QrCode} label="Nama Sesi Gateway" value={currentData.sessionName || `brand_${brandId}`} />
+        <div className="grid grid-cols-2 gap-3 p-4 sm:gap-4 sm:p-5">
+          <div className="hidden sm:block"><InfoCard icon={ShieldCheck} label="Isolasi Sesi" value={`Khusus ${brandName}`} /></div>
+          <InfoCard icon={Smartphone} label="Nomor" value={formatPhoneNumber(currentData.phoneNumber)} />
+          <InfoCard icon={Clock3} label="Terakhir aktif" value={currentData.lastConnectedAt ? new Date(currentData.lastConnectedAt).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Belum pernah'} />
+          <div className="hidden sm:block"><InfoCard icon={QrCode} label="Nama Sesi Gateway" value={currentData.sessionName || `brand_${brandId}`} /></div>
         </div>
 
         {/* Panduan Langkah Scan Terstruktur */}
-        <div className="border-t bg-zinc-50/70 p-5">
+        <div className="border-t bg-zinc-50/70 p-4 sm:p-5">
           <p className="text-sm font-semibold text-zinc-800">{copy.description}</p>
           {currentData.status !== 'connected' && waDisconnectReasonText(currentData.disconnectReason) && (
             <p className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
-              <span className="font-semibold">Penyebab terakhir:</span> {waDisconnectReasonText(currentData.disconnectReason)}
+              {waDisconnectReasonText(currentData.disconnectReason)}
             </p>
           )}
-          <p className="mt-1 text-xs leading-5 text-zinc-500">
+          <p className="mt-1 hidden text-xs leading-5 text-zinc-500 sm:block">
             {canManage
               ? 'Gunakan WhatsApp utama: Perangkat tertaut → Tautkan perangkat → scan QR yang tampil.'
               : 'Pengelolaan perangkat hanya dapat dilakukan oleh Super Admin dan Admin.'}
           </p>
 
           {canManage && currentData.status !== 'connected' && (
-            <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <div className="mt-4 hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:block">
               <p className="text-xs font-bold text-zinc-500">
                 Panduan Menautkan WhatsApp Biro
               </p>
@@ -177,15 +174,14 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
             <div role="alert" className="mt-3.5 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
               <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-600" />
               <div className="flex-1">
-                <strong className="font-semibold">Operasi gateway gagal:</strong>
-                <p className="mt-0.5">{actionError.message}</p>
+                <p>{actionError.message}</p>
               </div>
             </div>
           )}
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             {canManage && currentData.status !== 'connected' && (
-              <Button onClick={() => start.mutate()} disabled={busy}>
+              <Button className="col-span-2 sm:col-auto" onClick={() => start.mutate()} disabled={busy}>
                 {start.isPending ? <RefreshCw size={16} className="animate-spin" /> : <QrCode size={16} />}
                 {currentData.status === 'qr_ready' ? 'Buat QR baru' : 'Hubungkan perangkat'}
               </Button>
@@ -203,7 +199,7 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
       </section>
 
       {/* Bagian Visual QR Code & Status Perangkat */}
-      <section className="surface flex min-h-[380px] flex-col items-center justify-center p-6 text-center">
+      <section className="surface flex min-h-[200px] flex-col items-center justify-center p-5 text-center sm:min-h-[380px] sm:p-6">
         {currentData.status === 'qr_ready' && currentData.qrCode ? (
           <div className="w-full">
             <div className="relative mx-auto max-w-[280px] rounded-3xl border border-zinc-200 bg-white p-4 shadow-lift">
@@ -224,9 +220,7 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
             <div className="mt-4 flex items-center justify-center gap-2 text-sm font-extrabold text-zinc-950">
               <QrCode size={17} />Scan QR sekarang
             </div>
-            <p className="mt-1 text-xs text-zinc-500">
-              QR diperbarui otomatis dalam ~{countdown} detik. Jangan bagikan kode ini kepada pihak luar.
-            </p>
+            <p className="mt-1 text-xs text-zinc-500">Diperbarui dalam {countdown} detik.</p>
           </div>
         ) : currentData.status === 'connected' ? (
           <div className="max-w-xs">
@@ -237,9 +231,7 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
             <p className="mt-2 text-sm font-semibold text-zinc-800">
               {formatPhoneNumber(currentData.phoneNumber)}
             </p>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">
-              WhatsApp terhubung normal. Pesan jamaah masuk akan langsung diteruskan ke shared inbox tim CS.
-            </p>
+
           </div>
         ) : (
           <div className="max-w-xs">
@@ -247,13 +239,9 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
               {currentData.status === 'connecting' ? <RefreshCw size={28} className="animate-spin" /> : <QrCode size={28} />}
             </span>
             <h4 className="mt-4 font-display text-lg font-extrabold text-zinc-950">
-              {currentData.status === 'connecting' ? 'Menghubungkan ke Gateway…' : 'QR Belum Dibuat'}
+              {currentData.status === 'connecting' ? 'Menghubungkan…' : 'Belum ada QR'}
             </h4>
-            <p className="mt-2 text-xs leading-6 text-zinc-500">
-              {currentData.status === 'connecting'
-                ? 'Sedang membuat sesi baru di WhatsApp Gateway. QR akan muncul otomatis dalam beberapa detik.'
-                : 'Klik tombol Hubungkan perangkat untuk menampilkan kode QR otentikasi WhatsApp biro.'}
-            </p>
+
           </div>
         )}
       </section>
@@ -264,7 +252,7 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
         onConfirm={() => disconnect.mutate(undefined, { onSettled: () => setConfirmDisconnectOpen(false) })}
         pending={disconnect.isPending}
         title="Putuskan perangkat WhatsApp?"
-        description={<>Sesi WhatsApp <strong>{brandName}</strong> diputus dari gateway. Pesan jamaah tidak diterima sampai perangkat ditautkan kembali.</>}
+        description={<>Sesi WhatsApp <strong>{brandName}</strong> diputus. Pesan jamaah tidak diterima sampai ditautkan lagi.</>}
         confirmLabel="Putuskan sesi"
       />
     </div>
@@ -273,10 +261,10 @@ export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId
 
 function InfoCard({ icon: Icon, label, value }: { icon: typeof Smartphone; label: string; value: string }) {
   return (
-    <article className="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4">
+    <article className="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-3 sm:p-4">
       <div className="flex items-center gap-2 text-zinc-500">
-        <Icon size={15} />
-        <span className="text-xs font-bold">{label}</span>
+        <Icon size={15} className="shrink-0" />
+        <span className="truncate text-xs font-bold">{label}</span>
       </div>
       <p className="mt-2.5 truncate font-display text-sm font-bold text-zinc-900" title={value}>
         {value}

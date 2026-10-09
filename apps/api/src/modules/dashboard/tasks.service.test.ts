@@ -133,7 +133,7 @@ describe('Angka yang bisa dipercaya (audit Ringkasan R1–R4, R13)', () => {
     ]);
     const t = byKey((await tasksForManager([1, 2], NOW)).tasks);
     // Satu masalah = satu baris: lead Nava tidak dihitung dua kali.
-    expect(t.no_cs).toMatchObject({ count: 2, link: '/staff', tone: 'urgent', hint: 'Nava. Tambahkan CS agar lead bisa dibalas dan dibagikan' });
+    expect(t.no_cs).toMatchObject({ count: 2, link: '/staff', tone: 'urgent', hint: 'Nava belum punya CS aktif' });
     expect(t.unassigned).toMatchObject({ count: 1, link: '/pipeline?pic=none&brandId=1' });
   });
 

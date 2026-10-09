@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   ArrowLeft,
   Building2,
   Check,
+  ChevronRight,
   Copy,
   CreditCard,
   ExternalLink,
   Loader2,
   MapPin,
+  MoreVertical,
   Pencil,
   Phone,
   ShieldCheck,
@@ -36,9 +39,9 @@ import { onRovingKey, rovingTabIndex } from '../custom/roving';
 
 /** Semua pengaturan satu brand di satu tempat (dulu menu Perangkat WhatsApp & Meta CAPI terpisah). */
 const BRAND_TABS = [
-  { id: 'profil', label: 'Profil & rekening' },
-  { id: 'perangkat', label: 'Perangkat WhatsApp' },
-  { id: 'meta', label: 'Meta CAPI' },
+  { id: 'profil', label: 'Profil & rekening', short: 'Profil' },
+  { id: 'perangkat', label: 'Perangkat WhatsApp', short: 'Perangkat' },
+  { id: 'meta', label: 'Meta CAPI', short: 'Meta CAPI' },
 ] as const;
 type BrandTab = (typeof BRAND_TABS)[number]['id'];
 
@@ -143,7 +146,59 @@ export function BrandDetailPage() {
   return (
     <div className="app-page space-y-6 pb-16">
       {/* Header */}
+      {/* Mobile: layar detail ala aplikasi (app bar + kartu profil); desktop memakai PageHeader di bawah. */}
+      <div className="space-y-3 md:hidden">
+
+        <section className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-xs">
+          {canManage && (
+            <div className="absolute right-2 top-2">
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      className="grid h-9 w-9 place-items-center rounded-full text-zinc-900 transition active:bg-zinc-200"
+                      aria-label="Menu brand"
+                    >
+                      <MoreVertical size={20} aria-hidden="true" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content align="end" sideOffset={4} className="z-50 w-52 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl">
+                      <DropdownMenu.Item
+                        onSelect={() => setDeleteConfirmOpen(true)}
+                        className="flex min-h-10 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-rose-700 outline-none data-[highlighted]:bg-rose-50"
+                      >
+                        <Trash2 size={16} aria-hidden="true" />Hapus brand
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+            </div>
+          )}
+          <div className="flex items-center gap-3.5">
+            {brand.logoUrl ? (
+              <img src={resolveMediaUrl(brand.logoUrl)} alt="" className="h-14 w-14 shrink-0 rounded-2xl border border-zinc-200 object-cover" />
+            ) : (
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-zinc-100 text-zinc-500"><Building2 size={24} aria-hidden="true" /></span>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold leading-tight tracking-tight text-zinc-950">{brand.name}</h1>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-700">{brand.code}</span>
+                <StatusBadge status={waConnected ? 'active' : 'neutral'} label={waConnected ? 'WA Terhubung' : 'WA Terputus'} dot />
+              </div>
+            </div>
+          </div>
+          {canManage && (
+            <Button to={`/brands/${brand.id}/edit`} variant="primary" size="lg" icon={<Pencil size={15} />} className="mt-4 w-full">
+              Edit Brand
+            </Button>
+          )}
+        </section>
+      </div>
+
       <PageHeader
+        className="hidden md:flex"
         backUrl="/brands"
         title={
           <span className="flex items-center gap-3">
@@ -169,7 +224,12 @@ export function BrandDetailPage() {
             />
           </>
         }
-        subtitle={`${brand.address || 'Kantor Pusat'} · ${brand.phone || 'Nomor resmi belum diisi'}`}
+        subtitle={
+          <span className="flex flex-col gap-0.5">
+            <span className="line-clamp-2">{brand.address || 'Kantor Pusat'}</span>
+            <span className="tabular-nums">{brand.phone || 'Nomor resmi belum diisi'}</span>
+          </span>
+        }
         actions={
           <>
             {canManage && (
@@ -198,8 +258,16 @@ export function BrandDetailPage() {
         }
       />
 
-      {/* 4 Metric Stats */}
-      <StatGrid cols={4}>
+      {/* Statistik: mobile satu kartu 3 kolom; desktop 4 kartu */}
+      <dl className="grid grid-cols-3 divide-x divide-zinc-100 rounded-2xl border border-zinc-200 bg-white py-3 text-center md:hidden">
+        {([["Staf", brand._count?.users ?? 0], ["Paket", brand._count?.packages ?? 0], ["Prospek", brand._count?.prospects ?? 0]] as const).map(([label, value]) => (
+          <div key={label}>
+            <dd className="text-xl font-bold tabular-nums text-zinc-950">{value}</dd>
+            <dt className="text-xs text-zinc-500">{label}</dt>
+          </div>
+        ))}
+      </dl>
+      <StatGrid cols={4} className="hidden md:grid">
         <StatCard label="Total Staf Tim" value={brand._count?.users ?? 0} note="Akses sales & CS" />
         <StatCard label="Total Paket Umroh" value={brand._count?.packages ?? 0} note="Katalog program" />
         <StatCard label="Total Prospek" value={brand._count?.prospects ?? 0} note="Pipeline prospek" />
@@ -210,7 +278,22 @@ export function BrandDetailPage() {
         />
       </StatGrid>
 
-      <div role="tablist" aria-label="Pengaturan brand" className="scroll-row flex gap-2 border-b border-zinc-200" onKeyDown={(e) => onRovingKey(e, BRAND_TABS.map((t) => t.id), tab, setTab)}>
+      <div role="tablist" aria-label="Pengaturan brand" className="segmented grid grid-cols-3 gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1 md:hidden" onKeyDown={(e) => onRovingKey(e, BRAND_TABS.map((t) => t.id), tab, setTab)}>
+        {BRAND_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            tabIndex={rovingTabIndex(t.id, tab, 'profil')}
+            onClick={() => setTab(t.id)}
+            className={cn('rounded-lg px-2 text-sm font-medium transition', tab === t.id ? 'bg-white font-semibold text-zinc-950 shadow-xs' : 'text-zinc-600')}
+          >
+            {t.short}
+          </button>
+        ))}
+      </div>
+      <div role="tablist" aria-label="Pengaturan brand" className="scroll-row hidden gap-2 border-b border-zinc-200 md:flex" onKeyDown={(e) => onRovingKey(e, BRAND_TABS.map((t) => t.id), tab, setTab)}>
         {BRAND_TABS.map((t) => (
           <button
             key={t.id}
@@ -241,7 +324,100 @@ export function BrandDetailPage() {
 
       {/* 2-Column Responsive Layout */}
       {tab === 'profil' && (
-      <div role="tabpanel" id="brand-panel-profil" aria-labelledby="brand-tab-profil" className="grid gap-6 lg:grid-cols-2 items-start">
+      <>
+      {/* Mobile: daftar berkelompok ala aplikasi (label bagian di luar kartu, baris 48px). */}
+      <div role="tabpanel" aria-labelledby="brand-tab-profil" className="space-y-6 md:hidden">
+        <section aria-label="Kontak dan legalitas" className="space-y-2">
+          <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Kontak & legalitas</h2>
+          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+            <li className="px-4 py-3">
+              <p className="text-xs text-zinc-500">Izin PPIU Kemenag</p>
+              <p className="mt-0.5 font-mono text-sm font-semibold text-zinc-950">{brand.ppiuNumber || 'Belum didaftarkan'}</p>
+            </li>
+            <li className="px-4 py-3">
+              <p className="text-xs text-zinc-500">Telepon</p>
+              {brand.phone ? (
+                <a href={`tel:+${brand.phone.replace(/\D/g, '')}`} className="mt-0.5 block text-sm font-semibold tabular-nums text-zinc-950">{brand.phone}</a>
+              ) : (
+                <p className="mt-0.5 text-sm text-zinc-500">Belum diisi</p>
+              )}
+            </li>
+            <li className="px-4 py-3">
+              <p className="text-xs text-zinc-500">Alamat kantor</p>
+              <p className="mt-0.5 text-sm leading-relaxed text-zinc-900">{brand.address || 'Belum dicantumkan'}</p>
+            </li>
+            {brand.gmapsUrl && /^https?:\/\//i.test(brand.gmapsUrl) && (
+              <li>
+                <a href={brand.gmapsUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-between gap-3 px-4 text-sm font-semibold text-zinc-950 active:bg-zinc-50">
+                  <span className="flex items-center gap-2.5"><MapPin size={18} className="text-zinc-500" aria-hidden="true" />Buka di Google Maps</span>
+                  <ExternalLink size={16} className="text-zinc-400" aria-hidden="true" />
+                </a>
+              </li>
+            )}
+          </ul>
+        </section>
+
+        <section aria-label="Rekening bank" className="space-y-2">
+          <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Rekening bank</h2>
+          <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+            {brand.bankName ? (
+              <>
+                <p className="text-xs text-zinc-500">{brand.bankName}</p>
+                <p className="mt-1 font-mono text-xl font-bold tracking-tight text-zinc-950">{brand.bankAccountNumber}</p>
+                <p className="mt-1 text-sm text-zinc-700">a.n. {brand.bankAccountHolder || '-'}</p>
+                {brand.bankAccountNumber && (
+                  <Button type="button" variant="outline" size="lg" onClick={copyBankNumber} icon={copiedBank ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />} className="mt-3 w-full">
+                    {copiedBank ? 'Tersalin' : 'Salin nomor rekening'}
+                  </Button>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">Belum ada rekening resmi.</p>
+            )}
+          </div>
+        </section>
+
+        <section aria-label="WhatsApp" className="space-y-2">
+          <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">WhatsApp</h2>
+          <div className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs text-zinc-500">Nomor</p>
+                <p className="mt-0.5 font-mono text-sm font-semibold text-zinc-950">{brand.whatsappSession?.phoneNumber || '-'}</p>
+              </div>
+              <StatusBadge status={waConnected ? 'active' : 'neutral'} label={waConnected ? 'Aktif' : 'Terputus'} dot />
+            </div>
+            <button type="button" onClick={() => setTab('perangkat')} className="flex min-h-11 w-full items-center justify-between gap-3 px-4 text-left text-sm font-semibold text-zinc-950 active:bg-zinc-50">
+              <span className="flex items-center gap-2.5"><Smartphone size={18} className="text-zinc-500" aria-hidden="true" />Pengaturan perangkat</span>
+              <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+
+        <section aria-label="Staf tim" className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Staf tim ({brand.users?.length ?? 0})</h2>
+            <Link to="/staff" className="flex min-h-10 items-center text-sm font-semibold text-zinc-950">Kelola</Link>
+          </div>
+          {brand.users && brand.users.length > 0 ? (
+            <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+              {brand.users.map((member) => (
+                <li key={member.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-zinc-950">{member.name}</p>
+                    <p className="truncate text-xs text-zinc-500">{member.email}</p>
+                  </div>
+                  <span className="shrink-0 rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700">{member.role === 'admin' ? 'Admin' : 'CS'}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-500">Belum ada staf di brand ini.</p>
+          )}
+        </section>
+      </div>
+
+      <div role="tabpanel" id="brand-panel-profil" aria-labelledby="brand-tab-profil" className="hidden gap-6 md:grid lg:grid-cols-2 items-start">
         {/* Left Column */}
         <div className="space-y-5">
           {/* 1. Legalitas & Kontak Kantor */}
@@ -418,6 +594,7 @@ export function BrandDetailPage() {
           </Card>
         </div>
       </div>
+      </>
       )}
 
       <ConfirmDialog

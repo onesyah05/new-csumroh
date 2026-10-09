@@ -22,7 +22,7 @@ export function TopAds({ from, to, brandScope }: { from: string; to: string; bra
 
   return (
     <section className="surface overflow-hidden" aria-label="Iklan teratas">
-      <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-5 py-3">
+      <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 sm:px-5 py-3">
         <div className="min-w-0">
           <h2 className="text-sm font-bold text-zinc-950">Iklan teratas</h2>
           <p className="mt-0.5 text-xs text-zinc-600">Menurut nilai deal, lalu biaya</p>
@@ -31,7 +31,7 @@ export function TopAds({ from, to, brandScope }: { from: string; to: string; bra
       </div>
       <ul className="divide-y divide-zinc-100">
         {rows.map((r) => (
-          <li key={r.adId} className="flex items-center gap-3 px-5 py-3">
+          <li key={r.adId} className="flex items-center gap-3 px-4 sm:px-5 py-3">
             <CreativeThumb row={r} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="flex min-w-0 items-center gap-1.5">

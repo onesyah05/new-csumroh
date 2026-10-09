@@ -32,7 +32,8 @@ vi.mock('../../db/prisma.js', () => ({
     $queryRaw: mocks.queryRaw,
   },
 }));
-vi.mock('../../middleware/auth.js', () => ({
+vi.mock('../../middleware/auth.js', async () => ({
+  ...(await vi.importActual<typeof import('../../middleware/auth.js')>('../../middleware/auth.js')),
   authGuard: (_req: any, _res: any, next: any) => next(),
   requireRole: () => (_req: any, _res: any, next: any) => next(),
   scopedBrandId: (_req: any, requested?: number) => requested ?? 1,

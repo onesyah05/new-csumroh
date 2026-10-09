@@ -22,11 +22,25 @@ Semua komponen terletak di `@/components/ui/` dan siap pakai:
 
 ## 2. Standar Desain & Ukuran Token
 
+### Token ukuran kontrol
+Tinggi kontrol berasal dari token CSS `--ctl-*` di `src/styles/globals.css` (di bawah 768 px nilainya ditimpa). Jangan menulis tinggi manual (`h-9`, `min-h-11`) pada kontrol; pakai komponen atau token.
+
+| Token | Desktop | Mobile |
+|---|---|---|
+| `--ctl-sm` | 32 | 34 |
+| `--ctl-md` | 36 | 40 |
+| `--ctl-lg` | 40 | 42 |
+| `--ctl-icon` | 36 | 36 |
+| `--ctl-field` | 36 | 40 |
+
+Tidak ada lantai `min-height` global untuk `<button>`. Hanya `input`, `[role=combobox]`, dan `[role=menuitem|option]` yang memakai `--ctl-field` secara global. Detail pola mobile: `design-system/crm-azhan/pages/mobile.md`.
+
 ### A. Tombol (`Button`)
-- **Tinggi Default**: `size="md"` (36px / `h-9`), padding `px-3.5`, font `text-xs font-semibold`, radius `rounded-xl`.
-- **Tinggi Kecil**: `size="sm"` (32px / `h-8`), padding `px-2.5`, font `text-xs`, radius `rounded-lg`.
-- **Tinggi Besar**: `size="lg"` (40px / `h-10`), padding `px-4`, font `text-sm`, radius `rounded-xl`.
-- **Tombol Ikon**: `size="icon"` (36×36px / `h-9 w-9`), radius `rounded-xl`.
+- **Default**: `size="md"` (`--ctl-md`), padding `px-3.5`, font `text-xs font-semibold`, radius `rounded-xl`.
+- **Kecil**: `size="sm"` (`--ctl-sm`), padding `px-2.5`, font `text-xs`, radius `rounded-lg`.
+- **Besar**: `size="lg"` (`--ctl-lg`), padding `px-4`, font `text-sm`, radius `rounded-xl`.
+- **Ikon**: `size="icon"` (`--ctl-icon`, persegi), radius `rounded-xl`. Wajib `aria-label`.
+- Tombol mentah yang perlu target sentuh lebih besar: `max-md:min-h-9`, bukan lantai global.
 - **Varian**:
   - `primary`: Background hitam (`bg-zinc-950 text-white hover:bg-zinc-800`).
   - `secondary`: Putih border abu-abu (`border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50`).
@@ -47,7 +61,7 @@ Semua komponen terletak di `@/components/ui/` dan siap pakai:
 - **Catatan Sub**: `text-xs text-zinc-400`.
 
 ### D. Input Formulir
-- **Tinggi**: `h-9` (36px).
+- **Tinggi**: `--ctl-field` (36 desktop, 40 mobile), diatur global; jangan override.
 - **Radius**: `rounded-lg` (8px).
 - **Border**: `border-zinc-200 focus:border-zinc-950 focus:outline-none`.
 - **Dropdown**: Wajib menggunakan `<Select>` dari `@/components/ui/select`. Dilarang memakai `<select>` bawaan browser.
@@ -70,7 +84,19 @@ Semua komponen terletak di `@/components/ui/` dan siap pakai:
 ---
 
 ## 3. Aturan UX Copy
+- **Ini aplikasi, bukan artikel panduan.** Label dan satu frasa pendek.
+- Tanpa kalimat bantu di bawah isian dan tanpa subjudul penjelas; di mobile sembunyikan teks sekunder (`hidden sm:block`).
+- Keadaan kosong satu baris. Notifikasi dan toast satu kalimat, tanpa penjelasan.
 - **Padat, ringkas, profesional, to-the-point.**
 - Dilarang membuat caption *storytelling* atau kalimat panjang di bawah setiap judul field jika maknanya sudah jelas dari label.
 - Contoh yang dilarang: *"Rincian benefit yang sudah termasuk dan yang belum termasuk dalam paket perjalanan umroh ini."*
 - Contoh yang benar: *"Fasilitas Paket"* atau *"Termasuk (Include)"*.
+
+---
+
+## 4. Mobile (< 768 px)
+- Tampilan harus seperti aplikasi mobile: app bar "← Judul" untuk halaman anak, `PageHeader` dan `StatGrid` disembunyikan di halaman daftar (`hidden md:flex` / `hidden md:grid`), baris pencarian + tombol ikon "+".
+- Daftar berupa baris (`ul md:hidden`), tabel hanya md ke atas (`hidden md:block`).
+- Padding horizontal kartu 16 px; batang progres 8 px; seragam dalam satu halaman.
+- Satu baris filter; filter sekunder masuk dropdown atau panel Filter, tidak bertumpuk.
+- Verifikasi: ukur semua kontrol sejenis di lebar 375, bukan satu sampel.

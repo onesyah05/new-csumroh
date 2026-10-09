@@ -80,16 +80,20 @@ function dayGroup(iso: string) {
   return 'Sebelumnya';
 }
 
-/** Tab "Perlu tindakan": Mendesak lalu Tindakan (urutan dari server). Tab "Semua": per hari (WIB). */
+const GROUP_ORDER = ['Mendesak', 'Tindakan', 'Hari ini', 'Kemarin', 'Sebelumnya'];
+
+/** Dikelompokkan per hari (WIB). Urutan server bisa selang-seling (belum dibaca dulu), jadi item digabung per label, bukan per urutan datang. */
 function groupItems(items: NotificationItem[], filter: Filter) {
-  const groups: { label: string; items: NotificationItem[] }[] = [];
+  const byLabel = new Map<string, NotificationItem[]>();
   for (const item of items) {
     const label = filter === 'action' ? (item.priority === 'urgent' ? 'Mendesak' : 'Tindakan') : dayGroup(item.updatedAt);
-    const last = groups.at(-1);
-    if (last?.label === label) last.items.push(item);
-    else groups.push({ label, items: [item] });
+    const list = byLabel.get(label);
+    if (list) list.push(item);
+    else byLabel.set(label, [item]);
   }
-  return groups;
+  return [...byLabel.entries()]
+    .sort(([x], [y]) => GROUP_ORDER.indexOf(x) - GROUP_ORDER.indexOf(y))
+    .map(([label, groupItems]) => ({ label, items: groupItems }));
 }
 
 /**
@@ -98,9 +102,7 @@ function groupItems(items: NotificationItem[], filter: Filter) {
  */
 export function NotificationBell({ placement, className }: { placement: 'sidebar' | 'header'; className?: string }) {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<Filter>('action');
-  // Filter brand untuk user yang menerima notifikasi dari lebih dari satu brand (Admin/CS multi-brand).
-  const [brand, setBrand] = useState<BrandFilter>('all');
+  const filter: Filter = 'all';
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
@@ -109,25 +111,23 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
   const { actionable, urgent, info } = useNotificationCounts();
   const brands = useQuery({ queryKey: notificationKeys.brands, queryFn: () => api.get<BrandFacet[]>('/notifications/brands'), enabled: open, staleTime: 30_000 });
   const brandOptions = Array.isArray(brands.data) ? brands.data : [];
-  const showBrandFilter = brandOptions.length > 1;
-  const activeBrand = showBrandFilter && brand !== 'all' ? brand : 'all';
-  // Label brand hanya berguna bila notifikasi datang dari beberapa brand dan sedang melihat semuanya.
+  const showBrandLabel = brandOptions.length > 1;
+  // Label brand hanya berguna bila notifikasi datang dari beberapa brand.
   const brandLabel = (brandId?: number | null) => {
-    if (!showBrandFilter || activeBrand !== 'all' || !brandId) return null;
+    if (!showBrandLabel || !brandId) return null;
     const match = brandOptions.find((b) => b.id === brandId);
     return match ? match.code || match.name : null;
   };
-  const brandQuery = activeBrand === 'all' ? '' : `&brandId=${activeBrand}`;
   const list = useInfiniteQuery({
-    queryKey: notificationKeys.list(filter, activeBrand),
-    queryFn: ({ pageParam }) => api.get<Page>(`/notifications?filter=${filter}&limit=20${brandQuery}${pageParam ? `&cursor=${pageParam}` : ''}`),
+    queryKey: notificationKeys.list(filter),
+    queryFn: ({ pageParam }) => api.get<Page>(`/notifications?filter=${filter}&limit=20${pageParam ? `&cursor=${pageParam}` : ''}`),
     initialPageParam: 0,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: open,
   });
   const refresh = () => void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
   const markRead = useMutation({ mutationFn: (id: number) => api.post(`/notifications/${id}/read`), onSettled: refresh });
-  const markAll = useMutation({ mutationFn: () => api.post('/notifications/read-all', activeBrand === 'all' ? undefined : { brandId: activeBrand }), onSettled: refresh });
+  const markAll = useMutation({ mutationFn: () => api.post('/notifications/read-all'), onSettled: refresh });
 
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   const groups = groupItems(items, filter);
@@ -156,7 +156,6 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
     const onOpen = () => {
       const button = buttonRef.current;
       if (!button || button.getClientRects().length === 0) return;
-      setFilter('action');
       setOpen(true);
     };
     window.addEventListener(OPEN_NOTIFICATIONS_EVENT, onOpen);
@@ -173,9 +172,6 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
     ? `Notifikasi, ${actionable} perlu tindakan${urgent ? `, ${urgent} mendesak` : ''}`
     : info ? 'Notifikasi, ada info baru' : 'Notifikasi';
   const badgeText = actionable > 99 ? '99+' : String(actionable);
-  // Angka tab "Perlu tindakan" mengikuti brand yang dipilih.
-  const tabActionable = activeBrand === 'all' ? actionable : brandOptions.find((b) => b.id === activeBrand)?.actionable ?? 0;
-  const tabBadge = tabActionable > 99 ? '99+' : String(tabActionable);
 
   return (
     <div className={cn('relative', className)}>
@@ -282,42 +278,6 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
               </button>
             </div>
           </div>
-          <div role="group" aria-label="Tampilkan" className="flex shrink-0 gap-1 px-4 pt-2.5">
-            {([['action', `Perlu tindakan${tabActionable ? ` (${tabBadge})` : ''}`], ['all', 'Semua']] as const).map(([id, text]) => (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={filter === id}
-                onClick={() => setFilter(id)}
-                className={cn('mobile-dense min-h-7 rounded-full px-3 text-xs font-semibold focus-visible:ring-inset focus-visible:ring-offset-0', filter === id ? 'bg-zinc-950 text-white' : 'text-zinc-600 hover:bg-zinc-100')}
-              >
-                {text}
-              </button>
-            ))}
-          </div>
-
-          {showBrandFilter ? (
-            <div role="group" aria-label="Filter brand" className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-zinc-100 px-4 pb-2.5 pt-2 [scrollbar-width:none]">
-              {[{ id: 'all' as const, label: 'Semua brand', count: actionable }, ...brandOptions.map((b) => ({ id: b.id, label: b.code || b.name, count: b.actionable }))].map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={activeBrand === option.id}
-                  onClick={() => setBrand(option.id)}
-                  title={option.id === 'all' ? 'Semua brand' : brandOptions.find((b) => b.id === option.id)?.name}
-                  className={cn(
-                    'mobile-dense inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold focus-visible:ring-inset focus-visible:ring-offset-0',
-                    activeBrand === option.id ? 'border-zinc-950 bg-zinc-100 text-zinc-950' : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50',
-                  )}
-                >
-                  {option.label}
-                  {option.count > 0 && <span className="rounded-full bg-zinc-950 px-1.5 text-[11px] leading-4 text-white tabular-nums">{option.count > 99 ? '99+' : option.count}</span>}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="shrink-0 border-b border-zinc-100 pt-2.5" />
-          )}
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {list.isLoading ? (
@@ -326,8 +286,7 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
               <p className="px-4 py-8 text-center text-xs text-rose-700" role="alert">{(list.error as Error).message}</p>
             ) : items.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-zinc-600">
-                {filter === 'action' ? 'Tidak ada yang perlu ditindaklanjuti.' : 'Belum ada notifikasi.'}
-                {activeBrand !== 'all' && ' (brand ini)'}
+                Belum ada notifikasi.
               </p>
             ) : (
               groups.map((group) => (
@@ -355,7 +314,7 @@ export function NotificationBell({ placement, className }: { placement: 'sidebar
                               <span className={cn('block text-sm leading-5', unread ? 'font-semibold text-zinc-950' : 'text-zinc-700')}>
                                 {item.title}
                               </span>
-                              {item.body && <span className="mt-0.5 line-clamp-2 block text-xs text-zinc-600">{item.body}</span>}
+                              {item.body && <span className="mt-0.5 line-clamp-2 text-xs text-zinc-600">{item.body}</span>}
                               <span className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
                                 {/* Nama brand sebagai label, bukan bagian judul (ringkasan per brand). */}
                                 {brandLabel(item.brandId) && (

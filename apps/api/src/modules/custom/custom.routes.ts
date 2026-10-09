@@ -6,7 +6,7 @@ import {
   isLostStatus, isQualificationComplete, isWonStatus, samePax, type CustomRequestInput, type CustomRoomPrices,
 } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
-import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
+import { authGuard, requireRole, scopedBrandId, visibleBrandIds } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatch, notifyCustomAgreed, notifyCustomQuoted, notifyCustomReturned, notifyCustomSubmitted, notifyCustomUpdated } from '../notifications/notification.events.js';
@@ -22,7 +22,6 @@ export const customRouter = Router();
 customRouter.use(authGuard);
 
 const PRICING_ROLES = ['product', 'superadmin'] as const;
-const HOLDING_READERS = ['product', 'superadmin', 'admin', 'finance'];
 
 const detailInclude = {
   prospect: {
@@ -45,11 +44,9 @@ const detailInclude = {
 
 function allowedBrands(req: Request) {
   const user = req.user!;
-  if (HOLDING_READERS.includes(user.role)) return null;
-  const ids = new Set<number>();
-  if (user.brandId) ids.add(user.brandId);
-  for (const ub of user.userBrands ?? []) if (ub.brand?.id) ids.add(ub.brand.id);
-  return [...ids];
+  // Tim LA melayani semua brand; Admin yang punya brand hanya brand tugasnya.
+  if (user.role === 'product') return null;
+  return visibleBrandIds(user);
 }
 
 async function loadRequest(req: Request) {

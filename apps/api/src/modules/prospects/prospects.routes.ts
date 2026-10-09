@@ -618,7 +618,13 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
     const key = dateOnlyKey(nextFollowupDate);
     data.nextFollowupDate = key ? new Date(`${key}T00:00:00.000Z`) : null;
   }
-  if (packageId !== undefined) data.packageId = packageId;
+  if (packageId !== undefined) {
+    // Paket harus milik brand prospek: tanpa ini paket brand lain bisa ditautkan dan kuotanya ikut terpotong saat Deal.
+    if (packageId !== null && !(await prisma.package.findFirst({ where: { id: packageId, brandId: existing.brandId }, select: { id: true } }))) {
+      throw new HttpError(404, 'Paket tidak ditemukan di brand ini.');
+    }
+    data.packageId = packageId;
+  }
 
   // Isian kualifikasi memakai pilihan baku. Nilai lama (teks bebas) yang dikirim ulang tanpa perubahan
   // tetap diterima agar profil lama masih bisa disimpan; nilai kosong disimpan sebagai null.

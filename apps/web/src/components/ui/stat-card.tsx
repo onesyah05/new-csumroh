@@ -21,21 +21,21 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <div className={cn('surface rounded-xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs', className)}>
+    <div className={cn('surface rounded-xl border border-zinc-200/90 bg-white p-3 sm:p-5 shadow-2xs', className)}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-zinc-500 block truncate">{label}</span>
-        {icon && <span className="text-zinc-500 shrink-0">{icon}</span>}
+        {icon && <span className="hidden shrink-0 text-zinc-500 sm:block">{icon}</span>}
       </div>
       <p
         className={cn(
-          'mt-1 font-sans text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl tabular-nums leading-none',
+          'mt-1 font-sans text-lg font-bold tracking-tight text-zinc-950 sm:text-3xl tabular-nums leading-none',
           alert && !valueColor && 'text-amber-600',
           valueColor
         )}
       >
         {value}
       </p>
-      {note && <p className="mt-1.5 text-xs text-zinc-500 truncate">{note}</p>}
+      {note && <p className="mt-1 truncate text-xs text-zinc-500 sm:mt-1.5">{note}</p>}
     </div>
   );
 }
@@ -56,7 +56,7 @@ export function StatGrid({
   }[cols];
 
   return (
-    <section className={cn('grid gap-3.5', colClass, className)}>
+    <section className={cn('grid gap-2.5 sm:gap-3.5', colClass, className)}>
       {children}
     </section>
   );

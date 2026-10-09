@@ -488,7 +488,7 @@ export function PackageDetailPage() {
                     type="button"
                     onClick={() => flyerInputRef.current?.click()}
                     disabled={flyerMutation.isPending}
-                    className="text-xs font-semibold text-zinc-600 hover:text-zinc-950 flex items-center gap-1 transition cursor-pointer disabled:opacity-60"
+                    className="text-xs font-semibold text-zinc-600 hover:text-zinc-950 flex items-center gap-1 transition cursor-pointer disabled:opacity-60 max-md:min-h-9"
                   >
                     {flyerMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
                     <span>{pkg.flyerImage ? 'Ganti' : 'Unggah'}</span>
@@ -499,7 +499,7 @@ export function PackageDetailPage() {
                 <button
                   type="button"
                   onClick={() => setLightboxOpen(true)}
-                  className="text-xs font-semibold text-zinc-600 hover:text-zinc-950 flex items-center gap-1 transition cursor-pointer"
+                  className="text-xs font-semibold text-zinc-600 hover:text-zinc-950 flex items-center gap-1 transition cursor-pointer max-md:min-h-9"
                 >
                   <ZoomIn size={12} />
                   <span>Perbesar</span>
@@ -542,7 +542,7 @@ export function PackageDetailPage() {
           {/* Card 2: Template WhatsApp */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-              <div className="flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+              <div className="segmented flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
                 <button
                   type="button"
                   onClick={() => setCopyTab('summary')}
@@ -566,7 +566,7 @@ export function PackageDetailPage() {
               <button
                 type="button"
                 onClick={copyToClipboard}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-bold text-zinc-800 hover:bg-zinc-50 hover:text-zinc-950 transition cursor-pointer shadow-xs"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-bold text-zinc-800 hover:bg-zinc-50 hover:text-zinc-950 max-md:min-h-9 transition cursor-pointer shadow-xs"
               >
                 {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
                 <span>{copied ? 'Tersalin' : 'Salin Teks'}</span>

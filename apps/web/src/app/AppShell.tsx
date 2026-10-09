@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { BarChart3, Bell, BookOpen, Building2, ChevronDown, Image as ImageIcon, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, Bell, BookOpen, Building2, ChevronDown, Image as ImageIcon, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2, X } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -215,6 +215,11 @@ export function AppShell() {
     return [{ label: titles[p] ?? 'Halaman' }];
   };
 
+  // Halaman anak (Tambah Paket, Detail Brand, ...): header mobile memakai tombol kembali dan judul dari breadcrumb.
+  const crumbs = getBreadcrumbs();
+  const backTo = crumbs.length > 1 ? crumbs[crumbs.length - 2]?.to : undefined;
+  const goBack = () => (location.key !== 'default' ? navigate(-1) : backTo && navigate(backTo));
+
   return (
     <div className="min-h-screen bg-zinc-50/60">
       {/* Mobile Backdrop */}
@@ -248,7 +253,7 @@ export function AppShell() {
               <span className="block truncate text-xs uppercase tracking-[.18em] text-zinc-400">Conversion desk</span>
             </span>
           </NavLink>
-          <button className="text-zinc-400 lg:hidden p-1 hover:text-white" onClick={toggleSidebar} aria-label="Tutup navigasi">
+          <button className="text-zinc-400 lg:hidden p-1.5 hover:text-white" onClick={toggleSidebar} aria-label="Tutup navigasi">
             <X size={20} />
           </button>
         </div>
@@ -391,7 +396,12 @@ export function AppShell() {
                   );
                 })}
               </nav>
-              <span className="truncate text-sm font-semibold md:hidden">{location.pathname === '/' ? 'CRM Azhan' : location.pathname === '/pipeline' ? 'Prospek' : location.pathname === '/lainnya' ? 'Lainnya' : titles[location.pathname] ?? 'CRM Azhan'}</span>
+              {backTo && (
+                <button type="button" onClick={goBack} aria-label="Kembali" className="-ml-1.5 grid h-9 w-9 shrink-0 place-items-center rounded-full text-zinc-900 transition active:bg-zinc-200 md:hidden">
+                  <ArrowLeft size={20} aria-hidden="true" />
+                </button>
+              )}
+              <span className="truncate text-sm font-semibold md:hidden">{location.pathname === '/' ? 'CRM Azhan' : location.pathname === '/pipeline' ? 'Prospek' : location.pathname === '/lainnya' ? 'Lainnya' : backTo ? crumbs[crumbs.length - 1]?.label : titles[location.pathname] ?? 'CRM Azhan'}</span>
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0">

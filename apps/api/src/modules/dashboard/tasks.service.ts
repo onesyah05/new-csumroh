@@ -38,7 +38,7 @@ const inboxLink = (c: { id: number; brandId: number }) => `/inbox?prospectId=${c
 const waitedMinutes = (c: Conversation, now: Date) => (c.awaitingSince ? Math.floor((now.getTime() / 1000 - c.awaitingSince) / 60) : 0);
 const isActiveWait = (c: Conversation, now: Date) => Boolean(c.awaitingSince) && waitedMinutes(c, now) <= ACTIVE_WAIT_HOURS * 60;
 const isStaleWait = (c: Conversation, now: Date) => Boolean(c.awaitingSince) && waitedMinutes(c, now) > ACTIVE_WAIT_HOURS * 60;
-const STALE_HINT = `Belum dibalas lebih dari ${ACTIVE_WAIT_HOURS} jam: balas, tandai Batal, atau lepas PIC`;
+const STALE_HINT = `Belum dibalas lebih dari ${ACTIVE_WAIT_HOURS} jam`;
 
 async function conversationsFor(brandIds: number[]) {
   const lists = await Promise.all(brandIds.map((id) => getLivechatConversationsForBrand(id)));
@@ -191,7 +191,7 @@ export async function tasksForManager(brandIds: number[], now = new Date()): Pro
       }),
       // Hitungan = lead yang tertahan (minimal 1 agar brand tanpa CS tetap tampil walau belum ada lead).
       task('no_cs', 'Lead tertahan: brand belum punya CS aktif', noCs.size ? Math.max(blocked.length, 1) : 0, '/staff', {
-        urgent: blocked.length > 0, hint: noCs.size ? `${noCsNames}. Tambahkan CS agar lead bisa dibalas dan dibagikan` : null, action: 'Tambah CS',
+        urgent: blocked.length > 0, hint: noCs.size ? `${noCsNames} belum punya CS aktif` : null, action: 'Tambah CS',
       }),
       task('unassigned', 'Lead belum punya PIC', assignable.length, topBrand ? `/pipeline?pic=none&brandId=${topBrand}` : '/pipeline?pic=none', {
         urgent: assignableOld.length > 0,

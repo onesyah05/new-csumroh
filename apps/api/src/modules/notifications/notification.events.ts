@@ -37,7 +37,7 @@ export async function notifyLeadAssigned(p: ProspectRef, assigneeId: number) {
     type: 'lead.assigned', priority: 'action', brandId: p.brandId,
     userIds: await picOf({ userId: assigneeId, brandId: p.brandId }),
     title: `Lead baru: ${p.name}`,
-    body: 'Anda ditetapkan sebagai PIC. Balas jamaah secepatnya.',
+    body: 'Anda ditetapkan sebagai PIC.',
     link: inboxLink(p), entity: prospectEntity(p), activeKey: `lead.assigned:p${p.id}`,
   });
 }
@@ -87,7 +87,7 @@ export async function notifyIncomingCall(p: ProspectRef, call: { callId: string;
     type: 'call.incoming', priority: 'urgent', brandId: p.brandId,
     userIds: await callRecipients(p),
     title: `${p.name} sedang ${call.isVideo ? 'melakukan video call' : 'menelepon'}`,
-    body: 'Angkat dari HP WhatsApp brand. CRM tidak bisa mengangkat panggilan.',
+    body: 'Angkat dari HP WhatsApp brand.',
     link: inboxLink(p), entity: prospectEntity(p), activeKey: `call.incoming:p${p.id}`, dedupeKey: `call.incoming:${p.brandId}:${call.callId}`,
   });
 }
@@ -100,7 +100,7 @@ export async function notifyCallEnded(p: ProspectRef, call: { callId: string; is
     type: 'call.missed', priority: 'action', brandId: p.brandId,
     userIds: await callRecipients(p),
     title: `Panggilan tak terjawab dari ${p.name}`,
-    body: `Jamaah mencoba ${callLabel(call.isVideo)}. Hubungi balik lewat chat.`,
+    body: `Jamaah mencoba ${callLabel(call.isVideo)}.`,
     link: inboxLink(p), entity: prospectEntity(p), activeKey: `call.missed:p${p.id}`, dedupeKey: `call.missed:${p.brandId}:${call.callId}`,
   });
 }
@@ -144,7 +144,7 @@ export async function notifyPicChange(input: {
         ? `${p.name} diambil alih ${actor.name}`
         : toUserId ? `${p.name} dialihkan ke ${input.toName ?? 'CS lain'}` : `${p.name} dilepas ke antrean`,
       body: takenOver
-        ? `Jamaah belum dibalas ${input.waitedMinutes ?? 15} menit. Anda tidak lagi menjadi PIC prospek ini.`
+        ? `Jamaah belum dibalas ${input.waitedMinutes ?? 15} menit.`
         : `Oleh ${actor.name}${input.reason ? ` · ${input.reason}` : ''}`,
       link: detailLink(p), entity: prospectEntity(p),
     });
@@ -224,7 +224,7 @@ export async function notifyPaymentVerified(input: {
     type: 'payment.verified', priority: 'info', brandId: p.brandId, actorId: actor.id,
     userIds: await picOf({ userId: p.userId ?? null, brandId: p.brandId }),
     title: `Deal! Pembayaran ${p.name} diverifikasi`,
-    body: `${input.paymentType === 'full' ? 'Pembayaran lunas' : 'Pembayaran DP'} · ${rupiah(input.amount)}. Penanganan CS selesai.`,
+    body: `${input.paymentType === 'full' ? 'Pembayaran lunas' : 'Pembayaran DP'} · ${rupiah(input.amount)}.`,
     link: detailLink(p), entity: prospectEntity(p),
   });
 
@@ -239,7 +239,7 @@ export async function notifyProofRejected(input: { prospect: ProspectRef; actor:
     type: 'payment.rejected', priority: 'urgent', brandId: p.brandId, actorId: actor.id,
     userIds: await picOf({ userId: p.userId ?? null, brandId: p.brandId }),
     title: `Bukti transfer ${p.name} ditolak`,
-    body: `${input.reason} · oleh ${actor.name}. Minta bukti yang benar ke jamaah.`,
+    body: `${input.reason} · oleh ${actor.name}.`,
     link: inboxLink(p), entity: prospectEntity(p),
   });
 }
@@ -261,7 +261,7 @@ export async function notifyQuotaAfterBooking(packageId: number, actor: Actor, l
   await notify({
     type: 'package.quota_low', priority: 'action', brandId: pkg.brandId, actorId: actor.id, userIds: pics,
     title: empty ? `Kuota ${pkg.name} habis` : `Kuota ${pkg.name} tinggal ${pkg.quotaRemaining} seat`,
-    body: empty ? 'Tawarkan paket lain kepada jamaah yang sedang Anda tangani.' : 'Segera arahkan jamaah yang sedang Anda tawari untuk membayar DP.',
+    body: empty ? 'Tawarkan paket lain ke jamaah Anda.' : 'Arahkan jamaah yang Anda tawari untuk bayar DP.',
     link: `/packages/${pkg.id}`, entity, activeKey: `package.quota_low:k${pkg.id}`,
   });
   if (empty) {
@@ -326,7 +326,7 @@ export async function notifyWhatsappDisconnected(brandId: number) {
     type: 'wa.disconnected', priority: 'urgent', brandId,
     userIds: await adminsOf(brandId),
     title: `WhatsApp ${await brandName(brandId)} terputus`,
-    body: `Perangkat tidak terhubung lebih dari 2 menit. Pesan jamaah dan balasan CS tertunda.${reason ? ` ${reason}` : ''}`,
+    body: reason ?? 'Pesan jamaah dan balasan tertunda.',
     link: `/brands/${brandId}?tab=perangkat`, entity: { type: 'brand', id: brandId }, activeKey: `wa.disconnected:b${brandId}`,
   });
 }
@@ -351,7 +351,7 @@ export async function notifyCapiFailed(brandId: number, reason: string) {
     type: 'capi.failed', priority: 'info', brandId,
     userIds: await adminsOf(brandId),
     title: `Event Meta CAPI gagal (${await brandName(brandId)})`,
-    body: reason.length > 160 ? `${reason.slice(0, 159)}…` : reason,
+    body: reason.length > 100 ? `${reason.slice(0, 99)}…` : reason,
     link: `/brands/${brandId}?tab=meta`, entity: { type: 'brand', id: brandId }, activeKey: `capi.failed:b${brandId}`,
   });
 }
@@ -392,7 +392,7 @@ export async function notifyCustomUpdated(input: { prospect: ProspectRef; actor:
     type: 'custom.updated', priority: 'action', brandId: p.brandId, actorId: actor.id,
     userIds: await productOrSuperadmins(),
     title: `Kebutuhan custom ${p.name} diubah`,
-    body: `${actor.name} mengubah kebutuhan jamaah. Muat ulang rincian sebelum menghitung.`,
+    body: `${actor.name} mengubah kebutuhan jamaah.`,
     link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom.updated:r${input.requestId}`,
   });
 }
@@ -421,7 +421,7 @@ export async function notifyCustomDeal(input: { prospect: ProspectRef; actor: Ac
     type: 'custom.deal', priority: 'info', brandId: p.brandId, actorId: actor.id,
     userIds: await productUsers(),
     title: `Deal layanan custom: ${p.name}`,
-    body: `Pembayaran diverifikasi · ${await brandName(p.brandId)}. Siapkan pemesanan vendor.`,
+    body: `Pembayaran diverifikasi · ${await brandName(p.brandId)}.`,
     link: customLink(input.requestId), entity: prospectEntity(p), activeKey: `custom.deal:r${input.requestId}`,
   });
 }
@@ -434,7 +434,7 @@ export async function notifyCustomQuoted(input: { prospect: ProspectRef; actor: 
     type: 'custom.quoted', priority: 'action', brandId: p.brandId, actorId: actor.id,
     userIds: await picOf({ userId: p.userId ?? null, brandId: p.brandId }),
     title: `Harga custom ${p.name} sudah dihitung`,
-    body: `Ditawarkan ${rupiah(input.offeredPrice)} oleh ${actor.name}. Lanjutkan negosiasi dengan jamaah.`,
+    body: `Ditawarkan ${rupiah(input.offeredPrice)} oleh ${actor.name}.`,
     link: inboxLink(p), entity: prospectEntity(p), activeKey: `custom.quoted:p${p.id}`,
   });
 }

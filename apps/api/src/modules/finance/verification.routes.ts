@@ -9,7 +9,7 @@ import {
   paymentReversalSchema,
 } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
-import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
+import { authGuard, requireRole, scopedBrandId, visibleBrandIds } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { csvCell } from '../../utils/csv.js';
@@ -59,7 +59,10 @@ type QueueRow = Prisma.ProspectGetPayload<{ select: typeof prospectSelect }>;
 
 const brandWhereOf = (req: Request) => {
   const raw = req.query.brandId ? String(req.query.brandId) : 'all';
-  return raw === 'all' ? {} : { brandId: scopedBrandId(req, Number(raw)) };
+  if (raw !== 'all') return { brandId: scopedBrandId(req, Number(raw)) };
+  // "Semua brand" bagi admin yang punya brand = brand tugasnya saja.
+  const visible = visibleBrandIds(req.user!);
+  return visible ? { brandId: { in: visible } } : {};
 };
 
 /** Awal hari (WIB) dari kunci YYYY-MM-DD. */

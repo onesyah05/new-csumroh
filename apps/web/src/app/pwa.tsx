@@ -15,21 +15,23 @@ export function InstallApp() {
   const [pending, setPending] = useState(false);
   const [hint, setHint] = useState('');
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone;
-  if (standalone) return <p className="text-sm text-zinc-600">CRM Azhan dibuka sebagai aplikasi.</p>;
+  if (standalone) return null;
   async function install() {
     if (!installEvent) return;
     const event = installEvent;
     setPending(true);
-    try { await event.prompt(); const result = await event.userChoice; setHint(result.outcome === 'accepted' ? 'Pemasangan dimulai.' : 'Anda dapat memasang aplikasi nanti.'); }
-    catch { setHint('Buka menu browser untuk menambahkan CRM ke layar utama.'); }
+    try { await event.prompt(); const result = await event.userChoice; setHint(result.outcome === 'accepted' ? 'Pemasangan dimulai.' : ''); }
+    catch { setHint('Gunakan menu browser.'); }
     finally { installEvent = null; notify(); setPending(false); }
   }
-  return <section className="surface space-y-3 p-4" aria-label="Pasang aplikasi">
-    <h2 className="text-sm font-semibold">CRM di layar utama</h2>
-    <p className="text-sm leading-relaxed text-zinc-600">Buka CRM dengan cepat dari ikon di HP Anda.</p>
-    {available ? <Button onClick={() => void install()} disabled={pending}><Download size={16} aria-hidden="true" />{pending ? 'Memasang…' : 'Pasang CRM Azhan'}</Button>
-      : <p className="text-sm leading-relaxed text-zinc-600">Di iPhone, buka menu Bagikan di Safari, lalu Tambah ke Layar Utama. Di Android, buka menu browser dan pilih Instal aplikasi atau Tambahkan ke layar utama bila tersedia.</p>}
-    {hint && <p role="status" className="text-sm text-zinc-600">{hint}</p>}
+  return <section className="surface flex items-center gap-3 p-3" aria-label="Pasang aplikasi">
+    <Download size={20} aria-hidden="true" className="shrink-0 text-zinc-700" />
+    <div className="min-w-0 flex-1">
+      <h2 className="text-sm font-semibold">Pasang di layar utama</h2>
+      {!available && <p className="text-xs text-zinc-500">Menu browser → Tambah ke Layar Utama</p>}
+      {hint && <p role="status" className="text-xs text-zinc-500">{hint}</p>}
+    </div>
+    {available && <Button size="sm" onClick={() => void install()} disabled={pending}>{pending ? 'Memasang…' : 'Pasang'}</Button>}
   </section>;
 }
 

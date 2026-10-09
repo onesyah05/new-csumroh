@@ -44,7 +44,7 @@ export function TodayTasks({ scope }: { scope: string }) {
 
   if (pending.length === 0 && !waiting) {
     return (
-      <section aria-labelledby="today-tasks" className="surface flex items-center gap-3 px-5 py-4">
+      <section aria-labelledby="today-tasks" className="surface flex items-center gap-3 px-4 sm:px-5 py-4">
         <CheckCircle2 size={18} className="shrink-0 text-emerald-700" aria-hidden="true" />
         <p className="text-sm text-zinc-700">
           <span id="today-tasks" className="font-semibold text-zinc-950">Tidak ada yang perlu ditindaklanjuti.</span>{' '}
@@ -57,7 +57,7 @@ export function TodayTasks({ scope }: { scope: string }) {
   return (
     <section aria-labelledby="today-tasks" className={cn('surface grid overflow-hidden', waiting && 'lg:grid-cols-[minmax(0,1fr)_320px]')}>
       <div className="min-w-0">
-        <div className="flex items-baseline justify-between gap-3 border-b border-zinc-200 px-5 py-3">
+        <div className="flex items-baseline justify-between gap-3 border-b border-zinc-200 px-4 sm:px-5 py-3">
           <h2 id="today-tasks" className="text-sm font-bold text-zinc-950">Perlu ditindaklanjuti</h2>
           <span className="text-xs text-zinc-600">{pending.length ? `${pending.length} hal` : 'Semua beres'}</span>
         </div>
@@ -65,11 +65,12 @@ export function TodayTasks({ scope }: { scope: string }) {
           <ul className="divide-y divide-zinc-100">
             {pending.map((t) => (
               <li key={t.key}>
-                <Link to={t.link} className="group flex items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5 sm:py-3 transition hover:bg-zinc-50">
+                <Link to={t.link} className="group flex items-center gap-3 px-4 py-2.5 sm:gap-4 sm:px-5 sm:py-3 transition hover:bg-zinc-50">
                   <span
                     className={cn(
-                      'w-10 shrink-0 text-right text-xl font-bold leading-none tabular-nums',
-                      t.tone === 'urgent' ? 'text-rose-700' : 'text-zinc-950',
+                      // Mobile: lencana angka (tidak terpotong, tumbuh untuk 4+ digit); sm ke atas: kolom angka besar.
+                      'grid h-9 min-w-9 shrink-0 place-items-center whitespace-nowrap rounded-lg px-2 text-sm font-bold tabular-nums sm:block sm:h-auto sm:min-w-14 sm:bg-transparent sm:px-0 sm:text-right sm:text-xl sm:leading-none',
+                      t.tone === 'urgent' ? 'bg-rose-50 text-rose-700' : 'bg-zinc-100 text-zinc-950',
                     )}
                   >
                     {t.count}
@@ -85,7 +86,7 @@ export function TodayTasks({ scope }: { scope: string }) {
                         </>
                       )}
                     </span>
-                    {t.hint && <span className="mt-0.5 block text-xs text-zinc-600">{t.hint}</span>}
+                    {t.hint && <span className="mt-0.5 block truncate text-xs text-zinc-600 sm:whitespace-normal">{t.hint}</span>}
                   </span>
                   <span className="inline-flex shrink-0 items-center gap-1 rounded-lg sm:border border-zinc-200 sm:px-2.5 py-1 text-xs font-semibold text-zinc-800 transition group-hover:border-zinc-400 group-hover:text-zinc-950">
                     <span className="hidden sm:inline">{t.action ?? 'Buka'}</span>
@@ -96,7 +97,7 @@ export function TodayTasks({ scope }: { scope: string }) {
             ))}
           </ul>
         ) : (
-          <p className="flex items-center gap-2 px-5 py-4 text-sm text-zinc-700">
+          <p className="flex items-center gap-2 px-4 sm:px-5 py-4 text-sm text-zinc-700">
             <CheckCircle2 size={16} className="shrink-0 text-emerald-700" aria-hidden="true" />Tidak ada masalah terbuka.
           </p>
         )}

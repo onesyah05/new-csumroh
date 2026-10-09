@@ -13,20 +13,9 @@ import { Card } from '../../components/ui/card';
 type Tone = 'light' | 'dark';
 interface BrandRow { id: number; name: string; code: string; itineraryTemplate?: string | null; itineraryTone?: Tone }
 
-/** Angka sama dengan ITINERARY_ZONES di API (modules/catalog/itinerary-image.ts); panduan unduhan memakai angka yang sama. */
-const SPEC = [
-  ['Kanvas', '1080 × 1350 px (rasio 4:5), PNG/JPG/WEBP, maks. 15 MB'],
-  ['Area designer atas', 'y 0–150: logo, nama brand, ornamen'],
-  ['Nama paket', 'x 60, y 165, 960 × 170 px: maks. 2 baris'],
-  ['Tanggal berangkat · durasi', 'x 60, y 345, 960 × 56 px: 1 baris'],
-  ['Agenda per hari', 'x 60, y 415, 960 × 805 px'],
-  ['Area designer bawah', 'y 1230–1350: kontak, alamat, ornamen'],
-  ['Jarak tepi', 'Teks menempel di tepi area: beri ±24 px ruang kosong di sekeliling area teks'],
-];
-
 const TONES: { value: Tone; label: string; hint: string }[] = [
-  { value: 'light', label: 'Banner terang', hint: 'Teks gelap' },
-  { value: 'dark', label: 'Banner gelap', hint: 'Teks terang' },
+  { value: 'light', label: 'Terang', hint: 'Teks gelap' },
+  { value: 'dark', label: 'Gelap', hint: 'Teks terang' },
 ];
 
 const readAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
@@ -54,7 +43,7 @@ function useTemplatePreview(brand: BrandRow) {
   return { url, loading: query.isFetching, failed: query.isError };
 }
 
-function BrandTemplateCard({ brand }: { brand: BrandRow }) {
+function BrandTemplateCard({ brand, onGuide, guideBusy }: { brand: BrandRow; onGuide(tone: Tone): void; guideBusy: boolean }) {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const tone: Tone = brand.itineraryTone === 'dark' ? 'dark' : 'light';
@@ -78,10 +67,7 @@ function BrandTemplateCard({ brand }: { brand: BrandRow }) {
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-bold text-zinc-900">{brand.name}</h3>
-          <p className="text-xs text-zinc-500">{brand.itineraryTemplate ? 'Template terpasang · pratinjau dengan contoh paket' : 'Belum ada template'}</p>
-        </div>
+        <h3 className="min-w-0 truncate text-sm font-bold text-zinc-900">{brand.name}</h3>
         <input
           ref={inputRef}
           type="file"
@@ -93,6 +79,18 @@ function BrandTemplateCard({ brand }: { brand: BrandRow }) {
             if (file) upload.mutate(file);
           }}
         />
+        <div className="flex shrink-0 items-center gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="max-md:h-9 max-md:w-9"
+          aria-label="Unduh panduan"
+          title="Unduh panduan"
+          onClick={() => onGuide(tone)}
+          loading={guideBusy}
+          icon={<Download size={14} />}
+        />
         <Button
           type="button"
           variant="outline"
@@ -103,6 +101,7 @@ function BrandTemplateCard({ brand }: { brand: BrandRow }) {
         >
           {brand.itineraryTemplate ? 'Ganti' : 'Unggah'}
         </Button>
+        </div>
       </div>
 
       <div role="radiogroup" aria-label={`Warna banner ${brand.name}`} className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-1">
@@ -116,10 +115,10 @@ function BrandTemplateCard({ brand }: { brand: BrandRow }) {
               aria-checked={active}
               disabled={changeTone.isPending}
               onClick={() => { if (!active) changeTone.mutate(option.value); }}
+              title={option.hint}
               className={cn('rounded-md px-2 py-1.5 text-xs transition', active ? 'bg-white font-semibold text-zinc-950 shadow-xs' : 'font-medium text-zinc-600 hover:text-zinc-950')}
             >
               {option.label}
-              <span className="block font-normal text-zinc-500">{option.hint}</span>
             </button>
           );
         })}
@@ -137,8 +136,8 @@ function BrandTemplateCard({ brand }: { brand: BrandRow }) {
           {preview.url && preview.loading && <Loader2 size={16} className="absolute right-2 top-2 animate-spin rounded-full bg-white/90 p-0.5 text-zinc-700" aria-label="Memperbarui pratinjau" />}
         </div>
       ) : (
-        <div className="grid aspect-[4/5] place-items-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50 text-zinc-500">
-          <ImageIcon size={28} className="opacity-30" aria-hidden="true" />
+        <div className="grid h-24 place-items-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50 text-zinc-500">
+          <ImageIcon size={24} className="opacity-30" aria-hidden="true" />
         </div>
       )}
     </Card>
@@ -169,38 +168,11 @@ export function ItineraryTemplatePage() {
 
   return (
     <div className="app-page space-y-6">
-      <PageHeader
-        title="Template Itinerary"
-        subtitle="Satu template kosong per brand. CS membagikan itinerary paket sebagai gambar di atas template ini."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            {TONES.map((option) => (
-              <Button key={option.value} type="button" variant="outline" onClick={() => void downloadGuide(option.value)} loading={downloading === option.value} icon={<Download size={14} />}>
-                Panduan {option.label.toLowerCase()}
-              </Button>
-            ))}
-          </div>
-        }
-      />
-
-      <Card className="p-4">
-        <h2 className="mb-3 text-xs font-extrabold text-zinc-700">Ukuran dan area teks (tetap)</h2>
-        <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
-          {SPEC.map(([label, value]) => (
-            <div key={label} className="flex flex-col">
-              <dt className="font-semibold text-zinc-800">{label}</dt>
-              <dd className="text-zinc-600">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-3 text-xs text-zinc-600">
-          Area teks harus polos. Pilih <b>Banner terang</b> bila area itu terang (teks ditulis gelap) atau <b>Banner gelap</b> bila area itu gelap (teks ditulis terang). Logo dan elemen brand dibuat langsung di template, di area designer. Pratinjau di bawah memakai contoh paket 9 hari.
-        </p>
-      </Card>
+      <PageHeader className="hidden md:flex" title="Template Itinerary" />
 
       {brands.isLoading ? <PageLoading label="Memuat brand…" /> : brands.isError ? <PageError title="Daftar brand belum dapat dimuat" onRetry={() => void brands.refetch()} /> : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {(brands.data ?? []).map((brand) => <BrandTemplateCard key={brand.id} brand={brand} />)}
+          {(brands.data ?? []).map((brand) => <BrandTemplateCard key={brand.id} brand={brand} onGuide={(tone) => void downloadGuide(tone)} guideBusy={downloading !== null} />)}
         </div>
       )}
     </div>

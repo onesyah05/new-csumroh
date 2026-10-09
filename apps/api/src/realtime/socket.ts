@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import type { SessionUser } from '@csumroh/shared-types';
 import { isTokenRevoked } from '../modules/auth/sessions.js';
+import { assignedBrandIds, isHoldingWide } from '../middleware/auth.js';
 import { allowedOrigins, env } from '../config/env.js';
 
 let io: Server | undefined;
@@ -24,11 +25,8 @@ export function createSocketServer(server: HttpServer) {
     const user = socket.data.user as SessionUser;
     // Room mengikuti scope yang sama dengan scopedBrandId: pengawas holding menerima event semua
     // brand; CS menerima event brand utama DAN semua brand penugasan UserBrand.
-    if (user.role === 'superadmin' || user.role === 'admin' || user.role === 'finance') socket.join(HOLDING_ROOM);
-    const brandIds = new Set<number>();
-    if (user.brandId) brandIds.add(user.brandId);
-    for (const ub of user.userBrands ?? []) if (ub.brand?.id) brandIds.add(ub.brand.id);
-    for (const brandId of brandIds) socket.join(`brand:${brandId}`);
+    if (isHoldingWide(user)) socket.join(HOLDING_ROOM);
+    for (const brandId of assignedBrandIds(user)) socket.join(`brand:${brandId}`);
     // Room pribadi untuk notifikasi in-app: semua tab/perangkat user yang sama.
     socket.join(userRoom(user.id));
     // Koneksi tidak boleh hidup lebih lama dari token-nya: diputus saat kedaluwarsa, klien menyambung ulang

@@ -47,7 +47,8 @@ vi.mock('../notifications/notification.events.js', () => ({
   notifyCustomAgreed: async () => { state.notified.push('agreed'); },
   notifyCustomUpdated: async () => { state.notified.push('updated'); },
 }));
-vi.mock('../../middleware/auth.js', () => ({
+vi.mock('../../middleware/auth.js', async () => ({
+  ...(await vi.importActual<typeof import('../../middleware/auth.js')>('../../middleware/auth.js')),
   authGuard: (_req: any, _res: any, next: any) => next(),
   requireRole: (...roles: string[]) => (req: any, _res: any, next: any) => (roles.includes(req.user.role) ? next() : next(Object.assign(new Error('403'), { status: 403 }))),
   scopedBrandId: (req: any, brandId: number) => {

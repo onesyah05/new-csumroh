@@ -547,6 +547,7 @@ export function StaffPage() {
     <div className="app-page space-y-6">
       {/* Header */}
       <PageHeader
+        className="hidden md:flex"
         title="Staf"
         subtitle="Kelola akun dan hak akses tim sales, CS, dan admin."
         actions={
@@ -567,7 +568,7 @@ export function StaffPage() {
       />
 
       {/* 4 Metric Stats */}
-      <StatGrid cols={4}>
+      <StatGrid cols={4} className="hidden md:grid">
         <StatCard label="Total Staf" value={total} note="Semua akun" />
         <StatCard label="Customer Service" value={csCount} note="Tim CS" />
         <StatCard label="Admin Brand" value={adminCount} note="Admin brand" />
@@ -577,14 +578,31 @@ export function StaffPage() {
       {/* Search & Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {/* Search */}
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
-          <input
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
-            placeholder="Cari nama atau email staf…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex items-center gap-2 sm:contents">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            <input
+              className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-4 text-xs text-zinc-900 outline-none focus:border-black focus:ring-1 focus:ring-black transition placeholder:text-zinc-500 shadow-xs"
+              placeholder="Cari staf"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {(isSuperadmin || isAdmin) && (
+            <Button
+              type="button"
+              variant="primary"
+              size="icon"
+              className="md:hidden"
+              aria-label="Tambah staf"
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              <Plus size={18} />
+            </Button>
+          )}
         </div>
 
         {/* Brand Filter (for superadmin) */}
@@ -606,7 +624,7 @@ export function StaffPage() {
         )}
 
         {/* Role Pills Filter */}
-        <div className="flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs shrink-0">
+        <div className="segmented scroll-row flex max-w-full rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs sm:shrink-0">
           {(['all', 'cs', 'admin', 'finance', 'product'] as const).map((r) => (
             <button
               key={r}
@@ -633,10 +651,44 @@ export function StaffPage() {
           <EmptyState
             icon={Users}
             title="Tidak ada staf ditemukan"
-            description={search || roleFilter !== 'all' || brandFilter !== 'all' ? 'Coba ubah kata kunci pencarian atau filter role/brand.' : 'Belum ada akun staf. Tambahkan lewat tombol Tambah Staf.'}
+            description={search || roleFilter !== 'all' || brandFilter !== 'all' ? 'Ubah pencarian atau filter.' : 'Belum ada akun staf.'}
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <ul className="divide-y divide-zinc-100 md:hidden">
+            {filtered.map((staff) => {
+              const codes = [
+                ...(staff.brand ? [staff.brand] : []),
+                ...(staff.userBrands?.map((ub) => ub.brand).filter((b) => b.id !== staff.brand?.id) ?? []),
+              ].map((b) => b.code);
+              const isSelf = staff.id === user?.id;
+              const canManage = isSuperadmin || (isAdmin && staff.role === 'cs');
+              const access = staff.role === 'superadmin' || staff.role === 'product' || staff.role === 'designer' ? 'Semua brand' : codes.join(', ');
+              return (
+                <li key={staff.id} className={`flex items-center gap-3 px-4 py-3 ${staff.isActive ? '' : 'opacity-60'}`}>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-950 text-sm font-bold text-white" aria-hidden="true">
+                    {staff.name.charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-zinc-950">
+                      {staff.name}{isSelf && <span className="ml-1.5 text-xs font-medium text-emerald-700">Anda</span>}
+                    </p>
+                    <p className="truncate text-xs text-zinc-500">
+                      {roleLabel(staff.role)}{access ? ` · ${access}` : ''}{staff.isActive ? '' : ' · Nonaktif'}
+                    </p>
+                  </div>
+                  {canManage && (
+                    <RowActions label={`Aksi staf ${staff.name}`} actions={[
+                      { label: 'Edit staf', icon: Edit2, onSelect: () => { setEditing(staff); setFormOpen(true); } },
+                      { label: staff.isActive ? 'Nonaktifkan akun' : 'Aktifkan akun', icon: staff.isActive ? ToggleLeft : ToggleRight, onSelect: () => toggleActive.mutate(staff.id), hidden: isSelf },
+                      { label: 'Hapus staf', icon: Trash2, onSelect: () => setDeleteTarget(staff), danger: true, hidden: isSelf || staff.role === 'superadmin' },
+                    ]} />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-xs lg:min-w-[720px]">
               <thead className="border-b border-zinc-200 bg-zinc-50/75 text-xs font-semibold text-zinc-500">
                 <tr>
@@ -743,6 +795,7 @@ export function StaffPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

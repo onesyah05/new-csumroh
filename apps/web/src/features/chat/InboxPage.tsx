@@ -17,7 +17,6 @@ import {
   CalendarDays,
   Check,
   CheckCheck,
-  CheckCircle2,
   ChevronDown,
   Clock,
   Copy,
@@ -29,7 +28,6 @@ import {
   HandCoins,
   ImageIcon,
   Lock,
-  Luggage,
   Menu,
   MessageSquareText,
   Megaphone,
@@ -50,7 +48,6 @@ import {
   Sparkles,
   Star,
   Trash2,
-  TrendingDown,
   Upload,
   User,
   UserPlus2,
@@ -449,7 +446,7 @@ export function InboxPage() {
       const accNumber = activeBrand?.bankAccountNumber?.trim();
       const accHolder = activeBrand?.bankAccountHolder?.trim();
       if (!bank || !accNumber || accNumber === '-' || !accHolder) {
-        showToast('Rekening resmi brand belum lengkap. Minta Admin melengkapi data bank di menu Brand.');
+        showToast('Rekening resmi brand belum lengkap.');
         return;
       }
       text = `Pembayaran ${travelName} hanya melalui rekening resmi berikut:\n\n${bank} a/n ${accHolder}\n*${accNumber}*\n\nSetelah transfer, kirim foto bukti transfernya di chat ini untuk diverifikasi tim Finance.`;
@@ -463,7 +460,7 @@ export function InboxPage() {
     } else if (type === 'ppiu') {
       const ppiu = activeBrand?.ppiuNumber?.trim();
       if (!ppiu) {
-        showToast('Nomor izin PPIU brand belum diisi. Minta Admin melengkapinya di menu Brand.');
+        showToast('Nomor PPIU brand belum diisi.');
         return;
       }
       text = `${travelName} adalah penyelenggara umroh berizin Kemenag (PPIU) dengan nomor izin *${ppiu}*.\n\nNomor ini bisa dicek di situs resmi Kementerian Agama.`;
@@ -472,7 +469,7 @@ export function InboxPage() {
       const address = activeBrand?.address?.trim();
       const maps = activeBrand?.gmapsUrl?.trim();
       if (!address && !maps) {
-        showToast('Alamat kantor brand belum diisi. Minta Admin melengkapinya di menu Brand.');
+        showToast('Alamat kantor brand belum diisi.');
         return;
       }
       text = waMessage(
@@ -683,7 +680,7 @@ export function InboxPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['conversations', brandId] });
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
-      showToast('Anda sekarang PIC percakapan ini. Segera balas jamaah.');
+      showToast('Anda sekarang PIC percakapan ini.');
     },
     onError: (err: any) => showToast(err?.message || 'Gagal mengambil alih percakapan'),
   });
@@ -833,7 +830,7 @@ export function InboxPage() {
     if (!canSend) return;
     // Lampiran masih disiapkan (kompres/unduh): kirim sekarang hanya mengirim teksnya tanpa gambar.
     if (isCompressing) {
-      showToast('Gambar masih disiapkan, tunggu sebentar lalu kirim lagi.');
+      showToast('Gambar masih disiapkan.');
       return;
     }
     if (mediaPreview) {
@@ -850,11 +847,11 @@ export function InboxPage() {
     if (!text) return;
     // Draf tersimpan di sessionStorage, lampiran tidak: setelah muat ulang, caption flyer bisa tertinggal tanpa gambar.
     if (text.includes(FLYER_CAPTION_CLOSING)) {
-      showToast('Caption flyer belum ada gambarnya. Pilih flyer lagi, atau hapus caption bila hanya ingin mengirim teks.');
+      showToast('Caption flyer belum ada gambarnya.');
       return;
     }
     if (unresolvedScript(text)) {
-      showToast('Draft masih memuat data yang belum terisi (tanda {{…}}). Lengkapi dulu sebelum mengirim.');
+      showToast('Draft masih memuat tanda {{…}}.');
       return;
     }
     send.mutate({ text, prospectId: selectedId, quoted: replyingTo, clearDraft: setMessage });
@@ -1054,9 +1051,6 @@ export function InboxPage() {
           savingsPercent: result.savingsPercent,
           isCompressed: result.isCompressed,
         });
-        if (result.isCompressed && result.savingsPercent > 5 && selectedIdRef.current === chatId) {
-          showToast(`Kompresi otomatis: hemat ${result.savingsPercent}%`);
-        }
       } finally {
         setIsCompressing(false);
       }
@@ -1369,14 +1363,13 @@ export function InboxPage() {
             <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900" role="status">
               <WifiOff size={14} className="mt-0.5 shrink-0 text-amber-600" />
               <div className="min-w-0">
-                <p className="font-semibold">WhatsApp terputus — mode baca</p>
-                <p className="text-amber-800">Riwayat tetap bisa dibaca; pesan baru belum masuk dan belum bisa dikirim.</p>
+                <p className="font-semibold">WhatsApp terputus</p>
                 {waDisconnectReasonText(sessionQuery.data?.disconnectReason) && (
                   <p className="mt-0.5 text-amber-800">{waDisconnectReasonText(sessionQuery.data?.disconnectReason)}</p>
                 )}
                 {canManageDevice && (
                   <Link to={`/devices/${brandId}`} className="mt-1 inline-flex items-center gap-1 font-semibold underline">
-                    <Smartphone size={12} /> Hubungkan WA
+                    <Smartphone size={12} /> Hubungkan
                   </Link>
                 )}
               </div>
@@ -1387,10 +1380,9 @@ export function InboxPage() {
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#8696a0]">
                 <p className="font-semibold text-[#54656f]">
-                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : 'Tidak ada percakapan pada pilihan PIC ini'}
+                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : 'Tidak ada percakapan'}
                 </p>
-                <p className="mt-1">Hasil mengikuti pencarian dan PIC yang dipilih.</p>
-                <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua percakapan</button>
+                <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua</button>
               </div>
             ) : (
               filtered.map((item) => {
@@ -2374,7 +2366,7 @@ export function InboxPage() {
                 <div className="border-t border-[#e9edef] bg-[#f0f2f5] p-3.5 shrink-0" role="status">
                   <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                     <WifiOff size={16} className="shrink-0 text-amber-600" />
-                    <span>Pengiriman dinonaktifkan karena WhatsApp brand terputus. Riwayat dan profil tetap dapat dibaca.</span>
+                    <span>WhatsApp terputus, pesan tidak bisa dikirim.</span>
                   </div>
                 </div>
               ) : canReply ? (
@@ -2425,99 +2417,45 @@ export function InboxPage() {
                   {/* WhatsApp Web Media Preview Card (before sending) */}
                   {mediaPreview && (
                     <div className="mx-auto mb-2 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-150">
-                      <div className="relative rounded-2xl border border-[#e9edef] bg-white p-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-2.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-bold text-zinc-800">Pratinjau Media</span>
-                            {mediaPreview.isPackageFlyer && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300/60">
-                                <Luggage size={12} className="shrink-0" aria-hidden="true" />{mediaPreview.packageName}
-                              </span>
-                            )}
-                            {mediaPreview.isCompressed ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
-                                <TrendingDown size={12} className="shrink-0" aria-hidden="true" />Dikompres: {formatFileSize(mediaPreview.originalSize)} ➔ {formatFileSize(mediaPreview.compressedSize)} (Hemat {mediaPreview.savingsPercent}%)
-                              </span>
-                            ) : (
-                              <span className="text-xs text-zinc-500 font-medium">
-                                Ukuran: {formatFileSize(mediaPreview.compressedSize)}
-                              </span>
-                            )}
+                      <div className="relative flex items-center gap-3 rounded-2xl border border-[#e9edef] bg-white p-2.5 shadow-sm">
+                        {mediaPreview.type.startsWith('image/') ? (
+                          <div className="h-14 w-14 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-zinc-100">
+                            <img src={mediaPreview.url} alt="Pratinjau" className="h-full w-full object-cover" />
                           </div>
+                        ) : mediaPreview.type.startsWith('video/') ? (
+                          <div className="h-14 w-14 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-black">
+                            <video src={mediaPreview.url} className="h-full w-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="grid h-14 w-14 place-items-center rounded-xl bg-purple-50 border border-purple-200 shrink-0">
+                            <FileText size={24} className="text-purple-600" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-zinc-900 truncate">{mediaPreview.isPackageFlyer && mediaPreview.packageName ? mediaPreview.packageName : mediaPreview.name}</p>
+                          <p className="text-xs text-zinc-500">{formatFileSize(mediaPreview.compressedSize)}</p>
+                        </div>
+                        {mediaPreview.isPackageFlyer && (
                           <button
                             type="button"
-                            onClick={() => {
-                              URL.revokeObjectURL(mediaPreview.url);
-                              setMediaPreview(null);
-                            }}
-                            className="h-6 w-6 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer"
-                            title="Batal"
+                            onClick={() => setShowPackagePickerModal(true)}
+                            className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
                           >
-                            <X size={15} />
+                            Ganti paket
                           </button>
-                        </div>
-
-                        <div className="flex items-start gap-3.5">
-                          {mediaPreview.type.startsWith('image/') ? (
-                            <div className="relative h-20 w-20 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-zinc-100">
-                              <img src={mediaPreview.url} alt="Preview" className="h-full w-full object-cover" />
-                            </div>
-                          ) : mediaPreview.type.startsWith('video/') ? (
-                            <div className="relative h-20 w-20 rounded-xl overflow-hidden border border-black/10 shrink-0 bg-black">
-                              <video src={mediaPreview.url} className="h-full w-full object-cover" />
-                            </div>
-                          ) : (
-                            <div className="grid h-20 w-20 place-items-center rounded-xl bg-purple-50 border border-purple-200 shrink-0">
-                              <FileText size={30} className="text-purple-600" />
-                            </div>
-                          )}
-
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-zinc-900 truncate">{mediaPreview.name}</p>
-                            <p className="text-xs text-zinc-500 mt-0.5">{mediaPreview.type || 'Dokumen'}</p>
-                            {mediaPreview.isPackageFlyer && (
-                              <p className="flex items-start gap-1 text-xs text-emerald-800 mt-1 font-medium">
-                                <FileText size={12} className="mt-0.5 shrink-0" aria-hidden="true" />Flyer resmi umroh siap dikirim dengan rincian jadwal, maskapai, hotel, dan rincian harga.
-                              </p>
-                            )}
-                            {mediaPreview.isCompressed && (
-                              <p className="flex items-start gap-1 text-xs text-emerald-700 mt-0.5">
-                                <CheckCircle2 size={12} className="mt-0.5 shrink-0" aria-hidden="true" />Resolusi dan ukuran telah dioptimalkan otomatis agar server tetap cepat dan hemat penyimpanan.
-                              </p>
-                            )}
-
-                            <div className="mt-2.5 flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  URL.revokeObjectURL(mediaPreview.url);
-                                  setMediaPreview(null);
-                                }}
-                                className="mobile-compact-control rounded-lg px-3 py-1 text-xs font-semibold text-zinc-600 border border-zinc-200 bg-white hover:bg-zinc-50 transition cursor-pointer"
-                              >
-                                Batal
-                              </button>
-                              {mediaPreview.isPackageFlyer && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowPackagePickerModal(true)}
-                                  className="mobile-compact-control rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 transition cursor-pointer"
-                                >
-                                  Ganti Paket
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                disabled={uploadingMedia}
-                                onClick={() => void handleSendMedia()}
-                                className="mobile-compact-control inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1 text-xs font-bold text-white bg-[#00a884] hover:bg-[#008f6f] active:scale-95 transition cursor-pointer disabled:opacity-60 shadow-xs"
-                              >
-                                {uploadingMedia ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
-                                <span>{uploadingMedia ? 'Mengirim...' : 'Kirim'}</span>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            URL.revokeObjectURL(mediaPreview.url);
+                            setMediaPreview(null);
+                          }}
+                          className="h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition cursor-pointer"
+                          title="Hapus lampiran"
+                          aria-label="Hapus lampiran"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
                     </div>
                   )}

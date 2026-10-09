@@ -510,18 +510,19 @@ export function PipelinePage() {
   return (
     <div className="app-page space-y-4">
       <PageHeader
+        actionsOnlyOnMobile
         title="Pipeline"
         subtitle="Kelola perjalanan setiap calon jamaah dari sapaan pertama hingga deal."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs" role="group" aria-label="Tampilan pipeline">
+            <div className="segmented flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-xs" role="group" aria-label="Tampilan pipeline">
               {([['kanban', 'Papan', KanbanSquare], ['table', 'Tabel', List]] as const).map(([id, label, Icon]) => (
                 <button
                   key={id}
                   aria-pressed={view === id}
                   onClick={() => setParam('view', id)}
                   className={cn(
-                    'mobile-compact-control flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
+                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
                     view === id ? 'bg-zinc-950 text-white font-semibold shadow-xs' : 'text-zinc-600 hover:text-zinc-950',
                   )}
                 >
@@ -678,13 +679,13 @@ export function PipelinePage() {
         <>
           {/* Satu baris ringkas: lompat ke tahap (berguna saat kolom di luar layar) + info/petunjuk. */}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
-            <nav aria-label="Lompat ke tahap" className="mobile-compact-filters flex flex-wrap items-center gap-x-1 gap-y-0.5 text-zinc-700">
-              <span className="mr-1 font-medium text-zinc-600">Lompat ke</span>
+            <nav aria-label="Lompat ke tahap" className="mobile-compact-filters scroll-row flex max-w-full items-center gap-x-1 gap-y-0.5 text-zinc-700 md:flex-wrap">
+              <span className="mr-1 shrink-0 font-medium text-zinc-600">Lompat ke</span>
               {columns.map((column) => (
                 <button
                   key={column.id}
                   onClick={() => jumpToColumn(column.id)}
-                  className="mobile-compact-control min-h-6 rounded px-1.5 py-1 hover:bg-zinc-100 hover:text-zinc-950"
+                  className="mobile-compact-control min-h-6 shrink-0 whitespace-nowrap rounded px-1.5 py-1 hover:bg-zinc-100 hover:text-zinc-950"
                 >
                   {column.label} <span className="tabular-nums text-zinc-600">{columnItems(column.id).length}</span>
                 </button>
@@ -767,7 +768,7 @@ export function PipelinePage() {
                                 onClick={() => toggleCollapsed(column.id)}
                                 aria-label={`Lipat kolom ${column.label}`}
                                 title="Lipat kolom"
-                                className="grid h-6 w-6 place-items-center rounded text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
+                                className="grid h-6 w-6 place-items-center rounded text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 max-md:h-8 max-md:w-8"
                               >
                                 <FoldHorizontal size={13} />
                               </button>

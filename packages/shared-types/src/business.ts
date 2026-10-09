@@ -217,12 +217,12 @@ export const capiEventForStatus = (status: ProspectStatus) =>
 
 /** Alasan putus perangkat WhatsApp: dari gateway (kode Baileys) atau dari API (gateway tidak menjawab / diputus admin). */
 export const WA_DISCONNECT_REASONS = {
-  logged_out: 'Perangkat dikeluarkan dari WhatsApp di HP (Perangkat tertaut). Scan ulang QR untuk menyambung.',
-  replaced: 'Sesi dibuka di gateway lain. Pastikan hanya satu gateway berjalan, lalu hubungkan ulang.',
-  forbidden: 'WhatsApp membatasi akun ini. Buka aplikasi WhatsApp di HP untuk melihat penyebabnya.',
-  restart: 'WhatsApp meminta sambung ulang; gateway menyambung kembali otomatis.',
-  connection_lost: 'Koneksi ke WhatsApp terputus (HP atau internet). Gateway mencoba menyambung ulang otomatis.',
-  gateway_unreachable: 'Gateway WhatsApp tidak merespons. Periksa proses wa-gateway di server.',
+  logged_out: 'Sesi WhatsApp tidak berlaku, scan ulang QR.',
+  replaced: 'Sesi dibuka di gateway lain.',
+  forbidden: 'WhatsApp membatasi akun ini.',
+  restart: 'WhatsApp meminta sambung ulang.',
+  connection_lost: 'Koneksi terputus, mencoba menyambung ulang.',
+  gateway_unreachable: 'Gateway WhatsApp tidak merespons.',
   manual: 'Perangkat diputus dari CRM.',
 } as const;
 export type WaDisconnectReason = keyof typeof WA_DISCONNECT_REASONS;

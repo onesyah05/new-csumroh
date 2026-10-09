@@ -132,7 +132,20 @@ export function VerificationPage() {
 
   return (
     <div className="app-page space-y-6">
+      <div className="md:hidden">
+        <Select
+          value={brandScope}
+          onValueChange={setBrandScope}
+          aria-label="Cakupan brand"
+          className="w-full"
+          options={[
+            { value: 'all', label: 'Semua brand' },
+            ...(brands.data ?? []).map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() })),
+          ]}
+        />
+      </div>
       <PageHeader
+        className="hidden md:flex"
         kicker="Finance"
         kickerIcon={<ShieldCheck size={13} />}
         title="Verifikasi Pembayaran"
@@ -164,7 +177,7 @@ export function VerificationPage() {
         <StatCard
           label="Rata-rata verifikasi"
           value={s?.avgVerifyMinutes != null ? durationLabel(s.avgVerifyMinutes) : '—'}
-          note="Bukti masuk → diverifikasi (30 hari)"
+          note="30 hari terakhir"
           icon={<Timer size={16} />}
         />
       </StatGrid>

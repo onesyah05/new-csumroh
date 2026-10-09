@@ -49,7 +49,15 @@ export function LmsPage() {
 
   return (
     <div className="app-page space-y-6">
+      <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 md:hidden">
+        <span className="text-xs font-medium text-zinc-500">Progres belajar</span>
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-label="Progres belajar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+          <div className="h-full rounded-full bg-zinc-950 transition-all duration-300" style={{ width: `${progress}%` }} />
+        </div>
+        <span className="font-mono text-xs font-bold text-zinc-950">{progress}%</span>
+      </div>
       <PageHeader
+        className="hidden md:flex"
         title="Akademi CS"
         subtitle="Kurikulum praktis alur konsultasi calon jamaah dari sapaan awal hingga deal yang amanah."
         actions={
@@ -82,7 +90,7 @@ export function LmsPage() {
         <aside className="surface h-fit overflow-hidden">
           <div className="border-b border-zinc-200/90 px-4 py-3.5">
             <h3 className="font-sans text-sm font-semibold text-zinc-950">Daftar Modul</h3>
-            <p className="mt-0.5 text-xs text-zinc-500">9 bab conversion cycle</p>
+            <p className="mt-0.5 hidden text-xs text-zinc-500 sm:block">9 bab conversion cycle</p>
           </div>
           <div className="max-h-[620px] overflow-y-auto p-2 space-y-1">
             {stages.map((item, index) => {

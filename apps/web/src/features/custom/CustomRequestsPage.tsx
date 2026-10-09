@@ -103,10 +103,10 @@ export function CustomRequestsPage() {
   });
 
   return <div className="app-page">
-    <PageHeader title={canPrice ? 'Layanan custom' : 'Status layanan custom'} subtitle={canPrice ? 'Hitung harga kebutuhan khusus jamaah dari semua brand, atau kembalikan ke CS bila datanya kurang.' : 'Status permintaan layanan custom jamaah Anda.'} />
+    <PageHeader className="hidden md:flex" title={canPrice ? 'Layanan custom' : 'Status layanan custom'} subtitle={canPrice ? 'Hitung harga kebutuhan khusus jamaah dari semua brand, atau kembalikan ke CS bila datanya kurang.' : 'Status permintaan layanan custom jamaah Anda.'} />
     <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
       <section aria-label="Daftar permintaan" className={cn('surface overflow-hidden', selectedId && 'hidden lg:block')}>
-        <div role="tablist" aria-label="Status permintaan" className="flex flex-wrap gap-1 border-b border-zinc-200 p-2" onKeyDown={(e) => onRovingKey(e, GROUPS.map((g) => g.id), group, setGroup)}>
+        <div role="tablist" aria-label="Status permintaan" className="scroll-row flex gap-1 border-b border-zinc-200 p-2 md:flex-wrap" onKeyDown={(e) => onRovingKey(e, GROUPS.map((g) => g.id), group, setGroup)}>
           {GROUPS.map((item) => <button key={item.id} id={`custom-tab-${item.id}`} type="button" role="tab" aria-selected={group === item.id} aria-controls="custom-queue"
             tabIndex={group === item.id ? 0 : -1} onClick={() => setGroup(item.id)}
             className={cn('shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold', group === item.id ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100')}>
@@ -317,7 +317,7 @@ function QuoteForm({ request, claimedByOther }: { request: CustomRequest; claime
     </div>
     <div className="flex flex-wrap items-center gap-3 text-xs">
       <span className="font-medium text-zinc-700">Berlaku</span>
-      <div role="radiogroup" aria-label="Masa berlaku harga" className="inline-flex rounded-lg border border-zinc-200 p-0.5" onKeyDown={(e) => onRovingKey(e, ['default', 'date'] as const, validity, setValidity)}>
+      <div role="radiogroup" aria-label="Masa berlaku harga" className="segmented inline-flex rounded-lg border border-zinc-200 p-0.5" onKeyDown={(e) => onRovingKey(e, ['default', 'date'] as const, validity, setValidity)}>
         {([['default', `${CUSTOM_DEFAULT_VALIDITY_DAYS} hari`], ['date', 'Sampai tanggal']] as const).map(([value, label]) =>
           <button key={value} type="button" role="radio" aria-checked={validity === value} tabIndex={rovingTabIndex(value, validity, 'default')} onClick={() => setValidity(value)}
             className={cn('rounded-md px-3 py-1.5 font-semibold', validity === value ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100')}>{label}</button>)}

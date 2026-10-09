@@ -43,9 +43,13 @@ describe('Paket per brand', () => {
     expect(mocks.findMany.mock.calls[0][0].where.brandId).toEqual({ in: [1, 6] });
   });
 
-  it('Admin lintas brand memakai brand yang diminta', async () => {
-    await call('/packages', { id: 2, role: 'admin', brandId: 1 }, { brandId: '6' });
+  it('Admin tanpa brand (holding) memakai brand yang diminta', async () => {
+    await call('/packages', { id: 2, role: 'admin', brandId: null }, { brandId: '6' });
     expect(mocks.findMany.mock.calls[0][0].where.brandId).toBe(6);
+  });
+
+  it('Admin yang punya brand tidak boleh meminta brand lain', async () => {
+    await expect(call('/packages', { id: 2, role: 'admin', brandId: 1 }, { brandId: '6' })).rejects.toMatchObject({ status: 403 });
   });
 
   it('"Semua brand": Admin bertugas = brand tugasnya, Superadmin = semua; tanpa filter Admin tetap brand utamanya', async () => {

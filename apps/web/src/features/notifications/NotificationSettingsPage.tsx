@@ -81,8 +81,19 @@ export function NotificationSettingsPage() {
     save.mutate({ type: p.type, toast: patch.toast ?? p.toast, sound: patch.sound ?? p.sound, muted: patch.muted ?? p.muted });
 
   return (
-    <div className="app-page space-y-6">
+    <div className="app-page space-y-4 md:space-y-6">
+      <div className="flex justify-end md:hidden">
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<Volume2 size={14} />}
+          onClick={() => { if (!playNotificationSound({ force: true })) showFeedback('Browser ini tidak mengizinkan suara.', { error: true }); }}
+        >
+          Uji suara
+        </Button>
+      </div>
       <PageHeader
+        className="hidden md:flex"
         title="Pengaturan Notifikasi"
         subtitle="Atur jenis notifikasi yang aktif, yang muncul di layar (toast), dan yang berbunyi. Jenis yang dimatikan tidak dicatat di lonceng."
         actions={
@@ -100,7 +111,7 @@ export function NotificationSettingsPage() {
         <section key={group} className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
           <header className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50/75 px-4 py-2.5">
             <h2 className="text-sm font-bold text-zinc-900">{group}</h2>
-            <div className="hidden gap-6 pr-1 text-xs font-semibold text-zinc-600 sm:flex" aria-hidden="true">
+            <div className="flex gap-3 text-xs font-semibold text-zinc-600 sm:gap-6" aria-hidden="true">
               <span className="w-11 text-center">Aktif</span>
               <span className="w-11 text-center">Toast</span>
               <span className="w-11 text-center">Suara</span>
@@ -108,32 +119,29 @@ export function NotificationSettingsPage() {
           </header>
           <ul className="divide-y divide-zinc-100">
             {items.map((p) => (
-              <li key={p.type} className={cn('flex flex-wrap items-center gap-3 px-4 py-3', p.muted && 'bg-zinc-50/70')}>
+              <li key={p.type} className={cn('flex items-center gap-3 px-4 py-3', p.muted && 'bg-zinc-50/70')}>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-zinc-900">
                     {p.label}
                     <span className={cn(
-                      'ml-2 rounded-full px-2 py-0.5 align-middle text-xs font-semibold',
-                      p.priority === 'urgent' ? 'bg-rose-50 text-rose-700' : 'bg-zinc-100 text-zinc-600',
+                      'mt-1 block w-fit whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold sm:ml-2 sm:mt-0 sm:inline sm:align-middle',
+                      p.priority === 'urgent' ? 'bg-rose-50 text-rose-700' : 'hidden bg-zinc-100 text-zinc-600 sm:inline',
                     )}>
                       {PRIORITY_LABEL[p.priority]}
                     </span>
                   </p>
-                  <p className="mt-0.5 text-xs text-zinc-600">
+                  <p className="mt-0.5 hidden text-xs text-zinc-600 sm:block">
                     {p.description}{p.locked ? ' Selalu aktif dan muncul di layar.' : p.muted ? ' Dimatikan: tidak dicatat di lonceng.' : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-6">
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-600 sm:hidden">Aktif</span>
+                <div className="flex items-center gap-3 sm:gap-6">
+                  <span className="flex items-center">
                     <Toggle checked={!p.muted} disabled={p.locked} label={`Aktifkan notifikasi: ${p.label}`} onChange={(active) => update(p, { muted: !active })} />
                   </span>
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-600 sm:hidden">Toast</span>
+                  <span className="flex items-center">
                     <Toggle checked={p.toast && !p.muted} disabled={p.locked || p.muted} label={`Tampilkan toast: ${p.label}`} onChange={(toast) => update(p, { toast })} />
                   </span>
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-600 sm:hidden">Suara</span>
+                  <span className="flex items-center">
                     <Toggle checked={p.sound && !p.muted} disabled={p.muted} label={`Bunyikan suara: ${p.label}`} onChange={(sound) => update(p, { sound })} />
                   </span>
                 </div>

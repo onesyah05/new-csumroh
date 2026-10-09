@@ -34,24 +34,47 @@ export const requireRole = (...roles: Role[]) => (req: Request, _res: Response, 
   next();
 };
 
+type BrandScopedUser = { role: string; brandId?: number | null; userBrands?: { brand?: { id: number } | null }[] | null };
+
+/** Brand utama + penugasan UserBrand. */
+export function assignedBrandIds(user: BrandScopedUser): number[] {
+  const ids = new Set<number>();
+  if (user.brandId) ids.add(user.brandId);
+  if (Array.isArray(user.userBrands)) for (const ub of user.userBrands) if (ub.brand?.id) ids.add(ub.brand.id);
+  return [...ids];
+}
+
+/**
+ * Pengawas holding (semua brand): Superadmin, Finance, dan Admin yang tidak punya brand sama sekali. Admin yang punya
+ * brand utama atau penugasan hanya memegang brand itu (aturan yang sama dengan penerima notifikasi dan pengelolaan paket).
+ */
+export function isHoldingWide(user: BrandScopedUser) {
+  if (user.role === 'superadmin' || user.role === 'finance') return true;
+  return user.role === 'admin' && assignedBrandIds(user).length === 0;
+}
+
+/** Brand yang boleh dilihat user; null = semua brand. Pakai untuk "semua brand" / tanpa brandId. */
+export function visibleBrandIds(user: BrandScopedUser): number[] | null {
+  return isHoldingWide(user) ? null : assignedBrandIds(user);
+}
+
+export function canAccessBrand(user: BrandScopedUser, brandId: number) {
+  const visible = visibleBrandIds(user);
+  return visible === null || visible.includes(brandId);
+}
+
 export function scopedBrandId(req: Request, requestedBrandId?: number) {
   if (!req.user) throw new HttpError(401, 'Tidak terautentikasi.');
 
   // Roles with holding-wide authority can scope to any requested brand
-  if (req.user.role === 'superadmin' || req.user.role === 'admin' || req.user.role === 'finance') {
+  if (isHoldingWide(req.user)) {
     if (requestedBrandId) return requestedBrandId;
     if (req.user.brandId) return req.user.brandId;
     throw new HttpError(400, 'Brand wajib dipilih.');
   }
 
-  // CS roles check both primary brandId and multi-brand userBrands assignments
-  const allowedBrandIds = new Set<number>();
-  if (req.user.brandId) allowedBrandIds.add(req.user.brandId);
-  if (req.user.userBrands && Array.isArray(req.user.userBrands)) {
-    for (const ub of req.user.userBrands) {
-      if (ub.brand?.id) allowedBrandIds.add(ub.brand.id);
-    }
-  }
+  // Admin/CS lain: brand utama + penugasan UserBrand
+  const allowedBrandIds = new Set<number>(assignedBrandIds(req.user));
 
   if (requestedBrandId) {
     if (!allowedBrandIds.has(requestedBrandId)) {

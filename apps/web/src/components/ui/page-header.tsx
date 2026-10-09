@@ -13,6 +13,8 @@ export interface PageHeaderProps {
   onBack?: () => void;
   actions?: ReactNode;
   className?: string;
+  /** Mobile: sembunyikan judul dan subjudul (app bar sudah memberi konteks), sisakan tombol aksi. */
+  actionsOnlyOnMobile?: boolean;
 }
 
 export function PageHeader({
@@ -25,6 +27,7 @@ export function PageHeader({
   onBack,
   actions,
   className,
+  actionsOnlyOnMobile,
 }: PageHeaderProps) {
   const navigate = useNavigate();
 
@@ -42,12 +45,12 @@ export function PageHeader({
 
   return (
     <section className={cn('page-header flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between', className)}>
-      <div className="flex items-start gap-3 min-w-0">
+      <div className={cn('flex items-start gap-3 min-w-0', actionsOnlyOnMobile && 'max-md:hidden')}>
         {showBackButton && (
           <button
             type="button"
             onClick={handleBack}
-            className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-500 shadow-xs hover:bg-zinc-50 hover:text-zinc-900 transition cursor-pointer"
+            className="mt-0.5 hidden h-9 w-9 shrink-0 place-items-center rounded-xl border md:grid border-zinc-200 bg-white text-zinc-500 shadow-xs hover:bg-zinc-50 hover:text-zinc-900 transition cursor-pointer"
             aria-label="Kembali"
           >
             <ArrowLeft size={16} />

@@ -13,9 +13,21 @@ export default defineConfig(({ command, mode }) => {
   }
   const apiOrigin = (env.VITE_API_URL || 'http://localhost:4000/api/v1').replace(/\/api\/v1\/?$/, '');
 
+  // ID build unik: dipakai klien untuk mendeteksi versi baru lewat /version.json.
+  const buildId = String(Date.now());
+
   return {
     envDir,
-    plugins: [react()],
+    define: { __BUILD_ID__: JSON.stringify(buildId) },
+    plugins: [
+      react(),
+      {
+        name: 'emit-version',
+        generateBundle() {
+          this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ id: buildId }) });
+        },
+      },
+    ],
     server: {
       port: 5173,
       proxy: {

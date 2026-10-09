@@ -8,7 +8,9 @@ import { queryClient } from './app/query';
 import { AppErrorBoundary } from './components/ui/AppErrorBoundary';
 import './styles/globals.css';
 import { registerAppWorker } from './app/pwa';
+import { watchForNewVersion } from './app/updates';
 
 registerAppWorker();
+watchForNewVersion();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AppErrorBoundary><QueryClientProvider client={queryClient}><BrowserRouter><AuthProvider><App /></AuthProvider></BrowserRouter></QueryClientProvider></AppErrorBoundary></React.StrictMode>);

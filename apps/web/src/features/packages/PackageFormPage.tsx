@@ -326,6 +326,7 @@ export function PackageFormPage() {
   return (
     <div className="app-page space-y-5 pb-16">
       <PageHeader
+        className="hidden md:flex"
         backUrl={backUrl}
         title={isEdit ? 'Sunting Paket Umroh' : 'Tambah Paket Umroh'}
         subtitle={
@@ -389,7 +390,7 @@ export function PackageFormPage() {
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {chooseBrand && (
-                  <div>
+                  <div className="col-span-2 sm:col-span-1">
                     <label className="text-xs font-semibold text-zinc-700 block mb-1">
                       Brand Travel <span className="text-rose-500">*</span>
                     </label>
@@ -398,12 +399,12 @@ export function PackageFormPage() {
                       onValueChange={(val) => setForm((prev) => ({ ...prev, brandId: val }))}
                       options={brands.map((b) => ({ value: String(b.id), label: b.name }))}
                       placeholder="Pilih Brand Travel"
-                      className="h-9 w-full text-xs rounded-lg border-zinc-200"
+                      className="h-9 w-full text-xs font-normal rounded-lg border-zinc-200 shadow-none"
                     />
                   </div>
                 )}
 
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-semibold text-zinc-700 block mb-1">
                     Tanggal Keberangkatan
                   </label>
@@ -558,7 +559,7 @@ export function PackageFormPage() {
                       { value: 'transit', label: 'Transit' },
                     ]}
                     placeholder="Pilih Rute"
-                    className="h-9 w-full text-xs rounded-lg border-zinc-200"
+                    className="h-9 w-full text-xs font-normal rounded-lg border-zinc-200 shadow-none"
                   />
                 </div>
 
