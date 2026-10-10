@@ -74,6 +74,7 @@ import { StatusBadge } from '../../components/ui/status-badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
+import { formatWaNumber } from '../../lib/phone';
 import { FLYER_CAPTION_CLOSING, formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
 import { unresolvedScript } from './scriptLibrary';
 import { customBadge } from '../custom/customApi';
@@ -1193,7 +1194,7 @@ export function InboxPage() {
                           <ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-700 shrink-0" />
                         </div>
                         <p className="text-xs text-[#667781] truncate">
-                          {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : isReconnecting ? 'Menyambung ulang…' : 'Terputus'}
+                          {isConnected ? (formatWaNumber(sessionQuery.data?.phoneNumber) ?? 'Terhubung') : isReconnecting ? 'Menyambung ulang…' : 'Terputus'}
                         </p>
                       </div>
                     </button>
@@ -1245,7 +1246,9 @@ export function InboxPage() {
                               )}
                               <div className="min-w-0">
                                 <p className="truncate text-xs">{b.name}</p>
-                                {b.phone && <p className="text-xs text-zinc-400 truncate">+{b.phone}</p>}
+                                <p className="truncate text-xs tabular-nums text-zinc-500">
+                                  {b.whatsappSession?.status === 'connected' ? (formatWaNumber(b.whatsappSession.phoneNumber) ?? 'Terhubung') : 'Terputus'}
+                                </p>
                               </div>
                             </div>
                             {isActive && <Check size={14} className="text-emerald-600 shrink-0" />}
@@ -1278,7 +1281,7 @@ export function InboxPage() {
                       {activeBrand?.name ?? 'WhatsApp Live Chat'}
                     </h2>
                     <p className="text-xs text-[#667781] truncate">
-                      {isConnected ? (sessionQuery.data?.phoneNumber ? `+${sessionQuery.data.phoneNumber}` : 'Terhubung') : isReconnecting ? 'Menyambung ulang…' : 'Terputus'}
+                      {isConnected ? (formatWaNumber(sessionQuery.data?.phoneNumber) ?? 'Terhubung') : isReconnecting ? 'Menyambung ulang…' : 'Terputus'}
                     </p>
                   </div>
                 </div>

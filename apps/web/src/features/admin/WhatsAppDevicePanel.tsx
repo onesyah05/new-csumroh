@@ -10,6 +10,7 @@ import { queryClient } from '../../app/query';
 import { Button } from '../../components/ui/button';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { ConfirmDialog } from '../../components/ui/modal';
+import { formatWaNumber } from '../../lib/phone';
 
 type WhatsAppStatus = 'disconnected' | 'connecting' | 'qr_ready' | 'connected';
 type WhatsAppSession = {
@@ -33,17 +34,7 @@ const statusCopy: Record<WhatsAppStatus, { label: string; description: string }>
 const QR_TTL_SECONDS = 25;
 
 function formatPhoneNumber(value?: string | null) {
-  if (!value) return 'Belum tersedia';
-  const clean = value.replace(/\D/g, '');
-  if (clean.startsWith('62') && clean.length >= 10) {
-    const prefix = '+62';
-    const rest = clean.slice(2);
-    if (rest.length <= 8) {
-      return `${prefix} ${rest.slice(0, 3)}-${rest.slice(3)}`;
-    }
-    return `${prefix} ${rest.slice(0, 3)}-${rest.slice(3, 7)}-${rest.slice(7)}`;
-  }
-  return value.startsWith('+') ? value : `+${value}`;
+  return formatWaNumber(value) ?? 'Belum tersedia';
 }
 
 export function WhatsAppDevicePanel({ brandId, brandName, canManage }: { brandId: number; brandName: string; canManage: boolean }) {
