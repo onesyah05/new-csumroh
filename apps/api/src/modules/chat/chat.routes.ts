@@ -19,7 +19,7 @@ import { adLabels, cacheAdThumbnail, withAdPreviews } from '../ads/meta-ads.js';
 import { syncSessionWithGateway } from '../whatsapp/gateway-probe.js';
 import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
 import { Prisma, type ChatMessage } from '@prisma/client';
-import { avatarNeedsRefresh } from '@csumroh/shared-types';
+import { avatarNeedsRefresh, MEDIA_PLACEHOLDER } from '@csumroh/shared-types';
 import { refreshProspectAvatar, refreshProspectAvatars } from './avatar.service.js';
 import { resolveNotifications } from '../notifications/notify.service.js';
 import {
@@ -702,7 +702,9 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
     // media sudah terkirim, lalu CS mengulang dan jamaah menerima dobel. Status tidak diubah agar tidak mundur.
     const messageId = gatewayResult.data?.messageId ?? `local-${randomUUID()}`;
     const mediaUrl = resolvedLocalUrl || (gatewayResult.data?.mediaUrl ?? null);
-    const messageText = input.caption || resolvedFileName;
+    // Foto/video tanpa keterangan: penanda standar (disembunyikan di UI), bukan nama berkas. Dokumen tetap memakai nama berkas.
+    const mediaPlaceholder = input.mediaType === 'imageMessage' ? MEDIA_PLACEHOLDER.image : input.mediaType === 'videoMessage' ? MEDIA_PLACEHOLDER.video : resolvedFileName;
+    const messageText = input.caption || mediaPlaceholder;
     const created = await tx.chatMessage.upsert({
       where: { brandId_messageId: { brandId, messageId } },
       update: {

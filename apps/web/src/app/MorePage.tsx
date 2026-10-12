@@ -1,4 +1,5 @@
-import { Bell, BookOpen, Building2, ChevronRight, Image as ImageIcon, LogOut, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2 } from 'lucide-react';
+import { canUseGallery } from '@csumroh/shared-types';
+import { Bell, BookOpen, Building2, ChevronRight, Image as ImageIcon, Images, LogOut, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from './auth';
 import { InstallApp } from './pwa';
@@ -13,6 +14,7 @@ export function MorePage() {
   const designer = user?.role === 'designer';
   const items = [
     ...(!product && !designer ? [{ to: '/packages', label: 'Paket Umroh', icon: PackageOpen }] : []),
+    ...(canUseGallery(user?.role) ? [{ to: '/galeri', label: 'Galeri', icon: Images }] : []),
     ...(!product && !finance && !designer ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
     ...(!finance && !designer ? [{ to: '/layanan-custom', label: product || user?.role === 'superadmin' ? 'Layanan custom' : 'Status custom', icon: SlidersHorizontal }] : []),
     ...(manager ? [
