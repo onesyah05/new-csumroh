@@ -63,6 +63,7 @@ import { PicDialog, canEditProspect, isLockedForCs, readOnlyNote } from './PicDi
 import { useNow } from '../../lib/useNow';
 import { showFeedback } from '../../app/toast';
 import { Modal } from '../../components/ui/modal';
+import { MENU_CONTENT, MENU_ITEM, MENU_SEPARATOR } from '../../components/ui/menu-styles';
 import { OfficialOfferModal } from '../chat/OfficialOfferModal';
 import { ObjectionModal } from '../chat/ObjectionModal';
 import { OfficialInvoiceModal } from '../chat/OfficialInvoiceModal';
@@ -1105,14 +1106,14 @@ function ProspectCard({
             <MoreHorizontal size={16} />
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" className="z-50 w-60 rounded-xl border bg-white p-1 shadow-lift">
+            <DropdownMenu.Content align="end" className={cn(MENU_CONTENT, 'w-60')}>
               {!locked && (
-                <DropdownMenu.Item onSelect={onLogFollowup} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs outline-none data-[highlighted]:bg-zinc-100">
+                <DropdownMenu.Item onSelect={onLogFollowup} className={MENU_ITEM}>
                   <ClipboardList size={13} className="text-zinc-500" />Catat follow-up
                 </DropdownMenu.Item>
               )}
               {canHandover && (
-                <DropdownMenu.Item onSelect={onHandover} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs outline-none data-[highlighted]:bg-zinc-100">
+                <DropdownMenu.Item onSelect={onHandover} className={MENU_ITEM}>
                   <UserPlus2 size={13} className="text-zinc-500" />Serahkan ke CS lain
                 </DropdownMenu.Item>
               )}
@@ -1128,13 +1129,13 @@ function ProspectCard({
                 </DropdownMenu.Item>
               )}
               {canAssign && (
-                <DropdownMenu.Item onSelect={onAssign} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs outline-none data-[highlighted]:bg-zinc-100">
+                <DropdownMenu.Item onSelect={onAssign} className={MENU_ITEM}>
                   <UserPlus2 size={13} className="text-zinc-500" />{prospect.userId ? 'Ganti PIC' : 'Tugaskan PIC'}
                 </DropdownMenu.Item>
               )}
               {moves.length > 0 && (
                 <>
-                  <DropdownMenu.Separator className="my-1 border-t border-zinc-100" />
+                  <DropdownMenu.Separator className={MENU_SEPARATOR} />
                   <p className="px-2 py-1.5 text-xs font-semibold text-zinc-500">Langkah berikutnya</p>
                   {moves.map((status) => (
                     <DropdownMenu.Item
