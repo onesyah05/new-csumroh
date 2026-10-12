@@ -16,6 +16,8 @@ const EXEMPT = new Set([
   'features/chat/ChatCopilotPanel.tsx',
   'features/chat/EmojiPicker.tsx',
   'features/chat/ChatSidePanel.tsx',
+  // Kartu pratinjau iklan Click-to-WhatsApp: hanya tampil di bubble Inbox yang bergaya WhatsApp Web.
+  'features/chat/AdReplyCard.tsx',
   // Tag tahap prospek: satu warna per tahap atas permintaan user (daftar dan header chat).
   'features/chat/ConversationTagChip.tsx',
   // Tautan di bubble chat berwarna biru atas permintaan user.
