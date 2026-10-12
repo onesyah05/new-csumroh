@@ -5,7 +5,7 @@ import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { businessDateKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, waDisconnectReasonText } from '@csumroh/shared-types';
+import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isMediaFileNameText, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle,
@@ -69,8 +69,6 @@ import { canAccessBrand, useBrandScope } from '../../lib/scope';
 import { useAuth } from '../../app/auth';
 import { useUiStore } from '../../app/store';
 import { queryClient } from '../../app/query';
-import { Badge } from '../../components/ui/badge';
-import { StatusBadge } from '../../components/ui/status-badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
@@ -78,8 +76,11 @@ import { formatWaNumber } from '../../lib/phone';
 import { FLYER_CAPTION_CLOSING, formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
 import { unresolvedScript } from './scriptLibrary';
 import { customBadge } from '../custom/customApi';
-import { conversationTags, conversationTrip } from './conversationTags';
-import { ConversationTagChip } from './ConversationTagChip';
+import { conversationTags, conversationTrip, picTag, stageTag } from './conversationTags';
+import { ConversationTagButton, ConversationTagChip, PicChip, StageChip } from './ConversationTagChip';
+import { linkifyText } from '../../lib/linkify';
+import { GalleryBrowser } from '../gallery/GalleryBrowser';
+import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxWorkFilters, type InboxWorkFilter } from './inboxFilters';
@@ -269,6 +270,8 @@ export function InboxPage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showPackagePickerModal, setShowPackagePickerModal] = useState(false);
   const [packageSearch, setPackageSearch] = useState('');
+  const [packageMonth, setPackageMonth] = useState('all');
+  useEffect(() => { setPackageMonth('all'); }, [brandId]);
   const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
   const [mediaPreview, setMediaPreview] = useState<MediaPreviewState | null>(null);
   // Lampiran yang belum terkirim disimpan per chat: caption flyer ada di draf chat itu, jadi lampirannya harus ikut
@@ -294,6 +297,7 @@ export function InboxPage() {
     return () => cancelAnimationFrame(frame);
   }, [sidePanelTab]);
   const documentInputRef = useRef<HTMLInputElement>(null);
+  const [showGalleryPicker, setShowGalleryPicker] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const flyerInputRef = useRef<HTMLInputElement>(null);
   const pendingFlyerPackageRef = useRef<any>(null);
@@ -406,8 +410,19 @@ export function InboxPage() {
     return packages.data?.find((p) => p.id === (selected?.packageId || selected?.package?.id));
   }, [packages.data, selected?.packageId, selected?.package?.id]);
 
+  // Bulan keberangkatan yang tersedia (YYYY-MM dari tanggal berangkat paket aktif), terurut naik.
+  const packageMonthOptions = useMemo(() => {
+    const keys = new Set<string>();
+    for (const p of packages.data ?? []) {
+      const key = p.isActive ? dateOnlyKey(p.departureDate)?.slice(0, 7) : null;
+      if (key) keys.add(key);
+    }
+    return [{ value: 'all', label: 'Semua bulan' }, ...[...keys].sort().map((key) => ({ value: key, label: targetMonthLabel(key) ?? key }))];
+  }, [packages.data]);
+
   const filteredPackages = useMemo(() => {
-    const list = (packages.data ?? []).filter((p) => p.isActive);
+    const list = (packages.data ?? []).filter((p) =>
+      p.isActive && (packageMonth === 'all' || dateOnlyKey(p.departureDate)?.slice(0, 7) === packageMonth));
     const q = packageSearch.trim().toLowerCase();
     if (!q) return list;
     return list.filter((p) =>
@@ -415,7 +430,7 @@ export function InboxPage() {
         .toLowerCase()
         .includes(q)
     );
-  }, [packages.data, packageSearch]);
+  }, [packages.data, packageSearch, packageMonth]);
 
   const quickReplyChips = [
     { id: 'greeting', label: 'Sapaan', icon: Sparkles },
@@ -1583,25 +1598,17 @@ export function InboxPage() {
                   <span className="block min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="block min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-[#111b21] md:flex-none md:leading-5">{selected.name}</span>
-                      {selected.spamAt && <span className="inline-flex shrink-0 items-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700">Spam</span>}
+                      {selected.spamAt && <ConversationTagChip tag={{ key: 'spam', label: 'Spam', tone: 'urgent' }} />}
                       {selected.leadSource === 'meta_ads' && (
                         <span
                           title={[selected.adName ?? selected.adHeadline, selected.adCampaignName, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
-                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-950 px-2 py-0.5 text-[9px] font-bold text-white"
+                          className="inline-flex shrink-0 items-center gap-1 rounded bg-zinc-800 px-1.5 text-xs font-semibold leading-4 text-white ring-1 ring-inset ring-zinc-800"
                         >
-                          <Megaphone size={10} /><span className="hidden md:inline">Meta Ads</span><span className="sr-only md:hidden">Meta Ads</span>
+                          <Megaphone size={12} /><span className="hidden md:inline">Meta Ads</span><span className="sr-only md:hidden">Meta Ads</span>
                         </span>
                       )}
-                      <span
-                        title={selected.user?.name ? `Penanggung jawab: ${selected.user.name}` : 'Percakapan belum memiliki PIC'}
-                        className={cn(
-                          'inline-flex min-w-0 max-w-[48%] shrink-0 items-center gap-1 rounded-md px-1.5 text-xs leading-4 md:hidden',
-                          selected.user?.name ? 'bg-zinc-100 text-zinc-700' : 'bg-amber-50 text-amber-800',
-                        )}
-                      >
-                        <User size={12} className="shrink-0" aria-hidden="true" />
-                        {selected.user?.name && <span className="shrink-0 font-medium">PIC</span>}
-                        <span className="truncate font-semibold">{selected.user?.name || 'Tanpa PIC'}</span>
+                      <span className="flex shrink-0 md:hidden">
+                        <PicChip item={selected} />
                       </span>
                     </span>
 
@@ -1618,16 +1625,9 @@ export function InboxPage() {
                     </span>
                     <span className="flex min-w-0 items-center gap-2 text-xs leading-4 md:hidden">
                       <span className="flex min-w-0 max-w-24" title={activeBrand?.name} aria-label={`Brand: ${activeBrand?.name || activeBrand?.code || brandId}`}>
-                        <StatusBadge
-                          size="sm"
-                          label={activeBrand?.code || `Brand ${brandId}`}
-                          className="max-w-full rounded-md border-zinc-200 bg-white px-1.5 py-0 text-zinc-600 shadow-none [&>span]:truncate"
-                        />
+                        <ConversationTagChip shrinkable tag={{ key: 'brand', label: activeBrand?.code || `Brand ${brandId}`, tone: 'muted' }} />
                       </span>
-                      {!selected.isGroup && <Badge value={selected.status || 'new'} className={cn(
-                        'shrink-0 whitespace-nowrap rounded-none border-0 bg-transparent p-0 font-medium shadow-none',
-                        isWonStatus(selected.status) ? 'text-emerald-700 [&>span:first-child]:bg-emerald-600' : 'text-zinc-600 [&>span:first-child]:bg-zinc-500',
-                      )} />}
+                      {!selected.isGroup && <StageChip item={selected} />}
                     </span>
                   </span>
                   </button>
@@ -1635,43 +1635,22 @@ export function InboxPage() {
 
                 {/* Right Action Tools */}
                 <div className="hidden md:flex items-center gap-2 shrink-0">
-                  {/* Status Pipeline Badge */}
-                  {!selected.isGroup && (
-                    <button
-                      type="button"
+                  {/* Tahap pipeline dan PIC: chip yang sama dengan daftar percakapan */}
+                  {!selected.isGroup && stageTag(selected) && (
+                    <ConversationTagButton
+                      tag={stageTag(selected)!}
                       onClick={() => setSidePanelTab('profile')}
-                      className="cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
                       title="Status Pipeline (Klik untuk membuka profil)"
-                      aria-label={`Status ${selected.status || 'new'}: buka profil prospek`}
-                    >
-                      <Badge value={selected.status || 'new'} className="shrink-0 cursor-pointer hover:opacity-85 transition-opacity" />
-                    </button>
+                      ariaLabel={`Status ${stageTag(selected)!.label}: buka profil prospek`}
+                    />
                   )}
 
-                  {/* PIC Status Badge */}
-                  {selected.user?.name ? (
-                    <button
-                      type="button"
+                  {picTag(selected) && (
+                    <ConversationTagButton
+                      tag={picTag(selected)!}
                       onClick={() => setSidePanelTab('profile')}
-                      className={cn(
-                        'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold cursor-pointer hover:opacity-85 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]',
-                        isPic
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
-                      )}
-                      title={`Penanggung jawab chat: ${selected.user.name} (Klik untuk membuka profil)`}
-                    >
-                      {isPic ? 'PIC Anda' : `PIC: ${selected.user.name}`}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setSidePanelTab('profile')}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-xs font-bold cursor-pointer hover:opacity-85 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
-                      title="Percakapan belum memiliki PIC (Klik untuk membuka profil)"
-                    >
-                      Belum ada PIC
-                    </button>
+                      title={isPic ? 'Anda penanggung jawab chat ini (Klik untuk membuka profil)' : `${picTag(selected)!.title ?? 'Percakapan belum memiliki PIC'} (Klik untuk membuka profil)`}
+                    />
                   )}
 
                   {user?.role === 'cs' && isUnassigned && !isWonStatus(selected.status) && !isLostStatus(selected.status) && (
@@ -2249,9 +2228,11 @@ export function InboxPage() {
                                      )}
 
                                      {Boolean(item.messageText) && item.messageType !== 'callLogMessage' &&
-                                       !['[Gambar]', '[Video]', '[Audio]', '[Voice Note]', '[Dokumen]', '[Stiker]', '[Lokasi]'].includes(item.messageText!.trim()) && (
+                                       !['[Gambar]', '[Video]', '[Audio]', '[Voice Note]', '[Dokumen]', '[Stiker]', '[Lokasi]'].includes(item.messageText!.trim()) &&
+                                       // Pesan lama: foto/video yang tersimpan dengan nama berkas sebagai teks.
+                                       !(['imageMessage', 'videoMessage'].includes(item.messageType ?? '') && isMediaFileNameText(item.messageText!)) && (
                                          <p className="text-base md:text-[14px] leading-relaxed whitespace-pre-wrap break-words text-[#111b21] mt-1">
-                                           {item.messageText}
+                                           {linkifyText(item.messageText!)}
                                          </p>
                                      )}
                                    </>
@@ -2397,6 +2378,7 @@ export function InboxPage() {
                       e.target.value = '';
                     }}
                   />
+                  {/* Kirim langsung dari perangkat tanpa menyimpan ke galeri (mis. GIF, MOV) */}
                   <input
                     ref={mediaInputRef}
                     type="file"
@@ -2579,7 +2561,7 @@ export function InboxPage() {
 
                           {/* Foto & Video */}
                           <DropdownMenu.Item
-                            onClick={() => mediaInputRef.current?.click()}
+                            onClick={() => setShowGalleryPicker(true)}
                             className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer transition"
                           >
                             <div className="grid h-8 w-8 place-items-center rounded-full bg-[#007bfc] text-white shadow-xs shrink-0">
@@ -2587,7 +2569,7 @@ export function InboxPage() {
                             </div>
                             <div>
                               <p className="font-semibold text-zinc-900">Foto & Video</p>
-                              <p className="text-xs font-normal text-zinc-500">Gambar (Autocompress), Video</p>
+                              <p className="text-xs font-normal text-zinc-500">Gambar, Video</p>
                             </div>
                           </DropdownMenu.Item>
 
@@ -2778,17 +2760,34 @@ export function InboxPage() {
         confirmLabel="Hapus untuk semua"
       />
 
+      {/* Galeri media bersama: Foto & Video memilih dari galeri brand (atau mengunggah ke galeri) */}
+      <ModalFrame open={showGalleryPicker} onClose={() => setShowGalleryPicker(false)} title="Galeri media">
+        <div className="relative flex h-[85vh] max-h-[640px] w-full max-w-4xl overflow-hidden rounded-xl bg-white shadow-2xl border border-zinc-200">
+          {brandId && (
+            <GalleryBrowser
+              brandId={brandId}
+              mode="picker"
+              onClose={() => setShowGalleryPicker(false)}
+              onPickFromDevice={() => { setShowGalleryPicker(false); mediaInputRef.current?.click(); }}
+              onSelect={(asset: GalleryAsset) => {
+                setShowGalleryPicker(false);
+                void galleryAssetToFile(asset)
+                  .then((file) => handleProcessFile(file))
+                  .catch((error: Error) => showToast(error.message || 'Gagal mengambil media dari galeri.'));
+              }}
+            />
+          )}
+        </div>
+      </ModalFrame>
+
       {/* Package Picker Modal (Brosur & Flyer Paket Umroh) */}
       <ModalFrame open={showPackagePickerModal} onClose={() => setShowPackagePickerModal(false)} title="Kirim flyer brosur paket umroh">
           <div className="relative flex flex-col max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 sm:px-6 sm:py-4 bg-[#f0f2f5]">
               <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-600 text-white shadow-sm">
-                  <ImageIcon size={20} />
-                </div>
                 <div>
-                  <p aria-hidden="true" className="font-display text-base font-bold text-zinc-900">
+                  <p aria-hidden="true" className="font-display text-sm font-bold text-zinc-900">
                     Kirim Flyer Brosur Paket Umroh
                   </p>
                   <p className="hidden text-xs text-zinc-500 sm:block">
@@ -2814,23 +2813,35 @@ export function InboxPage() {
                   type="text"
                   value={packageSearch}
                   onChange={(e) => setPackageSearch(e.target.value)}
-                  placeholder="Cari nama paket, maskapai, tanggal, atau hotel..."
+                  placeholder="Cari paket, maskapai, tanggal, hotel"
                   className="w-full rounded-xl border border-zinc-200 bg-white pl-10 pr-4 py-2 text-xs text-zinc-800 placeholder:text-zinc-500 focus:border-[#00a884] focus:ring-1 focus:ring-[#00a884] outline-none"
                 />
               </div>
-              <label className="inline-flex items-center gap-2 text-xs text-zinc-600 font-medium cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={linkPackageToProspect}
-                  onChange={(e) => setLinkPackageToProspect(e.target.checked)}
-                  className="rounded border-zinc-300 text-[#00a884] focus:ring-[#00a884]"
-                />
-                <span>Hubungkan paket ke profil prospek</span>
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <div className="w-40 shrink-0">
+                  <Select
+                    value={packageMonth}
+                    onValueChange={setPackageMonth}
+                    options={packageMonthOptions}
+                    aria-label="Filter bulan berangkat"
+                    size="sm"
+                    className="w-full"
+                  />
+                </div>
+                <label className="inline-flex min-w-0 items-center gap-2 text-xs text-zinc-600 font-medium cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={linkPackageToProspect}
+                    onChange={(e) => setLinkPackageToProspect(e.target.checked)}
+                    className="shrink-0 rounded border-zinc-300 text-[#00a884] focus:ring-[#00a884]"
+                  />
+                  <span className="truncate">Hubungkan ke profil</span>
+                </label>
+              </div>
             </div>
 
             {/* Package List */}
-            <div className="thin-scrollbar flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+            <div className="thin-scrollbar flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-3">
               {filteredPackages.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-zinc-100 text-zinc-400 mb-3">
@@ -2838,7 +2849,7 @@ export function InboxPage() {
                   </div>
                   <p className="text-sm font-bold text-zinc-700">Tidak ada paket umroh yang cocok</p>
                   <p className="text-xs text-zinc-400 mt-1">
-                    {packageSearch ? 'Coba kata kunci pencarian yang lain' : 'Belum ada paket umroh aktif pada brand ini'}
+                    {packageSearch || packageMonth !== 'all' ? 'Coba kata kunci atau bulan yang lain' : 'Belum ada paket umroh aktif pada brand ini'}
                   </p>
                 </div>
               ) : (
@@ -2853,7 +2864,7 @@ export function InboxPage() {
                     <div
                       key={pkg.id}
                       className={cn(
-                        'group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 rounded-2xl border p-3 sm:p-4 transition duration-150',
+                        'group flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 rounded-2xl border p-3 sm:p-4 transition duration-150',
                         isCurrent
                           ? 'border-emerald-300 bg-emerald-50/40 shadow-xs'
                           : 'border-zinc-200 bg-white hover:border-emerald-300 hover:shadow-xs'
@@ -2877,30 +2888,18 @@ export function InboxPage() {
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-bold text-sm text-zinc-900 truncate">{pkg.name}</h4>
-                            {isCurrent && (
-                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
-                                Paket Terhubung
-                              </span>
-                            )}
-                            {hasFlyer ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-bold text-zinc-700 border border-zinc-200">
-                                <ImageIcon size={12} className="shrink-0" aria-hidden="true" />Flyer siap
-                              </span>
-                            ) : (
+                          <h4 className="font-bold text-sm text-zinc-900 truncate" title={pkg.name}>{pkg.name}</h4>
+                          {!hasFlyer && (
+                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                               <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800 border border-amber-200">
                                 <Upload size={12} className="shrink-0" aria-hidden="true" />Unggah saat kirim
                               </span>
-                            )}
-                          </div>
+                            </div>
+                          )}
 
-                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                            <span className="inline-flex items-center gap-1"><CalendarDays size={12} className="shrink-0" aria-hidden="true" />{departureStr}{pkg.duration ? ` (${pkg.duration})` : ''}</span>
-                            {pkg.airline && <span className="inline-flex items-center gap-1"><Plane size={12} className="shrink-0" aria-hidden="true" />{pkg.airline}</span>}
-                            {(pkg.hotelMakkah || pkg.hotelMadinah) && (
-                              <span className="inline-flex items-center gap-1"><Building2 size={12} className="shrink-0" aria-hidden="true" />{pkg.hotelMakkah || pkg.hotelMadinah}</span>
-                            )}
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+                            <span className="inline-flex max-w-full min-w-0 items-center gap-1"><CalendarDays size={12} className="shrink-0" aria-hidden="true" /><span className="truncate">{departureStr}{pkg.duration ? ` (${pkg.duration})` : ''}</span></span>
+                            {pkg.airline && <span className="inline-flex max-w-full min-w-0 items-center gap-1"><Plane size={12} className="shrink-0" aria-hidden="true" /><span className="truncate">{pkg.airline}</span></span>}
                           </div>
 
                           <div className="mt-1 text-xs font-bold text-[#00a884]">
@@ -2914,7 +2913,9 @@ export function InboxPage() {
                           type="button"
                           size="sm"
                           variant="secondary"
+                          aria-disabled={isCurrent}
                           onClick={() => {
+                            if (isCurrent) return;
                             if (selectedId) {
                               void api.patch(`/prospects/${selectedId}/profile`, {
                                 packageId: pkg.id,
@@ -2932,10 +2933,15 @@ export function InboxPage() {
                                 });
                             }
                           }}
-                          className="mobile-compact-control w-full sm:w-auto gap-1 text-xs font-bold border-zinc-300 hover:bg-zinc-100 cursor-pointer"
+                          className={cn(
+                            'mobile-compact-control w-full sm:w-auto gap-1 text-xs font-bold',
+                            isCurrent
+                              ? 'cursor-default !border-emerald-500 !bg-emerald-100 !text-emerald-900 hover:!bg-emerald-100'
+                              : 'border-zinc-300 hover:bg-zinc-100 cursor-pointer',
+                          )}
                         >
                           <Check size={14} className="text-[#00a884]" />
-                          <span>Pilih Paket</span>
+                          <span>{isCurrent ? 'Paket Terpilih' : 'Pilih Paket'}</span>
                         </Button>
 
                         <Button
@@ -2960,7 +2966,7 @@ export function InboxPage() {
                           className="mobile-compact-control w-full sm:w-auto gap-1.5 bg-[#00a884] hover:bg-[#008f6f] text-white font-bold text-xs shadow-xs cursor-pointer"
                         >
                           <ImageIcon size={14} />
-                          <span>Siapkan Flyer</span>
+                          <span>Kirim Flyer</span>
                         </Button>
                       </div>
                     </div>
