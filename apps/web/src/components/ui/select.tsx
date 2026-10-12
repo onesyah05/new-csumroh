@@ -33,7 +33,7 @@ export function Select({
       <SelectPrimitive.Trigger
         aria-label={ariaLabel}
         className={cn(
-          'flex items-center justify-between gap-2 border border-zinc-200 bg-white text-zinc-800 outline-none hover:border-zinc-300 focus:ring-1 focus:ring-zinc-950 transition select-none whitespace-nowrap shadow-xs [&>span]:truncate',
+          'flex items-center justify-between gap-2 border border-zinc-200 bg-white text-zinc-800 outline-none hover:border-zinc-300 focus-visible:border-zinc-950 focus-visible:ring-2 focus-visible:ring-zinc-950/10 focus-visible:ring-offset-0 transition select-none whitespace-nowrap shadow-xs [&>span]:truncate',
           {
             'h-8 px-2.5 text-xs rounded-lg': size === 'sm',
             'h-9 px-3 text-xs font-medium rounded-xl': size === 'md',
