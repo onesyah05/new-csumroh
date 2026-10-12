@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   brandFindMany: vi.fn(async () => [] as unknown[]),
   logFindMany: vi.fn(async () => [] as unknown[]),
   deleteMany: vi.fn(async () => ({ count: 1 })),
+  picLocked: false,
 }));
 
 vi.mock('./notify.service.js', () => ({ notify: mocks.notify, resolveNotifications: mocks.resolve, syncSummary: mocks.summary }));
@@ -24,7 +25,7 @@ vi.mock('../../db/prisma.js', () => ({
   prisma: {
     prospect: { findMany: mocks.prospectFindMany },
     user: { findMany: mocks.userFindMany },
-    brand: { findMany: mocks.brandFindMany, findUnique: async () => ({ name: 'Hana' }) },
+    brand: { findMany: mocks.brandFindMany, findUnique: async () => ({ name: 'Hana', picLocked: mocks.picLocked }) },
     prospectLog: { findMany: mocks.logFindMany },
     notification: { deleteMany: mocks.deleteMany },
     notificationDedupe: { deleteMany: mocks.deleteMany },
@@ -44,6 +45,7 @@ const conversation = (overrides: Record<string, unknown>) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.picLocked = false;
   resetGatewayState();
 });
 
@@ -58,6 +60,16 @@ describe('SLA balasan', () => {
     expect(sent().map((n) => n.type)).toEqual(['reply.takeover_open']);
     expect(sent()[0]).toMatchObject({ userIds: [22, 23], activeKey: 'reply.takeover_open:b1' });
     expect(mocks.resolve).not.toHaveBeenCalled();
+  });
+
+  it('PIC dikunci: tidak ada ajakan ambil alih; peringatan 10 menit tanpa ancaman diambil alih', async () => {
+    mocks.picLocked = true;
+    await replySlaForBrand(1, [conversation({ awaitingSince: minutesAgo(20) })], NOW);
+    expect(sent().map((n) => n.type)).not.toContain('reply.takeover_open');
+    expect(mocks.resolve).toHaveBeenCalledWith({ entity: { type: 'brand', id: 1 }, types: ['reply.takeover_open'] });
+    mocks.notify.mockClear();
+    await replySlaForBrand(1, [conversation({ awaitingSince: minutesAgo(12) })], NOW);
+    expect(sent()[0].body).toBe('Jamaah menunggu balasan Anda.');
   });
 
   it('di luar jam operasional: tidak ada ajakan ambil alih, tetapi eskalasi ke Admin tetap jalan', async () => {

@@ -183,6 +183,8 @@ export function SocketBridge() {
     socket.on('wa:status', refreshWhatsApp);
     socket.on('whatsapp:status', refreshWhatsApp);
     socket.on('wa:qr', refreshWhatsApp);
+    // Pengaturan brand berubah (mis. Kunci PIC): daftar brand dimuat ulang agar tombol ambil alih mengikuti.
+    socket.on('brand:updated', () => void queryClient.invalidateQueries({ queryKey: ['brands'] }));
 
     return () => {
       if (flushTimer) clearTimeout(flushTimer);

@@ -72,15 +72,20 @@ function dealsWithoutValue(brandIds: number[]) {
 }
 
 export async function tasksForCs(user: Actor, brandIds: number[], now = new Date()): Promise<DashboardTasks> {
-  const conversations = await conversationsFor(brandIds);
+  // Brand dengan PIC terkunci: CS lain tidak bisa mengambil alih, jadi tidak masuk daftar "bisa diambil alih".
+  const [conversations, lockedBrands] = await Promise.all([
+    conversationsFor(brandIds),
+    prisma.brand.findMany({ where: { id: { in: brandIds }, picLocked: true }, select: { id: true } }),
+  ]);
+  const lockedBrandIds = new Set(lockedBrands.map((b) => b.id));
   const today = businessDateKey(now);
   const mine = conversations.filter((c) => c.userId === user.id);
   const myWaiting = mine.filter((c) => isActiveWait(c, now));
   const myStale = mine.filter((c) => isStaleWait(c, now));
   const longest = Math.max(0, ...myWaiting.map((c) => waitedMinutes(c, now)));
   // Mengikuti aturan ambil alih: 15 menit belum dibalas dan sedang jam operasional.
-  const takeover = conversations.filter((c) => c.userId && c.userId !== user.id && isActiveWait(c, now) && isTakeoverOpen(c.awaitingSince, now.getTime()));
-  const myTakeoverOpen = myWaiting.some((c) => isTakeoverOpen(c.awaitingSince, now.getTime()));
+  const takeover = conversations.filter((c) => c.userId && c.userId !== user.id && !lockedBrandIds.has(c.brandId) && isActiveWait(c, now) && isTakeoverOpen(c.awaitingSince, now.getTime()));
+  const myTakeoverOpen = myWaiting.some((c) => !lockedBrandIds.has(c.brandId) && isTakeoverOpen(c.awaitingSince, now.getTime()));
   const unassigned = conversations.filter((c) => !c.userId);
   const followToday = mine.filter((c) => dateOnlyKey(c.nextFollowupDate) === today).length;
   const followLate = mine.filter((c) => { const d = dateOnlyKey(c.nextFollowupDate); return d !== null && d < today; }).length;

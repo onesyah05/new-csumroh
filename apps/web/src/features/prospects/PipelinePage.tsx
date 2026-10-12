@@ -238,6 +238,12 @@ export function PipelinePage() {
     queryFn: () => api.get<Prospect[]>(`/prospects${query}`),
     enabled: !!brandId,
   });
+  // Brand dengan PIC dikunci: CS tidak bisa mengambil alih atau menyerahkan PIC, hanya Admin yang mengganti.
+  const brandList = useQuery({
+    queryKey: ['brands'],
+    queryFn: () => api.get<Array<{ id: number; picLocked?: boolean }>>('/catalog/brands'),
+  });
+  const lockedBrandIds = new Set((brandList.data ?? []).filter((b) => b.picLocked).map((b) => b.id));
   const packages = useQuery({
     queryKey: ['packages', brandId],
     queryFn: () => api.get<any[]>(`/catalog/packages${query}`),
@@ -493,10 +499,11 @@ export function PipelinePage() {
     today,
     canClaim: isCs && !p.userId && isOpen(p),
     canAssign: isManager,
-    canHandover: isCs && p.userId === user?.id,
+    canHandover: isCs && p.userId === user?.id && !lockedBrandIds.has(p.brandId),
+    picLocked: lockedBrandIds.has(p.brandId),
     // Aturan ambil alih: jamaah belum dibalas lebih dari 15 menit DAN jam operasional 08.00–22.00 WIB
     // (server memeriksa ulang dari riwayat chat).
-    canTakeOver: isLockedForCs(user, p) && isOpen(p) && isTakeoverOpen(p.awaitingSince, now),
+    canTakeOver: isLockedForCs(user, p) && isOpen(p) && !lockedBrandIds.has(p.brandId) && isTakeoverOpen(p.awaitingSince, now),
     onTakeOver: () => takeover.mutate(p),
     locked: !canEditProspect(user, p),
     onClaim: () => claim.mutate(p.id),
@@ -1030,7 +1037,7 @@ function PicControl({ prospect, canClaim, canAssign, canHandover, canTakeOver, o
 }
 
 function ProspectCard({
-  prospect, photoUrl, today, role, dragging, disabled, onDragStart, onDragEnd, onStatus, onClaim, onAssign, onHandover, onLogFollowup, onTakeOver, canClaim, canAssign, canHandover, canTakeOver, locked,
+  prospect, photoUrl, today, role, dragging, disabled, onDragStart, onDragEnd, onStatus, onClaim, onAssign, onHandover, onLogFollowup, onTakeOver, canClaim, canAssign, canHandover, canTakeOver, locked, picLocked,
 }: {
   prospect: Prospect;
   photoUrl: string | null;
@@ -1052,6 +1059,8 @@ function ProspectCard({
   onTakeOver(): void;
   /** CS yang bukan PIC: kartu hanya-baca (server menolak perubahan dari selain PIC/Admin). */
   locked: boolean;
+  /** Brand mengunci PIC: ambil alih dimatikan, hanya Admin yang mengganti PIC. */
+  picLocked: boolean;
 }) {
   const due = dateOnlyKey(prospect.nextFollowupDate);
   const open = isOpen(prospect);
@@ -1110,7 +1119,7 @@ function ProspectCard({
               {locked && (
                 <p className="px-2 py-2 text-xs text-zinc-600">
                   {role === 'finance' ? readOnlyNote({ role }, prospect) : <>Ditangani {prospect.user?.name ?? 'CS lain'}. Hanya PIC atau Admin yang dapat mengubah prospek ini
-                  {canTakeOver ? '.' : ', kecuali jamaah belum dibalas lebih dari 15 menit pada jam operasional (08.00–22.00 WIB).'}</>}
+                  {canTakeOver || picLocked ? '.' : ', kecuali jamaah belum dibalas lebih dari 15 menit pada jam operasional (08.00–22.00 WIB).'}</>}
                 </p>
               )}
               {canTakeOver && (

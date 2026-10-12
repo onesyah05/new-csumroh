@@ -390,9 +390,12 @@ export function InboxPage() {
   // Aturan ambil alih: CS lain boleh mengambil prospek bila jamaah belum dibalas lebih dari 15 menit, hanya pada jam
   // operasional 08.00–22.00 WIB (di luar jam itu PIC tetap terkunci).
   const now = useNow();
+  // Brand dengan PIC dikunci: tidak ada ambil alih, hanya Admin yang mengganti PIC.
+  const picLocked = Boolean(brandsQuery.data?.find((b) => b.id === (selected?.brandId ?? brandId))?.picLocked);
   const canTakeOver = Boolean(
     selected && user?.role === 'cs' && !isPic && !isUnassigned && !selected.isGroup
     && !isWonStatus(selected.status) && !isLostStatus(selected.status)
+    && !picLocked
     && isTakeoverOpen(selected.awaitingSince, now),
   );
   // Hak membalas (role/PIC) dan kemampuan mengirim (perangkat terhubung) dibedakan.
@@ -2682,7 +2685,9 @@ export function InboxPage() {
                               Percakapan ini ditugaskan kepada PIC <strong>{selected.user?.name || 'CS lain'}</strong>.{' '}
                               {canTakeOver
                                 ? 'Jamaah belum dibalas lebih dari 15 menit, jadi Anda boleh mengambil alih.'
-                                : 'Anda hanya dapat membaca pesan. Bila jamaah belum dibalas lebih dari 15 menit pada jam operasional (08.00–22.00 WIB), CS lain boleh mengambil alih.'}
+                                : picLocked
+                                  ? 'Anda hanya dapat membaca pesan. PIC brand ini dikunci; hanya Admin yang dapat menggantinya.'
+                                  : 'Anda hanya dapat membaca pesan. Bila jamaah belum dibalas lebih dari 15 menit pada jam operasional (08.00–22.00 WIB), CS lain boleh mengambil alih.'}
                             </p>
                           </>
                         )}

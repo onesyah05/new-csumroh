@@ -12,6 +12,7 @@ import { revokeUserSessions } from '../auth/sessions.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { FLYER_URL_PATTERN, LOGO_URL_PATTERN } from '../../utils/safe-path.js';
 import { releaseProspectsOf } from '../prospects/pic.js';
+import { emitToBrand } from '../../realtime/socket.js';
 import { ITINERARY_CANVAS, ITINERARY_MAX_CHARS, ITINERARY_TONES, itineraryDateText, itineraryFits, renderItineraryGuide, renderItineraryImage, renderItineraryPreview, type ItineraryTone } from './itinerary-image.js';
 
 // Tautan yang dirender sebagai <a href>: hanya http(s), mencegah skema javascript:/data:.
@@ -243,7 +244,8 @@ catalogRouter.post('/brands', requireRole('superadmin'), asyncHandler(async (req
     bankAccountHolder: z.string().max(100).optional().nullable(),
     address: z.string().optional().nullable(),
     gmapsUrl: httpsUrlSchema,
-    phone: z.string().max(30).optional().nullable()
+    phone: z.string().max(30).optional().nullable(),
+    picLocked: z.boolean().optional(),
   }).parse(req.body);
   const data = withoutSecrets(await prisma.brand.create({ data: input as any }));
   res.status(201).json({ success: true, data });
@@ -261,13 +263,20 @@ catalogRouter.patch('/brands/:id', requireRole('superadmin'), asyncHandler(async
     bankAccountHolder: z.string().max(100).optional().nullable(),
     address: z.string().optional().nullable(),
     gmapsUrl: httpsUrlSchema,
-    phone: z.string().max(30).optional().nullable()
+    phone: z.string().max(30).optional().nullable(),
+    picLocked: z.boolean().optional(),
   });
   const input = schema.parse(req.body);
   const existing = await prisma.brand.findUnique({ where: { id } });
   if (!existing) throw new HttpError(404, 'Brand tidak ditemukan.');
 
   const data = withoutSecrets(await prisma.brand.update({ where: { id }, data: input as any }));
+  if (input.picLocked !== undefined && input.picLocked !== existing.picLocked) {
+    // Jejak perubahan kunci PIC (tidak ada tabel audit brand): siapa, kapan, ke nilai apa.
+    console.info(`[audit] brand ${id} picLocked ${existing.picLocked} -> ${input.picLocked} oleh user ${req.user!.id} (${req.user!.name})`);
+    // CS yang sedang membuka aplikasi memuat ulang daftar brand, jadi tombol ambil alih tidak basi.
+    emitToBrand(id, 'brand:updated', { brandId: id, picLocked: input.picLocked });
+  }
   // File logo lama dihapus SETELAH update berhasil: bila update gagal (mis. kode brand bentrok), logo lama masih dipakai.
   if (input.logoUrl !== undefined && existing.logoUrl && input.logoUrl !== existing.logoUrl) {
     const oldFile = path.resolve(process.cwd(), 'uploads', 'brands', path.basename(existing.logoUrl));

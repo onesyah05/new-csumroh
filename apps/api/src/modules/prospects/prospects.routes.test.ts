@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 
 type Row = Record<string, any>;
 const mocks = vi.hoisted(() => ({
-  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[], rejections: [] as Row[] },
+  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[], rejections: [] as Row[], picLocked: false },
   capi: vi.fn(),
   spamAudience: vi.fn(async () => undefined),
   send: vi.fn(),
@@ -74,6 +74,7 @@ const db = vi.hoisted(() => {
         return { count: rows.length };
       },
     },
+    brand: { findUnique: async () => ({ picLocked: s().picLocked }) },
     package: {
       findFirst: async ({ where }: any) => copy([...s().packages.values()].find((p) => matches(p, where))),
       findUnique: async ({ where }: any) => copy(s().packages.get(where.id)),
@@ -201,6 +202,7 @@ beforeEach(() => {
   mocks.state.logs = [];
   mocks.state.customRequests = [];
   mocks.state.rejections = [];
+  mocks.state.picLocked = false;
   mocks.state.messages = [];
   mocks.state.users = [
     { id: 7, name: 'CS Fitri', role: 'cs', isActive: true, brandId: 1 },
@@ -680,6 +682,37 @@ describe('PIC: ambil alih setelah 15 menit belum dibalas', () => {
     expect(prospect(1).userId).toBe(7);
     // Pagi 08.00: jamaah masih belum dibalas, prospek boleh diambil alih.
     vi.setSystemTime(new Date('2026-10-07T08:00:00+07:00'));
+    expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(200);
+  });
+});
+
+describe('PIC dikunci per brand', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-06T10:00:00+07:00') }); });
+  afterEach(() => { vi.useRealTimers(); });
+  const waiting = () => [{ id: 1, prospectId: 1, brandId: 1, isFromMe: false, timestamp: Math.floor(Date.now() / 1000) - 60 * 60, isDeleted: false, messageType: 'conversation' }];
+
+  it('ambil alih ditolak walau jamaah sudah lama menunggu; PIC tetap', async () => {
+    mocks.state.picLocked = true;
+    mocks.state.messages = waiting();
+    const result = await invoke('post', '/:id/takeover', { userId: 8 });
+    expect(result.status).toBe(403);
+    expect(result.error).toContain('dikunci');
+    expect(prospect(1).userId).toBe(7);
+  });
+
+  it('CS tidak bisa menyerahkan PIC, Admin tetap bisa menyerahkan dan menugaskan', async () => {
+    mocks.state.picLocked = true;
+    const byPic = await invoke('post', '/:id/handover', { body: { targetUserId: 8, reason: 'Cuti seminggu' } });
+    expect(byPic.status).toBe(403);
+    expect(prospect(1).userId).toBe(7);
+    expect((await invoke('post', '/:id/handover', { userId: 99, role: 'admin', body: { targetUserId: 8, reason: 'Pindah tugas' } })).status).toBe(200);
+    expect(prospect(1).userId).toBe(8);
+    expect((await invoke('post', '/:id/assign', { userId: 99, role: 'admin', body: { userId: 7 } })).status).toBe(200);
+    expect(prospect(1).userId).toBe(7);
+  });
+
+  it('brand tidak dikunci: perilaku lama', async () => {
+    mocks.state.messages = waiting();
     expect((await invoke('post', '/:id/takeover', { userId: 8 })).status).toBe(200);
   });
 });

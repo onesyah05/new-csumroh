@@ -65,6 +65,9 @@ export async function replySlaJob(now = new Date()) {
 export async function replySlaForBrand(brandId: number, conversations: Conversation[], now: Date) {
   const nowSec = now.getTime() / 1000;
   const eligible = conversations.filter((c) => !c.isGroup && !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && isOpenStatus(c.status));
+  // PIC dikunci: CS lain tidak bisa mengambil alih, jadi tidak ada ajakan ambil alih maupun ancamannya.
+  const brandRow = await prisma.brand.findUnique({ where: { id: brandId }, select: { name: true, picLocked: true } }).catch(() => null);
+  const picLocked = Boolean(brandRow?.picLocked);
   let takeoverOpen = 0;
   const escalated: string[] = [];
 
@@ -82,7 +85,7 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
         userIds: await picOf({ userId: c.userId, brandId }),
         title: `${c.name} menunggu balasan ${waited} menit`,
         // Di luar jam operasional prospek tidak bisa diambil alih: pengingat tetap dikirim tanpa ancaman itu.
-        body: isTakeoverOpen(since, (since + SLA.takeoverMinutes * 60) * 1000)
+        body: !picLocked && isTakeoverOpen(since, (since + SLA.takeoverMinutes * 60) * 1000)
           ? `Balas sebelum ${SLA.takeoverMinutes} menit agar tidak diambil alih CS lain.`
           : 'Jamaah menunggu balasan Anda.',
         link: inboxLink(ref), entity: { type: 'prospect', id: c.id },
@@ -90,7 +93,7 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
       });
     }
     // Boleh diambil alih: 15 menit DAN jam operasional (08.00–22.00 WIB). Di luar jam itu PIC tetap terkunci.
-    if (waited >= SLA.takeoverMinutes && isTakeoverOpen(since, now.getTime())) {
+    if (!picLocked && waited >= SLA.takeoverMinutes && isTakeoverOpen(since, now.getTime())) {
       takeoverOpen++;
       const others = (await csOfBrand(brandId)).filter((id) => id !== c.userId);
       await notify({
@@ -110,7 +113,7 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
 
   // Ringkasan per brand (angka = kondisi saat ini), bukan satu notifikasi per prospek.
   const admins = await adminsOf(brandId);
-  const brand = await brandLabel(brandId);
+  const brand = brandRow?.name ?? `Brand ${brandId}`;
   await syncSummary({
     type: 'reply.escalation', priority: 'urgent', brandId, userIds: admins,
     activeKey: `reply.escalation:b${brandId}`, count: escalated.length,
@@ -130,11 +133,6 @@ export async function replySlaForBrand(brandId: number, conversations: Conversat
       : `${brand} belum punya CS aktif.`,
     link: '/pipeline?pic=none',
   });
-}
-
-async function brandLabel(brandId: number) {
-  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { name: true } }).catch(() => null);
-  return brand?.name ?? `Brand ${brandId}`;
 }
 
 // ── Perangkat WA & gateway ──────────────────────────────────────────────────────

@@ -400,6 +400,14 @@ prospectsRouter.get('/:id/pic-candidates', asyncHandler(async (req, res) => {
   res.json({ success: true, data: await picCandidates(brandId) });
 }));
 
+const PIC_LOCKED_MESSAGE = 'PIC brand ini dikunci. Hanya Admin yang dapat mengganti PIC.';
+
+/** Pengaturan brand "PIC dikunci": CS tidak bisa mengambil alih atau menyerahkan PIC yang sudah terpasang. */
+async function isPicLocked(brandId: number) {
+  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { picLocked: true } });
+  return Boolean(brand?.picLocked);
+}
+
 /** Target PIC harus aktif, CS, dan punya akses ke brand prospek (brand utama atau UserBrand). */
 async function findEligiblePic(targetUserId: number, brandId: number) {
   return prisma.user.findFirst({
@@ -463,6 +471,9 @@ prospectsRouter.post('/:id/handover', asyncHandler(async (req, res) => {
   if (!isCurrentPic && !isManager) {
     throw new HttpError(403, 'Hanya PIC saat ini atau Admin yang berhak melakukan handover prospek.');
   }
+  if (!isManager && await isPicLocked(brandId)) {
+    throw new HttpError(403, PIC_LOCKED_MESSAGE);
+  }
 
   const { targetUserId, reason } = z.object({
     targetUserId: z.number().int().positive().optional().nullable(),
@@ -514,6 +525,7 @@ prospectsRouter.post('/:id/takeover', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
   if (!existing.userId) throw new HttpError(409, 'Prospek ini belum punya PIC. Gunakan Klaim.');
   if (existing.userId === req.user!.id) throw new HttpError(409, 'Anda sudah menjadi PIC prospek ini.');
+  if (await isPicLocked(brandId)) throw new HttpError(403, PIC_LOCKED_MESSAGE);
   if (isClosedStatus(existing.status)) throw new HttpError(409, 'Prospek sudah Deal atau Batal; PIC hanya dapat diubah oleh Admin.');
   const me = await findEligiblePic(req.user!.id, brandId);
   if (!me) throw new HttpError(403, 'Akun Anda tidak aktif atau tidak memiliki akses ke brand ini.');
