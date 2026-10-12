@@ -38,6 +38,7 @@ interface BrandFormData {
   bankAccountHolder: string;
   address: string;
   gmapsUrl: string;
+  picLocked: boolean;
 }
 
 interface UploadResponse {
@@ -72,6 +73,7 @@ export function BrandFormPage() {
     bankAccountHolder: '',
     address: '',
     gmapsUrl: '',
+    picLocked: false,
   });
 
   const brands = useQuery({
@@ -99,6 +101,7 @@ export function BrandFormPage() {
         bankAccountHolder: currentBrand.bankAccountHolder ?? '',
         address: currentBrand.address ?? '',
         gmapsUrl: currentBrand.gmapsUrl ?? '',
+        picLocked: Boolean(currentBrand.picLocked),
       });
       if (currentBrand.logoUrl) {
         setLogoPreview(resolveMediaUrl(currentBrand.logoUrl));
@@ -185,6 +188,7 @@ export function BrandFormPage() {
         bankAccountHolder: form.bankAccountHolder.trim() || null,
         address: form.address.trim() || null,
         gmapsUrl: form.gmapsUrl.trim() || null,
+        picLocked: form.picLocked,
       };
 
       if (isEditing) {
@@ -546,6 +550,24 @@ export function BrandFormPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Kunci PIC */}
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 p-4">
+            <div className="min-w-0">
+              <p id="brand-pic-locked-label" className="text-sm font-semibold text-zinc-950">Kunci PIC</p>
+              <p className="mt-0.5 hidden text-xs text-zinc-600 sm:block">PIC yang sudah terpasang tidak bisa diambil alih atau diserahkan CS. Hanya Admin yang dapat menggantinya.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.picLocked}
+              aria-labelledby="brand-pic-locked-label"
+              onClick={() => setForm({ ...form, picLocked: !form.picLocked })}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition ${form.picLocked ? 'border-zinc-950 bg-zinc-950' : 'border-zinc-300 bg-zinc-200'}`}
+            >
+              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${form.picLocked ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
           </div>
 
           {/* Action Buttons */}

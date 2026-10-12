@@ -32,6 +32,8 @@ const byKey = (tasks: { key: string }[]) => Object.fromEntries(tasks.map((t: any
 beforeEach(() => vi.clearAllMocks());
 
 describe('Ringkasan CS', () => {
+  beforeEach(() => { mocks.brandFindMany.mockResolvedValue([]); });
+
   it('pekerjaan saya: menunggu balasan (terlama), follow-up, invoice lewat, bisa diambil alih, lead tanpa PIC', async () => {
     mocks.conversations.mockResolvedValue([
       conv({ id: 1, awaitingSince: minutesAgo(12) }),
@@ -50,6 +52,18 @@ describe('Ringkasan CS', () => {
     expect(t.takeover.count).toBe(1);
     expect(t.unassigned.count).toBe(1);
     expect(result.waiting?.items.map((i) => i.id)).toEqual([1, 2]);
+  });
+
+  it('brand dengan PIC dikunci: tidak ada yang bisa diambil alih', async () => {
+    mocks.brandFindMany.mockResolvedValue([{ id: 1 }]);
+    mocks.conversations.mockResolvedValue([
+      conv({ id: 1, awaitingSince: minutesAgo(12) }),
+      conv({ id: 4, userId: 8, user: { name: 'Rahma' }, awaitingSince: minutesAgo(20) }),
+    ]);
+    const result = await tasksForCs({ id: 7, role: 'cs' }, [1], NOW);
+    const t = byKey(result.tasks);
+    expect(t.takeover.count).toBe(0);
+    expect(t.reply.hint).toBe('Terlama 12 menit');
   });
 
   it('semua beres: tugas bertanda clear', async () => {
