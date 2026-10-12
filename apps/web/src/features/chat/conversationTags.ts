@@ -1,6 +1,6 @@
 import { dateOnlyKey, isLostStatus, isWonStatus, parseTargetMonth, targetMonthLabel } from '@csumroh/shared-types';
 
-export type ConversationTagTone = 'urgent' | 'warn' | 'ok' | 'info' | 'pic' | 'muted'
+export type ConversationTagTone = 'urgent' | 'warn' | 'ok' | 'custom' | 'lost' | 'pic' | 'muted'
   // Satu warna per tahap prospek agar terbedakan sekilas di daftar.
   | 'contact' | 'qualified' | 'offer' | 'objection' | 'followup' | 'nurture' | 'closing';
 export interface ConversationTag { key: string; label: string; tone: ConversationTagTone; title?: string }
@@ -41,6 +41,24 @@ const STAGE_TONE: Record<string, ConversationTagTone> = {
 
 export const MAX_CONVERSATION_TAGS = 3;
 
+/** PIC terpasang atau belum (Deal/Batal tidak menampilkan "Tanpa PIC"). */
+export function picTag(item: TaggableConversation): ConversationTag | null {
+  const picName = item.user?.name?.trim();
+  if (item.userId && picName) {
+    return { key: 'pic', label: `PIC ${picName.replace(/^cs\s+/i, '').split(/\s+/)[0]}`, tone: 'pic', title: `Penanggung jawab: ${picName}` };
+  }
+  if (!item.userId && !isWonStatus(item.status) && !isLostStatus(item.status)) return { key: 'nopic', label: 'Tanpa PIC', tone: 'warn' };
+  return null;
+}
+
+/** Tahap prospek dengan warnanya sendiri; sama di daftar dan di header chat. */
+export function stageTag(item: TaggableConversation): ConversationTag | null {
+  if (isWonStatus(item.status)) return { key: 'stage', label: item.paymentStatus === 'paid_full' ? 'Lunas' : item.paymentStatus === 'partial_dp' ? 'DP' : 'Deal', tone: 'ok' };
+  if (isLostStatus(item.status)) return { key: 'stage', label: 'Batal', tone: 'lost' };
+  if (item.status && STAGE_LABEL[item.status]) return { key: 'stage', label: STAGE_LABEL[item.status]!, tone: STAGE_TONE[item.status] ?? 'muted' };
+  return null;
+}
+
 /**
  * Tag kondisi lead di baris daftar percakapan, terurut dari yang paling perlu ditindak.
  * Grup, chat sendiri, dan kontak sistem tidak punya kondisi lead.
@@ -66,21 +84,12 @@ export function conversationTags(
     if (due < today) tags.push({ key: 'followup', label: 'Telat', tone: 'urgent', title: 'Follow-up terlambat' });
     else if (due === today) tags.push({ key: 'followup', label: 'Hari ini', tone: 'warn', title: 'Follow-up hari ini' });
   }
-  if (!won && !lost && !item.userId) tags.push({ key: 'nopic', label: 'Tanpa PIC', tone: 'warn' });
-  const picName = item.user?.name?.trim();
-  if (item.userId && picName) {
-    tags.push({ key: 'pic', label: `PIC ${picName.replace(/^cs\s+/i, '').split(/\s+/)[0]}`, tone: 'pic', title: `Penanggung jawab: ${picName}` });
-  }
+  const pic = picTag(item);
+  if (pic) tags.push(pic);
+  const stage = proofPending ? null : stageTag(item);
+  if (stage) tags.push(stage);
 
-  if (won) {
-    tags.push({ key: 'stage', label: item.paymentStatus === 'paid_full' ? 'Lunas' : item.paymentStatus === 'partial_dp' ? 'DP' : 'Deal', tone: 'ok' });
-  } else if (lost) {
-    tags.push({ key: 'stage', label: 'Batal', tone: 'muted' });
-  } else if (item.status && STAGE_LABEL[item.status] && !proofPending) {
-    tags.push({ key: 'stage', label: STAGE_LABEL[item.status]!, tone: STAGE_TONE[item.status] ?? 'muted' });
-  }
-
-  if (custom) tags.push({ key: 'custom', label: 'Custom', tone: custom.urgent ? 'warn' : 'info', title: custom.text });
+  if (custom) tags.push({ key: 'custom', label: 'Custom', tone: custom.urgent ? 'warn' : 'custom', title: custom.text });
 
   // Melebihi batas: tahap (paling tidak informatif) dikorbankan lebih dulu, lalu tag paling akhir.
   while (tags.length > MAX_CONVERSATION_TAGS) {
