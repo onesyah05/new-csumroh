@@ -16,6 +16,10 @@ const EXEMPT = new Set([
   'features/chat/ChatCopilotPanel.tsx',
   'features/chat/EmojiPicker.tsx',
   'features/chat/ChatSidePanel.tsx',
+  // Tag tahap prospek: satu warna per tahap atas permintaan user (daftar dan header chat).
+  'features/chat/ConversationTagChip.tsx',
+  // Tautan di bubble chat berwarna biru atas permintaan user.
+  'lib/linkify.tsx',
 ]);
 
 function sourceFiles(dir: string): string[] {

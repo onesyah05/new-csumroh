@@ -5,11 +5,13 @@ import { Download, ExternalLink, X } from 'lucide-react';
  * Penampil gambar layar penuh (mis. flyer paket). Klik di luar gambar atau Escape menutup; fokus kembali
  * ke pemicu. Nama dialog = `alt` gambar untuk pembaca layar.
  */
-export function ImageLightbox({ open, onClose, src, alt, download = false }: {
+export function ImageLightbox({ open, onClose, src, alt, download = false, video = false }: {
   open: boolean;
   onClose: () => void;
   src: string;
   alt: string;
+  /** Sumber berupa video: diputar dengan kontrol, bukan gambar. */
+  video?: boolean;
   /** Tampilkan tombol unduh (mis. media chat) alih-alih "buka di tab baru". */
   download?: boolean;
 }) {
@@ -43,7 +45,9 @@ export function ImageLightbox({ open, onClose, src, alt, download = false }: {
                 <X size={16} />
               </Dialog.Close>
             </div>
-            <img src={src} alt={alt} className="max-h-[86vh] w-auto max-w-full rounded-xl object-contain" />
+            {video
+              ? <video src={src} controls autoPlay playsInline aria-label={alt} className="max-h-[86vh] w-auto max-w-full rounded-xl" />
+              : <img src={src} alt={alt} className="max-h-[86vh] w-auto max-w-full rounded-xl object-contain" />}
           </div>
         </Dialog.Content>
       </Dialog.Portal>

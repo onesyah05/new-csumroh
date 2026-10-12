@@ -107,6 +107,8 @@ model Brand {
   payments           Payment[]
   customRequests     CustomRequest[]
   proofRejections    PaymentProofRejection[]
+  mediaFolders       MediaFolder[]
+  mediaAssets        MediaAsset[]
 
   @@map("brands")
 }
@@ -130,6 +132,8 @@ model User {
   customRequestsCreated   CustomRequest[]          @relation("CustomRequestCreatedBy")
   customRequestsQuoted    CustomRequest[]          @relation("CustomRequestQuotedBy")
   customRequestsClaimed   CustomRequest[]          @relation("CustomRequestClaimedBy")
+  mediaFolders            MediaFolder[]
+  mediaAssets             MediaAsset[]
   proofRejections         PaymentProofRejection[]
 
   @@index([brandId, isActive])
@@ -604,4 +608,41 @@ model CustomRequest {
   @@index([prospectId])
   @@index([brandId, status])
   @@map("custom_requests")
+}
+
+/// Galeri media bersama per brand: folder buatan user.
+model MediaFolder {
+  id            Int          @id @default(autoincrement())
+  brandId       Int          @map("brand_id")
+  name          String       @db.VarChar(80)
+  createdById   Int?         @map("created_by_id")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  brand         Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  createdBy     User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  assets        MediaAsset[]
+
+  @@unique([brandId, name])
+  @@map("media_folders")
+}
+
+/// Berkas galeri (gambar/video). Siapa yang mengunggah dan kapan tercatat; terlihat oleh semua staf brand.
+model MediaAsset {
+  id           Int          @id @default(autoincrement())
+  brandId      Int          @map("brand_id")
+  folderId     Int?         @map("folder_id")
+  name         String       @db.VarChar(160)
+  url          String       @db.VarChar(255)
+  mimeType     String       @map("mime_type") @db.VarChar(60)
+  size         Int
+  width        Int?
+  height       Int?
+  uploadedById Int?         @map("uploaded_by_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  brand        Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  folder       MediaFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  uploadedBy   User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([brandId, createdAt])
+  @@index([brandId, folderId])
+  @@map("media_assets")
 }

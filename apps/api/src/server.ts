@@ -22,6 +22,7 @@ import { whatsappRouter } from './modules/whatsapp/whatsapp.routes.js';
 import { contactsRouter } from './modules/contacts/contacts.routes.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 import { reportsRouter } from './modules/reports/reports.routes.js';
+import { galleryRouter } from './modules/gallery/gallery.routes.js';
 import { createSocketServer } from './realtime/socket.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { ensureConversationStats } from './modules/chat/conversation-stats.js';
@@ -42,6 +43,7 @@ app.use(cors({ origin(origin, callback) { callback(null, !origin || allowedOrigi
 // rute unggahan dan SETELAH token diverifikasi, agar request anonim tidak bisa mengirim puluhan MB (DoS).
 const LARGE_BODY_ROUTES = [
   /^\/api\/v1\/chat\/messages\/media$/,
+  /^\/api\/v1\/gallery\/assets$/,
   /^\/api\/v1\/catalog\/brands\/upload-logo$/,
   /^\/api\/v1\/catalog\/packages\/upload-flyer$/,
   /^\/api\/v1\/catalog\/packages\/\d+\/flyer$/,
@@ -79,6 +81,7 @@ app.use('/api/v1/whatsapp', whatsappRouter);
 app.use('/api/v1/contacts', contactsRouter);
 app.use('/api/v1/notifications', notificationsRouter);
 app.use('/api/v1/reports', reportsRouter);
+app.use('/api/v1/gallery', galleryRouter);
 app.use('/internal', internalRouter);
 app.use((_req, res) => res.status(404).json({ success: false, error: 'Endpoint tidak ditemukan.' }));
 app.use(errorHandler);
