@@ -1307,8 +1307,9 @@ export function InboxPage() {
 
           {(
             <div className="p-2 border-b border-[#e9edef] bg-white shrink-0 space-y-2">
-              {/* WhatsApp Web Search Bar */}
-              <div className="relative flex items-center">
+              {/* Pencarian + filter PIC sebaris agar tidak memakan ruang daftar */}
+              <div className="flex items-center gap-2">
+              <div className="relative flex min-w-0 flex-1 items-center">
                 <Search className="absolute left-3 text-[#54656f]" size={15} />
                 <input
                   aria-label="Cari atau mulai chat baru"
@@ -1328,15 +1329,17 @@ export function InboxPage() {
                   </button>
                 )}
               </div>
-
-              <Select
-                value={ownerFilter}
-                onValueChange={setOwnerFilter}
-                options={ownerOptions}
-                aria-label="Filter penanggung jawab percakapan"
-                size="sm"
-                className="w-full"
-              />
+              <div className="w-[7.5rem] shrink-0">
+                <Select
+                  value={ownerFilter}
+                  onValueChange={setOwnerFilter}
+                  options={ownerOptions}
+                  aria-label="Filter penanggung jawab percakapan"
+                  size="sm"
+                  className="w-full"
+                />
+              </div>
+              </div>
               <div className="mobile-compact-filters flex flex-wrap items-center gap-1.5 text-xs font-medium" role="group" aria-label="Filter pekerjaan CS">
                 {inboxWorkFilters.map((filter) => (
                   <button

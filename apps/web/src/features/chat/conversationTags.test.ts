@@ -22,7 +22,7 @@ describe('conversationTags', () => {
   it('bukti transfer menandai Verifikasi sebagai perlu tindakan', () => {
     expect(labels({ status: 'closing', paymentProofUrl: 'x', userId: 2 })).toEqual(['Verifikasi']);
     expect(conversationTags({ status: 'closing', paymentProofUrl: 'x', userId: 2 }, today)[0]?.tone).toBe('warn');
-    expect(conversationTags({ status: 'closing', userId: 2 }, today)[0]?.tone).toBe('info');
+    expect(conversationTags({ status: 'closing', userId: 2 }, today)[0]?.tone).toBe('closing');
   });
 
   it('deal menampilkan Lunas atau DP, tanpa Tanpa PIC', () => {
@@ -39,6 +39,14 @@ describe('conversationTags', () => {
   it('batas tiga tag: tahap dikorbankan lebih dulu, Custom dan PIC tetap tampil', () => {
     expect(labels({ status: 'contact', nextFollowupDate: '2026-10-09', userId: 4, user: { name: 'Joko' } }, { text: 'Custom: harga siap', urgent: false }))
       .toEqual(['Telat', 'PIC Joko', 'Custom']);
+  });
+
+  it('setiap tahap punya warna sendiri', () => {
+    const toneOf = (status: string) => conversationTags({ status, userId: 1 }, today).find((t) => t.key === 'stage')?.tone;
+    const tones = ['new', 'contact', 'qualified', 'offer', 'objection', 'followup', 'nurture', 'closing'].map(toneOf);
+    expect(new Set(tones).size).toBe(tones.length);
+    expect(toneOf('identifying')).toBe(toneOf('contact'));
+    expect(toneOf('offered')).toBe(toneOf('offer'));
   });
 
   it('batal tidak menampilkan follow-up', () => {
