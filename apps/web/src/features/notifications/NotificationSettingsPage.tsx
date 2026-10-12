@@ -87,7 +87,7 @@ export function NotificationSettingsPage() {
           variant="secondary"
           size="sm"
           icon={<Volume2 size={14} />}
-          onClick={() => { if (!playNotificationSound({ force: true })) showFeedback('Browser ini tidak mengizinkan suara.', { error: true }); }}
+          onClick={() => { void playNotificationSound({ force: true }).then((played) => { if (!played) showFeedback('Browser ini tidak mengizinkan suara.', { error: true }); }); }}
         >
           Uji suara
         </Button>
@@ -100,7 +100,7 @@ export function NotificationSettingsPage() {
           <Button
             variant="secondary"
             icon={<Volume2 size={14} />}
-            onClick={() => { if (!playNotificationSound({ force: true })) showFeedback('Browser ini tidak mengizinkan suara.', { error: true }); }}
+            onClick={() => { void playNotificationSound({ force: true }).then((played) => { if (!played) showFeedback('Browser ini tidak mengizinkan suara.', { error: true }); }); }}
           >
             Uji suara
           </Button>

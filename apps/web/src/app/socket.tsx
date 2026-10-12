@@ -173,7 +173,7 @@ export function SocketBridge() {
       // Telepon yang sedang berdering tetap berbunyi walau chat-nya sedang dibuka: CS perlu mengambil HP.
       if (!data || (isViewing(data.link) && data.type !== 'call.incoming')) return;
       if (data.toast) pushNotificationToast(data, openNotificationPanel);
-      if (data.sound) playNotificationSound({ urgent: data.priority === 'urgent' });
+      if (data.sound) void playNotificationSound({ urgent: data.priority === 'urgent' });
     };
     socket.on('notification:new', onNotification);
     socket.on('notification:updated', refreshNotifications);
