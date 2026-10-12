@@ -30,6 +30,17 @@ describe('conversationTags', () => {
     expect(labels({ status: 'deal', paymentStatus: 'partial_dp', userId: 3 })).toEqual(['DP']);
   });
 
+  it('PIC terpasang menampilkan nama depan, urut sebelum tahap', () => {
+    expect(labels({ status: 'qualified', userId: 4, user: { name: 'CS Fitri Handayani' } })).toEqual(['PIC Fitri', 'Kualifikasi']);
+    expect(labels({ status: 'qualified', userId: 4, user: { name: 'Fitri Handayani' } })).toEqual(['PIC Fitri', 'Kualifikasi']);
+    expect(labels({ status: 'deal', paymentStatus: 'partial_dp', userId: 3, user: { name: 'Aji' } })).toEqual(['PIC Aji', 'DP']);
+  });
+
+  it('batas tiga tag: tahap dikorbankan lebih dulu, Custom dan PIC tetap tampil', () => {
+    expect(labels({ status: 'contact', nextFollowupDate: '2026-10-09', userId: 4, user: { name: 'Joko' } }, { text: 'Custom: harga siap', urgent: false }))
+      .toEqual(['Telat', 'PIC Joko', 'Custom']);
+  });
+
   it('batal tidak menampilkan follow-up', () => {
     expect(labels({ status: 'lose', nextFollowupDate: '2026-10-01', userId: 1 })).toEqual(['Batal']);
   });

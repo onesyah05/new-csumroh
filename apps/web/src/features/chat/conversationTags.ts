@@ -1,6 +1,6 @@
 import { dateOnlyKey, isLostStatus, isWonStatus, parseTargetMonth, targetMonthLabel } from '@csumroh/shared-types';
 
-export type ConversationTagTone = 'urgent' | 'warn' | 'ok' | 'info' | 'muted';
+export type ConversationTagTone = 'urgent' | 'warn' | 'ok' | 'info' | 'pic' | 'muted';
 export interface ConversationTag { key: string; label: string; tone: ConversationTagTone; title?: string }
 
 export interface TaggableConversation {
@@ -8,6 +8,7 @@ export interface TaggableConversation {
   isOwn?: boolean;
   remoteJid?: string | null;
   userId?: number | null;
+  user?: { name?: string | null } | null;
   status?: string;
   paymentStatus?: string | null;
   paymentProofUrl?: string | null;
@@ -55,6 +56,10 @@ export function conversationTags(
     else if (due === today) tags.push({ key: 'followup', label: 'Hari ini', tone: 'warn', title: 'Follow-up hari ini' });
   }
   if (!won && !lost && !item.userId) tags.push({ key: 'nopic', label: 'Tanpa PIC', tone: 'warn' });
+  const picName = item.user?.name?.trim();
+  if (item.userId && picName) {
+    tags.push({ key: 'pic', label: `PIC ${picName.replace(/^cs\s+/i, '').split(/\s+/)[0]}`, tone: 'pic', title: `Penanggung jawab: ${picName}` });
+  }
 
   if (won) {
     tags.push({ key: 'stage', label: item.paymentStatus === 'paid_full' ? 'Lunas' : item.paymentStatus === 'partial_dp' ? 'DP' : 'Deal', tone: 'ok' });
@@ -66,7 +71,12 @@ export function conversationTags(
 
   if (custom) tags.push({ key: 'custom', label: 'Custom', tone: custom.urgent ? 'warn' : 'info', title: custom.text });
 
-  return tags.slice(0, MAX_CONVERSATION_TAGS);
+  // Melebihi batas: tahap (paling tidak informatif) dikorbankan lebih dulu, lalu tag paling akhir.
+  while (tags.length > MAX_CONVERSATION_TAGS) {
+    const stage = tags.findIndex((tag) => tag.key === 'stage');
+    tags.splice(stage === -1 ? tags.length - 1 : stage, 1);
+  }
+  return tags;
 }
 
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
