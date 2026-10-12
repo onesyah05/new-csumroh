@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Clock, FolderPlus, Images, Loader2, Monitor, Search, Trash2, Upload, X } from 'lucide-react';
+import { Check, Clock, FolderPlus, Images, Loader2, Monitor, Search, Upload, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../app/auth';
 import { cn } from '../../lib/cn';
@@ -8,7 +8,6 @@ import { Button } from '../../components/ui/button';
 import { EmptyState } from '../../components/ui/page-feedback';
 import { ImageLightbox } from '../../components/ui/image-lightbox';
 import { ConfirmDialog } from '../../components/ui/modal';
-import { Select } from '../../components/ui/select';
 import { showFeedback } from '../../app/toast';
 import { resolveMediaUrl } from '../../lib/api';
 import { formatFileSize } from '../chat/mediaCompressor';
@@ -19,7 +18,6 @@ import {
 } from './galleryApi';
 
 const RECENT = 'recent';
-const NO_FOLDER = '0';
 
 type PendingDelete = { kind: 'asset'; asset: GalleryAsset } | { kind: 'folder'; id: number; name: string };
 
@@ -124,10 +122,6 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
   });
 
   const current = folders.data?.folders.find((f) => String(f.id) === folder);
-  const folderOptions = [
-    { value: NO_FOLDER, label: 'Tanpa folder' },
-    ...(folders.data?.folders ?? []).map((f) => ({ value: String(f.id), label: f.name })),
-  ];
 
   const folderButton = (id: string, label: string, count: number | undefined) => (
     <button
@@ -255,19 +249,25 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
                     key={asset.id}
                     asset={asset}
                     active={selected?.id === asset.id}
-                    editable={canModify(asset)}
-                    renameValue={renaming?.id === asset.id ? renaming.value : null}
+                    actions={canModify(asset) ? {
+                      folders: folders.data?.folders ?? [],
+                      move: (target) => updateAsset.mutate({ asset, patch: { folderId: target } }),
+                      startRename: () => { setSelected(asset); setRenaming({ id: asset.id, value: asset.name }); },
+                      remove: () => setPendingDelete({ kind: 'asset', asset }),
+                    } : null}
+                    rename={renaming?.id === asset.id ? {
+                      value: renaming.value,
+                      change: (value) => setRenaming({ id: asset.id, value }),
+                      commit: (value) => {
+                        const name = value.trim();
+                        if (name && name !== asset.name) updateAsset.mutate({ asset, patch: { name } });
+                        else setRenaming(null);
+                      },
+                      cancel: () => setRenaming(null),
+                    } : null}
                     onSelect={() => { setSelected(asset); setRenaming(null); }}
                     onOpen={() => { if (isPicker) onSelect?.(asset); else setZoom(asset); }}
                     onZoom={() => setZoom(asset)}
-                    onStartRename={() => { setSelected(asset); setRenaming({ id: asset.id, value: asset.name }); }}
-                    onRenameChange={(value) => setRenaming({ id: asset.id, value })}
-                    onRenameCommit={(value) => {
-                      const name = value.trim();
-                      if (name && name !== asset.name) updateAsset.mutate({ asset, patch: { name } });
-                      else setRenaming(null);
-                    }}
-                    onRenameCancel={() => setRenaming(null)}
                   />
                 ))}
               </ul>
@@ -290,30 +290,6 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {canModify(selected) && (
-                  <>
-                    <div className="w-36">
-                      <Select
-                        size="md"
-                        value={String(selected.folderId ?? NO_FOLDER)}
-                        onValueChange={(value) => updateAsset.mutate({ asset: selected, patch: { folderId: value === NO_FOLDER ? null : Number(value) } })}
-                        options={folderOptions}
-                        aria-label="Pindah ke folder"
-                        className="w-full"
-                      />
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      onClick={() => setPendingDelete({ kind: 'asset', asset: selected })}
-                      disabled={removeAsset.isPending}
-                      aria-label="Hapus media"
-                      className="text-rose-700"
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </>
-                )}
                 {isPicker && <Button onClick={() => onSelect?.(selected)}>Pilih</Button>}
               </div>
             </div>
