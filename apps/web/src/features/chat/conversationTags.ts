@@ -1,6 +1,8 @@
 import { dateOnlyKey, isLostStatus, isWonStatus, parseTargetMonth, targetMonthLabel } from '@csumroh/shared-types';
 
-export type ConversationTagTone = 'urgent' | 'warn' | 'ok' | 'info' | 'pic' | 'muted';
+export type ConversationTagTone = 'urgent' | 'warn' | 'ok' | 'info' | 'pic' | 'muted'
+  // Satu warna per tahap prospek agar terbedakan sekilas di daftar.
+  | 'contact' | 'qualified' | 'offer' | 'objection' | 'followup' | 'nurture' | 'closing';
 export interface ConversationTag { key: string; label: string; tone: ConversationTagTone; title?: string }
 
 export interface TaggableConversation {
@@ -26,6 +28,15 @@ const STAGE_LABEL: Record<string, string> = {
   objection: 'Keberatan',
   followup: 'Follow-up', nurture: 'Nurture',
   closing: 'Verifikasi',
+};
+
+const STAGE_TONE: Record<string, ConversationTagTone> = {
+  contact: 'contact', identifying: 'contact',
+  qualified: 'qualified',
+  offer: 'offer', offered: 'offer',
+  objection: 'objection',
+  followup: 'followup', nurture: 'nurture',
+  closing: 'closing',
 };
 
 export const MAX_CONVERSATION_TAGS = 3;
@@ -66,7 +77,7 @@ export function conversationTags(
   } else if (lost) {
     tags.push({ key: 'stage', label: 'Batal', tone: 'muted' });
   } else if (item.status && STAGE_LABEL[item.status] && !proofPending) {
-    tags.push({ key: 'stage', label: STAGE_LABEL[item.status]!, tone: item.status === 'new' ? 'muted' : 'info' });
+    tags.push({ key: 'stage', label: STAGE_LABEL[item.status]!, tone: STAGE_TONE[item.status] ?? 'muted' });
   }
 
   if (custom) tags.push({ key: 'custom', label: 'Custom', tone: custom.urgent ? 'warn' : 'info', title: custom.text });
