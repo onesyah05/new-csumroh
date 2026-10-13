@@ -151,6 +151,8 @@
   --ctl-field: 36px;
 }
 .mobile-navigation { padding-bottom: env(safe-area-inset-bottom, 0px); }
+/* Tab/pill segmented: bingkai selalu setinggi kolom isian di sebelahnya (token --ctl-field, desktop dan mobile). */
+.segmented button, .segmented [role='radio'], .segmented [role='tab'] { min-height: calc(var(--ctl-field) - 6px); height: auto; padding-block: 6px; line-height: 1rem; }
 @media (max-width: 767px) {
   :root { --ctl-sm: 34px; --ctl-md: 40px; --ctl-lg: 42px; --ctl-icon: 40px; --ctl-field: 40px; }
   html { scroll-padding-top: 72px; }
@@ -188,8 +190,6 @@
   button.mobile-compact-control,
   button.mobile-compact-control:has(> svg:only-child) { min-height: 34px; height: auto; padding-block: 6px; line-height: 1rem; }
   .mobile-compact-filters { gap: 8px; }
-  /* Tab/pill segmented: bingkai selalu setinggi kolom isian di sebelahnya (token --ctl-field). */
-  .segmented button, .segmented [role='radio'], .segmented [role='tab'] { min-height: calc(var(--ctl-field) - 6px); height: auto; padding-block: 6px; line-height: 1rem; }
   /* Baris tombol cepat di atas kolom pesan: ringkas (32px) agar tidak memakan tinggi layar chat; jarak 6px tetap. */
   .quick-reply-row { scrollbar-width: none; padding-bottom: 0; }
   .quick-reply-row::-webkit-scrollbar { display: none; }
