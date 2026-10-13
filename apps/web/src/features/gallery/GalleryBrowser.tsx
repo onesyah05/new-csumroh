@@ -9,11 +9,12 @@ import { EmptyState } from '../../components/ui/page-feedback';
 import { ImageLightbox } from '../../components/ui/image-lightbox';
 import { ConfirmDialog } from '../../components/ui/modal';
 import { showFeedback } from '../../app/toast';
+import { useFileDrop } from '../../lib/useFileDrop';
 import { resolveMediaUrl } from '../../lib/api';
 import { formatFileSize } from '../chat/mediaCompressor';
 import { GalleryAssetCard, formatGalleryWhen } from './GalleryAssetCard';
 import {
-  GALLERY_ACCEPT, isVideoAsset, uploadGalleryFile,
+  GALLERY_ACCEPT, isGalleryFile, isVideoAsset, uploadGalleryFile,
   type GalleryAsset, type GalleryAssetPage, type GalleryFolders,
 } from './galleryApi';
 
@@ -75,8 +76,17 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
   };
   const onError = (error: Error) => showFeedback(error.message, { error: true });
 
-  async function handleFiles(list: FileList | null) {
-    const files = Array.from(list ?? []);
+  async function handleFiles(list: ArrayLike<File> | null) {
+    const all = Array.from(list ?? []);
+    if (!all.length) return;
+    if (uploading > 0) {
+      showFeedback('Tunggu unggahan yang sedang berjalan selesai.', { error: true });
+      return;
+    }
+    const files = all.filter(isGalleryFile);
+    if (files.length < all.length) {
+      showFeedback((all.length - files.length) + ' berkas dilewati (hanya JPG, PNG, WEBP, atau video MP4).', { error: true });
+    }
     if (!files.length) return;
     setUploading(files.length);
     let last: GalleryAsset | null = null;
@@ -86,7 +96,7 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
       } catch (error) {
         showFeedback(error instanceof Error ? error.message : 'Gagal mengunggah media.', { error: true });
       } finally {
-        setUploading((count) => count - 1);
+        setUploading((count) => Math.max(0, count - 1));
       }
     }
     refresh();
@@ -123,6 +133,8 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
 
   const current = folders.data?.folders.find((f) => String(f.id) === folder);
 
+  const { dragging, dropProps } = useFileDrop({ onFiles: (files) => void handleFiles(files), disabled: uploading > 0 });
+
   const folderButton = (id: string, label: string, count: number | undefined) => (
     <button
       key={id}
@@ -142,7 +154,19 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
   );
 
   return (
-    <div className={cn('flex min-h-0 w-full min-w-0 flex-col bg-white', isPicker ? 'h-full' : 'min-h-[60vh] rounded-2xl border border-zinc-200')}>
+    <div
+      {...dropProps}
+      className={cn('relative flex min-h-0 w-full min-w-0 flex-col bg-white', isPicker ? 'h-full' : 'min-h-[60vh] rounded-2xl border border-zinc-200')}
+    >
+      <p className="sr-only" role="status" aria-live="polite">{uploading > 0 ? 'Mengunggah ' + uploading + ' berkas' : ''}</p>
+      {dragging && (
+        <div role="status" className="pointer-events-none absolute inset-2 z-20 grid place-items-center rounded-xl border-2 border-dashed border-zinc-950 bg-white/90">
+          <p className="flex max-w-full flex-col items-center gap-2 px-4 text-center text-sm font-semibold text-zinc-950">
+            <Upload size={20} aria-hidden="true" />
+            <span>Lepaskan untuk mengunggah ke {current?.name ?? 'Unggahan terbaru'}</span>
+          </p>
+        </div>
+      )}
       <div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2.5 sm:px-4">
         {isPicker && <h2 className="shrink-0 text-sm font-bold text-zinc-900">Galeri</h2>}
         <div className="relative min-w-0 flex-1">
