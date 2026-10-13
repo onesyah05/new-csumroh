@@ -228,3 +228,21 @@ export const WA_DISCONNECT_REASONS = {
 export type WaDisconnectReason = keyof typeof WA_DISCONNECT_REASONS;
 export const waDisconnectReasonText = (reason?: string | null) =>
   reason && reason in WA_DISCONNECT_REASONS ? WA_DISCONNECT_REASONS[reason as WaDisconnectReason] : null;
+
+/** Label tahap prospek baku untuk UI dan prompt AI (AGENTS §3/§5: Terhubung, Tunggu Verifikasi, Batal). */
+export const PROSPECT_STATUS_LABELS: Record<string, string> = {
+  new: 'Baru',
+  contact: 'Terhubung',
+  identifying: 'Terhubung',
+  qualified: 'Terkualifikasi',
+  offer: 'Ditawarkan',
+  offered: 'Ditawarkan',
+  objection: 'Keberatan',
+  followup: 'Follow-up',
+  closing: 'Tunggu Verifikasi',
+  deal: 'Deal',
+  closed_won: 'Deal',
+  lose: 'Batal',
+  closed_lost: 'Batal',
+  nurture: 'Nurture',
+};

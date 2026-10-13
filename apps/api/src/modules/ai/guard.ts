@@ -19,33 +19,49 @@ export function redactPii(text: string) {
 export const ALLOWED_TOKENS = new Set<string>([...SCRIPT_VARIABLES, ...Object.keys(TOKEN_INFO)]);
 
 const TOKEN = /\{\{([a-z0-9_]+)\}\}/gi;
-const MONTH = '(jan|feb|mar|apr|mei|may|jun|jul|agu|agt|aug|sep|okt|oct|nov|des|dec)[a-z]*';
-/** Pola fakta yang tidak boleh ditulis AI sendiri (spec bagian 8). Fakta hanya lewat token. */
+/** Selalu ditolak, walau ada di riwayat: nomor panjang (telepon/rekening) dan tautan hanya lewat token. */
 const FORBIDDEN: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /\bRp\.?\s?\d/i, reason: 'menulis nominal Rupiah' },
-  { pattern: /\b\d+([.,]\d+)?\s?(rb|ribu|jt|juta|k|m)\b/i, reason: 'menulis nominal uang' },
-  { pattern: /\b\d{1,3}([.,]\d{3})+\b/, reason: 'menulis angka nominal' },
-  { pattern: new RegExp(`\\b\\d{1,2}\\s+${MONTH}\\b`, 'i'), reason: 'menulis tanggal' },
-  { pattern: /\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b/, reason: 'menulis tanggal' },
-  { pattern: /\b20\d{2}\b/, reason: 'menulis tahun' },
   { pattern: /\d{8,}/, reason: 'menulis nomor telepon atau rekening' },
   { pattern: /https?:\/\/|www\./i, reason: 'menulis tautan' },
 ];
+
+const MONTHS: Record<string, string> = {
+  jan: 'jan', feb: 'feb', mar: 'mar', apr: 'apr', mei: 'mei', may: 'mei', jun: 'jun', jul: 'jul',
+  agu: 'agu', agt: 'agu', aug: 'agu', sep: 'sep', okt: 'okt', oct: 'okt', nov: 'nov', des: 'des', dec: 'des',
+};
+const UNIT: Record<string, number> = { rb: 1e3, ribu: 1e3, k: 1e3, jt: 1e6, juta: 1e6, m: 1e6 };
+const MONEY = /(rp\.?\s?)?(\d+(?:[.,]\d+)*)\s?(rb|ribu|k|jt|juta|m)?\b/gi;
+const DAY_MONTH = /\b(\d{1,2})\s+(jan|feb|mar|apr|mei|may|jun|jul|agu|agt|aug|sep|okt|oct|nov|des|dec)[a-z]*\b/gi;
+const NUMERIC_DATE = /\b(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?\b/g;
+const YEAR = /\b20\d{2}\b/g;
+
+type Fact = { key: string; reason: string };
+/**
+ * Fakta yang tertulis di teks: nominal (nilai beserta satuannya), tanggal (hari + bulan), dan tahun. Dipakai untuk
+ * template dan riwayat chat dengan aturan yang sama: fakta di template hanya boleh bila fakta yang SAMA ada di riwayat
+ * (mis. "25 Desember" di chat tidak meloloskan "Rp25 juta").
+ */
+function factsIn(text: string): Fact[] {
+  const facts: Fact[] = [];
+  for (const [, prefix, number, unit] of text.matchAll(MONEY)) {
+    const grouped = /^\d{1,3}([.,]\d{3})+$/.test(number!);
+    if (!prefix && !unit && !grouped) continue; // angka biasa ("2 orang", "9 hari") bukan nominal
+    const separators = (number!.match(/[.,]/g) ?? []).length;
+    // "34.499jt" = 34,499 juta (satu pemisah + satuan = desimal); "38.499.000" = angka penuh.
+    const base = unit && separators === 1 ? Number(number!.replace(',', '.')) : Number(number!.replace(/[.,]/g, ''));
+    const value = Math.round(base * (unit ? UNIT[unit.toLowerCase()]! : 1));
+    facts.push({ key: `uang:${value}`, reason: prefix ? 'menulis nominal Rupiah' : unit ? 'menulis nominal uang' : 'menulis angka nominal' });
+  }
+  for (const [, day, month] of text.matchAll(DAY_MONTH)) facts.push({ key: `tanggal:${Number(day)}-${MONTHS[month!.toLowerCase()]}`, reason: 'menulis tanggal' });
+  for (const [, day, month] of text.matchAll(NUMERIC_DATE)) facts.push({ key: `tanggal:${Number(day)}/${Number(month)}`, reason: 'menulis tanggal' });
+  for (const [year] of text.matchAll(YEAR)) facts.push({ key: `tahun:${year}`, reason: 'menulis tahun' });
+  return facts;
+}
 export const MAX_OPTION_LENGTH = 700;
 /** Token yang terisi daftar berbutir (beberapa baris): harus berdiri di baris sendiri agar format WhatsApp tidak rusak. */
 export const LIST_TOKENS = ['harga_kamar', 'fasilitas_termasuk', 'fasilitas_tidak_termasuk'];
 /** Alamat dan tautan Maps panjang: di baris sendiri, boleh diawali label pendek ("Alamat:"). */
 export const LINE_TOKENS = ['alamat_kantor', 'link_maps'];
-
-/** Angka (≥2 digit) yang sudah tertulis di riwayat chat: boleh dipakai ulang persis, karena bukan karangan AI. */
-function numbersIn(text: string) {
-  return new Set([...text.matchAll(/\d[\d.,]*\d|\d/g)].map((m) => m[0].replace(/[.,]$/, '')).filter((n) => n.replace(/\D/g, '').length >= 2));
-}
-/** Ganti kata berangka yang angkanya sudah ada di riwayat dengan "N" agar aturan FORBIDDEN tidak menolaknya. */
-function neutralizeKnownNumbers(text: string, known: Set<string>) {
-  if (!known.size) return text;
-  return text.replace(/\d[\d.,]*\d|\d/g, (number) => (known.has(number.replace(/[.,]$/, '')) ? 'N' : number));
-}
 
 export type TemplateRules = {
   /** Teks riwayat chat (sudah disamarkan): angka/tanggal yang sudah ada di sini boleh dipakai ulang. */
@@ -74,7 +90,10 @@ export function templateViolations(template: string, rules: TemplateRules = {}) 
   if (/(^|\n)\s*(salam|hormat kami|regards)\b/i.test(text)) violations.push('memakai tanda tangan penutup');
   // Sapaan formal ditulis kapital ("Ibu", "Bapak/Ibu", "Bu"); huruf kecil seperti "ibu kota" tidak dihitung.
   if (/\bkak(ak)?\b/i.test(text) && /\b(Bapak|Ibu|Pak|Bu)\b/.test(text)) violations.push('mencampur sapaan "kak" dan "Bapak/Ibu"');
-  const withoutTokens = neutralizeKnownNumbers(text.replace(TOKEN, ''), numbersIn(rules.history ?? ''));
+  const withoutTokens = text.replace(TOKEN, '');
   for (const rule of FORBIDDEN) if (rule.pattern.test(withoutTokens)) violations.push(rule.reason);
+  // Nominal/tanggal/tahun hanya boleh bila fakta yang sama (nilai + satuan, hari + bulan) sudah tertulis di riwayat.
+  const known = new Set(factsIn(rules.history ?? '').map((fact) => fact.key));
+  for (const fact of factsIn(withoutTokens)) if (!known.has(fact.key)) violations.push(fact.reason);
   return [...new Set(violations)];
 }

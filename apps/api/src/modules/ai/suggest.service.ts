@@ -1,4 +1,4 @@
-import { interpolateScript, normalizeScriptNarrative, objectionLabel, OBJECTION_SCRIPT_CATEGORIES, recommendedCategory, transformScriptTree } from '@csumroh/shared-types';
+import { interpolateScript, normalizeScriptNarrative, objectionLabel, OBJECTION_SCRIPT_CATEGORIES, PROSPECT_STATUS_LABELS, recommendedCategory, transformScriptTree } from '@csumroh/shared-types';
 import { z } from 'zod';
 import { annotateScript, TOKEN_INFO, type ScriptContext } from '../scripts/context.js';
 import { readScript } from '../scripts/scripts.routes.js';
@@ -6,11 +6,6 @@ import { ALLOWED_TOKENS, redactPii, templateViolations } from './guard.js';
 import { buildMaterial, buildUserContent, INTENTS, OBJECTIONS, ORIGINS, OUTPUT_SCHEMA, SYSTEM_PROMPT, type CategoryMaterial } from './prompt.js';
 import { getProvider, ProviderError, type FallbackReason } from './provider.js';
 
-const STAGE_LABEL: Record<string, string> = {
-  new: 'Baru', contact: 'Kontak', identifying: 'Identifikasi', qualified: 'Terkualifikasi', offer: 'Penawaran', offered: 'Penawaran',
-  objection: 'Keberatan', followup: 'Follow-up', nurture: 'Nurture', closing: 'Closing / pembayaran', deal: 'Deal', closed_won: 'Deal',
-  lose: 'Lost', closed_lost: 'Lost',
-};
 const MEDIA_LABEL: Record<string, string> = {
   imageMessage: '[gambar]', videoMessage: '[video]', audioMessage: '[pesan suara]', documentMessage: '[dokumen]',
   documentWithCaptionMessage: '[dokumen]', stickerMessage: '[stiker]', locationMessage: '[lokasi]', contactMessage: '[kontak]',
@@ -85,7 +80,7 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
   const { context } = input;
   const category = recommendedCategory(input.prospect.status);
   const bank = await bankScripts(category, context, input.prospect.objectionCategory);
-  const stageLabel = STAGE_LABEL[input.prospect.status] ?? input.prospect.status;
+  const stageLabel = PROSPECT_STATUS_LABELS[input.prospect.status] ?? input.prospect.status;
 
   const fallback = (reason: FallbackReason): SuggestionResult => ({
     source: 'fallback', fallbackReason: reason, detected: null,

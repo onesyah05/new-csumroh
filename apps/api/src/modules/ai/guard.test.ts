@@ -43,6 +43,21 @@ describe('templateViolations', () => {
     expect(templateViolations('Harganya jadi Rp36.000.000 kak', { history })).toContain('menulis nominal Rupiah');
   });
 
+  it('angka dari riwayat hanya meloloskan fakta yang sama (nilai + satuan, hari + bulan), bukan angkanya saja', () => {
+    const history = 'Keberangkatan 25 Desember 2026, start di harga 34.499jt, paket 38.499.000';
+    // Celah lama: "25" dan "2026" dari riwayat meloloskan nominal karangan.
+    expect(templateViolations('DP-nya cukup Rp25 juta kak', { history })).toContain('menulis nominal Rupiah');
+    expect(templateViolations('Harganya 25 juta saja kak', { history })).toContain('menulis nominal uang');
+    expect(templateViolations('Paket 2026 jadi Rp30.000.000 kak', { history })).toContain('menulis nominal Rupiah');
+    // Nilai yang sama walau ditulis beda format tetap lolos.
+    expect(templateViolations('Yang mulai Rp34.499.000 itu kak?', { history })).toEqual([]);
+    expect(templateViolations('Yang Rp38.499.000 sudah all in kak', { history })).toEqual([]);
+    expect(templateViolations('Mau ambil yang 25 Des 2026 kak?', { history })).toEqual([]);
+    expect(templateViolations('Kalau yang 38 juta bagaimana kak?', { history })).toContain('menulis nominal uang');
+    expect(templateViolations('Mau yang 26 Desember kak?', { history })).toContain('menulis tanggal');
+    expect(templateViolations('Kalau 2027 bagaimana kak?', { history })).toContain('menulis tahun');
+  });
+
   it('alamat/Maps di baris sendiri, tidak diulang bila sudah dikirim, dan tanpa tanda tangan', () => {
     expect(templateViolations('Baik kak, ini lokasinya:\nAlamat: {{alamat_kantor}}\n{{link_maps}}')).toEqual([]);
     expect(templateViolations('Kantor kami di {{alamat_kantor}}, kapan mau mampir kak?')).toContain('alamat atau tautan Maps tidak di baris sendiri');
