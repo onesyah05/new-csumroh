@@ -18,6 +18,8 @@ const schema = z.object({
   NOTIFICATIONS_ENABLED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
   // Job berkala (SLA balasan, ringkasan harian, retensi). Matikan di tes atau bila menjalankan beberapa proses tanpa kebutuhan.
   SCHEDULER_ENABLED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
+  // Batas waktu panggilan Asisten AI. Kunci API, model, dan peserta diatur Superadmin di dashboard (tabel ai_settings).
+  AI_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
 });
 
 export const env = schema.parse(process.env);

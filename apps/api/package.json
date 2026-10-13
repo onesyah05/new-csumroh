@@ -19,6 +19,7 @@
     "db:backfill:contact": "tsx prisma/backfill-contact-status.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@csumroh/shared-types": "workspace:*",
     "@prisma/client": "^6.16.1",
     "bcryptjs": "^3.0.2",

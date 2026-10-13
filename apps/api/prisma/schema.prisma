@@ -109,6 +109,7 @@ model Brand {
   proofRejections    PaymentProofRejection[]
   mediaFolders       MediaFolder[]
   mediaAssets        MediaAsset[]
+  aiSuggestions      AiSuggestion[]
 
   @@map("brands")
 }
@@ -135,6 +136,7 @@ model User {
   mediaFolders            MediaFolder[]
   mediaAssets             MediaAsset[]
   proofRejections         PaymentProofRejection[]
+  aiSuggestions           AiSuggestion[]
 
   @@index([brandId, isActive])
   @@map("users")
@@ -273,6 +275,7 @@ model Prospect {
   payments                Payment[]
   customRequests          CustomRequest[]
   proofRejections         PaymentProofRejection[]
+  aiSuggestions           AiSuggestion[]
 
   @@index([brandId, status])
   @@index([userId])
@@ -645,4 +648,52 @@ model MediaAsset {
   @@index([brandId, createdAt])
   @@index([brandId, folderId])
   @@map("media_assets")
+}
+
+// Log Saran Balasan AI (Copilot Inbox). Hanya template opsi (dengan token, tanpa nilai data) dan metrik;
+// riwayat chat dan isi prompt tidak disimpan. Dihapus otomatis setelah 180 hari oleh job retensi.
+model AiSuggestion {
+  id             Int       @id @default(autoincrement())
+  brandId        Int       @map("brand_id")
+  prospectId     Int?      @map("prospect_id")
+  userId         Int       @map("user_id")
+  previousId     Int?      @map("previous_id")
+  source         String    @db.VarChar(10)
+  fallbackReason String?   @map("fallback_reason") @db.VarChar(30)
+  model          String?   @db.VarChar(80)
+  intent         String?   @db.VarChar(30)
+  objection      String?   @db.VarChar(30)
+  coverage       String?   @db.VarChar(10)
+  options        Json
+  instruction    String?   @db.VarChar(200)
+  inputTokens    Int?      @map("input_tokens")
+  outputTokens   Int?      @map("output_tokens")
+  latencyMs      Int       @map("latency_ms")
+  action         String?   @db.VarChar(15)
+  optionIndex    Int?      @map("option_index") @db.TinyInt
+  similarity     Float?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  actedAt        DateTime? @map("acted_at")
+  brand          Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  prospect       Prospect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([brandId, createdAt])
+  @@map("ai_suggestions")
+}
+
+// Pengaturan Asisten AI (satu baris, id = 1), dikelola Superadmin dari dashboard. Kunci API disimpan terenkripsi.
+model AiSetting {
+  id                Int      @id @default(1)
+  enabled           Boolean  @default(false)
+  apiKey            String?  @map("api_key") @db.Text
+  model             String   @default("claude-haiku-5-5") @db.VarChar(80)
+  // Kosong = semua CS/Admin; berisi id user = hanya peserta pilot.
+  pilotUserIds      Json?    @map("pilot_user_ids")
+  dailyLimitPerUser Int      @default(150) @map("daily_limit_per_user")
+  updatedById       Int?     @map("updated_by_id")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_settings")
 }

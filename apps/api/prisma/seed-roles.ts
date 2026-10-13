@@ -19,6 +19,8 @@ function assertLocal() {
 }
 
 const ACCOUNTS: { email: string; name: string; role: Role; brand: 'primary' | null; extraBrands?: boolean }[] = [
+  // Superadmin uji: halaman khusus Superadmin (mis. Asisten AI) tanpa memakai akun pemilik.
+  { email: 'superadmin.uji@crm.test', name: 'Superadmin Uji', role: 'superadmin', brand: null },
   { email: 'admin.uji@crm.test', name: 'Admin Uji', role: 'admin', brand: 'primary' },
   { email: 'finance.uji@crm.test', name: 'Finance Uji', role: 'finance', brand: null },
   { email: 'timla.uji@crm.test', name: 'Tim LA Uji', role: 'product', brand: null },
