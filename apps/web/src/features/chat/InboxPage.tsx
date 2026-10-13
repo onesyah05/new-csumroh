@@ -2737,6 +2737,7 @@ export function InboxPage() {
             onOpenPackagePicker={() => setShowPackagePickerModal(true)}
             onPreviewImage={(url) => setPreviewFlyer(url)}
             onShowToast={showToast}
+            hasInboundMessage={(messages.data ?? []).some((message: any) => !message.isFromMe && !message.isDeleted && !['protocolMessage', 'reactionMessage'].includes(message.messageType))}
           />
         )}
       </div>

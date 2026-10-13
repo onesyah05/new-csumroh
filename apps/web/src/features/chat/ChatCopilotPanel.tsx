@@ -26,9 +26,11 @@ interface Props {
   prospectId?: number | null; revision?: string | null;
   prospectName?: string; packageId?: number | null; packageName?: string; brandId?: number;
   brandName?: string; query?: string; stage?: string; objectionCategory?: string | null; objection?: string;
+  /** Saran AI hanya bila sudah ada pesan masuk dari prospek (spec §3). */
+  hasInboundMessage?: boolean;
   onInsertText(text: string): void; onShowToast(message: string): void;
 }
-export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/Ibu', packageId, packageName, brandId, brandName, query = '', stage, objectionCategory, objection, onInsertText, onShowToast }: Props) {
+export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/Ibu', packageId, packageName, brandId, brandName, query = '', stage, objectionCategory, objection, hasInboundMessage = false, onInsertText, onShowToast }: Props) {
   const complete = ['deal', 'closed_won'].includes(stage || '');
   const [category, setCategory] = useState('recommended');
   const [search, setSearch] = useState('');
@@ -126,7 +128,7 @@ export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/I
       {category === 'identification' && !search && <Select aria-label="Jenis pertanyaan kualifikasi" className="w-full" value={framework} onValueChange={setFramework} options={[{ value: 'all', label: 'Semua pertanyaan' }, { value: 'need', label: 'Kebutuhan' }, { value: 'pain', label: 'Hambatan' }, { value: 'gain', label: 'Manfaat yang dicari' }, { value: 'dream', label: 'Harapan' }, { value: 'qualification', label: 'Informasi praktis' }]} />}
     </header>
     <div className="thin-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
-      {!search && prospectId && aiStatus.data?.enabled && <AiReplySuggestions key={prospectId} brandId={brandId} prospectId={prospectId} onReview={openAi} />}
+      {!search && prospectId && hasInboundMessage && aiStatus.data?.enabled && <AiReplySuggestions key={prospectId} brandId={brandId} prospectId={prospectId} onReview={openAi} />}
       {warnings.length > 0 && <ul className="space-y-1 text-xs leading-relaxed text-amber-800">{warnings.map(text => <li key={text} className="flex gap-1.5"><AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />{text}</li>)}</ul>}
       {category === 'recommended' && !search && <div className="space-y-1 text-xs leading-relaxed text-zinc-600"><p className="flex items-center gap-1 font-semibold text-zinc-800"><Sparkles size={14} />Skrip yang datanya sudah tersedia</p>{stage === 'objection' && <p>Keberatan tercatat: {objectionCategory ? objectionLabel(objectionCategory) : objection || 'belum dipilih'}</p>}</div>}
       {scripts.isLoading ? <p role="status" className="text-sm text-zinc-600">Memuat pustaka skrip…</p> : scripts.isError ? <div role="alert" className="space-y-2 text-sm"><p>Skrip tidak dapat dimuat. Silakan coba lagi.</p><Button variant="secondary" onClick={() => void scripts.refetch()}>Coba lagi</Button></div> : <>

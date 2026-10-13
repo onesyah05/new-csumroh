@@ -90,6 +90,15 @@ describe('suggestReplies', () => {
     expect(result.options.every((option) => option.origin === 'bank')).toBe(true);
   });
 
+  it('JSON rusak dicoba ulang sekali dengan koreksi; token kedua percobaan terhitung', async () => {
+    const { requests } = fakeProvider(undefined, output(['Boleh saya kirim rincian {{paket}} kak?']));
+    const result = await suggestReplies(input);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.user).toContain('bukan JSON yang valid');
+    expect(result.source).toBe('ai');
+    expect(result).toMatchObject({ inputTokens: 200, outputTokens: 100 });
+  });
+
   it('fallback saat provider gagal, timeout, atau menolak', async () => {
     fakeProvider(new ProviderError('timeout', 'lambat'));
     expect((await suggestReplies(input)).fallbackReason).toBe('timeout');

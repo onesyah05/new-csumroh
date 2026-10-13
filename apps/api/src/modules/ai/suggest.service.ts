@@ -154,9 +154,11 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
         model: result.model, inputTokens, outputTokens,
       };
     }
-    const problems = parsed.success
-      ? [...new Set(checked.flatMap((item) => item.violations))].join('; ')
-      : 'format jawaban tidak sesuai skema';
+    const problems = result.json === undefined
+      ? 'jawaban bukan JSON yang valid; balas hanya dengan JSON sesuai skema'
+      : parsed.success
+        ? [...new Set(checked.flatMap((item) => item.violations))].join('; ')
+        : 'format jawaban tidak sesuai skema';
     user = `${baseUser}\n\nPercobaan sebelumnya ditolak karena: ${problems}. Perbaiki: fakta hanya lewat token yang tersedia atau angka yang tertulis persis di riwayat chat.`;
   }
   return { ...fallback('invalid_output'), inputTokens, outputTokens };

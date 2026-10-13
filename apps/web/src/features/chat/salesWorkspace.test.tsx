@@ -139,6 +139,17 @@ describe('Profil dan Copilot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tambahkan ke draft' }));
     expect(insert).toHaveBeenCalledWith('Berangkat 15 Desember 2026.');
   });
+  it('saran AI hanya tampil bila sudah ada pesan masuk dari prospek dan prospek belum deal', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => (url.startsWith('/ai/status') ? { enabled: true } : url.startsWith('/scripts') ? scripts : prospect()) as any);
+    const { rerender } = render(<ChatCopilotPanel brandId={1} prospectId={11} stage="qualified" hasInboundMessage={false} onInsertText={insert} onShowToast={vi.fn()} />, { wrapper });
+    await screen.findByText('Jadwal paket');
+    expect(screen.queryByText('Saran balasan AI')).toBeNull();
+    rerender(<ChatCopilotPanel brandId={1} prospectId={11} stage="qualified" hasInboundMessage onInsertText={insert} onShowToast={vi.fn()} />);
+    expect(await screen.findByText('Saran balasan AI')).toBeTruthy();
+    rerender(<ChatCopilotPanel brandId={1} prospectId={11} stage="deal" hasInboundMessage onInsertText={insert} onShowToast={vi.fn()} />);
+    expect(screen.getByText('Deal terverifikasi')).toBeTruthy();
+    expect(screen.queryByText('Saran balasan AI')).toBeNull();
+  });
   it('menampilkan error pustaka secara terpisah dari hasil pencarian kosong', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('Offline'));
     render(<ChatCopilotPanel brandId={1} onInsertText={insert} onShowToast={vi.fn()} />, { wrapper });
