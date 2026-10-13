@@ -35,7 +35,7 @@ import { ConfirmDialog } from '../../components/ui/modal';
 import { cn } from '../../lib/cn';
 import { WhatsAppDevicePanel } from '../admin/WhatsAppDevicePanel';
 import { MetaCapiPage } from '../meta/MetaCapiPage';
-import { onRovingKey, rovingTabIndex } from '../custom/roving';
+import { onRovingKey, rovingTabIndex } from '../../lib/roving';
 
 /** Semua pengaturan satu brand di satu tempat (dulu menu Perangkat WhatsApp & Meta CAPI terpisah). */
 const BRAND_TABS = [

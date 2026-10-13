@@ -19,7 +19,7 @@ import { Select } from '../../components/ui/select';
 import { EmptyState, PageError, PageLoading } from '../../components/ui/page-feedback';
 import { cn } from '../../lib/cn';
 import { MoneyInput } from './MoneyInput';
-import { onRovingKey, rovingTabIndex } from './roving';
+import { onRovingKey, rovingTabIndex } from '../../lib/roving';
 import { ConfirmDialog } from '../../components/ui/modal';
 import { dateRange, minDpTotal, money, packageServices, sinceLabel, timeLeftLabel, validUntilLabel, type CustomRequest } from './customApi';
 

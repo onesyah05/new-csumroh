@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { isHoldingUser, useBrandScope } from '../../lib/scope';
-import { Select } from '../../components/ui/select';
+import { brandOption, Select } from '../../components/ui/select';
 import { useAuth } from '../../app/auth';
 import { TodayTasks } from './TodayTasks';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
@@ -153,7 +153,7 @@ export function DashboardPage() {
                 size="sm"
                 aria-label="Cakupan brand"
                 className="w-auto text-xs"
-                options={[{ value: 'all', label: 'Semua brand' }, ...data.scope.brands.map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() }))]}
+                options={[{ value: 'all', label: 'Semua brand' }, ...data.scope.brands.map(brandOption)]}
               />
             )}
           </div>
@@ -170,7 +170,7 @@ export function DashboardPage() {
             size="sm"
             aria-label="Cakupan brand"
             className="w-auto text-xs"
-            options={[{ value: 'all', label: 'Semua brand' }, ...data.scope.brands.map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() }))]}
+            options={[{ value: 'all', label: 'Semua brand' }, ...data.scope.brands.map(brandOption)]}
           />
         )}
       </div>

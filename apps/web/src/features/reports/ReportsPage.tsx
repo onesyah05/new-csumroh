@@ -6,11 +6,11 @@ import { businessDateKey } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { Button } from '../../components/ui/button';
-import { Select } from '../../components/ui/select';
+import { brandOption, Select } from '../../components/ui/select';
 import { PageHeader } from '../../components/ui/page-header';
 import { StatCard, StatGrid } from '../../components/ui/stat-card';
 import { EmptyState, PageError, PageLoading } from '../../components/ui/page-feedback';
-import { onRovingKey, rovingTabIndex } from '../custom/roving';
+import { onRovingKey, rovingTabIndex } from '../../lib/roving';
 import { showFeedback } from '../../app/toast';
 import { durationLabel, rupiah } from '../finance/verificationApi';
 import { CreativesView, roasText } from './CreativesView';
@@ -141,7 +141,7 @@ export function ReportsPage() {
             className="w-48"
             options={[
               { value: 'all', label: 'Semua brand' },
-              ...(brands.data ?? []).map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() })),
+              ...(brands.data ?? []).map(brandOption),
             ]}
           />
         }
@@ -155,7 +155,7 @@ export function ReportsPage() {
           className="w-full"
           options={[
             { value: 'all', label: 'Semua brand' },
-            ...(brands.data ?? []).map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() })),
+            ...(brands.data ?? []).map(brandOption),
           ]}
         />
         <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={PERIOD_OPTIONS} className="w-full" />
