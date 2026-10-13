@@ -34,9 +34,28 @@ const FORBIDDEN: Array<{ pattern: RegExp; reason: string }> = [
 export const MAX_OPTION_LENGTH = 700;
 /** Token yang terisi daftar berbutir (beberapa baris): harus berdiri di baris sendiri agar format WhatsApp tidak rusak. */
 export const LIST_TOKENS = ['harga_kamar', 'fasilitas_termasuk', 'fasilitas_tidak_termasuk'];
+/** Alamat dan tautan Maps panjang: di baris sendiri, boleh diawali label pendek ("Alamat:"). */
+export const LINE_TOKENS = ['alamat_kantor', 'link_maps'];
+
+/** Angka (≥2 digit) yang sudah tertulis di riwayat chat: boleh dipakai ulang persis, karena bukan karangan AI. */
+function numbersIn(text: string) {
+  return new Set([...text.matchAll(/\d[\d.,]*\d|\d/g)].map((m) => m[0].replace(/[.,]$/, '')).filter((n) => n.replace(/\D/g, '').length >= 2));
+}
+/** Ganti kata berangka yang angkanya sudah ada di riwayat dengan "N" agar aturan FORBIDDEN tidak menolaknya. */
+function neutralizeKnownNumbers(text: string, known: Set<string>) {
+  if (!known.size) return text;
+  return text.replace(/\d[\d.,]*\d|\d/g, (number) => (known.has(number.replace(/[.,]$/, '')) ? 'N' : number));
+}
+
+export type TemplateRules = {
+  /** Teks riwayat chat (sudah disamarkan): angka/tanggal yang sudah ada di sini boleh dipakai ulang. */
+  history?: string;
+  /** Token yang tidak boleh dipakai di permintaan ini (mis. alamat yang baru saja dikirim CS). */
+  blockedTokens?: string[];
+};
 
 /** Pelanggaran satu template opsi; kosong berarti lolos. */
-export function templateViolations(template: string) {
+export function templateViolations(template: string, rules: TemplateRules = {}) {
   const violations: string[] = [];
   const text = template.trim();
   if (!text) return ['teks kosong'];
@@ -44,12 +63,18 @@ export function templateViolations(template: string) {
   for (const match of text.matchAll(TOKEN)) {
     const token = match[1]!.toLowerCase();
     if (!ALLOWED_TOKENS.has(token)) violations.push(`token tidak dikenal {{${token}}}`);
+    else if (rules.blockedTokens?.includes(token)) violations.push(`{{${token}}} sudah dikirim CS, jangan diulang`);
   }
   for (const line of text.split('\n')) {
     const inline = LIST_TOKENS.some((token) => line.includes(`{{${token}}}`) && line.trim() !== `{{${token}}}`);
     if (inline) violations.push('token daftar tidak di baris sendiri');
+    const crowded = LINE_TOKENS.some((token) => line.includes(`{{${token}}}`) && !/^([\p{L} ]{0,20}:)?$/u.test(line.replace(`{{${token}}}`, '').trim()));
+    if (crowded) violations.push('alamat atau tautan Maps tidak di baris sendiri');
   }
-  const withoutTokens = text.replace(TOKEN, '');
+  if (/(^|\n)\s*(salam|hormat kami|regards)\b/i.test(text)) violations.push('memakai tanda tangan penutup');
+  // Sapaan formal ditulis kapital ("Ibu", "Bapak/Ibu", "Bu"); huruf kecil seperti "ibu kota" tidak dihitung.
+  if (/\bkak(ak)?\b/i.test(text) && /\b(Bapak|Ibu|Pak|Bu)\b/.test(text)) violations.push('mencampur sapaan "kak" dan "Bapak/Ibu"');
+  const withoutTokens = neutralizeKnownNumbers(text.replace(TOKEN, ''), numbersIn(rules.history ?? ''));
   for (const rule of FORBIDDEN) if (rule.pattern.test(withoutTokens)) violations.push(rule.reason);
   return [...new Set(violations)];
 }

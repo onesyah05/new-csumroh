@@ -35,6 +35,24 @@ describe('templateViolations', () => {
     expect(templateViolations('Mau saya kirim rincian *{{harga_kamar}}* untuk dipertimbangkan?')).toContain('token daftar tidak di baris sendiri');
   });
 
+  it('angka dan tanggal yang sudah ada di riwayat chat boleh dipakai ulang; yang tidak ada tetap ditolak', () => {
+    const history = 'Keberangkatan 19 Desember 2026 harga (Double) 38.499.000\n19 ato 21 Dec';
+    expect(templateViolations('Kak, mau yang 19 atau 21 Desember?', { history })).toEqual([]);
+    expect(templateViolations('Yang Rp38.499.000 itu sudah all in ya kak', { history })).toEqual([]);
+    expect(templateViolations('Kalau yang 28 Desember bagaimana kak?', { history })).toContain('menulis tanggal');
+    expect(templateViolations('Harganya jadi Rp36.000.000 kak', { history })).toContain('menulis nominal Rupiah');
+  });
+
+  it('alamat/Maps di baris sendiri, tidak diulang bila sudah dikirim, dan tanpa tanda tangan', () => {
+    expect(templateViolations('Baik kak, ini lokasinya:\nAlamat: {{alamat_kantor}}\n{{link_maps}}')).toEqual([]);
+    expect(templateViolations('Kantor kami di {{alamat_kantor}}, kapan mau mampir kak?')).toContain('alamat atau tautan Maps tidak di baris sendiri');
+    expect(templateViolations('Ini lokasinya:\n{{link_maps}}', { blockedTokens: ['link_maps'] })).toContain('{{link_maps}} sudah dikirim CS, jangan diulang');
+    expect(templateViolations('Ditunggu kabarnya kak.\nSalam, Zaky - Alsha Tours')).toContain('memakai tanda tangan penutup');
+    expect(templateViolations('Kak, kalau mau datang Bapak/Ibu kabari ya')).toContain('mencampur sapaan "kak" dan "Bapak/Ibu"');
+    expect(templateViolations('Kak Erni, jadwal mana yang cocok untuk Ibu?')).toContain('mencampur sapaan "kak" dan "Bapak/Ibu"');
+    expect(templateViolations('Kantor kami di ibu kota, kak')).toEqual([]);
+  });
+
   it('menolak token di luar kontrak dan teks kosong atau terlalu panjang', () => {
     expect(templateViolations('Harga {{harga_spesial}}')).toContain('token tidak dikenal {{harga_spesial}}');
     expect(templateViolations('   ')).toEqual(['teks kosong']);

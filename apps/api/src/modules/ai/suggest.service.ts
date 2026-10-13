@@ -99,6 +99,16 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
   for (const key of ['jumlah_jamaah', 'bulan_target', 'budget', 'kota'] as const) {
     if (context.variables[key]) profile[TOKEN_INFO[key]?.label ?? key] = context.variables[key]!;
   }
+  const messages = promptMessages(input.messages);
+  const history = messages.map((m) => m.text).join('\n');
+  // Alamat/Maps yang sudah dikirim CS tidak ditawarkan lagi (perbaikan C).
+  const csText = messages.filter((m) => m.fromCs).map((m) => m.text.toLowerCase()).join('\n');
+  const address = context.variables.alamat_kantor?.toLowerCase().slice(0, 25);
+  const blockedTokens = [
+    ...(address && csText.includes(address) ? ['alamat_kantor'] : []),
+    ...(/maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps/.test(csText) ? ['link_maps'] : []),
+  ];
+  const usable = (token: string) => !blockedTokens.includes(token) && (Boolean(context.variables[token]) || token === 'travel' || token === 'cs_name');
   const baseUser = buildUserContent({
     csName: input.csName,
     brandName: input.brandName,
@@ -110,10 +120,10 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
       profile,
     },
     packageName: context.variables.paket ?? null,
-    available: tokens.filter((token) => context.variables[token] || token === 'travel' || token === 'cs_name'),
-    missing: tokens.filter((token) => !context.variables[token] && token !== 'travel' && token !== 'cs_name'),
+    available: tokens.filter(usable),
+    missing: tokens.filter((token) => !usable(token)),
     warnings: context.warnings,
-    messages: promptMessages(input.messages),
+    messages,
     instruction: input.instruction,
   });
 
@@ -138,7 +148,7 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
     outputTokens += result.outputTokens;
     const parsed = OutputSchema.safeParse(result.json);
     const candidates = parsed.success ? parsed.data.options.slice(0, MAX_OPTIONS) : [];
-    const checked = candidates.map((option) => ({ option, violations: templateViolations(option.template) }));
+    const checked = candidates.map((option) => ({ option, violations: templateViolations(option.template, { history, blockedTokens }) }));
     const valid = checked.filter((item) => !item.violations.length);
     if (parsed.success && valid.length) {
       const out = parsed.data;
@@ -152,7 +162,7 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
     const problems = parsed.success
       ? [...new Set(checked.flatMap((item) => item.violations))].join('; ')
       : 'format jawaban tidak sesuai skema';
-    user = `${baseUser}\n\nPercobaan sebelumnya ditolak karena: ${problems}. Perbaiki: tulis fakta hanya lewat token yang tersedia.`;
+    user = `${baseUser}\n\nPercobaan sebelumnya ditolak karena: ${problems}. Perbaiki: fakta hanya lewat token yang tersedia atau angka yang tertulis persis di riwayat chat.`;
   }
   return { ...fallback('invalid_output'), inputTokens, outputTokens };
 }

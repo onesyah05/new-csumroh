@@ -24,7 +24,7 @@ const ORIGIN_LABEL: Record<AiOption['origin'], string> = {
 };
 const INTENT_LABEL: Record<string, string> = {
   greeting: 'Sapaan', question_package: 'Tanya paket', question_price: 'Tanya harga', objection: 'Keberatan',
-  ready_to_pay: 'Siap bayar', payment_sent: 'Sudah transfer', followup_reply: 'Balasan follow-up', other: 'Lainnya',
+  ready_to_pay: 'Siap bayar', payment_sent: 'Sudah transfer', followup_reply: 'Balasan follow-up', cs_followup: 'Lanjutan dari CS', other: 'Lainnya',
 };
 const OBJECTION_LABEL: Record<string, string> = {
   harga: 'harga', izin_keluarga: 'izin keluarga', waktu: 'waktu', kepercayaan: 'kepercayaan', jadwal: 'jadwal',
