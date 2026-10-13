@@ -29,6 +29,7 @@ vi.mock('../../db/prisma.js', () => ({
     prospectLog: { findMany: mocks.logFindMany },
     notification: { deleteMany: mocks.deleteMany },
     notificationDedupe: { deleteMany: mocks.deleteMany },
+    aiSuggestion: { deleteMany: mocks.deleteMany },
   },
 }));
 

@@ -9,7 +9,7 @@ import { annotateScript, buildScriptContext } from './context.js';
 
 export const scriptsRouter = Router();
 scriptsRouter.use(authGuard);
-const categories = ['greeting', 'identification', 'offer', 'objection', 'closing', 'followups'] as const;
+export const categories = ['greeting', 'identification', 'offer', 'objection', 'closing', 'followups'] as const;
 
 function normalizeScriptData(file: string, raw: any) {
   if (!raw || !Array.isArray(raw.scripts)) return raw;
@@ -79,7 +79,7 @@ function normalizeScriptData(file: string, raw: any) {
   return { ...raw, scripts: normalizedScripts.filter(Boolean) };
 }
 
-async function readScript(name: string) {
+export async function readScript(name: string) {
   const file = path.resolve(process.cwd(), '../../packages/scripts-data/scripts-chat', `${name}.json`);
   const raw = JSON.parse(await readFile(file, 'utf8'));
   // Shared prompts for the qualification form and Copilot; preserve the legacy library.

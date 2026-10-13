@@ -31,15 +31,8 @@ export function useScriptLibrary({ brandId, prospectId, revision, packageId, que
   });
 }
 
-/** Keberatan tercatat di prospek → kategori script TGJP yang relevan (audit S09). */
-export const OBJECTION_SCRIPT_CATEGORIES: Record<string, string[]> = {
-  price: ['harga_mahal', 'dp_berat', 'belum_ada_dana', 'menunggu_promo'],
-  competitor: ['bandingkan_travel', 'sudah_punya_travel', 'takut_ditipu', 'minta_bukti_legalitas', 'minta_testimoni'],
-  schedule_leave: ['jadwal_tidak_cocok', 'belum_siap_berangkat'],
-  passport: ['belum_punya_paspor'],
-  family_decision: ['diskusi_keluarga', 'diskusi_pasangan', 'mau_pikir_pikir'],
-  facility_distance: ['hotel_jauh', 'maskapai', 'khawatir_kesehatan'],
-};
+export { OBJECTION_SCRIPT_CATEGORIES } from '@csumroh/shared-types';
+
 
 /** Tebal WhatsApp: *teks* → segmen tebal; dipakai untuk pratinjau gelembung chat. */
 export function whatsappSegments(text: string) {

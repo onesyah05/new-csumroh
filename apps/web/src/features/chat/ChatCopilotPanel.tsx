@@ -1,7 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ChevronDown, Copy, CornerDownLeft, Search, Sparkles, X } from 'lucide-react';
-import { objectionLabel } from '@csumroh/shared-types';
-import { draftWarnings, OBJECTION_SCRIPT_CATEGORIES, unresolvedScript, useScriptLibrary, whatsappSegments, type ScriptStatus } from './scriptLibrary';
+import { objectionLabel, recommendedCategory } from '@csumroh/shared-types';
+import { draftWarnings, OBJECTION_SCRIPT_CATEGORIES, unresolvedScript, useScriptLibrary, type ScriptStatus } from './scriptLibrary';
+import { AiReplySuggestions, sendAiFeedback, textSimilarity, useAiStatus, type AiPick } from './AiReplySuggestions';
+import { WhatsAppText } from './WhatsAppText';
 export { unresolvedScript } from './scriptLibrary';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
@@ -13,19 +15,12 @@ const categories = [
   { id: 'offer', label: 'Paket & solusi' }, { id: 'objection', label: 'Keberatan' },
   { id: 'followups', label: 'Follow-up' }, { id: 'closing', label: 'Pembayaran' },
 ];
-export function recommendedCategory(stage?: string) {
-  if (stage === 'objection') return 'objection';
-  if (['qualified'].includes(stage || '')) return 'offer';
-  if (['offer', 'offered', 'followup', 'nurture', 'lose', 'closed_lost'].includes(stage || '')) return 'followups';
-  if (['closing', 'deal', 'closed_won'].includes(stage || '')) return 'closing';
-  if (['contact', 'identifying'].includes(stage || '')) return 'identification';
-  return 'greeting';
-}
+export { recommendedCategory };
 const statusRank: Record<ScriptStatus, number> = { ready: 0, needs_context: 1, blocked: 2 };
 
 /** Sumber teks yang sedang ditinjau, agar draft bisa disegarkan dari data terbaru tanpa menimpa suntingan CS. */
 type ReviewSource = { key: string; step?: number; variant?: number };
-type Review = { title: string; text: string; original: string; step?: string; source: ReviewSource; version?: string };
+type Review = { title: string; text: string; original: string; step?: string; source: ReviewSource; version?: string; ai?: AiPick };
 
 interface Props {
   prospectId?: number | null; revision?: string | null;
@@ -42,6 +37,7 @@ export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/I
   const [expanded, setExpanded] = useState<string | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const [copyError, setCopyError] = useState('');
+  const aiStatus = useAiStatus();
   const scripts = useScriptLibrary({ brandId, prospectId, revision, packageId, query, enabled: !complete });
   const context = scripts.data?.context;
   const recommended = recommendedCategory(stage);
@@ -82,6 +78,18 @@ export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/I
     setReview({ title, text, original: text, step, source, version: context?.version });
   }
 
+  function openAi(option: { approach: string; text: string }, pick: AiPick) {
+    setCopyError('');
+    setReview({ title: option.approach, text: option.text, original: option.text, source: { key: `ai:${pick.suggestionId}:${pick.optionIndex}` }, version: context?.version, ai: pick });
+  }
+  function insertReview(current: Review) {
+    const text = current.text.trim();
+    onInsertText(text);
+    // Saran AI: catat dipakai dan seberapa banyak diedit (bahan evaluasi pilot).
+    if (current.ai) void sendAiFeedback(current.ai.suggestionId, { action: 'used', optionIndex: current.ai.optionIndex, similarity: textSimilarity(current.ai.text, text) });
+    setReview(null);
+  }
+
   function renderSteps(item: any, blocked: boolean) {
     return item.steps.map((step: any, index: number) => {
       const choiceKey = `${item.key}:${index}`;
@@ -118,6 +126,7 @@ export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/I
       {category === 'identification' && !search && <Select aria-label="Jenis pertanyaan kualifikasi" className="w-full" value={framework} onValueChange={setFramework} options={[{ value: 'all', label: 'Semua pertanyaan' }, { value: 'need', label: 'Kebutuhan' }, { value: 'pain', label: 'Hambatan' }, { value: 'gain', label: 'Manfaat yang dicari' }, { value: 'dream', label: 'Harapan' }, { value: 'qualification', label: 'Informasi praktis' }]} />}
     </header>
     <div className="thin-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
+      {!search && prospectId && aiStatus.data?.enabled && <AiReplySuggestions key={prospectId} brandId={brandId} prospectId={prospectId} onReview={openAi} />}
       {warnings.length > 0 && <ul className="space-y-1 text-xs leading-relaxed text-amber-800">{warnings.map(text => <li key={text} className="flex gap-1.5"><AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />{text}</li>)}</ul>}
       {category === 'recommended' && !search && <div className="space-y-1 text-xs leading-relaxed text-zinc-600"><p className="flex items-center gap-1 font-semibold text-zinc-800"><Sparkles size={14} />Skrip yang datanya sudah tersedia</p>{stage === 'objection' && <p>Keberatan tercatat: {objectionCategory ? objectionLabel(objectionCategory) : objection || 'belum dipilih'}</p>}</div>}
       {scripts.isLoading ? <p role="status" className="text-sm text-zinc-600">Memuat pustaka skrip…</p> : scripts.isError ? <div role="alert" className="space-y-2 text-sm"><p>Skrip tidak dapat dimuat. Silakan coba lagi.</p><Button variant="secondary" onClick={() => void scripts.refetch()}>Coba lagi</Button></div> : <>
@@ -160,7 +169,7 @@ export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/I
     </div>
     <footer className="shrink-0 border-t border-zinc-200 px-4 py-3 text-xs text-zinc-600">Skrip ditambahkan ke draft. Pengiriman tetap melalui tombol WhatsApp.</footer>
     {review && <Modal open onClose={() => setReview(null)} size="md" title={review.title} description={`${prospectName}${review.step ? ` · Langkah ${review.step}` : ''}`}
-      footer={<><Button variant="secondary" disabled={!review.text.trim() || unresolved} icon={<Copy size={14} />} onClick={() => void copy(review.text)}>Salin</Button><Button disabled={!review.text.trim() || unresolved} icon={<CornerDownLeft size={14} />} onClick={() => { onInsertText(review.text.trim()); setReview(null); }}>Tambahkan ke draft</Button></>}>
+      footer={<><Button variant="secondary" disabled={!review.text.trim() || unresolved} icon={<Copy size={14} />} onClick={() => void copy(review.text)}>Salin</Button><Button disabled={!review.text.trim() || unresolved} icon={<CornerDownLeft size={14} />} onClick={() => insertReview(review)}>Tambahkan ke draft</Button></>}>
       <div className="space-y-3">
         {stale && review.text !== review.original && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900"><span>Data paket atau prospek baru berubah. Angka di draft ini mungkin sudah tidak sesuai.</span><Button size="sm" variant="secondary" onClick={() => setReview({ ...review, text: latest!, original: latest!, version: context?.version })}>Pakai teks terbaru</Button></div>}
         <div className="rounded-xl bg-[#efeae2] p-3" aria-label="Pratinjau di WhatsApp">
@@ -182,9 +191,4 @@ function textFor(items: any[], source: ReviewSource): string | undefined {
   if (source.step === undefined) return item.script;
   const step = item.steps?.[source.step];
   return step?.variants?.[source.variant ?? 0]?.text ?? step?.text;
-}
-
-/** Teks dengan tebal WhatsApp (*teks*) seperti yang akan terlihat di ponsel jamaah. */
-function WhatsAppText({ text, className }: { text: string; className?: string }) {
-  return <p className={cn('whitespace-pre-line break-words', className)}>{whatsappSegments(text).map((part, index) => part.bold ? <strong key={index} className="font-semibold">{part.text}</strong> : <Fragment key={index}>{part.text}</Fragment>)}</p>;
 }

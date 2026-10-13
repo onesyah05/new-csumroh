@@ -356,7 +356,7 @@ export async function eveningDigestJob(now = new Date()) {
 
 export async function retentionJob(now = new Date()) {
   const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * HOUR);
-  const [read, unread, dedupes, ticks] = await Promise.all([
+  const [read, unread, dedupes, ticks, aiSuggestions] = await Promise.all([
     // Ringkasan yang masih aktif (activeKey, belum selesai) tidak dihapus walau sudah dibaca lama: menghapusnya membuat
     // ringkasan yang sama muncul lagi sebagai notifikasi baru (dengan suara) untuk keadaan yang tidak berubah.
     prisma.notification.deleteMany({ where: { readAt: { lt: daysAgo(60) }, NOT: { activeKey: { not: null }, resolvedAt: null } } }),
@@ -364,6 +364,8 @@ export async function retentionJob(now = new Date()) {
     // Lebih lama dari jendela job terpanjang (invoice lewat jatuh tempo: 30 hari) agar pengingat yang sama tidak terkirim ulang.
     prisma.notificationDedupe.deleteMany({ where: { createdAt: { lt: daysAgo(35) } } }),
     prisma.notificationDedupe.deleteMany({ where: { key: { startsWith: 'scheduler:' }, createdAt: { lt: daysAgo(1) } } }),
+    // Log Saran Balasan AI disimpan 180 hari (spec AI bagian 10).
+    prisma.aiSuggestion.deleteMany({ where: { createdAt: { lt: daysAgo(180) } } }),
   ]);
-  return { read: read.count, unread: unread.count, dedupes: dedupes.count + ticks.count };
+  return { read: read.count, unread: unread.count, dedupes: dedupes.count + ticks.count, aiSuggestions: aiSuggestions.count };
 }

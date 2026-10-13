@@ -25,6 +25,10 @@ export function decryptMetaToken(value: string) {
   return Buffer.concat([decipher.update(Buffer.from(ciphertextValue, 'base64url')), decipher.final()]).toString('utf8');
 }
 
+/** Enkripsi rahasia lain milik aplikasi (mis. kunci API Asisten AI) memakai kunci dan format yang sama. */
+export const encryptSecret = encryptMetaToken;
+export const decryptSecret = decryptMetaToken;
+
 export function maskMetaToken(value: string | null) {
   if (!value) return null;
   return '••••••••••••••••';

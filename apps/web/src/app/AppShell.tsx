@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { canUseGallery } from '@csumroh/shared-types';
-import { ArrowLeft, BarChart3, Bell, BookOpen, Building2, ChevronDown, Image as ImageIcon, Images, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, Bell, BookOpen, Building2, ChevronDown, Image as ImageIcon, Images, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Users2, X } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -61,6 +61,7 @@ export function navGroupsFor(role?: string): NavGroup[] {
       items: is('superadmin', 'admin') ? [
         { to: '/staff', label: 'Staf', icon: Users2 },
         { to: '/brands', label: 'Brand Travel', icon: Building2 },
+        ...(is('superadmin') ? [{ to: '/pengaturan/ai', label: 'Asisten AI', icon: Sparkles }] : []),
       ] : [],
     },
   ];
@@ -72,6 +73,7 @@ const titles: Record<string, string> = {
   '/inbox': 'Kotak masuk',
   '/pipeline': 'Pipeline',
   '/pengaturan/notifikasi': 'Pengaturan Notifikasi',
+  '/pengaturan/ai': 'Asisten AI',
   '/verifikasi': 'Verifikasi Pembayaran',
   '/laporan': 'Laporan',
   '/packages': 'Paket Umroh',

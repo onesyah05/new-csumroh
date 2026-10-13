@@ -1,5 +1,5 @@
 import { canUseGallery } from '@csumroh/shared-types';
-import { Bell, BookOpen, Building2, ChevronRight, Image as ImageIcon, Images, LogOut, PackageOpen, ShieldCheck, SlidersHorizontal, TrendingUp, Users2 } from 'lucide-react';
+import { Bell, BookOpen, Building2, ChevronRight, Image as ImageIcon, Images, LogOut, PackageOpen, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Users2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from './auth';
 import { InstallApp } from './pwa';
@@ -23,6 +23,7 @@ export function MorePage() {
       { to: '/verifikasi', label: 'Verifikasi pembayaran', icon: ShieldCheck },
       { to: '/staff', label: 'Staf', icon: Users2 },
       { to: '/brands', label: 'Brand Travel', icon: Building2 },
+      ...(user?.role === 'superadmin' ? [{ to: '/pengaturan/ai', label: 'Asisten AI', icon: Sparkles }] : []),
     ] : []),
     ...(!designer ? [{ to: '/pengaturan/notifikasi', label: 'Pengaturan notifikasi', icon: Bell }] : []),
   ];

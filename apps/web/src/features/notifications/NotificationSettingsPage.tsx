@@ -9,6 +9,7 @@ import { playNotificationSound } from '../../lib/notificationSound';
 import { Button } from '../../components/ui/button';
 import { PageHeader } from '../../components/ui/page-header';
 import { PageError, PageLoading } from '../../components/ui/page-feedback';
+import { Toggle } from '../../components/ui/toggle';
 
 type Preference = {
   type: string;
@@ -26,26 +27,6 @@ type Preference = {
 // Kunci sendiri (bukan di bawah ['notifications']) agar tidak dimuat ulang setiap ada notifikasi masuk.
 const PREFERENCES_KEY = ['notification-preferences'] as const;
 const PRIORITY_LABEL = { urgent: 'Mendesak', action: 'Tindakan', info: 'Info' } as const;
-
-function Toggle({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange(next: boolean): void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition',
-        checked ? 'border-zinc-950 bg-zinc-950' : 'border-zinc-300 bg-zinc-200',
-        disabled && 'cursor-not-allowed opacity-60',
-      )}
-    >
-      <span className={cn('inline-block h-4 w-4 rounded-full bg-white shadow transition', checked ? 'translate-x-6' : 'translate-x-1')} />
-    </button>
-  );
-}
 
 /**
  * Preferensi notifikasi per tipe yang relevan untuk role user. Daftar di lonceng selalu lengkap;

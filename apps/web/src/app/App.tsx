@@ -31,6 +31,7 @@ const VerificationPage = page(() => import('../features/finance/VerificationPage
 const ReportsPage = page(() => import('../features/reports/ReportsPage'), 'ReportsPage');
 const AdLeadsPage = page(() => import('../features/reports/AdLeadsPage'), 'AdLeadsPage');
 const CustomRequestsPage = page(() => import('../features/custom/CustomRequestsPage'), 'CustomRequestsPage');
+const AiSettingsPage = page(() => import('../features/admin/AiSettingsPage'), 'AiSettingsPage');
 const NotificationSettingsPage = page(() => import('../features/notifications/NotificationSettingsPage'), 'NotificationSettingsPage');
 const MorePage = page(() => import('./MorePage'), 'MorePage');
 // socket.io-client (±40 KB) baru diunduh setelah login, bukan di halaman login.
@@ -116,6 +117,7 @@ export function App() {
             <Route path="staff" element={managerOnly(<StaffPage />)} />
             <Route path="meta-capi" element={managerOnly(<LegacyBrandTab tab="meta" />)} />
             <Route path="pengaturan/notifikasi" element={<NotificationSettingsPage />} />
+            <Route path="pengaturan/ai" element={superadminOnly(<AiSettingsPage />, '/')} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
       </Routes>
