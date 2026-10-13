@@ -240,7 +240,22 @@ export function QuickRepliesPage() {
               </div>
             </div>
             <div>
-              <label className="label" htmlFor="qr-body">Isi pesan</label>
+              <div className="relative mb-1.5 flex items-center justify-between gap-2">
+                <label className="label !mb-0" htmlFor="qr-body">Isi pesan</label>
+                <button
+                  type="button"
+                  aria-expanded={emojiOpen}
+                  onClick={() => setEmojiOpen((open) => !open)}
+                  className="quick-reply-chip inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  <Smile size={14} aria-hidden="true" />Emoji
+                </button>
+                {emojiOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1.5 max-w-[calc(100vw-2rem)] shadow-2xl">
+                    <EmojiPicker onSelectEmoji={insertAtCaret} onClose={() => setEmojiOpen(false)} />
+                  </div>
+                )}
+              </div>
               <textarea
                 id="qr-body"
                 ref={bodyRef}
@@ -250,22 +265,10 @@ export function QuickRepliesPage() {
                 maxLength={QUICK_REPLY_BODY_MAX}
                 onChange={(event) => setDraft({ ...draft, body: event.target.value })}
               />
-              <div className="relative mt-2 flex flex-wrap gap-1.5" aria-label="Sisipkan emoji atau data otomatis">
-                <button
-                  type="button"
-                  aria-expanded={emojiOpen}
-                  onClick={() => setEmojiOpen((open) => !open)}
-                  className="quick-reply-chip inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
-                >
-                  <Smile size={14} aria-hidden="true" />Emoji
-                </button>
-                {emojiOpen && (
-                  <div className="absolute bottom-full left-0 z-50 mb-2 shadow-2xl">
-                    <EmojiPicker onSelectEmoji={insertAtCaret} onClose={() => setEmojiOpen(false)} />
-                  </div>
-                )}
+              <p className="mb-1.5 mt-3 text-xs font-medium text-zinc-600">Data otomatis (ketuk untuk menyisipkan)</p>
+              <div className="flex flex-wrap gap-2" aria-label="Sisipkan data otomatis">
                 {QUICK_REPLY_SUGGESTED_TOKENS.map((token) => (
-                  <button key={token} type="button" onClick={() => insertToken(token)} className="quick-reply-chip rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
+                  <button key={token} type="button" onClick={() => insertToken(token)} className="quick-reply-chip inline-flex h-8 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100">
                     {token}
                   </button>
                 ))}
