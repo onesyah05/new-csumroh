@@ -109,6 +109,7 @@ model Brand {
   proofRejections    PaymentProofRejection[]
   mediaFolders       MediaFolder[]
   mediaAssets        MediaAsset[]
+  quickReplies       QuickReply[]
   aiSuggestions      AiSuggestion[]
 
   @@map("brands")
@@ -135,6 +136,7 @@ model User {
   customRequestsClaimed   CustomRequest[]          @relation("CustomRequestClaimedBy")
   mediaFolders            MediaFolder[]
   mediaAssets             MediaAsset[]
+  quickReplies            QuickReply[]
   proofRejections         PaymentProofRejection[]
   aiSuggestions           AiSuggestion[]
 
@@ -696,4 +698,24 @@ model AiSetting {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("ai_settings")
+}
+
+/// Balas cepat: template pesan dipilih dengan mengetik "/" di kolom pesan. scope "brand" dipakai seluruh staf brand,
+/// "personal" hanya pemiliknya (owner_id).
+model QuickReply {
+  id        Int      @id @default(autoincrement())
+  brandId   Int      @map("brand_id")
+  scope     String   @default("brand") @db.VarChar(10)
+  ownerId   Int?     @map("owner_id")
+  title     String   @db.VarChar(80)
+  shortcut  String?  @db.VarChar(30)
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([brandId, scope])
+  @@index([ownerId])
+  @@map("quick_replies")
 }

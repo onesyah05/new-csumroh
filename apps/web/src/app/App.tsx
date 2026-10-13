@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ComponentType } from 'react';
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
-import { canUseGallery } from '@csumroh/shared-types';
+import { canUseGallery, canUseQuickReplies } from '@csumroh/shared-types';
 import { useBrandScope } from '../lib/scope';
 import { useAuth } from './auth';
 import { AppShell } from './AppShell';
@@ -22,6 +22,7 @@ const PackageDetailPage = page(() => import('../features/packages/PackageDetailP
 const PackageFormPage = page(() => import('../features/packages/PackageFormPage'), 'PackageFormPage');
 const ItineraryTemplatePage = page(() => import('../features/packages/ItineraryTemplatePage'), 'ItineraryTemplatePage');
 const GalleryPage = page(() => import('../features/gallery/GalleryPage'), 'GalleryPage');
+const QuickRepliesPage = page(() => import('../features/quick-replies/QuickRepliesPage'), 'QuickRepliesPage');
 const BrandPage = page(() => import('../features/brand/BrandPage'), 'BrandPage');
 const BrandDetailPage = page(() => import('../features/brand/BrandDetailPage'), 'BrandDetailPage');
 const BrandFormPage = page(() => import('../features/brand/BrandFormPage'), 'BrandFormPage');
@@ -105,6 +106,7 @@ export function App() {
             <Route path="template-itinerary" element={managerOnly(<ItineraryTemplatePage />)} />
             <Route path="copilot" element={<Navigate to="/inbox" replace />} />
             <Route path="galeri" element={canUseGallery(user.role) ? <GalleryPage /> : <Navigate to="/" replace />} />
+            <Route path="balas-cepat" element={canUseQuickReplies(user.role) ? <QuickRepliesPage /> : <Navigate to="/" replace />} />
             <Route path="lms" element={<LmsPage />} />
             <Route path="layanan-custom" element={user.role === 'finance' ? <Navigate to="/" replace /> : <CustomRequestsPage />} />
             <Route path="brands" element={managerOnly(<BrandPage />)} />

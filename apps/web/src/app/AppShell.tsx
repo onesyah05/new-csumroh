@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
-import { canUseGallery } from '@csumroh/shared-types';
-import { ArrowLeft, BarChart3, Bell, BookOpen, Building2, ChevronDown, Image as ImageIcon, Images, Inbox, KanbanSquare, LogOut, Menu, PackageOpen, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Users2, X } from 'lucide-react';
+import { canUseGallery, canUseQuickReplies } from '@csumroh/shared-types';
+import { ArrowLeft, BarChart3, Bell, BookOpen, Building2, ChevronDown, Image as ImageIcon, Images, Inbox, MessageSquareText, KanbanSquare, LogOut, Menu, PackageOpen, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Users2, X } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -9,7 +9,7 @@ import { useUiStore } from './store';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { Button } from '../components/ui/button';
-import { Select } from '../components/ui/select';
+import { brandOption, Select } from '../components/ui/select';
 import { AppErrorBoundary } from '../components/ui/AppErrorBoundary';
 import { PageLoading } from '../components/ui/page-feedback';
 import { NotificationBell, useNotificationTitle } from '../features/notifications/NotificationBell';
@@ -44,6 +44,7 @@ export function navGroupsFor(role?: string): NavGroup[] {
         ...(is('cs', 'admin') ? [{ to: '/layanan-custom', label: 'Status custom', icon: SlidersHorizontal }] : []),
         ...(is('superadmin', 'admin', 'cs', 'finance', 'designer') ? [{ to: '/packages', label: 'Paket Umroh', icon: PackageOpen }] : []),
         ...(canUseGallery(role) ? [{ to: '/galeri', label: 'Galeri', icon: Images }] : []),
+        ...(canUseQuickReplies(role) ? [{ to: '/balas-cepat', label: 'Balas cepat', icon: MessageSquareText }] : []),
         ...(is('superadmin', 'admin', 'designer') ? [{ to: '/template-itinerary', label: 'Template itinerary', icon: ImageIcon }] : []),
         // Materi melayani jamaah: tidak relevan untuk Finance.
         ...(is('cs', 'admin', 'superadmin') ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
@@ -80,6 +81,7 @@ const titles: Record<string, string> = {
   '/packages/new': 'Tambah Paket',
   '/template-itinerary': 'Template Itinerary',
   '/galeri': 'Galeri',
+  '/balas-cepat': 'Balas cepat',
   '/lms': 'Akademi CS',
   '/layanan-custom': 'Layanan custom',
   '/brands': 'Brand Travel',
@@ -96,7 +98,7 @@ const titles: Record<string, string> = {
  */
 function followsActiveBrand(pathname: string) {
   // Profil prospek mengikuti brand milik prospek itu sendiri (namanya tampil di halaman), bukan brand aktif.
-  return pathname === '/pipeline' || pathname === '/galeri';
+  return pathname === '/pipeline' || pathname === '/galeri' || pathname === '/balas-cepat';
 }
 
 /**
@@ -414,9 +416,9 @@ export function AppShell() {
                 <Select
                   value={activeBrandId ? String(activeBrandId) : ''}
                   onValueChange={(value) => setActiveBrandId(Number(value))}
-                  options={(brands.data ?? []).map((brand) => ({ value: String(brand.id), label: brand.name }))}
+                  options={(brands.data ?? []).map(brandOption)}
                   placeholder="Pilih brand"
-                  className="w-36 sm:w-52"
+                  className="w-40 sm:w-60"
                   aria-label="Brand aktif"
                 />
               )}

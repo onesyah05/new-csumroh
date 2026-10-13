@@ -80,6 +80,8 @@ import { conversationTags, conversationTrip, picTag, stageTag } from './conversa
 import { ConversationTagButton, ConversationTagChip, PicChip, StageChip } from './ConversationTagChip';
 import { linkifyText } from '../../lib/linkify';
 import { GalleryBrowser } from '../gallery/GalleryBrowser';
+import { QuickReplyPicker } from '../quick-replies/QuickReplyPicker';
+import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickReplies, type QuickReply, type SlashToken } from '../quick-replies/quickRepliesApi';
 import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
@@ -388,6 +390,14 @@ export function InboxPage() {
   }, [location.key, location.state]);
 
   const selected = conversations.data?.find((item) => item.id === selectedId);
+  // Balas cepat: mengetik "/" di kolom pesan membuka daftar template (brand + pribadi), token diisi dari prospek.
+  const quickReplies = useQuickReplies(brandId, selected?.id ?? null);
+  const [slash, setSlash] = useState<SlashToken | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const slashDismissed = useRef<string | null>(null);
+  // Pindah chat: token lama merujuk teks chat sebelumnya.
+  useEffect(() => { setSlash(null); slashDismissed.current = null; }, [selectedId]);
+  const slashMatches = useMemo(() => (slash ? matchQuickReplies(quickReplies.data ?? [], slash.query) : []), [slash, quickReplies.data]);
   const isPic = Boolean(selected?.userId && selected.userId === user?.id);
   const isUnassigned = !selected?.userId;
   const canReply = isAdmin || isPic || (isUnassigned && user?.role === 'cs');
@@ -809,9 +819,56 @@ export function InboxPage() {
     element.style.overflowY = fullHeight > 144 ? 'auto' : 'hidden';
   }
 
+  /** Perbarui token "/" dari teks dan posisi kursor; Esc menutup sampai token berubah. */
+  function updateSlash(element: HTMLTextAreaElement) {
+    const token = slashQueryAt(element.value, element.selectionStart ?? element.value.length);
+    if (!token || slashDismissed.current === slashKey(token)) {
+      if (!token) slashDismissed.current = null;
+      setSlash(null);
+      return;
+    }
+    setSlash((previous) => {
+      if (!previous || previous.query !== token.query || previous.start !== token.start) setSlashIndex(0);
+      return token;
+    });
+  }
+
+  /** Keyboard saat daftar balas cepat terbuka; true bila tombol sudah ditangani (jangan lanjut ke kirim). */
+  function handleSlashKey(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (!slash || event.nativeEvent.isComposing) return false;
+    const count = slashMatches.length;
+    if (event.key === 'ArrowDown' && count) { event.preventDefault(); setSlashIndex((index) => (index + 1) % count); return true; }
+    if (event.key === 'ArrowUp' && count) { event.preventDefault(); setSlashIndex((index) => (index - 1 + count) % count); return true; }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      // Tanpa hasil: Enter tidak mengirim "/xyz" ke jamaah; Esc menutup daftar lebih dulu bila memang ingin mengirimnya.
+      if (event.key === 'Enter' || count) event.preventDefault();
+      if (count) pickQuickReply(slashMatches[Math.min(slashIndex, count - 1)]!);
+      return true;
+    }
+    if (event.key === 'Escape') { event.preventDefault(); slashDismissed.current = slashKey(slash); setSlash(null); return true; }
+    return false;
+  }
+
+  function pickQuickReply(item: QuickReply) {
+    const textarea = composerRef.current;
+    if (!slash || !textarea) return;
+    const next = message.slice(0, slash.start) + item.text + message.slice(slash.end);
+    setMessage(next);
+    setSlash(null);
+    slashDismissed.current = null;
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const caret = slash.start + item.text.length;
+      textarea.setSelectionRange(caret, caret);
+      adjustTextareaHeight(textarea);
+    });
+    if (item.missing.length) showToast('Data belum lengkap untuk: ' + item.missing.join(', ') + '. Lengkapi sebelum mengirim.');
+  }
+
   function handleComposerChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setMessage(e.target.value);
     adjustTextareaHeight(e.target);
+    updateSlash(e.target);
   }
 
   useEffect(() => {
@@ -849,6 +906,12 @@ export function InboxPage() {
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSend) return;
+    // Token {{...}} yang datanya belum ada (dari balas cepat/script) tidak boleh terkirim apa adanya ke jamaah.
+    const unresolved = unresolvedTokens(message);
+    if (unresolved.length) {
+      showToast('Lengkapi dulu data: ' + unresolved.join(', ') + '.');
+      return;
+    }
     // Lampiran masih disiapkan (kompres/unduh): kirim sekarang hanya mengirim teksnya tanpa gambar.
     if (isCompressing) {
       showToast('Gambar masih disiapkan.');
@@ -2365,7 +2428,16 @@ export function InboxPage() {
                   </div>
                 </div>
               ) : canReply ? (
-                <form onSubmit={submit} className="chat-composer border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
+                <form onSubmit={submit} className="chat-composer relative border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
+                  {slash && (
+                    <QuickReplyPicker
+                      items={slashMatches}
+                      activeIndex={Math.min(slashIndex, Math.max(slashMatches.length - 1, 0))}
+                      query={slash.query}
+                      onPick={pickQuickReply}
+                      onHover={setSlashIndex}
+                    />
+                  )}
                   {/* Hidden file inputs: Dokumen, Foto & Video, dan Flyer Paket */}
                   <input
                     ref={documentInputRef}
@@ -2596,7 +2668,11 @@ export function InboxPage() {
                       rows={1}
                       value={message}
                       onChange={handleComposerChange}
+                      onKeyUp={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') updateSlash(event.currentTarget); }}
+                      onClick={(event) => updateSlash(event.currentTarget)}
+                      onBlur={() => setSlash(null)}
                       onKeyDown={(event) => {
+                        if (handleSlashKey(event)) return;
                         if (!mobile && event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                           event.preventDefault();
                           event.currentTarget.form?.requestSubmit();
