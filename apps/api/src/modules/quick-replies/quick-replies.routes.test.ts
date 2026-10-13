@@ -63,6 +63,17 @@ describe('Balas cepat', () => {
     expect(mocks.create.mock.calls[0][0].data).toMatchObject({ brandId: 1, scope: 'personal', ownerId: 7, title: 'Sapaan', shortcut: 'halo', body: 'Halo' });
   });
 
+  it('baris baru dan emoji di isi pesan tersimpan apa adanya (hanya tepi yang dipangkas)', async () => {
+    mocks.create.mockImplementation(async ({ data }: any) => row(data));
+    const body = '  Assalamualaikum 🕋\n\nSaya {{cs_name}}\nSiap membantu 🙏  ';
+    const ok = await call('post', '/', cs(), { body: { brandId: 1, scope: 'brand', title: 'Sapaan', body } });
+    expect(ok.status).toBe(201);
+    const saved = mocks.create.mock.calls.at(-1)![0].data.body as string;
+    expect(saved).toBe(body.trim());
+    expect(saved).toContain('\n\n');
+    expect(saved).toContain('🕋');
+  });
+
   it('template brand diubah siapa saja di brand itu; template pribadi orang lain tidak ditemukan', async () => {
     mocks.update.mockImplementation(async ({ data }: any) => row(data));
     mocks.findUnique.mockResolvedValue(row({ scope: 'brand', ownerId: 7 }));
