@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquareText, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { MessageSquareText, Pencil, Plus, Search, Smile, Trash2 } from 'lucide-react';
 import {
   QUICK_REPLY_BODY_MAX, QUICK_REPLY_SHORTCUT_MAX, QUICK_REPLY_SUGGESTED_TOKENS, QUICK_REPLY_TITLE_MAX,
   type QuickReplyScope,
@@ -16,6 +16,7 @@ import { onRovingKey, rovingTabIndex } from '../../lib/roving';
 import { EmptyState, PageError, PageLoading } from '../../components/ui/page-feedback';
 import { PageHeader } from '../../components/ui/page-header';
 import { Pager } from '../../components/ui/pager';
+import { EmojiPicker } from '../chat/EmojiPicker';
 import { RowActions } from '../../components/ui/row-actions';
 import { QUICK_REPLIES_KEY, useQuickReplies, type QuickReply } from './quickRepliesApi';
 
@@ -27,6 +28,9 @@ const PAGE_SIZE = 10;
 const draftOf = (item: QuickReply): Draft => ({ id: item.id, scope: item.scope, title: item.title, shortcut: item.shortcut ?? '', body: item.body });
 
 /** Pilihan cakupan Brand/Pribadi: tab di daftar dan radio di formulir memakai satu markup. */
+// Baris kosong tidak boleh menghabiskan jatah dua baris pratinjau; pesan asli tetap utuh.
+const previewBody = (body: string) => body.replace(/\n{2,}/g, '\n');
+
 function ScopeSwitch({ value, onChange, kind, labels, className }: {
   value: QuickReplyScope;
   onChange(value: QuickReplyScope): void;
@@ -70,6 +74,7 @@ export function QuickRepliesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const isManager = user?.role === 'admin' || user?.role === 'superadmin';
 
   const items = useMemo(() => {
@@ -80,6 +85,7 @@ export function QuickRepliesPage() {
   const lastPage = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const currentPage = Math.min(page, lastPage);
   useEffect(() => { if (page > lastPage) setPage(lastPage); }, [page, lastPage]);
+  useEffect(() => { if (!draft) setEmojiOpen(false); }, [draft]);
   const pageItems = items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: [QUICK_REPLIES_KEY] });
   const onError = (error: Error) => showFeedback(error.message, { error: true });
@@ -104,9 +110,9 @@ export function QuickRepliesPage() {
   ];
   const changeTab = (value: QuickReplyScope) => { setTab(value); setPage(1); };
 
-  function insertToken(token: string) {
+  /** Sisipkan teks (token atau emoji) di posisi kursor kolom isi; baris baru tetap utuh. */
+  function insertAtCaret(text: string) {
     const area = bodyRef.current;
-    const text = '{{' + token + '}}';
     if (!area || !draft) return;
     const start = area.selectionStart ?? draft.body.length;
     const end = area.selectionEnd ?? draft.body.length;
@@ -114,6 +120,8 @@ export function QuickRepliesPage() {
     setDraft({ ...draft, body });
     requestAnimationFrame(() => { area.focus(); area.setSelectionRange(start + text.length, start + text.length); });
   }
+
+  const insertToken = (token: string) => insertAtCaret('{{' + token + '}}');
 
   if (!brandId) return <PageError title="Brand belum dipilih" description="Pilih brand untuk mengelola balas cepat." />;
   if (list.isLoading) return <PageLoading label="Memuat balas cepat…" />;
@@ -160,7 +168,7 @@ export function QuickRepliesPage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-zinc-950">{item.title}</p>
                   {item.shortcut && <p className="text-xs font-medium text-zinc-500">/{item.shortcut}</p>}
-                  <p className="mt-1 line-clamp-2 break-words text-xs leading-5 text-zinc-600">{item.body}</p>
+                  <p className="mt-1 line-clamp-2 whitespace-pre-line break-words text-xs leading-5 text-zinc-600">{previewBody(item.body)}</p>
                 </div>
                 <RowActions label={'Aksi ' + item.title} actions={actionsFor(item)} />
               </li>
@@ -181,7 +189,7 @@ export function QuickRepliesPage() {
                   <tr key={item.id} className="hover:bg-zinc-50/60">
                     <td className="px-4 py-3 align-top font-semibold text-zinc-950">{item.title}</td>
                     <td className="px-4 py-3 align-top text-zinc-600">{item.shortcut ? '/' + item.shortcut : '-'}</td>
-                    <td className="max-w-0 px-4 py-3 align-top text-zinc-700"><p className="line-clamp-2 break-words leading-5">{item.body}</p></td>
+                    <td className="max-w-0 px-4 py-3 align-top text-zinc-700"><p className="line-clamp-2 whitespace-pre-line break-words leading-5">{previewBody(item.body)}</p></td>
                     <td className="px-4 py-3 text-right align-top"><RowActions label={'Aksi ' + item.title} actions={actionsFor(item)} /></td>
                   </tr>
                 ))}
@@ -242,7 +250,20 @@ export function QuickRepliesPage() {
                 maxLength={QUICK_REPLY_BODY_MAX}
                 onChange={(event) => setDraft({ ...draft, body: event.target.value })}
               />
-              <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Sisipkan data otomatis">
+              <div className="relative mt-2 flex flex-wrap gap-1.5" aria-label="Sisipkan emoji atau data otomatis">
+                <button
+                  type="button"
+                  aria-expanded={emojiOpen}
+                  onClick={() => setEmojiOpen((open) => !open)}
+                  className="quick-reply-chip inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  <Smile size={14} aria-hidden="true" />Emoji
+                </button>
+                {emojiOpen && (
+                  <div className="absolute bottom-full left-0 z-50 mb-2 shadow-2xl">
+                    <EmojiPicker onSelectEmoji={insertAtCaret} onClose={() => setEmojiOpen(false)} />
+                  </div>
+                )}
                 {QUICK_REPLY_SUGGESTED_TOKENS.map((token) => (
                   <button key={token} type="button" onClick={() => insertToken(token)} className="quick-reply-chip rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
                     {token}
