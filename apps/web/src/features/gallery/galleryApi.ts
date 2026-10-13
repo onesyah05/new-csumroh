@@ -24,6 +24,11 @@ export const GALLERY_ACCEPT = 'image/jpeg,image/png,image/webp,video/mp4';
 /** Foto HP bisa jauh di atas batas galeri; dikecilkan di browser dulu, jadi batas mentahnya longgar. */
 const RAW_IMAGE_LIMIT_MB = 40;
 
+const GALLERY_TYPES = new Set(GALLERY_ACCEPT.split(','));
+
+/** Berkas yang boleh diunggah ke galeri (folder yang diseret bertipe kosong dan ikut tersaring). */
+export const isGalleryFile = (file: File) => GALLERY_TYPES.has(file.type);
+
 export const isVideoAsset = (asset: Pick<GalleryAsset, 'mimeType'>) => asset.mimeType.startsWith('video/');
 
 function readAsDataUrl(file: File) {

@@ -18,6 +18,8 @@ interface ChatSidePanelProps {
   packagesLoading?: boolean;
   onInsertText(text: string): void; onSendFlyer(pkg: any): void; onSendItineraryImage?(pkg: any): void; onOpenPackagePicker(): void;
   onPreviewImage?(url: string): void; onShowToast(message: string): void; connected?: boolean;
+  /** Sudah ada pesan masuk dari prospek: syarat tombol Saran balasan AI. */
+  hasInboundMessage?: boolean;
 }
 export function ChatSidePanel(props: ChatSidePanelProps) {
   const { user } = useAuth();
@@ -86,7 +88,7 @@ export function ChatSidePanel(props: ChatSidePanelProps) {
     </header>
     <div key={identity} className="min-h-0 flex-1">
       <div className={props.activeTab === 'profile' ? 'h-full' : 'hidden'}><ChatProspectProfile {...props} activeTab={profileTab} onChangeTab={setProfileTab} onInsertText={insert} onOpenCopilot={() => props.onChangeTab('copilot')} /></div>
-      <div className={props.activeTab === 'copilot' ? 'h-full' : 'hidden'}><ChatCopilotPanel prospectId={props.prospectId} revision={prospect?.updatedAt} prospectName={prospect?.name || props.prospectName} packageId={prospect?.packageId ?? props.packageId} packageName={props.packages.find(pkg => pkg.id === prospect?.packageId)?.name || props.packageName} brandName={props.activeBrand?.name} brandId={props.brandId} query={props.query} stage={prospect?.status} objectionCategory={prospect?.objectionCategory} objection={prospect?.objectionNotes} onInsertText={insert} onShowToast={props.onShowToast} /></div>
+      <div className={props.activeTab === 'copilot' ? 'h-full' : 'hidden'}><ChatCopilotPanel prospectId={props.prospectId} revision={prospect?.updatedAt} prospectName={prospect?.name || props.prospectName} packageId={prospect?.packageId ?? props.packageId} packageName={props.packages.find(pkg => pkg.id === prospect?.packageId)?.name || props.packageName} brandName={props.activeBrand?.name} brandId={props.brandId} query={props.query} stage={prospect?.status} objectionCategory={prospect?.objectionCategory} objection={prospect?.objectionNotes} hasInboundMessage={props.hasInboundMessage} onInsertText={insert} onShowToast={props.onShowToast} /></div>
     </div>
   </aside>;
   if (!props.isOpen) return null;

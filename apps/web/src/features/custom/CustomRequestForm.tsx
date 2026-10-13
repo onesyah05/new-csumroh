@@ -10,7 +10,7 @@ import { Select } from '../../components/ui/select';
 import { cn } from '../../lib/cn';
 import { MoneyInput } from './MoneyInput';
 import { packageServices, type CustomRequest } from './customApi';
-import { onRovingKey, rovingTabIndex } from './roving';
+import { onRovingKey, rovingTabIndex } from '../../lib/roving';
 import { CustomSpecGroups } from './CustomSpecGroups';
 import { waDate } from '../chat/waFormat';
 

@@ -11,6 +11,7 @@ export type ProviderRequest = {
   user: string;
   schema: Record<string, unknown>;
 };
+/** `json` undefined = jawaban bukan JSON yang valid. */
 export type ProviderResult = { json: unknown; model: string; inputTokens: number; outputTokens: number };
 export type FallbackReason = 'timeout' | 'provider_error' | 'refusal' | 'truncated' | 'invalid_output' | 'not_configured';
 
@@ -60,11 +61,12 @@ export function anthropicProvider(apiKey: string, model: string): AiProvider {
       if (response.stop_reason === 'refusal') throw new ProviderError('refusal', 'Provider AI menolak permintaan.');
       if (response.stop_reason === 'max_tokens') throw new ProviderError('truncated', 'Jawaban AI terpotong.');
       const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
+      // JSON rusak tidak dilempar: service mencoba ulang sekali dengan koreksi (spec §8), token tetap terhitung.
       let json: unknown;
       try {
         json = JSON.parse(text);
       } catch {
-        throw new ProviderError('invalid_output', 'Jawaban AI bukan JSON.');
+        json = undefined;
       }
       const usage = response.usage;
       return {

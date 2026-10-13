@@ -30,6 +30,8 @@ type Prospect = {
 export type TokenKind = 'fact' | 'context';
 /** Label untuk CS dan cara melengkapinya. `fact` = hanya dari data (tidak boleh diketik CS); `context` = isian profil. */
 export const TOKEN_INFO: Record<string, { label: string; kind: TokenKind; fix: string }> = {
+  nama: { label: 'nama jamaah', kind: 'context', fix: 'Isi nama prospek di profil' },
+  nama_jamaah: { label: 'nama lengkap jamaah', kind: 'context', fix: 'Isi nama prospek di profil' },
   paket: { label: 'paket', kind: 'fact', fix: 'Pilih paket aktif di tab Paket' },
   tanggal_keberangkatan: { label: 'tanggal keberangkatan', kind: 'fact', fix: 'Pilih paket yang jadwalnya terisi' },
   durasi: { label: 'durasi paket', kind: 'fact', fix: 'Lengkapi durasi paket di katalog' },

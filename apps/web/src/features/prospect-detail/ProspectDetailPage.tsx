@@ -7,7 +7,7 @@ import {
 } from '@csumroh/shared-types';
 import { ProspectNotes, ProspectTimeline } from '../prospects/ProspectHistory';
 import { customBadge } from '../custom/customApi';
-import { onRovingKey, rovingTabIndex } from '../custom/roving';
+import { onRovingKey, rovingTabIndex } from '../../lib/roving';
 import { useProfileAutosave } from '../chat/profileAutosave';
 import { cn } from '../../lib/cn';
 import { api } from '../../lib/api';

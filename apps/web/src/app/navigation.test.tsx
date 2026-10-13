@@ -75,6 +75,7 @@ describe('workspace navigation', () => {
         funnel: { stages: [{ label: 'Lead masuk', count: 1 }], lost: 0, conversion: 0, sources: [] },
         brands: [], team: null, departures: [],
       });
+      if (url.includes('/quick-replies')) return response([]);
       if (url.includes('/gallery/folders')) return response({ total: 0, folders: [] });
       if (url.includes('/gallery/assets')) return response({ items: [], nextCursor: null });
       if (url.includes('/chat/wa/status')) return response({ brandId: 1, status: 'connected', phoneNumber: '628123456789' });

@@ -90,11 +90,50 @@ describe('suggestReplies', () => {
     expect(result.options.every((option) => option.origin === 'bank')).toBe(true);
   });
 
+  it('JSON rusak dicoba ulang sekali dengan koreksi; token kedua percobaan terhitung', async () => {
+    const { requests } = fakeProvider(undefined, output(['Boleh saya kirim rincian {{paket}} kak?']));
+    const result = await suggestReplies(input);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.user).toContain('bukan JSON yang valid');
+    expect(result.source).toBe('ai');
+    expect(result).toMatchObject({ inputTokens: 200, outputTokens: 100 });
+  });
+
   it('fallback saat provider gagal, timeout, atau menolak', async () => {
     fakeProvider(new ProviderError('timeout', 'lambat'));
     expect((await suggestReplies(input)).fallbackReason).toBe('timeout');
     fakeProvider(new ProviderError('refusal', 'ditolak'));
     expect((await suggestReplies(input)).fallbackReason).toBe('refusal');
+  });
+
+  it('pesan terakhir dari CS: mode follow-up, dan angka yang sudah dikirim CS boleh dirujuk', async () => {
+    const { requests } = fakeProvider(output(['Kak, lebih cocok yang 19 atau 21 Desember?']));
+    const result = await suggestReplies({
+      ...input,
+      messages: [
+        { isFromMe: false, messageType: 'conversation', messageText: 'Harga double berapa? 19 ato 21 Dec' },
+        { isFromMe: true, messageType: 'conversation', messageText: 'Keb. 19 Desember harga (Double) 38.499.000' },
+      ],
+    });
+    expect(requests[0]!.user).toContain('Pesan terakhir dikirim CS dan belum dibalas prospek');
+    expect(result.source).toBe('ai');
+    expect(result.options[0]!.text).toBe('Kak, lebih cocok yang 19 atau 21 Desember?');
+  });
+
+  it('alamat yang sudah dikirim CS tidak ditawarkan lagi', async () => {
+    const withAddress = buildScriptContext({ csName: 'Fitri', brand: { ...brand, address: 'Jl. Raya Condet Ruko Mahkota Regency No.63' }, pkg, prospect: prospectRow, now: new Date('2026-10-13T03:00:00Z') });
+    const { requests } = fakeProvider(output(['Ini alamatnya kak:\n{{alamat_kantor}}']), output(['Ditunggu kedatangannya kak, mau mampir hari apa?']));
+    const result = await suggestReplies({
+      ...input,
+      context: withAddress,
+      messages: [
+        { isFromMe: false, messageType: 'conversation', messageText: 'lokasi dmn' },
+        { isFromMe: true, messageType: 'conversation', messageText: 'Ini alamatnya kak: Jl. Raya Condet Ruko Mahkota Regency No.63, Jakarta Timur' },
+      ],
+    });
+    expect(requests[0]!.user).toMatch(/Token kosong \(jangan dipakai\):[^\n]*\{\{alamat_kantor\}\}/);
+    expect(requests[1]!.user).toContain('sudah dikirim CS');
+    expect(result.options[0]!.text).toBe('Ditunggu kedatangannya kak, mau mampir hari apa?');
   });
 
   it('token kosong membuat opsi berstatus perlu data, bukan diisi tebakan', async () => {

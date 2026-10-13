@@ -6,13 +6,13 @@ import { PAYMENT_CATEGORY_LABEL, paymentCategory } from '@csumroh/shared-types';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { Button } from '../../components/ui/button';
-import { Select } from '../../components/ui/select';
+import { brandOption, Select } from '../../components/ui/select';
 import { PageHeader } from '../../components/ui/page-header';
 import { StatCard, StatGrid } from '../../components/ui/stat-card';
 import { PageError, PageLoading, EmptyState } from '../../components/ui/page-feedback';
 import { FinanceVerifyModal } from '../chat/FinanceVerifyModal';
 import { PrivateProofThumb } from '../chat/PrivateProof';
-import { onRovingKey, rovingTabIndex } from '../custom/roving';
+import { onRovingKey, rovingTabIndex } from '../../lib/roving';
 import { RejectProofDialog } from './RejectProofDialog';
 import { VerificationHistory } from './VerificationHistory';
 import { durationLabel, rupiah, type VerificationSummary } from './verificationApi';
@@ -140,7 +140,7 @@ export function VerificationPage() {
           className="w-full"
           options={[
             { value: 'all', label: 'Semua brand' },
-            ...(brands.data ?? []).map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() })),
+            ...(brands.data ?? []).map(brandOption),
           ]}
         />
       </div>
@@ -158,7 +158,7 @@ export function VerificationPage() {
             className="w-48"
             options={[
               { value: 'all', label: 'Semua brand' },
-              ...(brands.data ?? []).map((b) => ({ value: String(b.id), label: b.name, iconUrl: b.logoUrl, iconInitials: b.name.substring(0, 2).toUpperCase() })),
+              ...(brands.data ?? []).map(brandOption),
             ]}
           />
         }

@@ -1,4 +1,4 @@
-import { interpolateScript, normalizeScriptNarrative, objectionLabel, OBJECTION_SCRIPT_CATEGORIES, recommendedCategory, transformScriptTree } from '@csumroh/shared-types';
+import { interpolateScript, normalizeScriptNarrative, objectionLabel, OBJECTION_SCRIPT_CATEGORIES, PROSPECT_STATUS_LABELS, recommendedCategory, transformScriptTree } from '@csumroh/shared-types';
 import { z } from 'zod';
 import { annotateScript, TOKEN_INFO, type ScriptContext } from '../scripts/context.js';
 import { readScript } from '../scripts/scripts.routes.js';
@@ -6,11 +6,6 @@ import { ALLOWED_TOKENS, redactPii, templateViolations } from './guard.js';
 import { buildMaterial, buildUserContent, INTENTS, OBJECTIONS, ORIGINS, OUTPUT_SCHEMA, SYSTEM_PROMPT, type CategoryMaterial } from './prompt.js';
 import { getProvider, ProviderError, type FallbackReason } from './provider.js';
 
-const STAGE_LABEL: Record<string, string> = {
-  new: 'Baru', contact: 'Kontak', identifying: 'Identifikasi', qualified: 'Terkualifikasi', offer: 'Penawaran', offered: 'Penawaran',
-  objection: 'Keberatan', followup: 'Follow-up', nurture: 'Nurture', closing: 'Closing / pembayaran', deal: 'Deal', closed_won: 'Deal',
-  lose: 'Lost', closed_lost: 'Lost',
-};
 const MEDIA_LABEL: Record<string, string> = {
   imageMessage: '[gambar]', videoMessage: '[video]', audioMessage: '[pesan suara]', documentMessage: '[dokumen]',
   documentWithCaptionMessage: '[dokumen]', stickerMessage: '[stiker]', locationMessage: '[lokasi]', contactMessage: '[kontak]',
@@ -85,7 +80,7 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
   const { context } = input;
   const category = recommendedCategory(input.prospect.status);
   const bank = await bankScripts(category, context, input.prospect.objectionCategory);
-  const stageLabel = STAGE_LABEL[input.prospect.status] ?? input.prospect.status;
+  const stageLabel = PROSPECT_STATUS_LABELS[input.prospect.status] ?? input.prospect.status;
 
   const fallback = (reason: FallbackReason): SuggestionResult => ({
     source: 'fallback', fallbackReason: reason, detected: null,
@@ -99,6 +94,16 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
   for (const key of ['jumlah_jamaah', 'bulan_target', 'budget', 'kota'] as const) {
     if (context.variables[key]) profile[TOKEN_INFO[key]?.label ?? key] = context.variables[key]!;
   }
+  const messages = promptMessages(input.messages);
+  const history = messages.map((m) => m.text).join('\n');
+  // Alamat/Maps yang sudah dikirim CS tidak ditawarkan lagi (perbaikan C).
+  const csText = messages.filter((m) => m.fromCs).map((m) => m.text.toLowerCase()).join('\n');
+  const address = context.variables.alamat_kantor?.toLowerCase().slice(0, 25);
+  const blockedTokens = [
+    ...(address && csText.includes(address) ? ['alamat_kantor'] : []),
+    ...(/maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps/.test(csText) ? ['link_maps'] : []),
+  ];
+  const usable = (token: string) => !blockedTokens.includes(token) && (Boolean(context.variables[token]) || token === 'travel' || token === 'cs_name');
   const baseUser = buildUserContent({
     csName: input.csName,
     brandName: input.brandName,
@@ -110,10 +115,10 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
       profile,
     },
     packageName: context.variables.paket ?? null,
-    available: tokens.filter((token) => context.variables[token] || token === 'travel' || token === 'cs_name'),
-    missing: tokens.filter((token) => !context.variables[token] && token !== 'travel' && token !== 'cs_name'),
+    available: tokens.filter(usable),
+    missing: tokens.filter((token) => !usable(token)),
     warnings: context.warnings,
-    messages: promptMessages(input.messages),
+    messages,
     instruction: input.instruction,
   });
 
@@ -138,7 +143,7 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
     outputTokens += result.outputTokens;
     const parsed = OutputSchema.safeParse(result.json);
     const candidates = parsed.success ? parsed.data.options.slice(0, MAX_OPTIONS) : [];
-    const checked = candidates.map((option) => ({ option, violations: templateViolations(option.template) }));
+    const checked = candidates.map((option) => ({ option, violations: templateViolations(option.template, { history, blockedTokens }) }));
     const valid = checked.filter((item) => !item.violations.length);
     if (parsed.success && valid.length) {
       const out = parsed.data;
@@ -149,10 +154,12 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
         model: result.model, inputTokens, outputTokens,
       };
     }
-    const problems = parsed.success
-      ? [...new Set(checked.flatMap((item) => item.violations))].join('; ')
-      : 'format jawaban tidak sesuai skema';
-    user = `${baseUser}\n\nPercobaan sebelumnya ditolak karena: ${problems}. Perbaiki: tulis fakta hanya lewat token yang tersedia.`;
+    const problems = result.json === undefined
+      ? 'jawaban bukan JSON yang valid; balas hanya dengan JSON sesuai skema'
+      : parsed.success
+        ? [...new Set(checked.flatMap((item) => item.violations))].join('; ')
+        : 'format jawaban tidak sesuai skema';
+    user = `${baseUser}\n\nPercobaan sebelumnya ditolak karena: ${problems}. Perbaiki: fakta hanya lewat token yang tersedia atau angka yang tertulis persis di riwayat chat.`;
   }
   return { ...fallback('invalid_output'), inputTokens, outputTokens };
 }

@@ -7,3 +7,4 @@ export * from './qualification.js';
 export * from './money.js';
 export * from './custom.js';
 export * from './gallery.js';
+export * from './quickReplies.js';

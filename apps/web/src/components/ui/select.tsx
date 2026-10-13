@@ -6,6 +6,11 @@ import { resolveMediaUrl } from '../../lib/api';
 export type SelectOption = { value: string; label: string; iconUrl?: string | null; iconInitials?: string | null };
 export type SelectSize = 'sm' | 'md' | 'lg';
 
+/** Opsi pemilih brand: logo bila ada, dua huruf pertama nama sebagai cadangan. */
+export function brandOption(brand: { id: number; name: string; logoUrl?: string | null }): SelectOption {
+  return { value: String(brand.id), label: brand.name, iconUrl: brand.logoUrl ?? null, iconInitials: brand.name.substring(0, 2).toUpperCase() };
+}
+
 export function Select({
   value,
   onValueChange,
