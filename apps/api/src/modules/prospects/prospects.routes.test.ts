@@ -151,7 +151,7 @@ vi.mock('../../middleware/auth.js', () => ({
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: mocks.emit }));
 vi.mock('../capi/capi.service.js', () => ({ queueCapiForStatus: mocks.capi }));
 vi.mock('../ads/spam-audience.js', () => ({ updateSpamAudienceMember: mocks.spamAudience }));
-vi.mock('../chat/chat.routes.js', () => ({ getLivechatConversationsForBrand: mocks.conversations }));
+vi.mock('../chat/chat.routes.js', () => ({ getLivechatConversationsForPipeline: mocks.conversations }));
 vi.mock('../notifications/notification.events.js', () => ({
   dispatch: (task: () => Promise<unknown>) => { void task(); },
   notifyBookingCancelled: mocks.notify.bookingCancelled,

@@ -45,7 +45,7 @@ import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { queueCapiForStatus } from '../capi/capi.service.js';
 import { updateSpamAudienceMember } from '../ads/spam-audience.js';
-import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
+import { getLivechatConversationsForPipeline } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
 import { ensureAdLabels } from '../ads/meta-ads.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
@@ -125,7 +125,7 @@ prospectsRouter.get('/', asyncHandler(async (req, res) => {
   const filter = req.query.filter ? String(req.query.filter) : undefined;
 
   // STRICT RULE: Data pipeline HANYA menampilkan kontak yang ada di live chat WA
-  const livechatList = await getLivechatConversationsForBrand(brandId);
+  const livechatList = await getLivechatConversationsForPipeline(brandId);
   // Chat spam tidak ikut pipeline (tetap terlihat di Inbox dengan label Spam).
   let prospects = livechatList.filter((c) => !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && !c.spamAt);
 

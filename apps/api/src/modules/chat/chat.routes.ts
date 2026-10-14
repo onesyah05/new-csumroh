@@ -217,6 +217,25 @@ export function getLivechatConversationsForBrand(brandId: number) {
   }));
 }
 
+/**
+ * Kolom teks yang tidak dibaca Pipeline (kartu, tabel, dan modal panduan membaca daftar ini; profil lengkap diambil
+ * per prospek lewat GET /prospects/:id). notes tetap dimuat untuk prospectScore lalu dibuang dari respons.
+ */
+const pipelineOmittedColumns = {
+  specialNeeds: true, decisionMaker: true, vaccineStatus: true, roomPreference: true,
+  adSourceUrl: true, metaReferralMarker: true, lostReasonDetail: true,
+} as const;
+
+/** Daftar percakapan untuk Pipeline: semua kolom yang dipakai Pipeline, tanpa teks panjang yang tidak ditampilkan. */
+export function getLivechatConversationsForPipeline(brandId: number) {
+  return buildLivechatConversations(brandId, (devicePhone) => prisma.prospect.findMany({
+    where: conversationWhere(brandId, devicePhone),
+    include: conversationRelations,
+    omit: pipelineOmittedColumns,
+    orderBy: { updatedAt: 'desc' },
+  }), { omitNotes: true });
+}
+
 /** Daftar percakapan ringan untuk Inbox: hanya kolom yang dipakai daftar (lihat conversationColumns). */
 export function getLivechatConversationListForBrand(brandId: number) {
   return buildLivechatConversations(brandId, (devicePhone) => prisma.prospect.findMany({
