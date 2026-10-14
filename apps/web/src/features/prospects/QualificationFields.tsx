@@ -35,7 +35,7 @@ const toCount = (text: string) => Math.min(200, Number(text.replace(/\D/g, '')) 
  * status naik ke Terkualifikasi hanya bila semua isian bertanda * terisi (paspor dan domisili opsional). Kamar utama diturunkan dari pax.
  */
 export function QualificationFields({
-  value, onChange, disabled, bookingLocked, bookingLockedReason, packages, selectedPackageId, onSelectPackage, departure, layout = 'panel', showSummary = true,
+  value, onChange, disabled, bookingLocked, bookingLockedReason, packages, selectedPackageId, onSelectPackage, departure, layout = 'panel', showSummary = true, onTextBlur,
 }: {
   value: QualificationValue;
   onChange(patch: Partial<QualificationValue>): void;
@@ -52,6 +52,8 @@ export function QualificationFields({
   layout?: 'panel' | 'page';
   /** Baris "Belum diisi" di atas isian; Inbox mematikannya karena sudah ada di "Langkah berikutnya". */
   showSummary?: boolean;
+  /** Kolom teks (domisili) ditinggalkan: induk menyimpan sisa ketikan yang masih menunggu jeda. */
+  onTextBlur?(): void;
 }) {
   const target = parseTargetMonth(value.targetMonth);
   const months = upcomingTargetMonths();
@@ -193,6 +195,7 @@ export function QualificationFields({
           value={value.city}
           disabled={disabled}
           onChange={(e) => onChange({ city: e.target.value })}
+          onBlur={onTextBlur}
           className="field"
         />
       </label>

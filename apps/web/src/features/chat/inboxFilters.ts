@@ -47,10 +47,16 @@ function matchesWork(item: InboxConversation, work: InboxWorkFilter, today: stri
   if (!isJamaahConversation(item) || item.spamAt) return false;
   if (work === 'needs_reply') return item.messages?.[0]?.isFromMe === false;
   if (work.startsWith('stage:')) return canonicalStatus(item.status ?? '') === work.slice('stage:'.length);
-  const due = dateOnlyKey(item.nextFollowupDate);
-  // Scheduled post-booking follow-ups remain actionable, even after Deal.
-  return due !== null && due <= today;
+  if (work === 'followup') {
+    const due = dateOnlyKey(item.nextFollowupDate);
+    // Scheduled post-booking follow-ups remain actionable, even after Deal.
+    return due !== null && due <= today;
+  }
+  return false;
 }
+
+/** Nilai filter dari sesi lama atau sumber luar bisa tidak dikenal: diperlakukan sebagai "Semua". */
+const isKnownFilter = (id: string): id is InboxWorkFilter => inboxFilters.some((filter) => filter.id === id);
 
 export function getInboxQueue<T extends InboxConversation>(items: T[], options: {
   work: InboxWorkFilter;
@@ -59,7 +65,8 @@ export function getInboxQueue<T extends InboxConversation>(items: T[], options: 
   search: string;
   today: string;
 }) {
-  const { work, owner, userId, today } = options;
+  const { owner, userId, today } = options;
+  const work: InboxWorkFilter = isKnownFilter(options.work) ? options.work : 'all';
   const search = options.search.trim().toLowerCase();
   const scoped = items.filter((item) => {
     if (search && !`${item.name ?? ''} ${item.phone ?? ''} ${item.messages?.[0]?.messageText ?? ''}`.toLowerCase().includes(search)) return false;

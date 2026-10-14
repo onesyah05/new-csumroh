@@ -331,6 +331,10 @@ export function InboxPage() {
     && !picLocked
     && isTakeoverOpen(selected.awaitingSince, now),
   );
+  // Header desktop: pemisah status | aksi hanya bila kedua sisinya ada isinya.
+  const headerHasStatus = Boolean(selected && (selected.spamAt || (!selected.isGroup && stageTag(selected)) || picTag(selected)));
+  const headerHasActions = Boolean(selected && (canTakeOver || !sidePanelTab
+    || (canReply && !selected.isGroup && !selected.isOwn && !isWonStatus(selected.status))));
   // Hak membalas (role/PIC) dan kemampuan mengirim (perangkat terhubung) dibedakan.
   const online = useOnline();
   const canSend = canReply && isConnected && online;
@@ -1559,7 +1563,7 @@ export function InboxPage() {
                   )}
 
                   {/* Pemisah: kiri status (label), kanan aksi (tombol). */}
-                  <span className="hdr-collapse mx-1 h-5 w-px shrink-0 bg-zinc-300" aria-hidden="true" />
+                  {headerHasStatus && headerHasActions && <span className="hdr-collapse mx-1 h-5 w-px shrink-0 bg-zinc-300" aria-hidden="true" />}
 
                   {canTakeOver && (
                     <Button

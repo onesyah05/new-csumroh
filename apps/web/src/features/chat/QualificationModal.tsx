@@ -17,27 +17,37 @@ interface QualificationModalProps {
 }
 
 /** Kualifikasi dari Pipeline (mis. saat kartu dipindah ke Terkualifikasi). Isian sama dengan Inbox dan detail. */
+const valueOf = (prospect: any): QualificationValue => ({
+  targetMonth: prospect?.targetMonth ?? '',
+  targetMonthsExtra: prospect?.targetMonthsExtra ?? '',
+  budgetRange: prospect?.budgetRange ?? '',
+  passportStatus: prospect?.passportStatus ?? '',
+  city: prospect?.city ?? '',
+  paxQuad: Number(prospect?.paxQuad ?? 0),
+  paxTriple: Number(prospect?.paxTriple ?? 0),
+  paxDouble: Number(prospect?.paxDouble ?? 0),
+  paxInfant: Number(prospect?.paxInfant ?? 0),
+});
+
 export function QualificationModal({ open, onClose, prospect, brandId, packages, onShowToast }: QualificationModalProps) {
-  const [value, setValue] = useState<QualificationValue>(() => ({
-    targetMonth: prospect?.targetMonth ?? '',
-    targetMonthsExtra: prospect?.targetMonthsExtra ?? '',
-    budgetRange: prospect?.budgetRange ?? '',
-    passportStatus: prospect?.passportStatus ?? '',
-    city: prospect?.city ?? '',
-    paxQuad: Number(prospect?.paxQuad ?? 0),
-    paxTriple: Number(prospect?.paxTriple ?? 0),
-    paxDouble: Number(prospect?.paxDouble ?? 0),
-    paxInfant: Number(prospect?.paxInfant ?? 0),
-  }));
+  const [value, setValue] = useState<QualificationValue>(() => valueOf(prospect));
   const [packageId, setPackageId] = useState<string>(prospect?.packageId ? String(prospect.packageId) : '');
   const [error, setError] = useState('');
 
   const save = useMutation({
-    mutationFn: () => api.patch<any>(`/prospects/${prospect.id}/profile`, {
-      ...value,
-      ...(packageId && packageId !== String(prospect?.packageId ?? '') ? { packageId: Number(packageId) } : {}),
-      brandId,
-    }),
+    mutationFn: async () => {
+      // Hanya isian yang berubah yang dikirim: tidak menimpa perubahan orang lain atau mengubah null menjadi ''.
+      const base = valueOf(prospect);
+      const patch: Record<string, unknown> = {};
+      for (const key of Object.keys(value) as (keyof QualificationValue)[]) {
+        if (value[key] === base[key]) continue;
+        patch[key] = key === 'city' && !String(value.city).trim() ? null : value[key];
+      }
+      const packageChanged = Boolean(packageId) && packageId !== String(prospect?.packageId ?? '');
+      if (packageChanged) patch.packageId = Number(packageId);
+      if (Object.keys(patch).length === 0) return prospect;
+      return api.patch<any>(`/prospects/${prospect.id}/profile`, { ...patch, brandId });
+    },
     onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: ['prospect', prospect.id] });
       void queryClient.invalidateQueries({ queryKey: ['prospects'] });
