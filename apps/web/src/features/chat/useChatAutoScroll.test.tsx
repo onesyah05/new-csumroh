@@ -6,9 +6,12 @@ import { useChatAutoScroll } from './useChatAutoScroll';
 let height: number;
 let top: number;
 let resize: () => void;
+let isFollowing: () => boolean;
 
 function Timeline({ identity = 'brand:prospect', messages }: { identity?: string; messages?: unknown }) {
-  const { timelineRef, contentRef, showScrollToLatest, scrollToLatest } = useChatAutoScroll(identity, messages);
+  const scroll = useChatAutoScroll(identity, messages);
+  const { timelineRef, contentRef, showScrollToLatest, scrollToLatest } = scroll;
+  isFollowing = scroll.isFollowing;
   return <>
     <div data-testid="timeline" ref={node => {
       timelineRef.current = node;
@@ -19,6 +22,8 @@ function Timeline({ identity = 'brand:prospect', messages }: { identity?: string
       });
     }}><div ref={contentRef} /></div>
     {showScrollToLatest && <button onClick={scrollToLatest}>Ke pesan terbaru</button>}
+    {/* Mensimulasikan kirim pesan: InboxPage memanggil scrollToLatest saat dan setelah pesan dikirim. */}
+    <button type="button" data-testid="kirim" onClick={scrollToLatest}>Kirim</button>
   </>;
 }
 
@@ -39,7 +44,7 @@ describe('Navigasi ke pesan terbaru', () => {
     expect(top).toBe(0);
     view.rerender(<Timeline messages={['pertama']} />);
     expect(top).toBe(1500);
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ke pesan terbaru' })).toBeNull();
   });
 
   it('menjaga posisi baca saat ada pesan baru, lalu kembali ke akhir setelah tombol diklik', () => {
@@ -52,21 +57,43 @@ describe('Navigasi ke pesan terbaru', () => {
     expect(top).toBe(200);
     fireEvent.click(screen.getByRole('button', { name: 'Ke pesan terbaru' }));
     expect(top).toBe(2000);
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ke pesan terbaru' })).toBeNull();
     // Media yang selesai dimuat sesudah klik tetap diikuti sampai bagian akhir.
     height = 2800;
     act(() => resize());
     expect(top).toBe(2300);
   });
 
+  it('mengirim pesan saat membaca riwayat langsung mengikuti pesan baru ke bagian akhir', () => {
+    const view = render(<Timeline messages={['lama']} />);
+    top = 200;
+    fireEvent.scroll(screen.getByTestId('timeline'));
+    fireEvent.click(screen.getByTestId('kirim'));
+    // Pesan yang baru terkirim tiba sesudahnya dan menambah tinggi: tampilan harus ikut ke akhir, bukan tertahan di 200.
+    height = 2600;
+    view.rerender(<Timeline messages={['lama', 'baru']} />);
+    expect(top).toBe(2100);
+    expect(screen.queryByRole('button', { name: 'Ke pesan terbaru' })).toBeNull();
+  });
+
+  it('isFollowing: false saat membaca riwayat, true lagi setelah kembali ke pesan terbaru', () => {
+    render(<Timeline messages={['lama']} />);
+    expect(isFollowing()).toBe(true);
+    top = 200;
+    fireEvent.scroll(screen.getByTestId('timeline'));
+    expect(isFollowing()).toBe(false);
+    fireEvent.click(screen.getByTestId('kirim'));
+    expect(isFollowing()).toBe(true);
+  });
+
   it('menyembunyikan tombol saat kembali ke bawah secara manual', () => {
     render(<Timeline messages={[]} />);
     top = 100;
     fireEvent.scroll(screen.getByTestId('timeline'));
-    expect(screen.queryByRole('button')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ke pesan terbaru' })).not.toBeNull();
     top = 1500;
     fireEvent.scroll(screen.getByTestId('timeline'));
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ke pesan terbaru' })).toBeNull();
   });
 
   it('mengatur ulang posisi dan tombol ketika pindah percakapan', () => {
@@ -75,7 +102,7 @@ describe('Navigasi ke pesan terbaru', () => {
     fireEvent.scroll(screen.getByTestId('timeline'));
     view.rerender(<Timeline identity="brand:lain" messages={['b']} />);
     expect(top).toBe(1500);
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ke pesan terbaru' })).toBeNull();
   });
 
   it('tidak menarik pembaca dari riwayat saat ukuran media berubah', () => {
@@ -85,6 +112,6 @@ describe('Navigasi ke pesan terbaru', () => {
     height = 2600;
     act(() => resize());
     expect(top).toBe(200);
-    expect(screen.queryByRole('button')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ke pesan terbaru' })).not.toBeNull();
   });
 });
