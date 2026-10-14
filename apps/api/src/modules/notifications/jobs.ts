@@ -46,6 +46,11 @@ export async function claimOnce(key: string) {
   }
 }
 
+/** Lepas klaim (job gagal): putaran berikutnya boleh mencoba lagi. */
+export async function releaseClaim(key: string) {
+  await prisma.notificationDedupe.deleteMany({ where: { key: key.slice(0, 191) } }).catch(() => undefined);
+}
+
 export function businessHour(now: Date) {
   return Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false }).format(now)) % 24;
 }
@@ -356,7 +361,7 @@ export async function eveningDigestJob(now = new Date()) {
 
 export async function retentionJob(now = new Date()) {
   const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * HOUR);
-  const [read, unread, dedupes, ticks, aiSuggestions] = await Promise.all([
+  const [read, unread, dedupes, ticks, aiSuggestions, capiOk, capiStale] = await Promise.all([
     // Ringkasan yang masih aktif (activeKey, belum selesai) tidak dihapus walau sudah dibaca lama: menghapusnya membuat
     // ringkasan yang sama muncul lagi sebagai notifikasi baru (dengan suara) untuk keadaan yang tidak berubah.
     prisma.notification.deleteMany({ where: { readAt: { lt: daysAgo(60) }, NOT: { activeKey: { not: null }, resolvedAt: null } } }),
@@ -366,6 +371,10 @@ export async function retentionJob(now = new Date()) {
     prisma.notificationDedupe.deleteMany({ where: { key: { startsWith: 'scheduler:' }, createdAt: { lt: daysAgo(1) } } }),
     // Log Saran Balasan AI disimpan 180 hari (spec AI bagian 10).
     prisma.aiSuggestion.deleteMany({ where: { createdAt: { lt: daysAgo(180) } } }),
+    // Log CAPI: payload dan balasan Meta (hingga 10 KB) tidak berguna lagi setelah event terkirim; yang gagal/tertinggal
+    // sudah melewati jendela 7 hari Meta sehingga tidak bisa dikirim ulang.
+    prisma.metaCapiLog.deleteMany({ where: { status: 'success', createdAt: { lt: daysAgo(90) } } }),
+    prisma.metaCapiLog.deleteMany({ where: { status: { in: ['failed', 'pending'] }, createdAt: { lt: daysAgo(30) } } }),
   ]);
-  return { read: read.count, unread: unread.count, dedupes: dedupes.count + ticks.count, aiSuggestions: aiSuggestions.count };
+  return { read: read.count, unread: unread.count, dedupes: dedupes.count + ticks.count, aiSuggestions: aiSuggestions.count, capiLogs: capiOk.count + capiStale.count };
 }

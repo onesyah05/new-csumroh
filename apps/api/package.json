@@ -16,7 +16,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:roles": "tsx prisma/seed-roles.ts",
     "db:clean-demo": "tsx prisma/clean-demo.ts",
-    "db:backfill:contact": "tsx prisma/backfill-contact-status.ts"
+    "db:backfill:contact": "tsx prisma/backfill-contact-status.ts",
+    "db:reencrypt-secrets": "tsx prisma/reencrypt-secrets.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

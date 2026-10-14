@@ -206,6 +206,8 @@ model Prospect {
   status                  ProspectStatus          @default(new)
   targetMonth             String?                 @map("target_month") @db.VarChar(50)
   targetMonthsExtra       String?                 @map("target_months_extra") @db.VarChar(40)
+  // Saat pertama kali mencapai Terkualifikasi (waktu kejadian event QualifiedLead ke Meta).
+  qualifiedAt             DateTime?               @map("qualified_at")
   budgetRange             String?                 @map("budget_range") @db.VarChar(50)
   roomPreference          String?                 @map("room_preference") @db.VarChar(50)
   paxQuad                 Int                     @default(0) @map("pax_quad")

@@ -2,6 +2,7 @@ import { env } from '../../config/env.js';
 import { prisma } from '../../db/prisma.js';
 import { decryptMetaToken, withAdsToken } from '../capi/meta-token.js';
 import { normalizePhone, sha256 } from '../capi/capi.payload.js';
+import { isMetaSendingAllowed } from '../capi/send-guard.js';
 
 /**
  * Audiens pengecualian "nomor spam" per brand (Customer List di ad account brand). Nomor di-hash SHA-256 sebelum
@@ -71,6 +72,7 @@ async function send(audienceId: string, token: string, hashes: string[], method:
 
 /** Unggah seluruh nomor spam brand (Meta mengabaikan duplikat). */
 export async function syncSpamAudience(brandId: number) {
+  if (!isMetaSendingAllowed()) throw new SpamAudienceError('Sinkron audiens ke Meta dinonaktifkan di lingkungan non-produksi (META_ALLOW_NON_PRODUCTION).');
   const brand = withAdsToken(await prisma.brand.findUniqueOrThrow({ where: { id: brandId }, select: { id: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true, metaSpamAudienceId: true } }));
   assertConfigured(brand);
   const token = decryptMetaToken(brand.metaAccessToken);
@@ -85,7 +87,7 @@ export async function syncSpamAudience(brandId: number) {
 
 /** Tambah/hapus satu nomor saat CS menandai (atau membatalkan) spam; hanya bila audiens sudah pernah dibuat. */
 export async function updateSpamAudienceMember(brandId: number, phone: string | null, spam: boolean) {
-  if (!phone) return;
+  if (!phone || !isMetaSendingAllowed()) return;
   const row = await prisma.brand.findUnique({ where: { id: brandId }, select: { id: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true, metaSpamAudienceId: true } });
   const brand = row ? withAdsToken(row) : null;
   if (!brand?.metaSpamAudienceId || !brand.metaAccessToken || !brand.metaAdAccountId) return;

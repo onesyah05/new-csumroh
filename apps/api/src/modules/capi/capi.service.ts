@@ -4,6 +4,7 @@ import { env } from '../../config/env.js';
 import { buildCapiEventId, buildCapiPayload, validateEventValue, validateMetaConfig, type CapiEventName } from './capi.payload.js';
 import { decryptMetaToken } from './meta-token.js';
 import { dispatch, notifyCapiFailed } from '../notifications/notification.events.js';
+import { isMetaSendingAllowed } from './send-guard.js';
 
 /** Meta menolak event yang event_time-nya lebih tua dari 7 hari; beri sedikit ruang untuk jam server. */
 export const CAPI_MAX_EVENT_AGE_MS = 7 * 24 * 60 * 60_000 - 60 * 60_000;
@@ -15,7 +16,7 @@ export const CAPI_MAX_ATTEMPTS = 8;
  * belum punya stempel waktu) memakai percobaan kirim pertama, yang terjadi tepat saat prospek mencapai tahap itu.
  */
 function businessEventTime(
-  prospect: { createdAt: Date; offerSentAt: Date | null; invoiceSentAt: Date | null; dpPaidAt: Date | null },
+  prospect: { createdAt: Date; offerSentAt: Date | null; invoiceSentAt: Date | null; dpPaidAt: Date | null; qualifiedAt?: Date | null },
   eventName: CapiEventName,
   firstAttemptAt: Date | null,
 ) {
@@ -23,6 +24,7 @@ function businessEventTime(
   const at = eventName === 'Purchase' ? prospect.dpPaidAt
     : eventName === 'InitiateCheckout' ? prospect.invoiceSentAt
     : eventName === 'AddToCart' ? prospect.offerSentAt
+    : eventName === 'QualifiedLead' ? prospect.qualifiedAt ?? null
     : null;
   return at ?? firstAttemptAt ?? new Date();
 }
@@ -54,6 +56,8 @@ export async function dispatchCapiEvent(prospectId: number, eventName: CapiEvent
   if (!prospect?.metaReferralMarker) return { status: 'skipped', reason: 'NO_CTWA_MARKER' };
   // Chat spam tidak pernah dikirim: Meta hanya belajar dari prospek yang serius.
   if (prospect.spamAt) return { status: 'skipped', reason: 'SPAM' };
+  // Bukan production: tidak ada log dan tidak ada kiriman; log yang sudah ada tetap menunggu di production.
+  if (!isMetaSendingAllowed()) return { status: 'skipped', reason: 'NON_PRODUCTION' };
 
   const eventId = options.eventId ?? buildCapiEventId(prospect.id, eventName, prospect.closedWonCount);
   const existing = await prisma.metaCapiLog.findUnique({ where: { brandId_eventId: { brandId: prospect.brandId, eventId } }, select: { status: true, createdAt: true } });
@@ -194,7 +198,7 @@ export async function retryFailedCapiEvents(now = new Date()) {
  */
 export async function resendCapiLog(log: { brandId: number; prospectId: number; eventName: string; eventId: string }) {
   const result = await dispatchCapiEvent(log.prospectId, log.eventName as CapiEventName, { notify: false, eventId: log.eventId });
-  if (result.status === 'skipped' && result.reason !== 'ALREADY_SENT') {
+  if (result.status === 'skipped' && result.reason !== 'ALREADY_SENT' && result.reason !== 'NON_PRODUCTION') {
     await prisma.metaCapiLog.updateMany({
       where: { brandId: log.brandId, eventId: log.eventId, status: { not: 'success' } },
       data: { status: 'failed', attempts: CAPI_MAX_ATTEMPTS, responseBody: `Tidak dikirim ulang: ${result.reason}` },
@@ -209,13 +213,14 @@ export async function resendCapiLog(log: { brandId: number; prospectId: number; 
  * QualifiedLead tidak punya stempel sendiri, jadi hanya untuk prospek yang chat pertamanya masih dalam 7 hari.
  */
 function backfillHasEventTime(
-  prospect: { createdAt: Date; offerSentAt: Date | null; invoiceSentAt: Date | null; dpPaidAt: Date | null },
+  prospect: { createdAt: Date; offerSentAt: Date | null; invoiceSentAt: Date | null; dpPaidAt: Date | null; qualifiedAt?: Date | null },
   event: CapiEventName,
   oldest: number,
 ) {
   const at = event === 'Purchase' ? prospect.dpPaidAt
     : event === 'InitiateCheckout' ? prospect.invoiceSentAt
     : event === 'AddToCart' ? prospect.offerSentAt
+    : event === 'QualifiedLead' ? prospect.qualifiedAt ?? prospect.createdAt
     : prospect.createdAt;
   return Boolean(at && at.getTime() >= oldest);
 }
@@ -233,7 +238,7 @@ export async function backfillCapiEvents(now = new Date()) {
       brand: { metaPixelId: { not: null }, metaAccessToken: { not: null }, facebookPageId: { not: null } },
     },
     select: {
-      id: true, status: true, createdAt: true, offerSentAt: true, invoiceSentAt: true, dpPaidAt: true,
+      id: true, status: true, createdAt: true, offerSentAt: true, invoiceSentAt: true, dpPaidAt: true, qualifiedAt: true,
       capiLogs: { select: { eventName: true } },
     },
     orderBy: { updatedAt: 'desc' },

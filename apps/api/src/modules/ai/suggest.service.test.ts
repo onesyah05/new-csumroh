@@ -143,3 +143,13 @@ describe('suggestReplies', () => {
     expect(result.options[0]!.status).toBe('needs_context');
   });
 });
+
+describe('arahan CS', () => {
+  it('nomor dan email di arahan CS disamarkan sebelum dikirim ke penyedia AI', async () => {
+    const { requests } = fakeProvider(output(['Wajar Bu dibahas dulu. Boleh saya kirim rinciannya?']));
+    await suggestReplies({ ...input, instruction: 'hubungi ibu di 081234567890 atau ibu@contoh.id soal DP' });
+    expect(requests[0]!.user).toContain('Arahan dari CS');
+    expect(requests[0]!.user).not.toMatch(/081234567890|ibu@contoh/);
+    expect(requests[0]!.user).toContain('[disamarkan]');
+  });
+});

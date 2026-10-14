@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   claimed: new Set<string>(),
   runs: [] as string[],
   releaseCapi: null as null | (() => void),
+  retentionFailures: 0,
 }));
 
 vi.mock('../modules/notifications/jobs.js', async () => {
@@ -20,7 +21,11 @@ vi.mock('../modules/notifications/jobs.js', async () => {
     customExpiringJob: job('custom-expiring'),
     morningDigestJob: job('morning-digest'),
     eveningDigestJob: job('evening-digest'),
-    retentionJob: job('retention'),
+    retentionJob: async () => {
+      mocks.runs.push('retention');
+      if (mocks.retentionFailures > 0) { mocks.retentionFailures -= 1; throw new Error('database sedang bermasalah'); }
+    },
+    releaseClaim: async (key: string) => { mocks.claimed.delete(key); },
   };
 });
 vi.mock('../modules/notifications/notification.events.js', () => ({ notifyWhatsappDisconnected: vi.fn() }));
@@ -41,6 +46,7 @@ beforeEach(async () => {
   await backgroundJobsSettled();
   mocks.claimed.clear();
   mocks.runs = [];
+  mocks.retentionFailures = 0;
 });
 
 describe('scheduler', () => {
@@ -70,5 +76,23 @@ describe('scheduler', () => {
     expect(mocks.runs.filter((r) => r === 'morning-digest')).toHaveLength(1);
     expect(mocks.runs.filter((r) => r === 'retention')).toHaveLength(1);
     expect(mocks.runs).not.toContain('evening-digest');
+  });
+
+  it('job harian yang gagal dicoba lagi di putaran berikutnya, maksimal 3 kali per hari', async () => {
+    mocks.retentionFailures = 2;
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await runTick(new Date('2026-09-25T00:30:00Z'));
+    await runTick(new Date('2026-09-25T00:31:00Z'));
+    await runTick(new Date('2026-09-25T00:32:00Z'));
+    // Gagal, gagal, sukses; setelah sukses klaim tetap dan tidak dijalankan lagi.
+    await runTick(new Date('2026-09-25T00:33:00Z'));
+    expect(mocks.runs.filter((r) => r === 'retention')).toHaveLength(3);
+  });
+
+  it('gagal terus: berhenti setelah 3 percobaan hari itu', async () => {
+    mocks.retentionFailures = 99;
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    for (let minute = 0; minute < 6; minute += 1) await runTick(new Date(Date.UTC(2026, 8, 26, 0, 30 + minute)));
+    expect(mocks.runs.filter((r) => r === 'retention')).toHaveLength(3);
   });
 });

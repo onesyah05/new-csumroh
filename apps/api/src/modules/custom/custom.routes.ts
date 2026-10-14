@@ -136,7 +136,7 @@ async function syncProspect(tx: Prisma.TransactionClient, userId: number, prospe
   const qualification = qualificationFromCustom(row, prospect);
   const merged = { ...prospect, ...pax(input), ...qualification };
   const promote = isQualificationComplete(merged) && ['new', 'contact', 'identifying'].includes(prospect.status);
-  await tx.prospect.update({ where: { id: prospect.id }, data: { ...pax(input), ...qualification, ...(promote ? { status: 'qualified' } : {}) } });
+  await tx.prospect.update({ where: { id: prospect.id }, data: { ...pax(input), ...qualification, ...(promote ? { status: 'qualified', qualifiedAt: new Date() } : {}) } });
   if (promote) queueCapiForStatus(prospect.id, 'qualified');
   if (Object.keys(qualification).length || promote) {
     await tx.prospectLog.create({

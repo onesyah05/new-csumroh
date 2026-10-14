@@ -9,7 +9,7 @@ vi.mock('../capi/meta-token.js', () => ({
   withAdsToken: (b: any) => ({ ...b, metaAccessToken: b.metaAdsAccessToken || b.metaAccessToken }),
 }));
 
-import { adLabels, ensureAdLabels, isMetaCdnUrl, withAdPreviews } from './meta-ads.js';
+import { adLabels, downloadMetaImage, ensureAdLabels, isMetaCdnUrl, MAX_AD_IMAGE_BYTES, withAdPreviews } from './meta-ads.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -53,5 +53,35 @@ describe('Label iklan Meta', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({}) })));
     const labels = await ensureAdLabels(1, ['120256']);
     expect(labels.size).toBe(0);
+  });
+});
+
+describe('downloadMetaImage', () => {
+  const image = (headers: Record<string, string>, size = 10, ok = true) => ({
+    ok,
+    headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
+    arrayBuffer: async () => new ArrayBuffer(size),
+  });
+
+  it('host non-Meta tidak diambil sama sekali', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    expect(await downloadMetaImage('https://penyerang.example/x.jpg')).toBeNull();
+    expect(await downloadMetaImage('http://scontent.fbcdn.net/x.jpg')).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('gambar dari CDN Meta diterima; bukan gambar atau melebihi batas ditolak', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(image({ 'content-type': 'image/jpeg' }))
+      .mockResolvedValueOnce(image({ 'content-type': 'text/html' }))
+      .mockResolvedValueOnce(image({ 'content-type': 'image/jpeg', 'content-length': String(MAX_AD_IMAGE_BYTES + 1) }))
+      .mockResolvedValueOnce(image({ 'content-type': 'image/jpeg' }, MAX_AD_IMAGE_BYTES + 1)));
+    const url = 'https://scontent.xx.fbcdn.net/v/t45/x.jpg';
+    expect((await downloadMetaImage(url))?.length).toBe(10);
+    expect(await downloadMetaImage(url)).toBeNull();
+    expect(await downloadMetaImage(url)).toBeNull();
+    expect(await downloadMetaImage(url)).toBeNull();
+    vi.unstubAllGlobals();
   });
 });

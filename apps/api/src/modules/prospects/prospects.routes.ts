@@ -311,6 +311,7 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
         data: {
           status: status as DbProspectStatus,
           ...(isNewLost && lostReason ? { lostReason } : {}),
+          ...(status === 'qualified' && !existing.qualifiedAt ? { qualifiedAt: new Date() } : {}),
         },
       });
       if (moved.count !== 1) throw new HttpError(409, 'Status prospek baru saja berubah. Muat ulang lalu coba lagi.');
@@ -694,7 +695,10 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
 
   // Isian boleh bertahap; naik otomatis ke Terkualifikasi hanya bila semua syarat terisi.
   const promotedToQualified = isQualificationComplete(merged) && ['new', 'contact', 'identifying'].includes(existing.status);
-  if (promotedToQualified) data.status = 'qualified';
+  if (promotedToQualified) {
+    data.status = 'qualified';
+    if (!existing.qualifiedAt) data.qualifiedAt = new Date();
+  }
 
   // Penawaran yang sudah terkirim memakai jamaah/paket lama: catat agar CS mengirim ulang sebelum invoice.
   const bookingChanged = (['paxQuad', 'paxTriple', 'paxDouble', 'paxInfant'] as const).some((f) => input[f] !== undefined && input[f] !== existing[f])

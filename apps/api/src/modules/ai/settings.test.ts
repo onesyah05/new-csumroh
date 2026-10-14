@@ -38,7 +38,7 @@ beforeEach(() => { vi.clearAllMocks(); mocks.row = null; clearAiConfigCache(); }
 describe('Pengaturan Asisten AI', () => {
   it('kunci API disimpan terenkripsi dan bisa dibaca kembali oleh server', async () => {
     await saveAiConfig({ ...base, apiKey: KEY }, 1);
-    expect(mocks.row.apiKey).toMatch(/^enc:v1:/);
+    expect(mocks.row.apiKey).toMatch(/^enc:v2:[0-9a-f]{8}:/);
     expect(mocks.row.apiKey).not.toContain('rahasia');
     clearAiConfigCache();
     expect((await getAiConfig()).apiKey).toBe(KEY);

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   count: vi.fn(), create: vi.fn(), findSuggestion: vi.fn(), update: vi.fn(), suggest: vi.fn(),
 }));
 
-vi.mock('../../config/env.js', () => ({ env: { NODE_ENV: 'test', AI_TIMEOUT_MS: 20000 } }));
+vi.mock('../../config/env.js', () => ({ env: { NODE_ENV: 'test', AI_TIMEOUT_MS: 20000, AI_DAILY_LIMIT_GLOBAL: 3000 } }));
 vi.mock('./settings.js', async () => {
   const actual = await vi.importActual<typeof import('./settings.js')>('./settings.js');
   return { ...actual, getAiConfig: async () => mocks.config };
@@ -27,6 +27,7 @@ vi.mock('../../middleware/auth.js', async () => {
   return { ...actual, authGuard: (_req: unknown, _res: unknown, next: () => void) => next() };
 });
 
+import { env } from '../../config/env.js';
 import { aiRouter, startOfBusinessDay } from './ai.routes.js';
 
 type Actor = { id: number; role: string; brandId: number | null; name: string };
@@ -107,6 +108,16 @@ describe('Saran Balasan AI', () => {
     mocks.count.mockResolvedValueOnce(150);
     expect((await call('post', '/reply-suggestions', cs(), { body: { prospectId: 5 } })).status).toBe(429);
     expect(mocks.suggest).not.toHaveBeenCalled();
+  });
+
+  it('plafon harian seluruh tim: permintaan AI ditolak walau kuota pribadi masih ada', async () => {
+    mocks.count.mockResolvedValueOnce(3).mockResolvedValueOnce(env.AI_DAILY_LIMIT_GLOBAL);
+    const result = await call('post', '/reply-suggestions', cs(), { body: { prospectId: 5 } });
+    expect(result.status).toBe(429);
+    expect(result.error.message).toContain('seluruh tim');
+    expect(mocks.suggest).not.toHaveBeenCalled();
+    // Hanya permintaan yang memanggil penyedia AI yang dihitung.
+    expect(mocks.count.mock.calls[1]![0].where).toMatchObject({ source: 'ai' });
   });
 
   it('mengembalikan saran dan menyimpan log tanpa teks final', async () => {
