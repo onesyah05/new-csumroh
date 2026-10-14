@@ -23,6 +23,25 @@ export function onSessionChange(listener: SessionListener) {
 
 let refreshInFlight: Promise<SessionPayload | null> | null = null;
 
+/** Batas waktu permintaan: jaringan yang menggantung tidak boleh menahan spinner dan mutasi tanpa akhir. */
+const REQUEST_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 120_000;
+const BLOB_TIMEOUT_MS = 60_000;
+const UPLOAD_PATH = /\/messages\/media$|\/gallery\/assets$|upload-|\/flyer$|\/itinerary-template$|\/payment-proof(-upload)?$/;
+const withTimeout = (ms: number) => (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(ms) : undefined);
+const isTimeout = (error: unknown) => error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError');
+const timeoutError = () => Object.assign(new Error('Server tidak merespons. Periksa koneksi lalu coba lagi.'), { status: 504 });
+
+/** Hanya origin API yang boleh menerima token dan cookie sesi. */
+export function isApiUrl(url: string) {
+  try {
+    const base = typeof window !== 'undefined' ? window.location.href : 'http://localhost';
+    return new URL(url, base).origin === new URL(apiOrigin || '/', base).origin;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Refresh gagal karena gangguan sementara (jaringan putus, 429 dibatasi, 5xx/DB tidak tersedia), bukan karena sesi
  * berakhir. Sesi dan cookie refresh masih berlaku: pengguna tidak boleh dikeluarkan, cukup dicoba lagi nanti.
@@ -47,7 +66,7 @@ export function refreshSession(): Promise<SessionPayload | null> {
   if (!refreshInFlight) {
     const attempt = async (): Promise<SessionPayload | null> => {
       for (let index = 0; ; index += 1) {
-        const response = await fetch(`${baseUrl}/auth/refresh`, { method: 'POST', credentials: 'include' }).catch(() => null);
+        const response = await fetch(`${baseUrl}/auth/refresh`, { method: 'POST', credentials: 'include', signal: withTimeout(15_000) }).catch(() => null);
         if (response && (response.status === 401 || response.status === 403)) return null;
         if (response?.ok) {
           const body = await response.json().catch(() => null) as ApiResponse<SessionPayload> | null;
@@ -77,10 +96,11 @@ class SessionExpiredError extends Error {
 
 async function raw<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
+    signal: withTimeout(UPLOAD_PATH.test(path) ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS),
     ...options,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...options.headers },
-  });
+  }).catch((error: unknown) => { throw isTimeout(error) ? timeoutError() : error; });
   if (response.status === 401 && retry && !path.startsWith('/auth/')) {
     const session = await refreshSession();
     if (session) return raw(path, options, false);
@@ -100,10 +120,13 @@ async function raw<T>(path: string, options: RequestInit = {}, retry = true): Pr
  */
 async function rawBlob(path: string, retry = true): Promise<Blob> {
   const url = path.startsWith('http') ? path : `${apiOrigin}${path}`;
+  // Token dan cookie hanya untuk origin API; URL absolut ke host lain diambil tanpa kredensial.
+  const trusted = isApiUrl(url);
   const response = await fetch(url, {
-    credentials: 'include',
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-  });
+    credentials: trusted ? 'include' : 'omit',
+    headers: trusted && accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    signal: withTimeout(BLOB_TIMEOUT_MS),
+  }).catch((error: unknown) => { throw isTimeout(error) ? timeoutError() : error; });
   if (response.status === 401 && retry) {
     const session = await refreshSession();
     if (session) return rawBlob(path, false);
@@ -127,9 +150,9 @@ export const api = {
 
 export function resolveMediaUrl(url?: string | null): string {
   if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:')) {
-    return url;
-  }
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) return url;
+  // data: hanya untuk gambar; jenis lain (html, svg aktif, dll.) tidak dirender.
+  if (url.startsWith('data:')) return /^data:image\/(?:png|jpe?g|webp|gif);/i.test(url) ? url : '';
   const clean = url.startsWith('/') ? url : `/${url}`;
   return `${apiOrigin}${clean}`;
 }

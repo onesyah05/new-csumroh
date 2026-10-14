@@ -9,7 +9,8 @@ import { useUiStore } from '../../app/store';
 import { PipelinePage } from './PipelinePage';
 
 const brand = { id: 1, name: 'Hana', code: 'HANA' };
-const prospects = [
+// Waktu relatif (menunggu balasan) dihitung saat dibuat, jadi dibuat ulang bila jam sistem diatur di sebuah tes.
+const makeProspects = () => [
   { id: 1, brandId: 1, name: 'Deal Syawal', phone: '62811', status: 'deal', packageId: 10, package: { id: 10, name: 'Syawal' }, dealValue: 60_000_000, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
   { id: 6, brandId: 1, name: 'Baru Menunggu', phone: '62816', status: 'contact', awaitingSince: Math.floor(Date.now() / 1000) - 5 * 60, packageId: null, dealValue: 0, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
   { id: 2, brandId: 1, name: 'Deal Ramadhan', phone: '62812', status: 'closed_won', packageId: 11, package: { id: 11, name: 'Ramadhan' }, dealValue: 50_000_000, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
@@ -17,6 +18,7 @@ const prospects = [
   { id: 4, brandId: 1, name: 'Keberatan Harga', phone: '62814', status: 'objection', objectionCategory: 'price', awaitingSince: Math.floor(Date.now() / 1000) - 20 * 60, photoUrl: `/uploads/avatars/p4-${Date.now()}-ab12.jpg`, packageId: null, dealValue: 0, userId: 7, user: { id: 7, name: 'CS Fitri' }, leadSource: 'whatsapp', messages: [] },
   { id: 5, brandId: 1, name: 'Milik Tester', phone: '62815', status: 'contact', packageId: null, dealValue: 0, userId: 9, user: { id: 9, name: 'Tester' }, leadSource: 'whatsapp', messages: [] },
 ];
+let prospects = makeProspects();
 
 function json(data: unknown) {
   return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data }) } as Response);
@@ -48,6 +50,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+  prospects = makeProspects();
 });
 
 describe('Pipeline', () => {
@@ -59,7 +63,17 @@ describe('Pipeline', () => {
     expect(screen.queryByRole('table')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^Tabel$/ }));
     expect(await screen.findByRole('table')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Ekspor CSV' })).toBeTruthy();
+    // Ekspor berisi nama dan nomor seluruh prospek brand: hanya Superadmin.
+    expect(screen.queryByRole('button', { name: 'Ekspor CSV' })).toBeNull();
+  });
+
+  it('tombol Ekspor CSV hanya untuk Superadmin', async () => {
+    renderAs('superadmin', '/pipeline?view=table');
+    expect(await screen.findByRole('button', { name: 'Ekspor CSV' })).toBeTruthy();
+    cleanup();
+    renderAs('cs', '/pipeline?view=table');
+    await screen.findByRole('table');
+    expect(screen.queryByRole('button', { name: 'Ekspor CSV' })).toBeNull();
   });
   it('lingkup Deal digabung dengan filter paket (AND), dari URL; tautan lama ?quick=won tetap berlaku', async () => {
     renderAs('admin', '/pipeline?view=table&lingkup=deal&paket=10');
@@ -181,6 +195,10 @@ describe('Pipeline', () => {
   });
 
   it('ambil alih muncul hanya setelah jamaah belum dibalas lebih dari 15 menit', async () => {
+    // Ambil alih hanya dibuka pada jam operasional 08.00–22.00 WIB: jam sistem dipatok 10.00 WIB agar tes tidak bergantung waktu menjalankan.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-14T03:00:00.000Z'));
+    prospects = makeProspects();
     renderAs('cs');
     const late = await screen.findByRole('article', { name: 'Kartu prospek Keberatan Harga' });
     const button = within(late).getByRole('button', { name: 'Ambil alih Keberatan Harga dari CS Fitri' });

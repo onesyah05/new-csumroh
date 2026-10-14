@@ -1,8 +1,16 @@
 import { clearProfileDrafts } from '../features/chat/profileDraft';
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SessionUser } from '@csumroh/shared-types';
 import { api, onSessionChange, refreshSession, setAccessToken, type SessionPayload } from '../lib/api';
 import { queryClient } from './query';
+import { useUiStore } from './store';
+
+/** Data milik akun sebelumnya tidak boleh terlihat oleh akun berikutnya di tab/browser yang sama. */
+function clearAccountState() {
+  queryClient.clear();
+  clearProfileDrafts();
+  useUiStore.getState().setActiveBrandId(null);
+}
 
 type AuthValue = { user: SessionUser | null; loading: boolean; login(email: string, password: string): Promise<void>; logout(): Promise<void> };
 const AuthContext = createContext<AuthValue | null>(null);
@@ -10,19 +18,22 @@ const AuthContext = createContext<AuthValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  // Id akun yang sedang tampil, untuk mengenali pergantian akun lewat refresh (login akun lain di tab lain).
+  const userIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     // Setiap refresh (awal maupun karena access token kedaluwarsa) memperbarui user — termasuk
     // perubahan role/brand — atau mengakhiri sesi secara terpusat bila refresh ditolak.
     const unsubscribe = onSessionChange((session) => {
       if (session) {
+        if (userIdRef.current !== null && userIdRef.current !== session.user.id) clearAccountState();
+        userIdRef.current = session.user.id;
         setUser(session.user);
         return;
       }
-      setUser((current) => {
-        if (current) queryClient.clear();
-        return null;
-      });
+      if (userIdRef.current !== null) clearAccountState();
+      userIdRef.current = null;
+      setUser(null);
     });
     // refreshSession() berbagi satu request, jadi efek ganda StrictMode tidak memutar token dua kali.
     // Server sedang tidak terjangkau saat halaman dibuka: tetap memuat dan coba lagi, jangan tampilkan halaman login
@@ -44,13 +55,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthValue>(() => ({
     user, loading,
-    async login(email, password) { const data = await api.post<SessionPayload>('/auth/login', { email, password }); setAccessToken(data.accessToken); setUser(data.user); },
+    async login(email, password) {
+      const data = await api.post<SessionPayload>('/auth/login', { email, password });
+      if (userIdRef.current !== null && userIdRef.current !== data.user.id) clearAccountState();
+      userIdRef.current = data.user.id;
+      setAccessToken(data.accessToken);
+      setUser(data.user);
+    },
     async logout() {
       await api.post('/auth/logout').catch(() => null);
       setAccessToken(null);
+      userIdRef.current = null;
       setUser(null);
-      queryClient.clear();
-      clearProfileDrafts();
+      clearAccountState();
     },
   }), [user, loading]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -21,7 +21,7 @@ export function LmsPage() {
   const [done, setDone] = useState<string[]>(loadProgress);
 
   useEffect(() => {
-    localStorage.setItem('csumroh_lms_progress', JSON.stringify(done));
+    try { localStorage.setItem('csumroh_lms_progress', JSON.stringify(done)); } catch { /* Penyimpanan diblokir/penuh: progres tetap di layar sesi ini. */ }
   }, [done]);
 
   const stages = (course.data?.stages ?? []) as any[];
