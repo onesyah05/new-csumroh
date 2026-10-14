@@ -304,6 +304,7 @@ catalogRouter.delete('/brands/:id', requireRole('superadmin'), asyncHandler(asyn
   try {
     await fetch(`${env.WA_GATEWAY_URL}/sessions/${id}/logout`, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
     }).catch(() => null);
   } catch {}

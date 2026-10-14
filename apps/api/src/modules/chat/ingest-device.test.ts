@@ -11,16 +11,19 @@ const mocks = vi.hoisted(() => ({
   logCreate: vi.fn(),
   queueCapi: vi.fn(),
   stored: null as null | Record<string, unknown>,
+  sessionFind: vi.fn(),
+  brandFind: vi.fn(),
+  messageFind: vi.fn(),
   notifyInbound: vi.fn(),
 }));
 
 vi.mock('../../db/prisma.js', () => ({
   prisma: {
-    whatsappSession: { findUnique: async () => ({ brandId: 1, status: 'connected', phoneNumber: '628222' }), updateMany: mocks.sessionUpdateMany },
-    brand: { findUnique: async () => ({ phone: null }) },
+    whatsappSession: { findUnique: mocks.sessionFind, updateMany: mocks.sessionUpdateMany },
+    brand: { findUnique: mocks.brandFind },
     prospect: { findMany: mocks.prospectFindMany, create: mocks.prospectCreate, update: mocks.prospectUpdate, updateMany: mocks.prospectUpdateMany },
     prospectLog: { create: mocks.logCreate },
-    chatMessage: { findUnique: async () => mocks.stored, findFirst: async () => null, upsert: mocks.messageUpsert },
+    chatMessage: { findUnique: mocks.messageFind, findFirst: async () => null, upsert: mocks.messageUpsert },
     whatsappContact: { findFirst: mocks.contactFindFirst },
   },
 }));
@@ -47,6 +50,9 @@ function incoming(body: Record<string, unknown>, path = '/messages/incoming') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.sessionFind.mockResolvedValue({ brandId: 1, status: 'connected', phoneNumber: '628222' });
+  mocks.brandFind.mockResolvedValue({ phone: null });
+  mocks.messageFind.mockImplementation(async () => mocks.stored);
   mocks.prospectFindMany.mockResolvedValue([]);
   mocks.prospectCreate.mockImplementation(async ({ data }: any) => ({ id: 9, userId: null, ...data }));
   mocks.messageUpsert.mockImplementation(async ({ create }: any) => ({ id: 1, ...create }));
@@ -180,5 +186,30 @@ describe('Status dan isi pesan yang dikirim ulang', () => {
     } finally {
       mocks.stored = null;
     }
+  });
+});
+
+describe('Impor riwayat dan efisiensi ingest', () => {
+  it('satu pesan yang gagal disimpan dilewati; pesan lain dalam batch tetap masuk, sesi dicari sekali', async () => {
+    mocks.messageUpsert
+      .mockImplementationOnce(async ({ create }: any) => ({ id: 1, ...create }))
+      .mockRejectedValueOnce(new Error('Data too long for column'))
+      .mockImplementationOnce(async ({ create }: any) => ({ id: 3, ...create }));
+    const messages = ['H1', 'H2', 'H3'].map((messageId, index) => ({ ...base, messageId, timestamp: base.timestamp + index }));
+    const result = await incoming({ brandId: 1, devicePhone: '628222', messages }, '/messages/history');
+    expect(result.imported).toBe(2);
+    expect(mocks.messageUpsert).toHaveBeenCalledTimes(3);
+    expect(mocks.sessionFind).toHaveBeenCalledTimes(1);
+    expect(mocks.brandFind).toHaveBeenCalledTimes(1);
+  });
+
+  it('database tidak tersedia pada pesan riwayat: batch gagal agar gateway mengirim ulang', async () => {
+    mocks.messageUpsert.mockRejectedValueOnce(Object.assign(new Error('Pool timeout'), { code: 'P2024' }));
+    await expect(incoming({ brandId: 1, devicePhone: '628222', messages: [{ ...base, messageId: 'H9' }] }, '/messages/history')).rejects.toMatchObject({ code: 'P2024' });
+  });
+
+  it('pesan masuk membaca pesan sebelumnya satu kali', async () => {
+    await incoming({ ...base, messageId: 'M-one-read' });
+    expect(mocks.messageFind).toHaveBeenCalledTimes(1);
   });
 });

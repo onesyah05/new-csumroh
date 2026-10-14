@@ -164,6 +164,7 @@ prospectsRouter.get('/', asyncHandler(async (req, res) => {
           if (item.phone) params.set('phone', item.phone);
           const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/profile-pic?${params.toString()}`, {
             headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
+            signal: AbortSignal.timeout(15_000),
           });
           if (response.ok) {
             const body = await response.json() as { success: boolean; data?: { url?: string | null } };

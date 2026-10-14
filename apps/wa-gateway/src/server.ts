@@ -23,6 +23,7 @@ import { z } from 'zod';
 import { addLidMappings, normalizePhone, toGatewayCall, toGatewayContact, toGatewayMessage, toMessageChange, type HistoryContact } from './messages.js';
 import { classifyDisconnect, reconnectDelayMs } from './connection.js';
 import { acquireInstanceLock } from './instance-lock.js';
+import { declaredMediaBytes, exceedsMediaLimit, MAX_INBOUND_MEDIA_BYTES } from './media-limits.js';
 import { Outbox, type OutboxItem, type SendResult } from './outbox.js';
 
 dotenv.config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
@@ -116,6 +117,13 @@ async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promi
       return null;
     }
 
+    // Berkas besar tidak diunduh: seluruhnya dimuat ke memori, dan beberapa berkas sekaligus mematikan gateway.
+    const declaredBytes = declaredMediaBytes(content, messageType);
+    if (exceedsMediaLimit(declaredBytes)) {
+      logger.warn({ messageId: message.key.id, messageType, bytes: declaredBytes, limit: MAX_INBOUND_MEDIA_BYTES }, 'Media too large; forwarding message without file');
+      return null;
+    }
+
     // Unduhan yang menggantung tidak boleh menahan pesan-pesan berikutnya: setelah 30 dtk pesan diteruskan tanpa media.
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), MEDIA_DOWNLOAD_TIMEOUT_MS); });
@@ -126,6 +134,8 @@ async function downloadAndSaveMedia(socket: WASocket, message: WAMessage): Promi
     if (buffer === null) logger.warn({ messageId: message.key.id }, 'Media download timed out');
 
     if (!buffer || !Buffer.isBuffer(buffer)) return null;
+    // Ukuran yang dinyatakan pengirim bisa tidak ada atau salah: batas dicek lagi pada hasil unduhan.
+    if (buffer.length > MAX_INBOUND_MEDIA_BYTES) return null;
 
     let ext = '.bin';
     if (messageType === 'imageMessage') ext = '.jpg';
@@ -406,6 +416,10 @@ async function restoreSessions() {
   if (brandIds.length) logger.info({ brandIds }, 'Restored WhatsApp sessions');
 }
 
+let markSessionsRestored!: () => void;
+/** Selesai setelah antrean lama dimuat dan semua sesi tersimpan dicoba dipulihkan (berhasil atau tidak). */
+const sessionsRestored = new Promise<void>((resolve) => { markSessionsRestored = resolve; });
+
 const app = express();
 app.use(helmet());
 const origins=env.WEB_ORIGIN.split(',').map((item)=>item.trim());
@@ -423,6 +437,9 @@ app.use(express.json({ limit: '50mb' }));
 app.post('/sessions/:brandId/start', async (req, res, next) => {
   try {
     const brandId = brandIdSchema.parse(req.params.brandId);
+    // Setelah restart, peta status kosong sampai sesi tersimpan selesai dipulihkan. Menilai sebelum itu menganggap sesi
+    // yang sah sebagai "tidak tertaut" dan menghapus kredensialnya (scan QR ulang).
+    await sessionsRestored;
     // Kredensial hanya dihapus bila sesi memang tidak tertaut. Saat menyambung ulang (connecting), sesi masih sah:
     // menghapusnya memaksa scan QR ulang hanya karena koneksi putus sebentar.
     const current = statuses.get(brandId);
@@ -764,7 +781,9 @@ const server = app.listen(env.WA_GATEWAY_PORT, env.WA_GATEWAY_HOST, () => {
   void outbox.init()
     .then(() => { if (outbox.size) logger.info({ pending: outbox.size }, 'Resuming queued API notifications'); })
     .catch((error) => logger.error(error, 'Failed to load notification queue'))
-    .finally(() => void restoreSessions().catch((error) => logger.error(error, 'Failed to restore WhatsApp sessions')));
+    .finally(() => void restoreSessions()
+      .catch((error) => logger.error(error, 'Failed to restore WhatsApp sessions'))
+      .finally(markSessionsRestored));
 });
 // Gagal mendapat port = jangan tetap hidup setengah jalan; keluar agar tidak ada sesi yatim.
 server.on('error', (error) => {

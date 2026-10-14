@@ -23,6 +23,8 @@ async function resolveBrand(req: Parameters<typeof scopedBrandId>[0], requestedB
 async function gatewayRequest(pathname: string, method: 'GET' | 'POST') {
   const response = await fetch(`${env.WA_GATEWAY_URL}${pathname}`, {
     method,
+    // Memulai sesi menunggu pemulihan dan pembuatan soket; cukup longgar, tetapi tidak boleh menggantung.
+    signal: AbortSignal.timeout(60_000),
     headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
   }).catch(() => null);
   if (!response) throw new HttpError(502, 'WhatsApp gateway tidak dapat dihubungi.');
