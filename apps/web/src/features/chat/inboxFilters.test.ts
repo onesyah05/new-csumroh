@@ -24,7 +24,7 @@ describe('antrean kerja CS inbox', () => {
     const list = [contact(1, { name: 'Ahmad' }), contact(2, { name: 'Ahmad', userId: 8 }), contact(3, { name: 'Ahmad', messages: [outgoing] }), contact(4)];
     const result = getInboxQueue(list, { ...defaults, work: 'needs_reply', owner: 'mine', search: ' AHMAD ' });
     expect(result.conversations.map((p) => p.id)).toEqual([1]);
-    expect(result.counts).toEqual({ all: 2, needs_reply: 1, followup: 0 });
+    expect(result.counts).toEqual({ all: 2, needs_reply: 1, followup: 0, qualified: 0, won: 0, lost: 0 });
   });
 
   it('memisahkan penugasan CS tanpa menganggap admin tanpa id sebagai PIC', () => {
@@ -64,5 +64,32 @@ describe('antrean kerja CS inbox', () => {
     expect(getInboxQueue(list, { ...defaults, work: 'needs_reply' }).conversations.map((p) => p.id)).toEqual([2]);
     expect(getInboxQueue(list, { ...defaults, work: 'followup' }).conversations.map((p) => p.id)).toEqual([2]);
     expect(getInboxQueue(list, { ...defaults, owner: 'unassigned' }).conversations.map((p) => p.id)).toEqual([2]);
+  });
+});
+
+describe('filter tahap: Terkualifikasi, Deal, Batal', () => {
+  const list = [
+    contact(1, { status: 'qualified' }),
+    contact(2, { status: 'deal' }),
+    contact(3, { status: 'closed_won' }),
+    contact(4, { status: 'lose' }),
+    contact(5, { status: 'closed_lost' }),
+    contact(6),
+    contact(7, { status: 'qualified', spamAt: '2026-09-23T01:00:00.000Z' }),
+    contact(8, { status: 'deal', isGroup: true }),
+  ];
+
+  it('menyaring per tahap dan menghitung jumlah chip dari lingkup yang sama', () => {
+    expect(getInboxQueue(list, { ...defaults, work: 'qualified' }).conversations.map((p) => p.id)).toEqual([1]);
+    expect(getInboxQueue(list, { ...defaults, work: 'won' }).conversations.map((p) => p.id)).toEqual([2, 3]);
+    expect(getInboxQueue(list, { ...defaults, work: 'lost' }).conversations.map((p) => p.id)).toEqual([4, 5]);
+    expect(getInboxQueue(list, defaults).counts).toMatchObject({ all: 8, qualified: 1, won: 2, lost: 2 });
+  });
+
+  it('chat spam dan grup tidak masuk antrean tahap, dan filter tahap ikut PIC + pencarian', () => {
+    expect(getInboxQueue(list, { ...defaults, work: 'qualified' }).conversations.map((p) => p.id)).not.toContain(7);
+    expect(getInboxQueue(list, { ...defaults, work: 'won' }).conversations.map((p) => p.id)).not.toContain(8);
+    const mine = [contact(1, { status: 'deal', userId: 7 }), contact(2, { status: 'deal', userId: 8 })];
+    expect(getInboxQueue(mine, { ...defaults, work: 'won', owner: 'mine' }).conversations.map((p) => p.id)).toEqual([1]);
   });
 });

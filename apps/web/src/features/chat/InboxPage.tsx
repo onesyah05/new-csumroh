@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Megaphone, Video, Paperclip, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useWhatsAppAvatars } from '../../lib/avatars';
@@ -630,17 +630,6 @@ export function InboxPage() {
   });
 
   const spamToggle = useSpamToggle(brandId, showToast);
-
-  const claimMutation = useMutation({
-    mutationFn: (prospectId: number) => api.post(`/prospects/${prospectId}/claim`),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['conversations', brandId] });
-      showToast('Anda berhasil menjadi PIC percakapan ini');
-    },
-    onError: (err: any) => {
-      showToast(err?.message || 'Gagal mengklaim PIC');
-    },
-  });
 
   const takeoverMutation = useMutation({
     mutationFn: (prospect: { id: number; brandId?: number }) => api.post(`/prospects/${prospect.id}/takeover`, { brandId: prospect.brandId ?? brandId }),
@@ -1358,16 +1347,20 @@ export function InboxPage() {
                 />
               </div>
               </div>
-              <div className="mobile-compact-filters flex flex-wrap items-center gap-1.5 text-xs font-medium" role="group" aria-label="Filter pekerjaan CS">
+              <div className="mobile-compact-filters scroll-row flex flex-nowrap items-center gap-1.5 text-xs font-medium" role="group" aria-label="Filter pekerjaan CS">
                 {inboxWorkFilters.map((filter) => (
                   <button
                     key={filter.id}
                     type="button"
-                    onClick={() => setChatFilter(filter.id)}
+                    onClick={(event) => {
+                      setChatFilter(filter.id);
+                      // Chip di tepi baris yang bisa digeser: bawa ke area terlihat penuh.
+                      event.currentTarget.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+                    }}
                     aria-pressed={chatFilter === filter.id}
                     title={filter.description}
                     className={cn(
-                      'mobile-compact-control rounded-full px-2.5 py-1.5 transition-colors whitespace-nowrap',
+                      'mobile-compact-control shrink-0 rounded-full px-2.5 py-1.5 transition-colors whitespace-nowrap',
                       chatFilter === filter.id
                         ? 'bg-[#d9fdd3] text-[#008069] font-bold'
                         : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
@@ -1409,7 +1402,7 @@ export function InboxPage() {
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#8696a0]">
                 <p className="font-semibold text-[#54656f]">
-                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : 'Tidak ada percakapan'}
+                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : chatFilter === 'qualified' ? 'Belum ada jamaah Terkualifikasi' : chatFilter === 'won' ? 'Belum ada jamaah Deal' : chatFilter === 'lost' ? 'Belum ada jamaah Batal' : 'Tidak ada percakapan'}
                 </p>
                 <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua</button>
               </div>
@@ -1486,8 +1479,8 @@ export function InboxPage() {
           ) : selected ? (
             <>
               {/* WhatsApp Web Chat Header */}
-              <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-[#e9edef] bg-[#f0f2f5] px-4">
-                <div className="flex flex-1 items-center gap-3 min-w-0">
+              <header className="chat-header flex h-[60px] shrink-0 items-center justify-between border-b border-[#e9edef] bg-[#f0f2f5] px-4">
+                <div className="flex flex-1 items-center gap-3 min-w-0 pr-3">
                   {/* Mobile Back Button — di luar area profil agar kliknya tidak ikut membuka/menutup panel. */}
                   <Button
                     variant="ghost"
@@ -1516,19 +1509,7 @@ export function InboxPage() {
 
                   <span className="block min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="block min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-[#111b21] md:flex-none md:leading-5">{selected.name}</span>
-                      {selected.spamAt && <ConversationTagChip tag={{ key: 'spam', label: 'Spam', tone: 'urgent' }} />}
-                      {selected.leadSource === 'meta_ads' && (
-                        <span
-                          title={[selected.adName ?? selected.adHeadline, selected.adCampaignName, selected.adId && `Ad ${selected.adId}`].filter(Boolean).join(' · ')}
-                          className="inline-flex shrink-0 items-center gap-1 rounded bg-zinc-800 px-1.5 text-xs font-semibold leading-4 text-white ring-1 ring-inset ring-zinc-800"
-                        >
-                          <Megaphone size={12} /><span className="hidden md:inline">Meta Ads</span><span className="sr-only md:hidden">Meta Ads</span>
-                        </span>
-                      )}
-                      <span className="flex shrink-0 md:hidden">
-                        <PicChip item={selected} />
-                      </span>
+                      <span className="block min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-[#111b21] md:leading-5">{selected.name}</span>
                     </span>
 
                     <span className="hidden md:block truncate text-xs text-[#667781]">
@@ -1542,11 +1523,14 @@ export function InboxPage() {
                         ? (selected.phone.startsWith('+') ? selected.phone : `+${selected.phone}`)
                         : 'WhatsApp'}
                     </span>
-                    <span className="flex min-w-0 items-center gap-2 text-xs leading-4 md:hidden">
-                      <span className="flex min-w-0 max-w-24" title={activeBrand?.name} aria-label={`Brand: ${activeBrand?.name || activeBrand?.code || brandId}`}>
+                    {/* HP: semua badge dalam satu baris di bawah nama (urutan sama dengan desktop: spam, tahap, PIC, brand). */}
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-xs leading-4 md:hidden">
+                      {selected.spamAt && <span className="flex shrink-0"><ConversationTagChip tag={{ key: 'spam', label: 'Spam', tone: 'urgent' }} /></span>}
+                      {!selected.isGroup && <span className="flex shrink-0"><StageChip item={selected} /></span>}
+                      <span className="flex shrink-0"><PicChip item={selected} /></span>
+                      <span className="flex min-w-0 max-w-20" title={activeBrand?.name} aria-label={`Brand: ${activeBrand?.name || activeBrand?.code || brandId}`}>
                         <ConversationTagChip shrinkable tag={{ key: 'brand', label: activeBrand?.code || `Brand ${brandId}`, tone: 'muted' }} />
                       </span>
-                      {!selected.isGroup && <StageChip item={selected} />}
                     </span>
                   </span>
                   </button>
@@ -1554,7 +1538,8 @@ export function InboxPage() {
 
                 {/* Right Action Tools */}
                 <div className="hidden md:flex items-center gap-2 shrink-0">
-                  {/* Tahap pipeline dan PIC: chip yang sama dengan daftar percakapan */}
+                  {/* Kelompok status (satu garis): spam, tahap pipeline, PIC, sumber iklan. Chip sama dengan daftar percakapan. */}
+                  {selected.spamAt && <ConversationTagChip tag={{ key: 'spam', label: 'Spam', tone: 'urgent' }} />}
                   {!selected.isGroup && stageTag(selected) && (
                     <ConversationTagButton
                       tag={stageTag(selected)!}
@@ -1572,19 +1557,8 @@ export function InboxPage() {
                     />
                   )}
 
-                  {user?.role === 'cs' && isUnassigned && !isWonStatus(selected.status) && !isLostStatus(selected.status) && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="gap-1.5 text-xs bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 font-semibold ml-0.5"
-                      onClick={() => claimMutation.mutate(selected.id)}
-                      disabled={claimMutation.isPending}
-                      title="Klaim percakapan ini sebagai PIC Anda"
-                    >
-                      <UserPlus2 size={14} />
-                      <span className="hidden sm:inline">Klaim PIC</span>
-                    </Button>
-                  )}
+                  {/* Pemisah: kiri status (label), kanan aksi (tombol). */}
+                  <span className="hdr-collapse mx-1 h-5 w-px shrink-0 bg-zinc-300" aria-hidden="true" />
 
                   {canTakeOver && (
                     <Button
@@ -1596,21 +1570,7 @@ export function InboxPage() {
                       title={`Jamaah belum dibalas lebih dari 15 menit oleh ${selected.user?.name ?? 'PIC'}`}
                     >
                       <UserPlus2 size={14} />
-                      <span className="hidden sm:inline">Ambil alih</span>
-                    </Button>
-                  )}
-
-                  {canReply && !selected.isGroup && !selected.isOwn && !isWonStatus(selected.status) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => spamToggle.mutate({ prospectId: selected.id, spam: !selected.spamAt })}
-                      disabled={spamToggle.isPending}
-                      className={cn('gap-1.5 text-xs hover:bg-black/5', selected.spamAt ? 'text-[#54656f] hover:text-[#111b21]' : 'text-rose-700 hover:text-rose-800')}
-                      title={selected.spamAt ? 'Kembalikan ke pipeline dan antrean' : 'Keluarkan dari pipeline & laporan, tidak dikirim ke Meta, masuk audiens pengecualian iklan'}
-                    >
-                      <ShieldAlert size={15} />
-                      <span className="hidden lg:inline">{selected.spamAt ? 'Bukan spam' : 'Tandai spam'}</span>
+                      <span className="hdr-label">Ambil alih</span>
                     </Button>
                   )}
 
@@ -1621,9 +1581,25 @@ export function InboxPage() {
                       onClick={() => setSidePanelTab('profile')}
                       className="gap-1.5 text-xs text-[#54656f] hover:text-[#111b21] hover:bg-black/5"
                       title="Buka Profil Prospek & Copilot"
+                      aria-label="Info prospek"
                     >
                       <User size={15} className="text-[#00a884]" />
-                      <span className="hidden sm:inline">Info Prospek</span>
+                      <span className="hdr-label">Info Prospek</span>
+                    </Button>
+                  )}
+
+                  {canReply && !selected.isGroup && !selected.isOwn && !isWonStatus(selected.status) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => spamToggle.mutate({ prospectId: selected.id, spam: !selected.spamAt })}
+                      disabled={spamToggle.isPending}
+                      className={cn('gap-1.5 text-xs hover:bg-black/5', selected.spamAt ? 'text-[#54656f] hover:text-[#111b21]' : 'text-rose-700 hover:text-rose-800')}
+                      title={selected.spamAt ? 'Bukan spam' : 'Tandai spam'}
+                      aria-label={selected.spamAt ? 'Bukan spam' : 'Tandai spam'}
+                    >
+                      <ShieldAlert size={15} />
+                      <span className="hdr-label">{selected.spamAt ? 'Bukan spam' : 'Tandai spam'}</span>
                     </Button>
                   )}
                 </div>

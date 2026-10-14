@@ -218,3 +218,15 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 72px;
 }
+
+/*
+ * Header chat (desktop): label tombol dan ikon sumber menyusut menurut lebar header itu sendiri, bukan viewport,
+ * karena lebarnya berubah saat daftar percakapan atau panel profil dibuka. Nama kontak mendapat sisa ruang.
+ */
+.chat-header { container-type: inline-size; }
+@container (max-width: 640px) {
+  .chat-header .hdr-label { display: none; }
+}
+@container (max-width: 480px) {
+  .chat-header .hdr-collapse { display: none; }
+}
