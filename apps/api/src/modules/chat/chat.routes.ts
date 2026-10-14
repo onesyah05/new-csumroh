@@ -173,7 +173,63 @@ function messagePreview(message: ChatMessage) {
   };
 }
 
-export async function getLivechatConversationsForBrand(brandId: number) {
+/**
+ * Subset kolom prospek yang dibaca daftar percakapan Inbox. Mengambil seluruh kolom (termasuk teks panjang) membuat
+ * query dan payload daftar jauh lebih besar. Konsumen lain (Pipeline, Kontak, Dashboard) tetap memakai
+ * getLivechatConversationsForBrand yang lengkap karena memakai kolom lain; tambahkan di sini bila Inbox memerlukannya.
+ */
+const conversationColumns = {
+  id: true, brandId: true, userId: true, packageId: true, name: true, phone: true, status: true, leadSource: true,
+  spamAt: true, remoteJid: true, adId: true, adHeadline: true, photoUrl: true, targetMonth: true,
+  nextFollowupDate: true, paymentStatus: true, paymentProofUrl: true, paymentProofMessageId: true,
+  paymentProofSubmittedAt: true, invoiceDueAt: true, createdAt: true, updatedAt: true,
+  unreadCount: true, awaitingSince: true, inboundSenderName: true, messageCount: true, lastMessage: true, notes: true,
+  // Dibaca lalu dibuang dari respons (lihat buildLivechatConversations); ada di sini agar kedua varian satu bentuk.
+  conversationStatsAt: true,
+};
+
+const conversationRelations = {
+  user: { select: { id: true, name: true } },
+  package: { select: { id: true, name: true, departureDate: true } },
+  // Status layanan custom yang berjalan (label di daftar percakapan & Pipeline).
+  customRequests: { where: { status: { not: 'cancelled' as const } }, orderBy: { id: 'desc' as const }, take: 1, select: { id: true, status: true, quoteValidUntil: true } },
+};
+
+const conversationWhere = (brandId: number, devicePhone: string) => ({
+  brandId,
+  devicePhone,
+  lastMessageAt: { not: null },
+  NOT: [
+    { remoteJid: { contains: '@newsletter' } },
+    { remoteJid: { contains: '@broadcast' } },
+  ],
+});
+
+type ConversationProspect = Prisma.ProspectGetPayload<{ select: typeof conversationColumns & typeof conversationRelations }>;
+
+/** Daftar percakapan lengkap (seluruh kolom prospek): Pipeline, Kontak, tugas Dashboard. */
+export function getLivechatConversationsForBrand(brandId: number) {
+  return buildLivechatConversations(brandId, (devicePhone) => prisma.prospect.findMany({
+    where: conversationWhere(brandId, devicePhone),
+    include: conversationRelations,
+    orderBy: { updatedAt: 'desc' },
+  }));
+}
+
+/** Daftar percakapan ringan untuk Inbox: hanya kolom yang dipakai daftar (lihat conversationColumns). */
+export function getLivechatConversationListForBrand(brandId: number) {
+  return buildLivechatConversations(brandId, (devicePhone) => prisma.prospect.findMany({
+    where: conversationWhere(brandId, devicePhone),
+    select: { ...conversationColumns, ...conversationRelations },
+    orderBy: { updatedAt: 'desc' },
+  }), { omitNotes: true });
+}
+
+async function buildLivechatConversations<P extends ConversationProspect>(
+  brandId: number,
+  loadProspects: (devicePhone: string) => Promise<P[]>,
+  options: { omitNotes?: boolean } = {},
+) {
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
   // Kontak hanya tampil selama device asalnya tersambung atau sedang menyambung ulang (lihat device-scope.ts).
   const devicePhone = await activeDevicePhone(brandId);
@@ -194,24 +250,7 @@ export async function getLivechatConversationsForBrand(brandId: number) {
   // Ringkasan percakapan dibaca dari tabel prospek (lihat conversation-stats.ts); prospek lama/impor yang belum
   // punya ringkasan dihitung dulu. Prospek tanpa pesan tampil (lastMessageAt null) tidak masuk daftar.
   await ensureConversationStats(brandId);
-  const prospects = await prisma.prospect.findMany({
-    where: {
-      brandId,
-      devicePhone,
-      lastMessageAt: { not: null },
-      NOT: [
-        { remoteJid: { contains: '@newsletter' } },
-        { remoteJid: { contains: '@broadcast' } },
-      ],
-    },
-    include: {
-      user: { select: { id: true, name: true } },
-      package: { select: { id: true, name: true, departureDate: true } },
-      // Status layanan custom yang berjalan (label di daftar percakapan & Pipeline).
-      customRequests: { where: { status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, take: 1, select: { id: true, status: true, quoteValidUntil: true } },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
+  const prospects = await loadProspects(devicePhone);
 
   // Nama iklan asal untuk badge "Meta Ads" (dari tabel tersimpan saja: daftar tidak boleh menunggu Meta).
   const ads = await adLabels(prospects.map((prospect) => prospect.adId));
@@ -230,7 +269,10 @@ export async function getLivechatConversationsForBrand(brandId: number) {
   }
 
   const data = (await Promise.all([...grouped.values()].map(async (group) => {
-    const { lastMessage: _last, inboundSenderName: _sender, conversationStatsAt: _statsAt, ...canonical } = chooseCanonicalProspect(group);
+    const { lastMessage: _last, inboundSenderName: _sender, conversationStatsAt: _statsAt, ...chosen } = chooseCanonicalProspect(group);
+    // notes hanya dipakai prospectScore untuk memilih prospek utama; daftar Inbox tidak memerlukannya di klien.
+    const { notes: _notes, ...withoutNotes } = chosen;
+    const canonical = options.omitNotes ? withoutNotes : chosen;
     const summary = group.length === 1
       ? {
           latest: group[0]!.lastMessage as unknown as (ChatMessage | null),
@@ -297,7 +339,7 @@ export async function getLivechatConversationsForBrand(brandId: number) {
 
 chatRouter.get('/conversations', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
-  const data = await getLivechatConversationsForBrand(brandId);
+  const data = await getLivechatConversationListForBrand(brandId);
 
   // Salin foto profil WhatsApp yang belum ada / basi ke server di latar belakang (URL CDN WA kedaluwarsa).
   const missing = data.filter((item) => avatarNeedsRefresh(item.photoUrl) && !item.isGroup && item.remoteJid !== '0@s.whatsapp.net');

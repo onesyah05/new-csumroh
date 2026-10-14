@@ -3,67 +3,19 @@ import { useInboxNavigation } from './useInboxNavigation';
 import { useOnline } from '../../app/pwa';
 import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isMediaFileNameText, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
+import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import {
-  AlertCircle,
-  ArrowLeft,
-  ArrowDown,
-  ArrowUp,
-  Ban,
-  Building2,
-  CalendarDays,
-  Check,
-  CheckCheck,
-  ChevronDown,
-  Clock,
-  Copy,
-  CornerUpLeft,
-  CreditCard,
-  Download,
-  Eye,
-  FileText,
-  HandCoins,
-  ImageIcon,
-  Lock,
-  Menu,
-  MessageSquareText,
-  Megaphone,
-  Mic,
-  Phone,
-  PhoneMissed,
-  Sticker,
-  Video,
-  Paperclip,
-  Plane,
-  RefreshCw,
-  Search,
-  Send,
-  ShieldAlert,
-  ShieldCheck,
-  MapPin,
-  Smartphone,
-  Sparkles,
-  Star,
-  Trash2,
-  Upload,
-  User,
-  UserPlus2,
-  Users,
-  WifiOff,
-  Smile,
-  X,
-} from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Megaphone, Video, Paperclip, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useWhatsAppAvatars } from '../../lib/avatars';
 import { useNow } from '../../lib/useNow';
 import { NotificationBell } from '../notifications/NotificationBell';
-import { ProspectAvatar } from '../../components/ui/avatar';
+
 import { cn } from '../../lib/cn';
-import { AdReplyCard } from './AdReplyCard';
+
 import { ChatSidePanel } from './ChatSidePanel';
 import { canAccessBrand, useBrandScope } from '../../lib/scope';
 import { useAuth } from '../../app/auth';
@@ -75,10 +27,10 @@ import { PageError, PageLoading } from '../../components/ui/page-feedback';
 import { formatWaNumber } from '../../lib/phone';
 import { FLYER_CAPTION_CLOSING, formatWaFlyerCaption, formatWaPackageSummary } from '../packages/packageQuote';
 import { unresolvedScript } from './scriptLibrary';
-import { customBadge } from '../custom/customApi';
-import { conversationTags, conversationTrip, picTag, stageTag } from './conversationTags';
+
+import { picTag, stageTag } from './conversationTags';
 import { ConversationTagButton, ConversationTagChip, PicChip, StageChip } from './ConversationTagChip';
-import { linkifyText } from '../../lib/linkify';
+
 import { GalleryBrowser } from '../gallery/GalleryBrowser';
 import { QuickReplyPicker } from '../quick-replies/QuickReplyPicker';
 import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickReplies, type QuickReply, type SlashToken } from '../quick-replies/quickRepliesApi';
@@ -91,11 +43,18 @@ import { waMessage } from './waFormat';
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog, ModalFrame } from '../../components/ui/modal';
 import { ImageLightbox } from '../../components/ui/image-lightbox';
+import { isTouchDevice } from '../../lib/useMobile';
+import { useStableCallback } from '../../lib/useStableCallback';
+import { ConversationRow, ContactAvatar } from './ConversationRow';
+import { MessageBubble } from './MessageBubble';
 
+const NO_PACKAGES: any[] = [];
 const MAX_UPLOAD_MB = 30;
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
-const QUICK_REACTIONS =['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
+// Intl.DateTimeFormat mahal dibuat berulang; dipakai per pesan di riwayat chat, jadi dibuat sekali.
+const dateSeparatorFormat = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long' });
+const dateSeparatorFormatWithYear = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
 function formatDateSeparator(timestampSeconds: number): string {
   const date = new Date(timestampSeconds * 1000);
@@ -109,45 +68,10 @@ function formatDateSeparator(timestampSeconds: number): string {
   if (isToday) return 'Hari ini';
   if (isYesterday) return 'Kemarin';
 
-  return date.toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-  });
+  return (date.getFullYear() !== now.getFullYear() ? dateSeparatorFormatWithYear : dateSeparatorFormat).format(date);
 }
 
-function formatWaTimestamp(timestampSeconds?: number): string {
-  if (!timestampSeconds) return '';
-  const date = new Date(timestampSeconds * 1000);
-  const now = new Date();
 
-  const isToday = date.toDateString() === now.toDateString();
-  if (isToday) {
-    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
-  }
-
-  const yesterday = new Date();
-  yesterday.setDate(now.getDate() - 1);
-  const isYesterday = date.toDateString() === yesterday.toDateString();
-  if (isYesterday) return 'Kemarin';
-
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays < 7 && diffDays >= 0) {
-    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-    return days[date.getDay()] ?? '';
-  }
-
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
-}
-
-function formatBubbleTime(timestampSeconds?: number): string {
-  if (!timestampSeconds) return '';
-  const date = new Date(timestampSeconds * 1000);
-  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
-}
 
 type MediaPreviewState = {
   file: File;
@@ -163,13 +87,6 @@ type MediaPreviewState = {
   packageId?: number;
 };
 
-/** Elemen non-tombol yang bisa diklik juga harus bisa diaktifkan dengan Enter/Spasi (WCAG 2.1.1). */
-function activateWithKeyboard(event: ReactKeyboardEvent<HTMLElement>, action: () => void) {
-  if (event.key !== 'Enter' && event.key !== ' ') return;
-  event.preventDefault();
-  action();
-}
-
 function normalizePhone(value?: string | null) {
   const digits = value?.replace(/\D/g, '') ?? '';
   if (digits.startsWith('62')) return digits;
@@ -178,42 +95,26 @@ function normalizePhone(value?: string | null) {
   return digits;
 }
 
-/**
- * Avatar kontak = foto profil WhatsApp (lihat ProspectAvatar: tanpa foto tampil siluet, bukan inisial).
- * Grup dan akun resmi WhatsApp tetap memakai ikon.
- */
-function ContactAvatar({
-  photoUrl,
-  isGroup,
-  isWhatsAppOfficial,
-  size = 'md',
-}: {
-  photoUrl?: string | null;
-  isGroup?: boolean;
-  isWhatsAppOfficial?: boolean;
-  size?: 'sm' | 'md' | 'lg';
-}) {
-  const avatarSize = size === 'sm' ? 'sm' : size === 'lg' ? 'xl' : 'lg';
-  if (!isGroup && !isWhatsAppOfficial) return <ProspectAvatar photoUrl={photoUrl} size={avatarSize} />;
 
-  const sizeClass = size === 'sm' ? 'h-8 w-8' : size === 'lg' ? 'h-12 w-12' : 'h-10 w-10';
-  const iconSize = size === 'sm' ? 14 : size === 'lg' ? 22 : 18;
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'grid shrink-0 place-items-center rounded-full shadow-2xs select-none text-white',
-        sizeClass,
-        isWhatsAppOfficial ? 'bg-[#25d366]' : 'bg-[#00a884]'
-      )}
-    >
-      {isWhatsAppOfficial ? <MessageSquareText size={iconSize} /> : <Users size={iconSize} />}
-    </span>
-  );
-}
 
 /** Jumlah pesan per halaman riwayat chat (sama dengan bawaan API). */
-const MESSAGE_PAGE = 100;
+const MESSAGE_PAGE = 40;
+// Daftar percakapan bisa ratusan baris: dirender bertahap (mount/unmount ratusan baris membuat ganti brand terasa lama).
+const ROW_PAGE = 60;
+const ROW_HEIGHT = 72;
+
+/** Penanda akhir daftar: memuat baris berikutnya saat mendekati layar. */
+function ListSentinel({ onVisible }: { onVisible: () => void }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === 'undefined') { onVisible(); return; }
+    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) onVisible(); }, { rootMargin: '600px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onVisible]);
+  return <div ref={ref} aria-hidden="true" className="h-px" />;
+}
 
 export function InboxPage() {
   const { user } = useAuth();
@@ -247,6 +148,14 @@ export function InboxPage() {
     if (node) { try { node.scrollTop = Number(sessionStorage.getItem(`${listKey}.scroll`)) || 0; } catch { /* Optional scroll restore. */ } }
   }, [listKey]);
   const [today, setToday] = useState(() => businessDateKey());
+  // Posisi gulir yang dipulihkan harus tetap terjangkau: batas awal mengikuti posisi tersimpan.
+  const initialRowLimit = () => {
+    try { return Math.max(ROW_PAGE, Math.ceil((Number(sessionStorage.getItem(`${listKey}.scroll`)) || 0) / ROW_HEIGHT) + ROW_PAGE); } catch { return ROW_PAGE; }
+  };
+  const [rowLimit, setRowLimit] = useState(initialRowLimit);
+  useEffect(() => { setRowLimit(initialRowLimit()); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listKey, chatFilter, ownerFilter, search]);
+  const showMoreRows = useCallback(() => setRowLimit((limit) => limit + ROW_PAGE), []);
 
   useEffect(() => {
     // Keep the due queue correct for CS sessions that stay open across midnight WIB.
@@ -267,6 +176,16 @@ export function InboxPage() {
   const [showDeletedMessages, setShowDeletedMessages] = useState(false);
   const [revealedDeletedIds, setRevealedDeletedIds] = useState<Set<number>>(new Set());
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  // Identitas tetap untuk gelembung `memo`: tanpa ini setiap ketukan huruf merender ulang seluruh riwayat chat.
+  const scrollToMessageStable = useStableCallback((messageId?: string | null) => scrollToMessage(messageId));
+  const showToastStable = useStableCallback((text: string) => showToast(text));
+  const handleSelectConversationStable = useStableCallback((id: number) => handleSelectConversation(id));
+  const insertTextStable = useStableCallback((text: string) => handleInsertDirectText(text));
+  const sendFlyerStable = useStableCallback((pkg: any) => openSendFlyerModal(pkg));
+  const sendItineraryStable = useStableCallback((pkg: any) => void loadItineraryImageAsMediaPreview(pkg));
+  const openPackagePicker = useCallback(() => setShowPackagePickerModal(true), []);
+  const closeSidePanel = useStableCallback(() => setSidePanelTab(null));
+  const changeSidePanelTab = useStableCallback((tab: Parameters<typeof setSidePanelTab>[0]) => setSidePanelTab(tab));
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -581,6 +500,20 @@ export function InboxPage() {
       showToast((error as Error).message || 'Pesan lama gagal dimuat');
     }
   }
+
+  // Label tanggal (Intl) dihitung sekali per perubahan data, bukan di setiap ketukan huruf di kolom pesan.
+  const bubbleItems = useMemo(() => {
+    const visible = (messages.data ?? []).filter((item) => item.messageType !== 'protocolMessage' && item.messageType !== 'reactionMessage');
+    let previousLabel: string | null = null;
+    return visible.map((item) => {
+      const dateLabel = formatDateSeparator(item.timestamp);
+      const isNewDate = dateLabel !== previousLabel;
+      previousLabel = dateLabel;
+      return { item, dateLabel, isNewDate };
+    });
+    // today: label "Hari ini" ikut berganti saat tanggal bisnis berganti.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.data, today]);
 
   function scrollToMessage(messageId?: string | null) {
     if (!messageId) return;
@@ -1474,103 +1407,19 @@ export function InboxPage() {
                 <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua</button>
               </div>
             ) : (
-              filtered.map((item) => {
-                const last = item.messages?.[0];
-                const active = item.id === selectedId;
-                const hasUnread = (item.unreadCount ?? 0) > 0;
-                const isGroup = Boolean(item.isGroup);
-                const tags = conversationTags(item, today, customBadge(item.customRequests?.[0]));
-                const trip = conversationTrip(item);
-
-                return (
-                  <div
-                    key={item.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleSelectConversation(item.id)}
-                    onKeyDown={(event) => activateWithKeyboard(event, () => handleSelectConversation(item.id))}
-                    aria-current={active ? 'true' : undefined}
-                    aria-label={`Percakapan dengan ${item.name}`}
-                    className={cn(
-                      'flex min-h-[72px] items-center gap-3 px-3.5 py-2 cursor-pointer transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00a884]',
-                      active ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'
-                    )}
-                  >
-                    {/* Avatar */}
-                    <ContactAvatar
-                      size="lg"
-                      photoUrl={photoFor(item)}
-                      isGroup={isGroup}
-                      isWhatsAppOfficial={item.remoteJid === '0@s.whatsapp.net' || item.name === 'WhatsApp'}
-                    />
-
-                    {/* Content Column */}
-                    <div className="min-w-0 flex-1 pr-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="truncate text-[15px] font-semibold text-[#111b21]">
-                          {item.name}
-                        </span>
-                        <time className={cn(
-                          'shrink-0 text-[12px]',
-                          hasUnread ? 'font-semibold text-[#00a884]' : 'text-[#667781]'
-                        )}>
-                          {formatWaTimestamp(last?.timestamp)}
-                        </time>
-                      </div>
-
-                      <div className="mt-0.5 flex items-center justify-between gap-1">
-                        <span className="truncate text-[13px] text-[#667781] flex items-center gap-1">
-                          {last?.isFromMe && (
-                            last.status === 'pending' ? (
-                              <span title="Menunggu" className="shrink-0 flex items-center text-[#8696a0]">
-                                <Clock size={12} />
-                              </span>
-                            ) : last.status === 'sent' ? (
-                              <span title="Terkirim" className="shrink-0 flex items-center">
-                                <Check size={14} className="text-[#8696a0]" />
-                              </span>
-                            ) : (
-                              <span title={last.status === 'read' ? 'Sudah dibaca' : 'Tersampaikan'} className="shrink-0 flex items-center">
-                                <CheckCheck
-                                  size={15}
-                                  className={last.status === 'read' ? 'text-[#53bdeb]' : 'text-[#8696a0]'}
-                                />
-                              </span>
-                            )
-                          )}
-                          {last?.messageType === 'imageMessage' ? (
-                            <span className="inline-flex items-center gap-1"><ImageIcon size={13} /> Foto</span>
-                          ) : last?.messageType === 'documentMessage' ? (
-                            <span className="inline-flex items-center gap-1"><FileText size={13} /> Dokumen</span>
-                          ) : last?.messageType === 'audioMessage' ? (
-                            <span className="inline-flex items-center gap-1"><Mic size={13} /> Pesan suara</span>
-                          ) : last?.messageType === 'stickerMessage' ? (
-                            <span className="inline-flex items-center gap-1"><Sticker size={13} /> Stiker</span>
-                          ) : last?.messageType === 'callLogMessage' ? (
-                            <span className={cn('inline-flex min-w-0 items-center gap-1', isMissedCall(last.messageText) && 'text-red-600')}>
-                              <CallIcon text={last.messageText} size={13} /> <span className="truncate">{last.messageText}</span>
-                            </span>
-                          ) : (
-                            <span className="truncate">{last?.messageText || 'Belum ada pesan'}</span>
-                          )}
-                        </span>
-
-                        {hasUnread && (
-                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[#25d366] px-1.5 text-xs font-bold text-white shadow-2xs animate-fade-in">
-                            {item.unreadCount}
-                          </span>
-                        )}
-                      </div>
-                      {(tags.length > 0 || trip) && (
-                        <div className="mt-1 flex min-w-0 items-center gap-1 overflow-hidden">
-                          {tags.map((tag) => <ConversationTagChip key={tag.key} tag={tag} />)}
-                          {trip && <ConversationTagChip tag={{ key: 'trip', label: trip.label, tone: 'muted', title: trip.title }} shrinkable />}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
+              <>
+              {filtered.slice(0, rowLimit).map((item) => (
+                <ConversationRow
+                  key={item.id}
+                  item={item}
+                  active={item.id === selectedId}
+                  today={today}
+                  photoUrl={photoFor(item)}
+                  onSelect={handleSelectConversationStable}
+                />
+              ))}
+              {filtered.length > rowLimit && <ListSentinel key={rowLimit} onVisible={showMoreRows} />}
+              </>
             )}
             </div>
           )}
@@ -1829,547 +1678,36 @@ export function InboxPage() {
                   )}
 
                   {/* Render Message List with WhatsApp Bubbles */}
-                  {(messages.data ?? [])
-                    .filter((item) => item.messageType !== 'protocolMessage' && item.messageType !== 'reactionMessage')
-                    .map((item, index, arr) => {
-                    const prev = arr[index - 1];
-                    const isNewDate = !prev || formatDateSeparator(item.timestamp) !== formatDateSeparator(prev.timestamp);
-                    const isMessageDeleted = Boolean(item.isDeleted);
-                    const isRevealedByAdmin = isAdmin && (showDeletedMessages || revealedDeletedIds.has(item.id));
-
-                    return (
-                      <div key={item.id} id={`msg-${item.messageId}`} className="transition-colors duration-500 rounded-lg">
-                        {isNewDate && (
-                          <div className="my-3 flex items-center justify-center">
-                            <span className="rounded-lg bg-white/95 px-3 py-1 text-xs font-medium text-[#54656f] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] uppercase">
-                              {formatDateSeparator(item.timestamp)}
-                            </span>
-                          </div>
-                        )}
-
-                        {(() => {
-                          const isPickerOpen = activeReactionMessageId === item.id;
-
-                          const reactionTrigger = (
-                            <div className="relative shrink-0 flex items-center">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveReactionMessageId((prev) => (prev === item.id ? null : item.id));
-                                }}
-                                className={cn(
-                                  'h-6 w-6 sm:h-7 sm:w-7 rounded-full bg-white text-[#54656f] hover:text-[#111b21] shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-black/10 flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer',
-                                  isPickerOpen
-                                    ? 'opacity-100 ring-2 ring-[#00a884]/30'
-                                    : 'opacity-0 group-hover:opacity-100 transition-opacity duration-150'
-                                )}
-                                title="Beri reaksi"
-                                aria-label="Beri reaksi"
-                              >
-                                <Smile size={15} />
-                              </button>
-
-                              {/* Quick Reaction Floating Popover */}
-                              {isPickerOpen && (
-                                <>
-                                  <div
-                                    className="fixed inset-0 z-30 cursor-default"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveReactionMessageId(null);
-                                    }}
-                                  />
-                                  <div
-                                    className={cn(
-                                      'absolute bottom-full mb-2 z-40 flex items-center gap-1 rounded-full bg-white px-2 py-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.18)] border border-black/10 animate-in fade-in zoom-in-95 duration-150 select-none',
-                                      item.isFromMe ? 'right-0 sm:right-auto sm:left-0' : 'left-0'
-                                    )}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {QUICK_REACTIONS.map((emoji) => {
-                                      const isSelected = item.reaction === emoji;
-                                      // Jika emoji ini sudah dipilih oleh orang lain (bukan saya), disable toggle
-                                      const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
-                                      const isProspectReaction = isSelected && item.reactionUserId === null && !item.isFromMe;
-                                      const isOtherCSReaction = isSelected && item.reactionUserId !== null && item.reactionUserId !== user?.id && !isAdmin;
-                                      const canToggleThisEmoji = !isProspectReaction && !isOtherCSReaction;
-                                      return (
-                                        <button
-                                          key={emoji}
-                                          type="button"
-                                          disabled={!canToggleThisEmoji}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (canToggleThisEmoji) reactMutation.mutate({ messageId: item.id, emoji });
-                                          }}
-                                          className={cn(
-                                            'h-8 w-8 rounded-full flex items-center justify-center text-lg hover:scale-125 active:scale-90 transition-all hover:bg-black/5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100',
-                                            isSelected && 'bg-emerald-100 ring-1 ring-emerald-500 scale-110'
-                                          )}
-                                          title={
-                                            isProspectReaction ? 'Reaksi jamaah (tidak bisa dihapus)' :
-                                            isOtherCSReaction ? 'Reaksi CS lain (tidak bisa dihapus)' :
-                                            isSelected ? `Hapus reaksi ${emoji}` : `Beri reaksi ${emoji}`
-                                          }
-                                        >
-                                          <span className="leading-none">{emoji}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          );
-
-                          return (
-                            <div className={cn(
-                              'group relative flex items-center gap-1.5 my-1',
-                              item.isFromMe ? 'justify-end' : 'justify-start',
-                              item.reaction ? 'mb-3' : 'mb-1'
-                            )}>
-                              {item.isFromMe && !isMessageDeleted && canSend && reactionTrigger}
-
-                              <div className={cn(
-                                'relative max-w-[82%] sm:max-w-[65%] rounded-lg px-3 py-1.5 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] transition-all',
-                                item.isFromMe
-                                  ? 'rounded-tr-none bg-[#d9fdd3] text-[#111b21]'
-                                  : 'rounded-tl-none bg-white text-[#111b21]',
-                                isMessageDeleted && !isRevealedByAdmin && 'opacity-85 bg-[#f0f2f5] text-[#667781] border border-black/5'
-                              )}>
-                                {/* WhatsApp Web Context Menu Trigger (ChevronDown) on Bubble Hover */}
-                                <div className="absolute top-1 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                  <DropdownMenu.Root>
-                                    <DropdownMenu.Trigger asChild>
-                                      <button
-                                        type="button"
-                                        className="h-5 w-5 rounded-full bg-white/90 hover:bg-white text-[#54656f] hover:text-[#111b21] shadow-xs flex items-center justify-center transition cursor-pointer border border-black/5"
-                                        title="Menu pesan"
-                                        aria-label="Menu pesan"
-                                      >
-                                        <ChevronDown size={13} />
-                                      </button>
-                                    </DropdownMenu.Trigger>
-                                    <DropdownMenu.Portal>
-                                      <DropdownMenu.Content
-                                        align={item.isFromMe ? 'end' : 'start'}
-                                        sideOffset={4}
-                                        className="z-50 min-w-[160px] rounded-xl bg-white p-1 shadow-[0_4px_16px_rgba(0,0,0,0.15)] border border-black/10 text-xs animate-in fade-in zoom-in-95"
-                                      >
-                                        <DropdownMenu.Item
-                                          disabled={!canReply}
-                                          onClick={() => {
-                                            if (!canReply) return;
-                                            setReplyingTo({
-                                              id: item.id,
-                                              messageId: item.messageId,
-                                              senderName: item.isFromMe ? 'Anda' : (item.senderName || selected.name),
-                                              text: item.messageText || (item.messageType === 'imageMessage' ? 'Foto' : 'Pesan'),
-                                            });
-                                            composerRef.current?.focus();
-                                          }}
-                                          className={cn(
-                                            'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] outline-none',
-                                            canReply ? 'hover:bg-[#f0f2f5] cursor-pointer' : 'opacity-40 cursor-not-allowed'
-                                          )}
-                                          title={canReply ? 'Balas pesan' : `Hanya Admin dan PIC (${selected.user?.name || 'CS lain'}) yang dapat membalas`}
-                                        >
-                                          <CornerUpLeft size={14} className="text-[#54656f]" />
-                                          <span>Balas {!canReply && '(Hanya Admin/PIC)'}</span>
-                                        </DropdownMenu.Item>
-
-                                        {item.messageText && !isMessageDeleted && (
-                                          <DropdownMenu.Item
-                                            onClick={() => {
-                                              void navigator.clipboard.writeText(item.messageText);
-                                              showToast('Teks pesan disalin');
-                                            }}
-                                            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer"
-                                          >
-                                            <Copy size={14} className="text-[#54656f]" />
-                                            <span>Salin</span>
-                                          </DropdownMenu.Item>
-                                        )}
-
-                                        {!isMessageDeleted && canSend && (
-                                          <DropdownMenu.Item
-                                            onClick={() => {
-                                              setActiveReactionMessageId(item.id);
-                                            }}
-                                            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer"
-                                          >
-                                            <Smile size={14} className="text-[#54656f]" />
-                                            <span>Reaksi</span>
-                                          </DropdownMenu.Item>
-                                        )}
-
-                                        <DropdownMenu.Item
-                                          onClick={() => {
-                                            starMutation.mutate(item.id);
-                                          }}
-                                          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer"
-                                        >
-                                          <Star size={14} className={cn(item.isStarred ? 'fill-amber-400 text-amber-500' : 'text-[#54656f]')} />
-                                          <span>{item.isStarred ? 'Hapus bintang' : 'Beri bintang'}</span>
-                                        </DropdownMenu.Item>
-
-                                        {/* Bukti transfer langsung dari chat: server menyalin berkas, tanpa unduh-unggah ulang */}
-                                        {(canReply || user?.role === 'finance') && !['deal', 'closed_won'].includes(selected?.status || '') && !isMessageDeleted && !item.isFromMe && item.mediaUrl && (item.messageType === 'imageMessage' || item.messageType === 'documentMessage') && (
-                                          selected?.paymentProofMessageId === item.messageId ? (
-                                            <DropdownMenu.Item
-                                              disabled
-                                              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-emerald-700 outline-none"
-                                            >
-                                              <ShieldCheck size={14} />
-                                              <span>Sudah diajukan ke Finance</span>
-                                            </DropdownMenu.Item>
-                                          ) : (
-                                            <DropdownMenu.Item
-                                              onClick={() => proofFromMessage.mutate(item.id)}
-                                              disabled={proofFromMessage.isPending}
-                                              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] hover:bg-[#f0f2f5] outline-none cursor-pointer"
-                                            >
-                                              <ShieldCheck size={14} className="text-emerald-600" />
-                                              <span>Kirim ke Finance sebagai bukti transfer</span>
-                                            </DropdownMenu.Item>
-                                          )
-                                        )}
-
-                                        {/* WhatsApp hanya menarik pesan ±2 hari terakhir (batas yang sama di server). */}
-                                        {!isMessageDeleted && item.isFromMe && canSend && Date.now() / 1000 - item.timestamp <= 2 * 24 * 60 * 60 && (
-                                          <>
-                                            <DropdownMenu.Separator className="my-1 h-px bg-[#e9edef]" />
-                                            <DropdownMenu.Item
-                                              onClick={() => setDeleteConfirmId(item.id)}
-                                              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-red-600 hover:bg-red-50 outline-none cursor-pointer font-medium"
-                                            >
-                                              <Trash2 size={14} />
-                                              <span>Hapus pesan</span>
-                                            </DropdownMenu.Item>
-                                          </>
-                                        )}
-                                      </DropdownMenu.Content>
-                                    </DropdownMenu.Portal>
-                                  </DropdownMenu.Root>
-                                </div>
-
-                                {isMessageDeleted && !isRevealedByAdmin ? (
-                                  /* Deleted Message view for regular user / unrevealed */
-                                  <div className="flex items-center gap-1.5 py-0.5 pr-6 text-[13px] italic text-[#667781] select-none">
-                                    <Ban size={14} className="shrink-0 text-[#8696a0]" />
-                                    <span>{item.isFromMe ? 'Anda telah menghapus pesan ini' : 'Pesan ini telah dihapus'}</span>
-                                    {isAdmin && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setRevealedDeletedIds((prev) => {
-                                            const next = new Set(prev);
-                                            next.add(item.id);
-                                            return next;
-                                          });
-                                        }}
-                                        className="ml-2 inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-bold text-amber-800 hover:bg-amber-500/25 not-italic cursor-pointer"
-                                        title="Lihat pesan yang dihapus (Mode Admin)"
-                                      >
-                                        <Eye size={11} /> Lihat
-                                      </button>
-                                    )}
-                                  </div>
-                                ) : (
-                                  /* Normal Message or Admin-Revealed Deleted Message */
-                                  <>
-                                    {/* Admin Revealed Banner */}
-                                    {isMessageDeleted && isRevealedByAdmin && (
-                                      <div className="mb-1.5 flex items-center justify-between gap-2 border-b border-amber-500/30 pb-1 text-xs font-bold text-amber-800">
-                                        <span className="flex items-center gap-1">
-                                          <Eye size={12} className="text-amber-600" />
-                                          Pesan Dihapus {item.deletedAt ? `(${new Date(item.deletedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})` : ''}
-                                        </span>
-                                        {!showDeletedMessages && (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setRevealedDeletedIds((prev) => {
-                                                const next = new Set(prev);
-                                                next.delete(item.id);
-                                                return next;
-                                              });
-                                            }}
-                                            className="text-amber-700 hover:underline cursor-pointer"
-                                          >
-                                            Tutup
-                                          </button>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* Sender Name (CS name on outgoing, contact name on incoming) - always shown */}
-                                    {item.isFromMe && item.senderName && (
-                                      <p className="text-xs font-bold text-[#008069] mb-0.5 leading-tight">
-                                        {item.senderName}
-                                      </p>
-                                    )}
-                                    {!item.isFromMe && (
-                                      <p className="text-xs font-bold text-[#53bdeb] mb-0.5 leading-tight">
-                                        {item.senderName || selected.name || 'Jamaah'}
-                                      </p>
-                                    )}
-
-                                    {item.adPreview && <AdReplyCard ad={item.adPreview} isFromMe={item.isFromMe} />}
-
-                                    {/* Quoted Message Preview inside bubble */}
-                                    {(item.quotedText || item.quotedMessageId) && (
-                                      <div
-                                        role="button"
-                                        tabIndex={0}
-                                        aria-label="Lompat ke pesan yang dikutip"
-                                        onClick={() => scrollToMessage(item.quotedMessageId)}
-                                        onKeyDown={(event) => activateWithKeyboard(event, () => scrollToMessage(item.quotedMessageId))}
-                                        className={cn(
-                                          'mb-1.5 rounded border-l-4 px-2.5 py-1.5 text-xs cursor-pointer select-none transition-opacity hover:opacity-85',
-                                          item.isFromMe
-                                            ? 'border-[#00a884] bg-black/[0.04]'
-                                            : 'border-[#53bdeb] bg-[#f0f2f5]'
-                                        )}
-                                        title="Klik untuk menuju ke pesan yang dikutip"
-                                      >
-                                        <div className="font-bold text-xs text-[#008069]">
-                                          {item.quotedSender || (item.isFromMe ? 'Anda' : selected.name)}
-                                        </div>
-                                        <div className="truncate text-[12px] text-[#54656f]">
-                                          {item.quotedText || 'Pesan'}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                     {/* Image Media Preview */}
-                                     {item.messageType === 'imageMessage' && (
-                                       <div className="mb-1.5 overflow-hidden rounded-xl max-w-[280px]">
-                                         {item.mediaUrl ? (
-                                           <div
-                                             role="button"
-                                             tabIndex={0}
-                                             aria-label="Lihat gambar"
-                                             className="relative group cursor-pointer overflow-hidden rounded-xl border border-black/10 bg-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]"
-                                             onClick={() => setPreviewFlyer(item.mediaUrl)}
-                                             onKeyDown={(event) => activateWithKeyboard(event, () => setPreviewFlyer(item.mediaUrl))}
-                                           >
-                                             <img
-                                               src={resolveMediaUrl(item.mediaUrl)}
-                                               alt={item.messageText && item.messageText !== '[Gambar]' ? item.messageText : 'Foto'}
-                                               className="w-full max-h-[300px] object-cover rounded-xl transition duration-200 group-hover:scale-[1.01]"
-                                               loading="lazy"
-                                             />
-                                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                               <span className="bg-black/70 text-white text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md">
-                                                 <Eye size={13} /> Perbesar
-                                               </span>
-                                             </div>
-                                           </div>
-                                         ) : (
-                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
-                                             <ImageIcon size={16} className="shrink-0 text-[#00a884]" />
-                                             <span className="font-semibold">Foto / Gambar</span>
-                                           </div>
-                                         )}
-                                       </div>
-                                     )}
-
-                                     {/* Stiker: gambar kecil tanpa bingkai, seperti di WhatsApp */}
-                                     {item.messageType === 'stickerMessage' && (
-                                       <div className="mb-1">
-                                         {item.mediaUrl ? (
-                                           <img
-                                             src={resolveMediaUrl(item.mediaUrl)}
-                                             alt="Stiker"
-                                             className="h-32 w-32 object-contain"
-                                             loading="lazy"
-                                           />
-                                         ) : (
-                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
-                                             <Sticker size={16} className="shrink-0 text-[#00a884]" />
-                                             <span className="font-semibold">Stiker</span>
-                                           </div>
-                                         )}
-                                       </div>
-                                     )}
-
-                                     {/* Riwayat telepon/video call WhatsApp (tidak bisa diangkat dari CRM) */}
-                                     {item.messageType === 'callLogMessage' && (
-                                       <div className="flex min-w-[200px] items-center gap-2.5 py-0.5">
-                                         <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-full', isMissedCall(item.messageText) ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-[#008069]')}>
-                                           <CallIcon text={item.messageText} size={18} />
-                                         </span>
-                                         <div className="min-w-0">
-                                           <p className={cn('text-sm font-semibold', isMissedCall(item.messageText) ? 'text-red-700' : 'text-[#111b21]')}>{item.messageText}</p>
-                                           {/masuk$/.test(item.messageText ?? '') && <p className="text-xs text-[#667781]">Angkat dari HP WhatsApp brand</p>}
-                                         </div>
-                                       </div>
-                                     )}
-
-                                     {/* Video Media Preview */}
-                                     {item.messageType === 'videoMessage' && (
-                                       <div className="mb-1.5 overflow-hidden rounded-xl max-w-[280px]">
-                                         {item.mediaUrl ? (
-                                           <div className="rounded-xl overflow-hidden bg-black border border-black/10">
-                                             <video
-                                               src={resolveMediaUrl(item.mediaUrl)}
-                                               controls
-                                               playsInline
-                                               className="w-full rounded-xl max-h-[220px]"
-                                               preload="metadata"
-                                             />
-                                           </div>
-                                         ) : (
-                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
-                                             <ImageIcon size={16} className="shrink-0 text-purple-500" />
-                                             <span className="font-semibold">Video</span>
-                                           </div>
-                                         )}
-                                       </div>
-                                     )}
-
-                                     {/* Audio / Voicenote Player */}
-                                     {(item.messageType === 'audioMessage' || item.messageType === 'pttMessage') && (
-                                       <div className="mb-1.5">
-                                         {item.mediaUrl ? (
-                                           <div className="flex items-center gap-2 rounded-2xl bg-black/5 p-2 min-w-[220px] max-w-[280px] border border-black/5">
-                                             <div className="grid h-8 w-8 place-items-center rounded-full bg-emerald-100 text-emerald-700 shrink-0">
-                                               <Mic size={16} />
-                                             </div>
-                                             <audio
-                                               src={resolveMediaUrl(item.mediaUrl)}
-                                               controls
-                                               className="h-8 flex-1 outline-none min-w-0"
-                                               preload="metadata"
-                                             />
-                                           </div>
-                                         ) : (
-                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
-                                             <Mic size={16} className="shrink-0 text-amber-600" />
-                                             <span className="font-semibold">Pesan Suara (Voice Note)</span>
-                                           </div>
-                                         )}
-                                       </div>
-                                     )}
-
-                                     {/* Document / File */}
-                                     {item.messageType === 'documentMessage' && (
-                                       <div className="mb-1.5">
-                                         {item.mediaUrl ? (
-                                           <a
-                                             href={resolveMediaUrl(item.mediaUrl)}
-                                             download={item.messageText || 'dokumen'}
-                                             target="_blank"
-                                             rel="noopener noreferrer"
-                                             className="flex items-center justify-between gap-3 rounded-xl bg-black/5 p-2.5 text-xs hover:bg-black/10 transition border border-black/5 group"
-                                             title="Klik untuk mengunduh berkas"
-                                           >
-                                             <div className="flex items-center gap-2.5 min-w-0">
-                                               <div className="grid h-9 w-9 place-items-center rounded-lg bg-purple-100 text-purple-700 shrink-0">
-                                                 <FileText size={18} />
-                                               </div>
-                                               <div className="min-w-0">
-                                                 <p className="font-bold text-zinc-900 truncate max-w-[160px]">
-                                                   {item.messageText || 'Dokumen'}
-                                                 </p>
-                                                 <p className="text-xs text-zinc-500">Klik untuk mengunduh</p>
-                                               </div>
-                                             </div>
-                                             <div className="grid h-7 w-7 place-items-center rounded-full bg-white text-zinc-600 shadow-2xs group-hover:text-[#00a884] shrink-0">
-                                               <Download size={14} />
-                                             </div>
-                                           </a>
-                                         ) : (
-                                           <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs text-zinc-600">
-                                             <FileText size={16} className="shrink-0 text-sky-600" />
-                                             <span className="font-semibold">{item.messageText || 'Dokumen Berkas / PDF'}</span>
-                                           </div>
-                                         )}
-                                       </div>
-                                     )}
-
-                                     {Boolean(item.messageText) && item.messageType !== 'callLogMessage' &&
-                                       !['[Gambar]', '[Video]', '[Audio]', '[Voice Note]', '[Dokumen]', '[Stiker]', '[Lokasi]'].includes(item.messageText!.trim()) &&
-                                       // Pesan lama: foto/video yang tersimpan dengan nama berkas sebagai teks.
-                                       !(['imageMessage', 'videoMessage'].includes(item.messageType ?? '') && isMediaFileNameText(item.messageText!)) && (
-                                         <p className="text-base md:text-[14px] leading-relaxed whitespace-pre-wrap break-words text-[#111b21] mt-1">
-                                           {linkifyText(item.messageText!)}
-                                         </p>
-                                     )}
-                                   </>
-                                 )}
-
-                                {/* Timestamp & Read Receipts inside bubble */}
-                                <span className="float-right ml-3 mt-1 inline-flex items-center gap-1 text-xs text-[#667781] select-none leading-none">
-                                  {item.isStarred && (
-                                    <span title="Pesan berbintang">
-                                      <Star size={11} className="fill-amber-400 text-amber-500" />
-                                    </span>
-                                  )}
-                                  <span>{formatBubbleTime(item.timestamp)}</span>
-                                  {item.isFromMe && !isMessageDeleted && (
-                                    item.status === 'failed' ? (
-                                      <span title="Gagal terkirim" className="text-red-500">
-                                        <AlertCircle size={12} />
-                                      </span>
-                                    ) : item.status === 'pending' ? (
-                                      <span title="Menunggu" className="text-[#8696a0]">
-                                        <Clock size={11} />
-                                      </span>
-                                    ) : item.status === 'sent' ? (
-                                      <span title="Terkirim" className="text-[#8696a0] inline-flex items-center">
-                                        <Check size={14} />
-                                      </span>
-                                    ) : (
-                                      <span title={item.status === 'read' ? 'Sudah dibaca' : 'Tersampaikan'} className="inline-flex items-center">
-                                        <CheckCheck
-                                          size={15}
-                                          className={item.status === 'read' ? 'text-[#53bdeb]' : 'text-[#8696a0]'}
-                                        />
-                                      </span>
-                                    )
-                                  )}
-                                </span>
-
-                                {/* Pinned Reaction Emoji Badge on Bubble */}
-                                {item.reaction && !isMessageDeleted && (() => {
-                                  const isAdminUser = user?.role === 'superadmin' || user?.role === 'admin';
-                                  const isProspectReaction = item.reactionUserId === null && !item.isFromMe;
-                                  const isMyReaction = item.reactionUserId === user?.id;
-                                  const canRemoveReaction = !isProspectReaction && (isMyReaction || isAdminUser);
-                                  return (
-                                    <button
-                                      type="button"
-                                      disabled={!canRemoveReaction}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (canRemoveReaction) reactMutation.mutate({ messageId: item.id, emoji: item.reaction! });
-                                      }}
-                                      title={
-                                        isProspectReaction ? 'Reaksi dari jamaah' :
-                                        !isMyReaction && !isAdminUser ? 'Reaksi dari CS lain' :
-                                        'Klik untuk menghapus reaksi'
-                                      }
-                                      className={cn(
-                                        'absolute -bottom-2.5 right-2 flex items-center gap-0.5 rounded-full bg-white px-1.5 py-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.15)] border border-black/10 select-none z-10 transition-all',
-                                        canRemoveReaction ? 'cursor-pointer hover:scale-110 active:scale-95' : 'cursor-default opacity-90'
-                                      )}
-                                    >
-                                      <span className="text-[13px] leading-none">{item.reaction}</span>
-                                    </button>
-                                  );
-                                })()}
-                              </div>
-
-                              {!item.isFromMe && !isMessageDeleted && canSend && reactionTrigger}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    );
-                  })}
+                  {bubbleItems.map(({ item, dateLabel, isNewDate }) => {
+                      return (
+                        <MessageBubble
+                          key={item.id}
+                          item={item}
+                          isNewDate={isNewDate}
+                          dateLabel={dateLabel}
+                          isPickerOpen={activeReactionMessageId === item.id}
+                          isRevealedByAdmin={isAdmin && (showDeletedMessages || revealedDeletedIds.has(item.id))}
+                          isAdmin={isAdmin}
+                          showDeletedMessages={showDeletedMessages}
+                          canSend={canSend}
+                          canReply={canReply}
+                          selected={selected}
+                          user={user}
+                          composerRef={composerRef}
+                          setActiveReactionMessageId={setActiveReactionMessageId}
+                          setRevealedDeletedIds={setRevealedDeletedIds}
+                          setReplyingTo={setReplyingTo}
+                          setDeleteConfirmId={setDeleteConfirmId}
+                          setPreviewFlyer={setPreviewFlyer}
+                          reactMutate={reactMutation.mutate}
+                          starMutate={starMutation.mutate}
+                          proofMutate={proofFromMessage.mutate}
+                          proofPending={proofFromMessage.isPending}
+                          scrollToMessage={scrollToMessageStable}
+                          showToast={showToastStable}
+                        />
+                      );
+                    })}
                 </div>
               </div>
 
@@ -2673,7 +2011,7 @@ export function InboxPage() {
                       onBlur={() => setSlash(null)}
                       onKeyDown={(event) => {
                         if (handleSlashKey(event)) return;
-                        if (!mobile && event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                        if (!isTouchDevice() && event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                           event.preventDefault();
                           event.currentTarget.form?.requestSubmit();
                         }
@@ -2693,7 +2031,7 @@ export function InboxPage() {
                       disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia || isCompressing}
                       style={mobile ? { order: 3 } : undefined}
                       aria-label="Kirim pesan WhatsApp"
-                      title={mobile ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
+                      title={isTouchDevice() ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
                       className={cn(
                         'h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-white transition shadow-xs cursor-pointer',
                         canSend && (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia
@@ -2795,8 +2133,8 @@ export function InboxPage() {
             connected={isConnected}
             isOpen={Boolean(sidePanelTab)}
             activeTab={sidePanelTab}
-            onChangeTab={(tab) => setSidePanelTab(tab)}
-            onClose={() => setSidePanelTab(null)}
+            onChangeTab={changeSidePanelTab}
+            onClose={closeSidePanel}
             prospectId={selected.id}
             prospectName={selected.name}
             phone={selected.phone}
@@ -2805,14 +2143,14 @@ export function InboxPage() {
             brandId={brandId}
             query={query}
             activeBrand={activeBrand}
-            packages={packages.data ?? []}
+            packages={packages.data ?? NO_PACKAGES}
             packagesLoading={packages.isPending}
-            onInsertText={handleInsertDirectText}
-            onSendFlyer={(pkg) => openSendFlyerModal(pkg)}
-            onSendItineraryImage={(pkg) => void loadItineraryImageAsMediaPreview(pkg)}
-            onOpenPackagePicker={() => setShowPackagePickerModal(true)}
-            onPreviewImage={(url) => setPreviewFlyer(url)}
-            onShowToast={showToast}
+            onInsertText={insertTextStable}
+            onSendFlyer={sendFlyerStable}
+            onSendItineraryImage={sendItineraryStable}
+            onOpenPackagePicker={openPackagePicker}
+            onPreviewImage={setPreviewFlyer}
+            onShowToast={showToastStable}
             hasInboundMessage={(messages.data ?? []).some((message: any) => !message.isFromMe && !message.isDeleted && !['protocolMessage', 'reactionMessage'].includes(message.messageType))}
           />
         )}
@@ -3067,12 +2405,3 @@ export function InboxPage() {
   );
 }
 
-/** Panggilan yang tidak tersambung (tak terjawab/ditolak) ditandai merah. */
-function isMissedCall(text?: string | null) {
-  return /tak terjawab|ditolak/.test(text ?? '');
-}
-
-function CallIcon({ text, size }: { text?: string | null; size: number }) {
-  if (isMissedCall(text)) return <PhoneMissed size={size} aria-hidden="true" />;
-  return /video/i.test(text ?? '') ? <Video size={size} aria-hidden="true" /> : <Phone size={size} aria-hidden="true" />;
-}

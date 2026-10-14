@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest';
 const SRC = join(__dirname);
 const EXEMPT = new Set([
   'features/chat/InboxPage.tsx',
+  'features/chat/MessageBubble.tsx',
+  'features/chat/ConversationRow.tsx',
   'features/chat/ChatProspectProfile.tsx',
   'features/chat/ChatCopilotPanel.tsx',
   'features/chat/EmojiPicker.tsx',

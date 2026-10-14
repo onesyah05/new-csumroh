@@ -31,3 +31,16 @@ export function useAppViewport() {
     };
   }, []);
 }
+
+/**
+ * Enter di kolom pesan: HP/tablet memakai Enter sebagai baris baru (kirim lewat tombol), sedangkan laptop dengan
+ * keyboard fisik mengirim. Diputuskan dari perangkat, bukan lebar layar: jendela laptop yang sempit atau layar sentuh
+ * (pointer coarse) tetap laptop.
+ */
+export function isTouchDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
+  if (uaData?.mobile !== undefined) return uaData.mobile;
+  // iPadOS meminta situs desktop: UA tampak seperti Mac tetapi bertitik sentuh banyak.
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}

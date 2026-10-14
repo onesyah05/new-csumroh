@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
 import { AlertCircle, ArrowLeft, X } from 'lucide-react';
@@ -21,12 +21,32 @@ interface ChatSidePanelProps {
   /** Sudah ada pesan masuk dari prospek: syarat tombol Saran balasan AI. */
   hasInboundMessage?: boolean;
 }
-export function ChatSidePanel(props: ChatSidePanelProps) {
+/** `memo`: mengetik pesan di Inbox tidak merender ulang profil/copilot; props fungsi dari induk harus beridentitas tetap. */
+export const ChatSidePanel = memo(function ChatSidePanel(props: ChatSidePanelProps) {
   const { user } = useAuth();
   const [overlay, setOverlay] = useState(() => window.matchMedia('(max-width: 1279px)').matches);
   const trigger = useRef<HTMLElement | null>(null);
   const inserted = useRef(false);
   const [profileTab, setProfileTab] = useState<ProfileTab>('package');
+  // Tutup seketika: menutup lewat URL (router) menunggu render halaman penuh; panel disembunyikan lebih dulu agar klik terasa langsung.
+  const [closing, setClosing] = useState(false);
+  useEffect(() => { setClosing(false); }, [props.isOpen]);
+  // Jaring pengaman: bila penutupan tidak jadi terjadi (URL tak berubah), panel tampil lagi.
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(() => setClosing(false), 1500);
+    return () => clearTimeout(timer);
+  }, [closing]);
+  const close = () => {
+    setClosing(true);
+    props.onClose();
+    // Panel ter-unmount seketika sehingga fokus tidak dikembalikan oleh Dialog: kembalikan ke pemicu, atau ke kolom pesan bila teks baru disisipkan.
+    requestAnimationFrame(() => {
+      if (inserted.current) document.querySelector<HTMLTextAreaElement>('[data-chat-composer]')?.focus();
+      else trigger.current?.focus();
+      inserted.current = false;
+    });
+  };
   useEffect(() => {
     trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const media = window.matchMedia('(max-width: 1279px)');
@@ -52,11 +72,11 @@ export function ChatSidePanel(props: ChatSidePanelProps) {
     setProfileTab(tab);
     props.onChangeTab('profile');
   }
-  function insert(text: string) { inserted.current = true; props.onInsertText(text); if (overlay) props.onClose(); }
+  function insert(text: string) { inserted.current = true; props.onInsertText(text); if (overlay) close(); }
   const content = <aside className="inbox-copilot is-open sales-panel flex h-full min-h-0 flex-col border-l border-zinc-200 bg-white" aria-label="Profil dan Copilot" style={overlay ? { position: 'fixed', height: '100dvh' } : undefined}>
     {overlay && <Dialog.Title className="sr-only">Profil dan Copilot</Dialog.Title>}
     <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-3 py-2 md:hidden">
-      <Button variant="ghost" size="icon" aria-label="Kembali ke percakapan" onClick={props.onClose}><ArrowLeft size={20} /></Button>
+      <Button variant="ghost" size="icon" aria-label="Kembali ke percakapan" onClick={close}><ArrowLeft size={20} /></Button>
       <div className="min-w-0"><p className="truncate text-sm font-semibold">{prospect?.name || props.prospectName}</p><p className="truncate text-xs text-zinc-600">{props.activeBrand?.name} · {props.activeTab === 'copilot' ? 'Copilot' : 'Profil prospek'}</p></div>
     </div>
     {/* Satu baris tab: identitas jamaah sudah ada di header chat, jadi panel langsung ke pekerjaan. */}
@@ -91,7 +111,7 @@ export function ChatSidePanel(props: ChatSidePanelProps) {
       <div className={props.activeTab === 'copilot' ? 'h-full' : 'hidden'}><ChatCopilotPanel prospectId={props.prospectId} revision={prospect?.updatedAt} prospectName={prospect?.name || props.prospectName} packageId={prospect?.packageId ?? props.packageId} packageName={props.packages.find(pkg => pkg.id === prospect?.packageId)?.name || props.packageName} brandName={props.activeBrand?.name} brandId={props.brandId} query={props.query} stage={prospect?.status} objectionCategory={prospect?.objectionCategory} objection={prospect?.objectionNotes} hasInboundMessage={props.hasInboundMessage} onInsertText={insert} onShowToast={props.onShowToast} /></div>
     </div>
   </aside>;
-  if (!props.isOpen) return null;
+  if (!props.isOpen || closing) return null;
   if (!overlay) return content;
-  return <Dialog.Root open={props.isOpen} onOpenChange={open => { if (!open) props.onClose(); }}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-30 bg-black/25" /><Dialog.Content asChild aria-describedby={undefined} onCloseAutoFocus={event => { event.preventDefault(); if (!inserted.current) trigger.current?.focus(); else requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-chat-composer]')?.focus()); }}>{content}</Dialog.Content></Dialog.Portal></Dialog.Root>;
-}
+  return <Dialog.Root open={props.isOpen} onOpenChange={open => { if (!open) close(); }}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-30 bg-black/25" /><Dialog.Content asChild aria-describedby={undefined} onCloseAutoFocus={event => { event.preventDefault(); if (!inserted.current) trigger.current?.focus(); else requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-chat-composer]')?.focus()); }}>{content}</Dialog.Content></Dialog.Portal></Dialog.Root>;
+});
