@@ -7,6 +7,7 @@ import { useUiStore } from './store';
 import { pushNotificationToast } from './toast';
 import { openNotificationPanel } from '../features/notifications/NotificationBell';
 import { playNotificationSound } from '../lib/notificationSound';
+import { appendIncomingMessage, type IncomingMessage } from './messageCache';
 
 export function SocketBridge() {
   const { user } = useAuth();
@@ -82,16 +83,8 @@ export function SocketBridge() {
     };
     const refreshLists = () => scheduleRefresh('conversations', 'prospects', 'contacts', 'dashboard', 'verification-queue');
 
-    // Pesan baru langsung masuk ke chat yang sedang terbuka (tanpa memuat ulang riwayat), lalu daftar menyusul.
-    const onMessageNew = (message?: { id?: number; prospectId?: number | null; remoteJid?: string; timestamp?: number }) => {
-      if (message?.id) {
-        queryClient.setQueriesData<any[]>({ queryKey: ['messages'] }, (old) => {
-          if (!Array.isArray(old) || old.some((m) => m.id === message.id)) return old;
-          const sameConversation = old.some((m) => (message.prospectId && m.prospectId === message.prospectId) || (message.remoteJid && m.remoteJid === message.remoteJid));
-          if (!sameConversation) return old;
-          return [...old, message].sort((a, b) => (a.timestamp - b.timestamp) || (a.id - b.id));
-        });
-      }
+    const onMessageNew = (message?: IncomingMessage) => {
+      appendIncomingMessage(queryClient, message);
       refreshLists();
     };
     // Reaksi/hapus/bintang mengubah isi chat terbuka; daftar hanya bila pesan terakhir ikut berubah.
