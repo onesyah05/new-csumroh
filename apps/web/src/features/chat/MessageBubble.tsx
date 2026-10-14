@@ -341,12 +341,12 @@ export const MessageBubble = memo(function MessageBubble({
   
                             {/* Sender Name (CS name on outgoing, contact name on incoming) - always shown */}
                             {item.isFromMe && item.senderName && (
-                              <p className="text-xs font-bold text-[#008069] mb-0.5 leading-tight">
+                              <p className="text-xs font-bold text-[#008069] mb-0.5 leading-tight max-w-[24ch] truncate" title={item.senderName ?? undefined}>
                                 {item.senderName}
                               </p>
                             )}
                             {!item.isFromMe && (
-                              <p className="text-xs font-bold text-[#53bdeb] mb-0.5 leading-tight">
+                              <p className="text-xs font-bold text-[#53bdeb] mb-0.5 leading-tight max-w-[24ch] truncate" title={item.senderName || selected.name || 'Jamaah'}>
                                 {item.senderName || selected.name || 'Jamaah'}
                               </p>
                             )}
