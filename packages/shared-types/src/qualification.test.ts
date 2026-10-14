@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allTargetMonthKeys, joinExtraMonths, matchPackages, parseExtraMonths, qualificationMissing } from './qualification.js';
+import { allTargetMonthKeys, joinExtraMonths, matchPackages, parseExtraMonths, qualificationMissing, validateExtraMonths } from './qualification.js';
 
 describe('syarat kualifikasi', () => {
   it('paspor dan domisili opsional; bulan, 1 dewasa, dan budget wajib', () => {
@@ -13,6 +13,14 @@ describe('bulan tambahan', () => {
     expect(parseExtraMonths('2027-01, 2027-02,2027-01,xx,2027-13')).toEqual(['2027-01', '2027-02']);
     expect(parseExtraMonths(null)).toEqual([]);
     expect(joinExtraMonths(['2027-01', '2027-01', 'bad', '2027-02'])).toBe('2027-01,2027-02');
+  });
+
+  it('validasi masukan: valid dan unik; maksimal 3; bulan utama dibuang diam-diam', () => {
+    expect(validateExtraMonths('2027-01, 2026-12', '2026-12')).toEqual({ keys: ['2027-01'] });
+    expect(validateExtraMonths('', null)).toEqual({ keys: [] });
+    expect(validateExtraMonths('Januari', null)).toHaveProperty('error');
+    expect(validateExtraMonths('2027-01,2027-01', null)).toHaveProperty('error');
+    expect(validateExtraMonths('2027-01,2027-02,2027-03,2027-04', null)).toHaveProperty('error');
   });
 
   it('bulan utama + tambahan tanpa duplikat; tanpa bulan utama hanya tambahan', () => {

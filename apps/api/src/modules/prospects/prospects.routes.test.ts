@@ -818,10 +818,20 @@ describe('Kualifikasi: syarat, penjaga, dan pilihan baku', () => {
     expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: 'Januari' } })).status).toBe(422);
     expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '' } })).status).toBe(200);
     expect(prospect(7).targetMonthsExtra).toBeNull();
-    // Tanpa bulan utama, bulan tambahan saja tidak membuat kualifikasi lengkap.
+    // Tanpa bulan utama, bulan tambahan saja tidak membuat kualifikasi lengkap dan tidak disimpan.
     seedProspect(8, { status: 'contact', targetMonth: null, paxQuad: 2, budgetRange: '25–30 Juta' });
     await invoke('patch', '/:id/profile', { id: 8, body: { targetMonthsExtra: '2027-01' } });
     expect(prospect(8).status).toBe('contact');
+    expect(prospect(8).targetMonthsExtra).toBeNull();
+  });
+
+  it('bulan tambahan ikut dibersihkan saat bulan utama dikosongkan, dan tidak pernah sama dengan bulan utama', async () => {
+    seedProspect(9, { status: 'contact', targetMonth: '2026-12', targetMonthsExtra: '2027-01,2027-02' });
+    // Bulan utama pindah ke salah satu bulan tambahan: bulan itu tidak lagi tercatat ganda.
+    expect((await invoke('patch', '/:id/profile', { id: 9, body: { targetMonth: '2027-01' } })).status).toBe(200);
+    expect(prospect(9).targetMonthsExtra).toBe('2027-02');
+    expect((await invoke('patch', '/:id/profile', { id: 9, body: { targetMonth: '' } })).status).toBe(200);
+    expect(prospect(9).targetMonthsExtra).toBeNull();
   });
 
   it('tahap Terkualifikasi manual memakai syarat yang sama', async () => {

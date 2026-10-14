@@ -55,6 +55,18 @@ export function parseExtraMonths(value?: string | null): string[] {
   const keys = (value ?? '').split(',').map((part) => part.trim()).filter((part) => MONTH_KEY.test(part));
   return [...new Set(keys)];
 }
+/**
+ * Validasi masukan klien: tiap bagian harus "YYYY-MM" valid, tanpa duplikat, maksimal MAX_EXTRA_MONTHS.
+ * Bulan yang sama dengan bulan utama dibuang diam-diam (bukan kesalahan).
+ */
+export function validateExtraMonths(value: string | null | undefined, primaryKey: string | null): { keys: string[] } | { error: string } {
+  const raw = (value ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+  if (raw.some((part) => !MONTH_KEY.test(part)) || new Set(raw).size !== raw.length) {
+    return { error: 'Bulan tambahan harus berupa bulan yang valid dan tidak boleh sama.' };
+  }
+  if (raw.length > MAX_EXTRA_MONTHS) return { error: `Bulan tambahan maksimal ${MAX_EXTRA_MONTHS}.` };
+  return { keys: raw.filter((key) => key !== primaryKey) };
+}
 export const joinExtraMonths = (keys: string[]) => [...new Set(keys.filter((key) => MONTH_KEY.test(key)))].join(',');
 
 /** Bulan utama + bulan tambahan (tanpa duplikat), untuk pencocokan paket. */

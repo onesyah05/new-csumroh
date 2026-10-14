@@ -1538,7 +1538,7 @@ export function InboxPage() {
 
                 {/* Right Action Tools */}
                 <div className="hidden md:flex items-center gap-2 shrink-0">
-                  {/* Kelompok status (satu garis): spam, tahap pipeline, PIC, sumber iklan. Chip sama dengan daftar percakapan. */}
+                  {/* Kelompok status (satu garis): spam, tahap pipeline, PIC. Chip sama dengan daftar percakapan. */}
                   {selected.spamAt && <ConversationTagChip tag={{ key: 'spam', label: 'Spam', tone: 'urgent' }} />}
                   {!selected.isGroup && stageTag(selected) && (
                     <ConversationTagButton
