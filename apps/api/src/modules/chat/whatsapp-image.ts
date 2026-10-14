@@ -8,6 +8,8 @@ const CONVERT_TO_JPEG = new Set(['webp', 'heif', 'tiff']);
 /** Sisi terpanjang hasil konversi: cukup untuk layar HP dan mencegah JPEG raksasa dari WebP besar. */
 const MAX_SIDE_PX = 2560;
 const JPEG_QUALITY = 88;
+/** Batas piksel gambar masuk: konversi yang melampauinya gagal dan berkas asli dikirim apa adanya. */
+const MAX_INPUT_PIXELS = 64_000_000;
 
 /**
  * WhatsApp menyampaikan foto JPEG/PNG. Di production, gambar WebP (galeri media, flyer paket, atau berkas ".jpg"
@@ -29,7 +31,7 @@ export async function normalizeWhatsappImage(input: OutgoingImage): Promise<Outg
   if (!format || !CONVERT_TO_JPEG.has(format)) return { ...input, converted: false };
 
   try {
-    const jpeg = await sharp(buffer)
+    const jpeg = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS })
       .rotate()
       .resize({ width: MAX_SIDE_PX, height: MAX_SIDE_PX, fit: 'inside', withoutEnlargement: true })
       .flatten({ background: '#ffffff' })

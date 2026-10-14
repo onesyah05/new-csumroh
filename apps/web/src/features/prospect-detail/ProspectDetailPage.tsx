@@ -8,7 +8,7 @@ import {
 import { ProspectNotes, ProspectTimeline } from '../prospects/ProspectHistory';
 import { customBadge } from '../custom/customApi';
 import { onRovingKey, rovingTabIndex } from '../../lib/roving';
-import { useProfileAutosave } from '../chat/profileAutosave';
+import { qualificationSaveDelay, useProfileAutosave } from '../chat/profileAutosave';
 import { cn } from '../../lib/cn';
 import { api } from '../../lib/api';
 import { useAuth } from '../../app/auth';
@@ -254,7 +254,8 @@ export function ProspectDetailPage() {
               <QualificationFields
                 layout="page"
                 value={form}
-                onChange={(patch) => autosave.change(patch, Object.keys(patch).some((key) => key.startsWith('pax')) ? 600 : 0)}
+                onChange={(patch) => autosave.change(patch, qualificationSaveDelay(patch))}
+                onTextBlur={() => void autosave.flush()}
                 disabled={locked}
                 bookingLocked={bookingLocked}
                 bookingLockedReason={custom && !won ? 'Diatur di Layanan Custom.' : undefined}

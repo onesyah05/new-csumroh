@@ -6,13 +6,20 @@ import { TOKEN_INFO } from '../scripts/context.js';
  * telepon lebih dulu, lalu deret angka panjang (NIK, rekening), lalu pola paspor.
  */
 const MASK = '[disamarkan]';
-export function redactPii(text: string) {
-  return text
+export function redactPii(text: string, options: { addresses?: boolean } = {}) {
+  const masked = text
     .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, MASK)
     .replace(/(?:\+?62|0)[\s-]?8[\d\s-]{7,14}\d/g, MASK)
     // Deret angka panjang (NIK 16 digit, rekening) walau dipisah spasi/titik; angka pendek seperti "2 orang" tetap.
     .replace(/\d[\d\s.-]{6,}\d/g, (match) => (match.replace(/\D/g, '').length >= 8 ? MASK : match))
     .replace(/\b[A-Z]{1,2}\s?\d{6,8}\b/g, MASK);
+  if (options.addresses === false) return masked;
+  // Alamat jalan dan wilayah administratif (Jl./Gang, RT/RW, Kel./Kec./Desa): nama dan nomornya ikut disamarkan.
+  // Dimatikan untuk pesan CS sendiri: alamat kantor brand bukan data pribadi dan dipakai mendeteksi alamat yang sudah terkirim.
+  return masked
+    .replace(/\b(?:jl|jln|jalan|gg|gang)\.?\s+[^\n,;]{3,60}/gi, MASK)
+    .replace(/\brt\.?\s?\d{1,3}\s?[/\\-]?\s?(?:rw\.?\s?\d{1,3})?/gi, MASK)
+    .replace(/\b(?:kel|kelurahan|kec|kecamatan|desa)\.?\s+[^\n,;.]{2,40}/gi, MASK);
 }
 
 /** Token yang boleh dipakai AI: kontrak script (SCRIPT_VARIABLES) ditambah token brand dari konteks pustaka. */

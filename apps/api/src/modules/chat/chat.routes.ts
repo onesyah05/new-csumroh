@@ -8,9 +8,9 @@ import { z } from 'zod';
 import { messageInputSchema } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
-import { authGuard, scopedBrandId } from '../../middleware/auth.js';
+import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
-import { asyncHandler, HttpError } from '../../utils/http.js';
+import { asyncHandler, HttpError, isDatabaseUnavailable } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker, storedReferral } from '../prospects/referral.service.js';
 import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, resolveQuote, sendingDevicePhone, sendTextToProspect } from './outbound.js';
@@ -34,7 +34,9 @@ import {
 } from '../notifications/notification.events.js';
 
 export const chatRouter = Router();
-chatRouter.use(authGuard);
+// Hanya role yang memakai chat. Tim LA (product) dan designer tidak membuka percakapan jamaah; tanpa gerbang ini
+// mereka hanya terblokir karena tidak punya brand, sehingga satu penugasan brand membuka seluruh chat.
+chatRouter.use(authGuard, requireRole('superadmin', 'admin', 'cs', 'finance'));
 
 /** Batas "hapus untuk semua" di WhatsApp (±2 hari); lewat dari itu jamaah tetap melihat pesannya. */
 const DELETE_FOR_EVERYONE_SECONDS = 2 * 24 * 60 * 60;
@@ -215,6 +217,25 @@ export function getLivechatConversationsForBrand(brandId: number) {
     include: conversationRelations,
     orderBy: { updatedAt: 'desc' },
   }));
+}
+
+/**
+ * Kolom teks yang tidak dibaca Pipeline (kartu, tabel, dan modal panduan membaca daftar ini; profil lengkap diambil
+ * per prospek lewat GET /prospects/:id). notes tetap dimuat untuk prospectScore lalu dibuang dari respons.
+ */
+const pipelineOmittedColumns = {
+  specialNeeds: true, decisionMaker: true, vaccineStatus: true, roomPreference: true,
+  adSourceUrl: true, metaReferralMarker: true, lostReasonDetail: true,
+} as const;
+
+/** Daftar percakapan untuk Pipeline: semua kolom yang dipakai Pipeline, tanpa teks panjang yang tidak ditampilkan. */
+export function getLivechatConversationsForPipeline(brandId: number) {
+  return buildLivechatConversations(brandId, (devicePhone) => prisma.prospect.findMany({
+    where: conversationWhere(brandId, devicePhone),
+    include: conversationRelations,
+    omit: pipelineOmittedColumns,
+    orderBy: { updatedAt: 'desc' },
+  }), { omitNotes: true });
 }
 
 /** Daftar percakapan ringan untuk Inbox: hanya kolom yang dipakai daftar (lihat conversationColumns). */
@@ -542,7 +563,7 @@ chatRouter.post('/prospects/:id/read', asyncHandler(async (req, res) => {
   const sameDevice = !target.devicePhone || !activePhone || target.devicePhone === activePhone;
   if (waJid && sameDevice) {
     void fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/read`, {
-      method: 'POST',
+      method: 'POST', signal: AbortSignal.timeout(15000),
       headers: {
         'content-type': 'application/json',
         'x-internal-secret': env.WA_GATEWAY_SECRET,
@@ -584,7 +605,7 @@ chatRouter.post('/prospects/:id/history-sync', asyncHandler(async (req, res) => 
     return;
   }
   const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/history`, {
-    method: 'POST',
+    method: 'POST', signal: AbortSignal.timeout(30000),
     headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
     // Kontak @lid tanpa nomor: phone tidak dikirim (gateway menolak string kosong).
     body: JSON.stringify({ jid: oldest.remoteJid, phone: normalizePhoneIdentifier(oldest.phone || target.phone) || undefined, messageId: oldest.messageId, isFromMe: oldest.isFromMe, timestamp: oldest.timestamp, count: 50 }),
@@ -732,7 +753,7 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
 
   // Forward to WA gateway with base64 media
   const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/media`, {
-    method: 'POST',
+    method: 'POST', signal: AbortSignal.timeout(90000),
     headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
     body: JSON.stringify({
       jid: remoteJid,
@@ -896,7 +917,7 @@ chatRouter.post('/messages/:id/react', asyncHandler(async (req, res) => {
   sendingDevicePhone(message, session);
 
   const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/react`, {
-    method: 'POST',
+    method: 'POST', signal: AbortSignal.timeout(20000),
     headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
     body: JSON.stringify({
       jid: remoteJid,
@@ -963,7 +984,7 @@ chatRouter.delete('/messages/:id', asyncHandler(async (req, res) => {
 
   // Tarik di WhatsApp dulu; CRM baru menandai terhapus bila jamaah juga tidak lagi melihatnya.
   const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/delete`, {
-    method: 'POST',
+    method: 'POST', signal: AbortSignal.timeout(20000),
     headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
     body: JSON.stringify({ jid: remoteJid, messageId: message.messageId, isFromMe: message.isFromMe }),
   }).catch(() => null);
@@ -1089,7 +1110,17 @@ async function promoteRepliedProspect(prospectId: number, brandId: number, realt
   queueCapiForStatus(prospectId, 'contact');
 }
 
-async function ingestGatewayMessage(input: GatewayMessageInput, options: { realtime: boolean; notifyInbound?: boolean }) {
+/** Sesi dan nomor brand: sama untuk seluruh pesan dalam satu batch, jadi dicari sekali per batch. */
+async function loadIngestContext(brandId: number) {
+  const [session, brand] = await Promise.all([
+    prisma.whatsappSession.findUnique({ where: { brandId } }),
+    prisma.brand.findUnique({ where: { id: brandId }, select: { phone: true } }),
+  ]);
+  return { session, brand };
+}
+type IngestContext = Awaited<ReturnType<typeof loadIngestContext>>;
+
+async function ingestGatewayMessage(input: GatewayMessageInput, options: { realtime: boolean; notifyInbound?: boolean; context?: IngestContext }) {
   const { brandId, messageId, remoteJid, senderName, text, timestamp, messageType, mediaUrl, isFromMe, referral } = input;
   if (
     !remoteJid ||
@@ -1112,8 +1143,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     return null;
   }
 
-  const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
-  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { phone: true } });
+  const { session, brand } = options.context ?? await loadIngestContext(brandId);
   // Percakapan diikat ke device yang menerimanya. Sumber utama: nomor akun dari gateway (pasti benar walau status sesi
   // di database sesaat kosong saat sambung ulang); status sesi hanya cadangan untuk gateway versi lama.
   const devicePhone = normalizePhoneIdentifier(input.devicePhone) || normalizePhoneIdentifier(session?.phoneNumber) || undefined;
@@ -1215,12 +1245,10 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     });
   }
 
-  // Gateway bisa mengirim ulang pesan yang sama: notifikasi pesan masuk hanya untuk pesan yang baru tersimpan.
-  const alreadyStored = options.realtime && !isFromMe
-    ? await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true } })
-    : null;
-
-  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { prospectId: true, status: true, messageText: true, mediaUrl: true } });
+  // Satu pembacaan untuk dua kebutuhan: pemilik/isi sebelumnya, dan apakah pesan ini baru (gateway bisa mengirim ulang
+  // pesan yang sama; notifikasi pesan masuk hanya untuk pesan yang baru tersimpan).
+  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true, prospectId: true, status: true, messageText: true, mediaUrl: true } });
+  const alreadyStored = options.realtime && !isFromMe ? previousOwner : null;
   const message = await prisma.chatMessage.upsert({
     where: { brandId_messageId: { brandId, messageId } },
     update: {
@@ -1518,6 +1546,7 @@ internalRouter.post('/messages/incoming', asyncHandler(async (req, res) => {
 internalRouter.post('/messages/history', asyncHandler(async (req, res) => {
   const input = z.object({ brandId: z.coerce.number().int().positive(), devicePhone: z.string().max(40).optional(), messages: z.array(z.unknown()).max(100) }).parse(req.body);
   const messages = [];
+  const context = await loadIngestContext(input.brandId);
   // Divalidasi per pesan: satu pesan rusak dilewati, bukan menggagalkan (lalu membuang) 49 pesan lain di batch.
   for (const raw of input.messages) {
     const parsed = gatewayMessageSchema.safeParse(raw);
@@ -1527,8 +1556,14 @@ internalRouter.post('/messages/history', asyncHandler(async (req, res) => {
     }
     const item = parsed.data;
     if (item.brandId !== input.brandId) throw new HttpError(400, 'Brand histori pesan tidak konsisten.');
-    const result = await ingestGatewayMessage({ ...item, devicePhone: item.devicePhone ?? input.devicePhone }, { realtime: false });
-    if (result) messages.push(result);
+    try {
+      const result = await ingestGatewayMessage({ ...item, devicePhone: item.devicePhone ?? input.devicePhone }, { realtime: false, context });
+      if (result) messages.push(result);
+    } catch (error) {
+      // Database mati: biarkan gagal agar gateway menahan batch dan mengirim ulang. Selain itu pesan ini saja yang dilewati.
+      if (isDatabaseUnavailable(error)) throw error;
+      console.warn('Skipping history message that failed to store', item.messageId, error instanceof Error ? error.message : error);
+    }
   }
   const latest = messages.sort((a, b) => b.timestamp - a.timestamp)[0];
   if (latest) emitToBrand(input.brandId, 'message:new', latest);

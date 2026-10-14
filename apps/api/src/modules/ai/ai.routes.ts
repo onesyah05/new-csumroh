@@ -119,8 +119,12 @@ aiRouter.post('/reply-suggestions', suggestLimiter, asyncHandler(async (req, res
   if (!canActOnProspect(user, prospect)) throw new HttpError(403, 'Hanya PIC prospek ini atau Admin yang dapat meminta saran.');
   if (isWonStatus(prospect.status)) throw new HttpError(409, 'Prospek sudah deal.');
 
-  const used = await prisma.aiSuggestion.count({ where: { userId: user.id, createdAt: { gte: startOfBusinessDay() } } });
+  const dayStart = startOfBusinessDay();
+  const used = await prisma.aiSuggestion.count({ where: { userId: user.id, createdAt: { gte: dayStart } } });
   if (used >= config.dailyLimitPerUser) throw new HttpError(429, 'Batas saran AI hari ini sudah tercapai.');
+  // Plafon biaya seluruh tim: hanya permintaan yang benar-benar memanggil penyedia AI yang dihitung.
+  const usedByTeam = await prisma.aiSuggestion.count({ where: { source: 'ai', createdAt: { gte: dayStart } } });
+  if (usedByTeam >= env.AI_DAILY_LIMIT_GLOBAL) throw new HttpError(429, 'Batas saran AI harian untuk seluruh tim sudah tercapai. Coba lagi besok.');
 
   const ids = await linkedProspectIds(prisma, prospect);
   const rows = await prisma.chatMessage.findMany({

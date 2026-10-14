@@ -30,6 +30,7 @@ vi.mock('../../db/prisma.js', () => ({
     notification: { deleteMany: mocks.deleteMany },
     notificationDedupe: { deleteMany: mocks.deleteMany },
     aiSuggestion: { deleteMany: mocks.deleteMany },
+    metaCapiLog: { deleteMany: mocks.deleteMany },
   },
 }));
 
@@ -185,5 +186,17 @@ describe('retensi', () => {
     // Ringkasan aktif yang sudah dibaca tetap disimpan; kunci dedupe disimpan lebih lama dari jendela invoice (30 hari).
     expect(wheres[0].NOT).toEqual({ activeKey: { not: null }, resolvedAt: null });
     expect(wheres[2].createdAt.lt).toEqual(new Date(NOW.getTime() - 35 * 86_400_000));
+  });
+
+  it('memangkas log CAPI: berhasil > 90 hari, gagal atau tertinggal > 30 hari', async () => {
+    mocks.deleteMany.mockClear();
+    const result = await retentionJob(NOW) as { capiLogs: number };
+    const wheres = mocks.deleteMany.mock.calls.map(([arg]: any) => arg.where);
+    const ok = wheres.find((w: any) => w.status === 'success');
+    const stale = wheres.find((w: any) => w.status?.in);
+    expect(ok.createdAt.lt).toEqual(new Date(NOW.getTime() - 90 * 86_400_000));
+    expect(stale.status.in).toEqual(['failed', 'pending']);
+    expect(stale.createdAt.lt).toEqual(new Date(NOW.getTime() - 30 * 86_400_000));
+    expect(result.capiLogs).toBe(2);
   });
 });

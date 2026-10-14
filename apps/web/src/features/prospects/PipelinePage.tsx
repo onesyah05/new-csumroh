@@ -538,7 +538,10 @@ export function PipelinePage() {
                 </button>
               ))}
             </div>
-            <Button variant="secondary" className="mobile-compact-control" onClick={exportCsv}><Download size={14} />Ekspor CSV</Button>
+            {/* Berisi nama dan nomor WhatsApp seluruh prospek brand: hanya Superadmin. */}
+            {user?.role === 'superadmin' && (
+              <Button variant="secondary" className="mobile-compact-control" onClick={exportCsv}><Download size={14} />Ekspor CSV</Button>
+            )}
           </div>
         }
       />

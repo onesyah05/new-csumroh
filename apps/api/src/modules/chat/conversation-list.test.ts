@@ -19,11 +19,11 @@ vi.mock('../../db/prisma.js', () => ({
     },
   },
 }));
-vi.mock('../../middleware/auth.js', () => ({ authGuard: (_req: any, _res: any, next: any) => next(), scopedBrandId: (_req: any, requested?: number) => requested ?? 1 }));
+vi.mock('../../middleware/auth.js', () => ({ authGuard: (_req: any, _res: any, next: any) => next(), requireRole: () => (_req: any, _res: any, next: any) => next(), scopedBrandId: (_req: any, requested?: number) => requested ?? 1 }));
 vi.mock('../notifications/notification.events.js', () => ({ dispatch: vi.fn(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn() }));
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: vi.fn() }));
 
-import { getLivechatConversationListForBrand, getLivechatConversationsForBrand } from './chat.routes.js';
+import { getLivechatConversationListForBrand, getLivechatConversationsForBrand, getLivechatConversationsForPipeline } from './chat.routes.js';
 
 /**
  * Field yang dibaca Inbox dari item daftar percakapan (apps/web: InboxPage, ConversationRow, MessageBubble,
@@ -85,5 +85,20 @@ describe('Daftar percakapan Inbox: kolom terbatas', () => {
     const full = await getLivechatConversationsForBrand(1);
     expect(light.map((item) => item.id)).toEqual(full.map((item) => item.id));
     expect(light.length).toBe(2);
+  });
+});
+
+describe('Daftar percakapan Pipeline: tanpa teks panjang yang tidak ditampilkan', () => {
+  it('membuang kolom teks tak terpakai di DB dan notes dari respons, tetap membawa kolom modal panduan', async () => {
+    await getLivechatConversationsForPipeline(1);
+    const args = mocks.conversationQuery.mock.calls[0]![0];
+    expect(args.omit).toMatchObject({ specialNeeds: true, adSourceUrl: true, metaReferralMarker: true, lostReasonDetail: true });
+    // Dipakai modal panduan Pipeline (ObjectionModal) dan tidak boleh ikut dibuang.
+    expect(args.omit).not.toHaveProperty('objectionNotes');
+    expect(args.omit).not.toHaveProperty('notes');
+    mocks.rows = [row(1)];
+    const [item] = await getLivechatConversationsForPipeline(1);
+    expect(item).not.toHaveProperty('notes');
+    expect(item).toHaveProperty('status');
   });
 });

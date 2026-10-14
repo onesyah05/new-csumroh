@@ -304,6 +304,7 @@ catalogRouter.delete('/brands/:id', requireRole('superadmin'), asyncHandler(asyn
   try {
     await fetch(`${env.WA_GATEWAY_URL}/sessions/${id}/logout`, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
     }).catch(() => null);
   } catch {}
@@ -429,7 +430,8 @@ catalogRouter.get('/packages', asyncHandler(async (req, res) => {
     where.quotaRemaining = { gt: 0, lte: 5 };
   } else if (quota === 'sold_out') {
     // AND dengan pencarian: menambah ke OR pencarian membuat semua paket habis ikut tampil.
-    where.AND = [...(where.AND ?? []), { OR: [{ quotaRemaining: 0 }, { quotaRemaining: null }] }];
+    // null = tanpa batas (tetap bisa dijual), jadi bukan "habis".
+    where.quotaRemaining = { equals: 0 };
   }
 
   // Status filter
@@ -601,8 +603,10 @@ catalogRouter.patch('/packages/:id', requireRole('superadmin', 'admin'), asyncHa
   if (!existing) throw new HttpError(404, 'Paket umroh tidak ditemukan.');
   assertCanManagePackages(req.user!, existing.brandId);
 
-  const schema = packageInputSchema.partial();
-  const input = schema.parse(req.body);
+  // expectedQuotaRemaining = kuota yang dilihat form saat dibuka; dipakai agar simpan tidak menimpa kuota yang
+  // berubah (verifikasi Deal, pembatalan) selagi form terbuka.
+  const schema = packageInputSchema.partial().extend({ expectedQuotaRemaining: z.number().int().nonnegative().nullable().optional() });
+  const { expectedQuotaRemaining, ...input } = schema.parse(req.body);
   // Itinerary lama yang sudah terlanjur panjang tidak memblokir edit field lain; hanya teks yang diubah yang diperiksa.
   if (input.itinerary !== existing.itinerary) await assertItineraryFits(input.itinerary);
   // Memindahkan paket ke brand lain: brand tujuan juga harus brand yang boleh ia kelola.
@@ -615,6 +619,14 @@ catalogRouter.patch('/packages/:id', requireRole('superadmin', 'admin'), asyncHa
   }
 
   const updatePayload: any = { ...input };
+  if (input.quotaRemaining !== undefined && expectedQuotaRemaining !== undefined) {
+    if ((input.quotaRemaining ?? null) === expectedQuotaRemaining) {
+      // Pengguna tidak mengubah kuota: nilai di server (mungkin sudah berkurang) dipertahankan.
+      delete updatePayload.quotaRemaining;
+    } else if (expectedQuotaRemaining !== (existing.quotaRemaining ?? null)) {
+      throw new HttpError(409, `Kuota paket baru saja berubah menjadi ${existing.quotaRemaining ?? 'tanpa batas'}. Muat ulang form lalu atur kuota lagi.`);
+    }
+  }
   if (input.departureDate !== undefined) {
     updatePayload.departureDate = input.departureDate ? new Date(input.departureDate) : null;
   }

@@ -142,7 +142,7 @@ export async function sendTextToProspect(input: OutboundTextInput) {
   const { quotedMessageId, quotedText, quotedSender, isQuotedFromMe } = await resolveQuote(brandId, prospect, input);
 
   const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/messages`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
+    method: 'POST', signal: AbortSignal.timeout(30000), headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
     body: JSON.stringify({
       jid: remoteJid,
       text: input.text,

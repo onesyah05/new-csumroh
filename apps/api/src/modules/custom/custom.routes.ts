@@ -136,7 +136,7 @@ async function syncProspect(tx: Prisma.TransactionClient, userId: number, prospe
   const qualification = qualificationFromCustom(row, prospect);
   const merged = { ...prospect, ...pax(input), ...qualification };
   const promote = isQualificationComplete(merged) && ['new', 'contact', 'identifying'].includes(prospect.status);
-  await tx.prospect.update({ where: { id: prospect.id }, data: { ...pax(input), ...qualification, ...(promote ? { status: 'qualified' } : {}) } });
+  await tx.prospect.update({ where: { id: prospect.id }, data: { ...pax(input), ...qualification, ...(promote ? { status: 'qualified', qualifiedAt: new Date() } : {}) } });
   if (promote) queueCapiForStatus(prospect.id, 'qualified');
   if (Object.keys(qualification).length || promote) {
     await tx.prospectLog.create({
@@ -328,7 +328,12 @@ customRouter.post('/:id/agree', asyncHandler(async (req, res) => {
     throw new HttpError(422, `Nilai deal ${formatRupiah(agreedPrice)} di bawah harga terendah ${formatRupiah(floor)}. Nilai ini tidak dapat disepakati.`);
   }
   await prisma.$transaction(async (tx) => {
-    await tx.customRequest.update({ where: { id: current.id }, data: { status: 'agreed', agreedPrice, agreedAt: new Date() } });
+    // Bersyarat pada hitungan yang tadi diperiksa: bila Tim LA menghitung ulang (harga terendah baru), CS diminta memuat ulang.
+    const agreed = await tx.customRequest.updateMany({
+      where: { id: current.id, status: current.status, quoteCount: current.quoteCount },
+      data: { status: 'agreed', agreedPrice, agreedAt: new Date() },
+    });
+    if (agreed.count !== 1) throw new HttpError(409, 'Harga baru saja dihitung ulang Tim LA. Muat ulang lalu sepakati harga terbaru.');
     await tx.prospect.update({ where: { id: prospect.id }, data: { dealValue: agreedPrice, packageId: current.basePackageId ?? null } });
     await tx.prospectLog.create({
       data: {

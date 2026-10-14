@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/button';
 
 type Pkg = MatchablePackage & Record<string, any>;
 type Qualification = {
-  targetMonth?: string | null; budgetRange?: string | null; passportStatus?: string | null;
+  targetMonth?: string | null; targetMonthsExtra?: string | null; budgetRange?: string | null; passportStatus?: string | null;
   paxQuad: number; paxTriple: number; paxDouble: number; paxInfant: number;
 };
 

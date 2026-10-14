@@ -64,3 +64,12 @@ describe('Gambar keluar WhatsApp', () => {
     expect(out.mimeType).toBe('image/jpeg');
   });
 });
+
+describe('Batas piksel gambar masuk', () => {
+  it('WebP raksasa (> 64 MP) tidak didekode: berkas asli dikirim apa adanya', async () => {
+    const huge = await make('webp', { width: 9000, height: 9000 });
+    const out = await normalizeWhatsappImage({ base64: b64(huge), mimeType: 'image/webp', fileName: 'bom.webp' });
+    expect(out.converted).toBe(false);
+    expect(out.fileName).toBe('bom.webp');
+  }, 60_000);
+});

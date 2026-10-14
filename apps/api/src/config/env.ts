@@ -20,6 +20,13 @@ const schema = z.object({
   SCHEDULER_ENABLED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
   // Batas waktu panggilan Asisten AI. Kunci API, model, dan peserta diatur Superadmin di dashboard (tabel ai_settings).
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  // Batas permintaan saran AI per hari untuk seluruh tim (plafon biaya, di luar batas per pengguna).
+  AI_DAILY_LIMIT_GLOBAL: z.coerce.number().int().positive().default(3000),
+  // Pengiriman ke Meta (CAPI realtime, audiens spam) hanya di production. Salinan database di laptop memuat token asli:
+  // tanpa penjaga ini, mengganti status prospek secara lokal mengirim konversi sungguhan ke Pixel produksi.
+  META_ALLOW_NON_PRODUCTION: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  // Kunci enkripsi lama (dipisah koma) agar token yang dienkripsi sebelum rotasi tetap terbaca sampai dienkripsi ulang.
+  META_TOKEN_ENCRYPTION_KEY_PREVIOUS: z.string().optional(),
 });
 
 export const env = schema.parse(process.env);

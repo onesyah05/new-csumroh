@@ -7,6 +7,8 @@ import { useUiStore } from './store';
 import { pushNotificationToast } from './toast';
 import { openNotificationPanel } from '../features/notifications/NotificationBell';
 import { playNotificationSound } from '../lib/notificationSound';
+import { appendIncomingMessage, type IncomingMessage } from './messageCache';
+import { createRefreshBatcher } from './refreshBatcher';
 
 export function SocketBridge() {
   const { user } = useAuth();
@@ -68,30 +70,21 @@ export function SocketBridge() {
 
     // Event realtime datang beruntun (WhatsApp ramai, impor riwayat). Muat ulang digabung per 1,5 detik dan hanya
     // untuk data yang terdampak; sebelumnya setiap event memuat ulang daftar + chat terbuka di setiap browser.
-    const pendingKeys = new Set<string>();
-    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    // Daftar chat dan isi chat cepat (1,5 dtk); data berat (Pipeline ±beberapa ratus KB, Ringkasan, kontak) lebih
+    // jarang (10 dtk) dan tidak dimuat saat tab tersembunyi: chat ramai tidak mengunduh ulang Pipeline tiap detik.
+    const invalidateKey = (key: string) => void queryClient.invalidateQueries({ queryKey: [key] });
+    const fastBatcher = createRefreshBatcher({ delayMs: 1_500, invalidate: invalidateKey });
+    const heavyBatcher = createRefreshBatcher({ delayMs: 10_000, onlyWhenVisible: true, invalidate: invalidateKey });
+    const HEAVY_KEYS = new Set(['prospects', 'contacts', 'dashboard', 'verification-queue']);
     const scheduleRefresh = (...keys: string[]) => {
-      keys.forEach((key) => pendingKeys.add(key));
-      if (flushTimer) return;
-      flushTimer = setTimeout(() => {
-        flushTimer = null;
-        const keysNow = [...pendingKeys];
-        pendingKeys.clear();
-        for (const key of keysNow) void queryClient.invalidateQueries({ queryKey: [key] });
-      }, 1500);
+      for (const key of keys) (HEAVY_KEYS.has(key) ? heavyBatcher : fastBatcher).add(key);
     };
+    const onVisible = () => { if (document.visibilityState === 'visible') heavyBatcher.flush(); };
+    document.addEventListener('visibilitychange', onVisible);
     const refreshLists = () => scheduleRefresh('conversations', 'prospects', 'contacts', 'dashboard', 'verification-queue');
 
-    // Pesan baru langsung masuk ke chat yang sedang terbuka (tanpa memuat ulang riwayat), lalu daftar menyusul.
-    const onMessageNew = (message?: { id?: number; prospectId?: number | null; remoteJid?: string; timestamp?: number }) => {
-      if (message?.id) {
-        queryClient.setQueriesData<any[]>({ queryKey: ['messages'] }, (old) => {
-          if (!Array.isArray(old) || old.some((m) => m.id === message.id)) return old;
-          const sameConversation = old.some((m) => (message.prospectId && m.prospectId === message.prospectId) || (message.remoteJid && m.remoteJid === message.remoteJid));
-          if (!sameConversation) return old;
-          return [...old, message].sort((a, b) => (a.timestamp - b.timestamp) || (a.id - b.id));
-        });
-      }
+    const onMessageNew = (message?: IncomingMessage) => {
+      appendIncomingMessage(queryClient, message);
       refreshLists();
     };
     // Reaksi/hapus/bintang mengubah isi chat terbuka; daftar hanya bila pesan terakhir ikut berubah.
@@ -187,7 +180,9 @@ export function SocketBridge() {
     socket.on('brand:updated', () => void queryClient.invalidateQueries({ queryKey: ['brands'] }));
 
     return () => {
-      if (flushTimer) clearTimeout(flushTimer);
+      fastBatcher.dispose();
+      heavyBatcher.dispose();
+      document.removeEventListener('visibilitychange', onVisible);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       unsubscribeSession();
       socket.close();

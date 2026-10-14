@@ -26,8 +26,9 @@ const people = (value: unknown) => `${Number(value) || 0} orang`;
 const FIELDS: Array<{ key: string; label: string; format: (value: unknown) => string }> = [
   { key: 'name', label: 'Nama', format: text },
   { key: 'phone', label: 'Nomor WhatsApp', format: text },
-  { key: 'city', label: 'Kota', format: text },
+  { key: 'city', label: 'Domisili', format: text },
   { key: 'targetMonth', label: 'Bulan keberangkatan', format: (v) => (v ? targetMonthLabel(String(v)) ?? String(v) : empty) },
+  { key: 'targetMonthsExtra', label: 'Bulan tambahan', format: (v) => (v ? String(v).split(',').map((key) => targetMonthLabel(key) ?? key).join(', ') : empty) },
   { key: 'paxQuad', label: 'Quad', format: people },
   { key: 'paxTriple', label: 'Triple', format: people },
   { key: 'paxDouble', label: 'Double', format: people },

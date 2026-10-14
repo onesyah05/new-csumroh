@@ -51,7 +51,7 @@ import { queryClient } from '../../app/query';
 import { Badge, statusLabels } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
-import { useProfileAutosave } from './profileAutosave';
+import { qualificationSaveDelay, useProfileAutosave } from './profileAutosave';
 import { assignedBrandIds, isHoldingUser } from '../../lib/scope';
 import { ProspectAvatar } from '../../components/ui/avatar';
 import { useWhatsAppAvatars } from '../../lib/avatars';
@@ -167,7 +167,7 @@ export function ChatProspectProfile({
   // Pilihan tersimpan segera; ketikan (nama, catatan, angka jamaah) menunggu jeda singkat.
   const updateFormField = (key: string, value: any, delay = 0) => { if (!locked) autosave.change({ [key]: value }, delay); };
   const updateFormFields = (patch: Record<string, any>) => {
-    if (!locked) autosave.change(patch, Object.keys(patch).some((key) => key.startsWith('pax')) ? 600 : 0);
+    if (!locked) autosave.change(patch, qualificationSaveDelay(patch));
   };
 
   const selectedPackage = useMemo(() => {
@@ -448,7 +448,7 @@ export function ChatProspectProfile({
             packagesLoading={packagesLoading}
             brandName={activeBrand?.name}
             selected={selectedPackage}
-            qualification={{ targetMonth: form.targetMonth, budgetRange: form.budgetRange, passportStatus: form.passportStatus, ...formPax }}
+            qualification={{ targetMonth: form.targetMonth, targetMonthsExtra: form.targetMonthsExtra, budgetRange: form.budgetRange, passportStatus: form.passportStatus, ...formPax }}
             locked={won || locked}
             saving={packageMutation.isPending}
             connected={connected}
@@ -487,10 +487,11 @@ export function ChatProspectProfile({
             />}
             <QualificationFields
               value={{
-                targetMonth: form.targetMonth, budgetRange: form.budgetRange, passportStatus: form.passportStatus,
+                targetMonth: form.targetMonth, targetMonthsExtra: form.targetMonthsExtra, budgetRange: form.budgetRange, passportStatus: form.passportStatus, city: form.city,
                 paxQuad: Number(form.paxQuad), paxTriple: Number(form.paxTriple), paxDouble: Number(form.paxDouble), paxInfant: Number(form.paxInfant),
               }}
               onChange={(patch) => updateFormFields(patch)}
+              onTextBlur={() => void autosave.flush()}
               disabled={locked}
               bookingLocked={won || Boolean(custom)}
               bookingLockedReason={custom && !won ? 'Diatur di Layanan Custom (tab Paket).' : undefined}

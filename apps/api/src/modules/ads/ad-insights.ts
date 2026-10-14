@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../../config/env.js';
 import { decryptMetaToken } from '../capi/meta-token.js';
-import { rememberAds } from './meta-ads.js';
+import { downloadMetaImage, rememberAds } from './meta-ads.js';
 
 /** Metrik per iklan dari Meta Insights (level ad) untuk rentang tanggal, ditambah thumbnail kreatif yang disalin lokal. */
 export type AdInsight = {
@@ -67,10 +67,9 @@ async function localThumbnails(adIds: string[], token: string) {
         const creative = body[id]?.creative;
         const source = creative?.image_url ?? creative?.object_story_spec?.video_data?.image_url ?? creative?.thumbnail_url;
         if (!source) return;
-        const image = await fetch(source, { signal: AbortSignal.timeout(15_000) });
-        const type = image.headers.get('content-type') ?? '';
-        if (!image.ok || !type.startsWith('image/')) return;
-        await fs.promises.writeFile(path.join(THUMB_DIR, `${id}.jpg`), Buffer.from(await image.arrayBuffer()));
+        const image = await downloadMetaImage(source);
+        if (!image) return;
+        await fs.promises.writeFile(path.join(THUMB_DIR, `${id}.jpg`), image);
         result.set(id, `/uploads/ad-creatives/${id}.jpg`);
       }));
     } catch (error) {

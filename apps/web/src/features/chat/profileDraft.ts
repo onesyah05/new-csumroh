@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export const profileTextFields = ['name', 'phone', 'city', 'targetMonth', 'budgetRange', 'roomPreference', 'decisionMaker', 'specialNeeds', 'passportStatus', 'vaccineStatus', 'notes', 'nextFollowupDate', 'packageId'] as const;
+export const profileTextFields = ['name', 'phone', 'city', 'targetMonth', 'targetMonthsExtra', 'budgetRange', 'roomPreference', 'decisionMaker', 'specialNeeds', 'passportStatus', 'vaccineStatus', 'notes', 'nextFollowupDate', 'packageId'] as const;
 export const paxFields = ['paxQuad', 'paxTriple', 'paxDouble', 'paxInfant'] as const;
 export type ProfileForm = Record<typeof profileTextFields[number], string> & Record<typeof paxFields[number], number>;
 export function profileForm(source: any): ProfileForm {

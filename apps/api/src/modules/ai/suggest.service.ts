@@ -19,7 +19,7 @@ export function promptMessages(rows: ChatLine[]) {
   return rows.flatMap((row) => {
     const text = row.messageText?.trim();
     const media = MEDIA_LABEL[row.messageType];
-    const body = [media, text ? redactPii(text).slice(0, MAX_MESSAGE_CHARS) : null].filter(Boolean).join(' ');
+    const body = [media, text ? redactPii(text, { addresses: !row.isFromMe }).slice(0, MAX_MESSAGE_CHARS) : null].filter(Boolean).join(' ');
     return body ? [{ fromCs: row.isFromMe, text: body }] : [];
   });
 }
@@ -119,7 +119,8 @@ export async function suggestReplies(input: Input): Promise<SuggestionResult> {
     missing: tokens.filter((token) => !usable(token)),
     warnings: context.warnings,
     messages,
-    instruction: input.instruction,
+    // Arahan CS bebas teks: dapat memuat nomor atau email yang ditempel, jadi disamarkan seperti riwayat chat.
+    instruction: input.instruction ? redactPii(input.instruction) : null,
   });
 
   let provider;

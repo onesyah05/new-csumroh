@@ -17,6 +17,13 @@ function toPayload(patch: Patch) {
   return payload;
 }
 
+/** Jeda simpan isian kualifikasi: jumlah jamaah dan teks bebas (domisili) menunggu; pilihan disimpan segera. */
+export function qualificationSaveDelay(patch: Record<string, unknown>) {
+  const keys = Object.keys(patch);
+  if (keys.includes('city')) return 800;
+  return keys.some((key) => key.startsWith('pax')) ? 600 : 0;
+}
+
 /**
  * Simpan otomatis per isian untuk panel profil. Setiap perubahan hanya mengirim isian yang diubah, sehingga
  * perubahan orang lain pada isian lain tidak tertimpa dan tidak perlu draft/tombol Simpan.

@@ -1,14 +1,14 @@
-import { AlertTriangle, Check } from 'lucide-react';
+import { AlertTriangle, Check, X } from 'lucide-react';
 import {
-  BUDGET_OPTIONS, PASSPORT_OPTIONS,
-  adultPaxOf, matchPackages, parseTargetMonth, passportWarning,
+  BUDGET_OPTIONS, MAX_EXTRA_MONTHS, PASSPORT_OPTIONS,
+  adultPaxOf, joinExtraMonths, matchPackages, parseExtraMonths, parseTargetMonth, passportWarning,
   qualificationMissing, targetMonthLabel, upcomingTargetMonths, type MatchablePackage,
 } from '@csumroh/shared-types';
 import { Select } from '../../components/ui/select';
 import { cn } from '../../lib/cn';
 
 export type QualificationValue = {
-  targetMonth: string; budgetRange: string; passportStatus: string;
+  targetMonth: string; targetMonthsExtra: string; budgetRange: string; passportStatus: string; city: string;
   paxQuad: number; paxTriple: number; paxDouble: number; paxInfant: number;
 };
 
@@ -32,10 +32,10 @@ const toCount = (text: string) => Math.min(200, Number(text.replace(/\D/g, '')) 
 
 /**
  * Isian kualifikasi yang sama di Inbox, modal Pipeline, dan halaman detail prospek. Boleh diisi bertahap;
- * status naik ke Terkualifikasi hanya bila semua isian bertanda * terisi. Kamar utama diturunkan dari pax.
+ * status naik ke Terkualifikasi hanya bila semua isian bertanda * terisi (paspor dan domisili opsional). Kamar utama diturunkan dari pax.
  */
 export function QualificationFields({
-  value, onChange, disabled, bookingLocked, bookingLockedReason, packages, selectedPackageId, onSelectPackage, departure, layout = 'panel', showSummary = true,
+  value, onChange, disabled, bookingLocked, bookingLockedReason, packages, selectedPackageId, onSelectPackage, departure, layout = 'panel', showSummary = true, onTextBlur,
 }: {
   value: QualificationValue;
   onChange(patch: Partial<QualificationValue>): void;
@@ -52,6 +52,8 @@ export function QualificationFields({
   layout?: 'panel' | 'page';
   /** Baris "Belum diisi" di atas isian; Inbox mematikannya karena sudah ada di "Langkah berikutnya". */
   showSummary?: boolean;
+  /** Kolom teks (domisili) ditinggalkan: induk menyimpan sisa ketikan yang masih menunggu jeda. */
+  onTextBlur?(): void;
 }) {
   const target = parseTargetMonth(value.targetMonth);
   const months = upcomingTargetMonths();
@@ -61,10 +63,16 @@ export function QualificationFields({
     ...(target.key && !months.some((m) => m.value === target.key) ? [{ value: target.key, label: targetMonthLabel(target.key)! }] : []),
     ...months,
   ];
+  // Bulan rencana tambahan (maks MAX_EXTRA_MONTHS); bulan utama tetap yang menentukan kualifikasi.
+  const extras = parseExtraMonths(value.targetMonthsExtra).filter((key) => key !== target.key);
+  const extraOptions = [
+    { value: NONE, label: '+ Tambah bulan' },
+    ...months.filter((m) => m.value !== target.key && !extras.includes(m.value)),
+  ];
   const adults = adultPaxOf(value);
   const missing = qualificationMissing(value);
   const warning = passportWarning({ passportStatus: value.passportStatus, targetMonth: value.targetMonth, departure });
-  const matches = packages && target.key ? matchPackages(packages, value) : null;
+  const matches = packages && target.key ? matchPackages(packages, { ...value, targetMonthsExtra: joinExtraMonths(extras) }) : null;
   const grid = layout === 'page' ? 'grid gap-3 sm:grid-cols-2' : 'grid gap-3 md:grid-cols-2 md:gap-2';
 
   return (
@@ -86,6 +94,37 @@ export function QualificationFields({
           options={monthOptions}
           className="w-full"
         />
+        {target.key && (extras.length > 0 || !disabled) && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {extras.map((key) => (
+              <span key={key} className="inline-flex items-center gap-1 rounded-full bg-zinc-100 py-1 pl-2.5 pr-1.5 text-xs font-medium text-zinc-800">
+                {targetMonthLabel(key)}
+                {!disabled && (
+                  <button
+                    type="button"
+                    aria-label={`Hapus bulan ${targetMonthLabel(key)}`}
+                    onClick={() => onChange({ targetMonthsExtra: joinExtraMonths(extras.filter((item) => item !== key)) })}
+                    className="grid h-4 w-4 place-items-center rounded-full text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900"
+                  >
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                )}
+              </span>
+            ))}
+            {!disabled && extras.length < MAX_EXTRA_MONTHS && (
+              <div className="w-40">
+                <Select
+                  aria-label="Tambah bulan rencana"
+                  value={NONE}
+                  onValueChange={(v) => { if (v !== NONE) onChange({ targetMonthsExtra: joinExtraMonths([...extras, v]) }); }}
+                  options={extraOptions}
+                  size="sm"
+                  className="w-full"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div>
@@ -135,7 +174,7 @@ export function QualificationFields({
           />
         </div>
         <div>
-          <span className={label}>Paspor *</span>
+          <span className={label}>Paspor <span className="font-normal text-zinc-500">(opsional)</span></span>
           <Select
             aria-label="Status paspor"
             value={value.passportStatus || NONE}
@@ -146,6 +185,20 @@ export function QualificationFields({
           />
         </div>
       </div>
+      <label className="block">
+        <span className={label}>Domisili <span className="font-normal text-zinc-500">(opsional)</span></span>
+        <input
+          type="text"
+          maxLength={100}
+          aria-label="Domisili"
+          placeholder="Kota atau kabupaten"
+          value={value.city}
+          disabled={disabled}
+          onChange={(e) => onChange({ city: e.target.value })}
+          onBlur={onTextBlur}
+          className="field"
+        />
+      </label>
       {warning && (
         <p role="alert" className="flex items-start gap-1.5 text-xs text-amber-800">
           <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden="true" />{warning}
@@ -155,7 +208,7 @@ export function QualificationFields({
       {matches && (
         <section aria-label="Paket yang cocok" className="border-t border-zinc-100 pt-3">
           <h4 className="text-xs font-semibold text-zinc-900">
-            Paket yang cocok · {targetMonthLabel(target.key)}
+            Paket yang cocok · {[target.key, ...extras].map((key) => targetMonthLabel(key)).join(', ')}
           </h4>
           {matches.length === 0 ? (
             <p className="mt-1 text-xs text-zinc-600">Tidak ada paket yang cocok.</p>

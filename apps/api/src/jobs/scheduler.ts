@@ -9,6 +9,7 @@ import {
   morningDigestJob,
   proofStaleJob,
   replySlaJob,
+  releaseClaim,
   retentionJob,
   SLA,
   whatsappDisconnectedJob,
@@ -36,7 +37,7 @@ const backgroundJobs: Job[] = [
   // Retry + backfill event Meta CAPI; job sendiri hanya bekerja tiap 5 menit.
   { name: 'capi-sync', run: capiSyncJob },
 ];
-const backgroundRunning = new Map<string, Promise<void>>();
+const backgroundRunning = new Map<string, Promise<unknown>>();
 
 function startBackgroundJob(job: Job, now: Date) {
   if (backgroundRunning.has(job.name)) return;
@@ -55,16 +56,24 @@ const dailyJobs: (Job & { hour: number })[] = [
   { name: 'retention', hour: SLA.retentionHour, run: retentionJob },
 ];
 
+/** true bila job selesai tanpa galat. */
 async function runJob(job: Job, now: Date) {
   const started = Date.now();
+  let ok = true;
   try {
     await job.run(now);
   } catch (error) {
+    ok = false;
     console.error(`Job ${job.name} gagal`, error);
   }
   const elapsed = Date.now() - started;
   if (elapsed > 10_000) console.warn(`Job ${job.name} lambat: ${elapsed} ms`);
+  return ok;
 }
+
+/** Percobaan job harian per hari (di memori): job yang gagal dicoba ulang, tetapi tidak tanpa batas. */
+const DAILY_MAX_ATTEMPTS = 3;
+const dailyAttempts = new Map<string, number>();
 
 /**
  * Satu putaran scheduler. Kunci per menit di tabel dedupe memastikan hanya satu proses API yang
@@ -77,7 +86,16 @@ export async function runTick(now = new Date()) {
   const today = businessDateKey(now);
   const hour = businessHour(now);
   for (const job of dailyJobs) {
-    if (hour >= job.hour && (await claimOnce(`scheduler:daily:${job.name}:${today}`))) await runJob(job, now);
+    if (hour < job.hour) continue;
+    const claimKey = `scheduler:daily:${job.name}:${today}`;
+    if (!(await claimOnce(claimKey))) continue;
+    const attemptKey = `${job.name}:${today}`;
+    const attempts = (dailyAttempts.get(attemptKey) ?? 0) + 1;
+    dailyAttempts.set(attemptKey, attempts);
+    if (dailyAttempts.size > 50) for (const key of dailyAttempts.keys()) if (!key.endsWith(`:${today}`)) dailyAttempts.delete(key);
+    const ok = await runJob(job, now);
+    // Gagal (mis. database atau layanan luar sedang bermasalah): klaim dilepas agar putaran berikutnya mencoba lagi.
+    if (!ok && attempts < DAILY_MAX_ATTEMPTS) await releaseClaim(claimKey);
   }
   return true;
 }

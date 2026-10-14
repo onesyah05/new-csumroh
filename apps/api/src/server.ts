@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { allowedOrigins, env } from './config/env.js';
 import { errorHandler } from './utils/http.js';
-import { authGuard } from './middleware/auth.js';
+import { bodyParsers } from './middleware/body-parsers.js';
 import { protectUploads } from './modules/auth/media-access.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { prospectsRouter } from './modules/prospects/prospects.routes.js';
@@ -41,27 +41,7 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 // JSON daftar percakapan/pesan menyusut ±80–90% dengan gzip; gambar/video (sudah terkompresi) dilewati filter bawaan.
 app.use(compression({ threshold: 1024 }));
 app.use(cors({ origin(origin, callback) { callback(null, !origin || allowedOrigins.includes(origin)); }, credentials: true }));
-// Batas body: kecil secara bawaan. Body besar (media/flyer/logo/bukti berbentuk base64) hanya diterima pada
-// rute unggahan dan SETELAH token diverifikasi, agar request anonim tidak bisa mengirim puluhan MB (DoS).
-const LARGE_BODY_ROUTES = [
-  /^\/api\/v1\/chat\/messages\/media$/,
-  /^\/api\/v1\/gallery\/assets$/,
-  /^\/api\/v1\/catalog\/brands\/upload-logo$/,
-  /^\/api\/v1\/catalog\/packages\/upload-flyer$/,
-  /^\/api\/v1\/catalog\/packages\/\d+\/flyer$/,
-  /^\/api\/v1\/catalog\/brands\/\d+\/itinerary-template$/,
-  /^\/api\/v1\/prospects\/\d+\/payment-proof(?:-upload)?$/,
-];
-const smallJson = express.json({ limit: '1mb' });
-const internalJson = express.json({ limit: '10mb' });
-const largeJson = express.json({ limit: '50mb' });
-app.use((req, res, next) => {
-  if (LARGE_BODY_ROUTES.some((route) => route.test(req.path))) {
-    return authGuard(req, res, (error?: unknown) => (error ? next(error) : largeJson(req, res, next)));
-  }
-  if (req.path.startsWith('/internal/')) return internalJson(req, res, next);
-  return smallJson(req, res, next);
-});
+app.use(bodyParsers);
 
 app.use(cookieParser());
 // Media chat & foto profil jamaah hanya untuk staf yang masuk (cookie media); flyer & logo tetap publik.

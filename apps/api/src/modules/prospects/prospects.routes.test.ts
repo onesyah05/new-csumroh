@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 
 type Row = Record<string, any>;
 const mocks = vi.hoisted(() => ({
-  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[], rejections: [] as Row[], picLocked: false },
+  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[], rejections: [] as Row[], picLocked: false, beforeTx: null as null | (() => void) },
   capi: vi.fn(),
   spamAudience: vi.fn(async () => undefined),
   send: vi.fn(),
@@ -125,6 +125,8 @@ const db = vi.hoisted(() => {
     // Serialized like conflicting InnoDB row locks; state is rolled back when the callback throws.
     $transaction: (callback: any) => {
       const run = tail.then(async () => {
+        // Simulasi request lain yang menang tepat sebelum transaksi ini mulai.
+        const hook = s().beforeTx; s().beforeTx = null; hook?.();
         const snapshot = structuredClone({ prospects: [...s().prospects], packages: [...s().packages], payments: s().payments, logs: s().logs });
         try {
           return await callback(client);
@@ -151,7 +153,7 @@ vi.mock('../../middleware/auth.js', () => ({
 vi.mock('../../realtime/socket.js', () => ({ emitToBrand: mocks.emit }));
 vi.mock('../capi/capi.service.js', () => ({ queueCapiForStatus: mocks.capi }));
 vi.mock('../ads/spam-audience.js', () => ({ updateSpamAudienceMember: mocks.spamAudience }));
-vi.mock('../chat/chat.routes.js', () => ({ getLivechatConversationsForBrand: mocks.conversations }));
+vi.mock('../chat/chat.routes.js', () => ({ getLivechatConversationsForPipeline: mocks.conversations }));
 vi.mock('../notifications/notification.events.js', () => ({
   dispatch: (task: () => Promise<unknown>) => { void task(); },
   notifyBookingCancelled: mocks.notify.bookingCancelled,
@@ -240,7 +242,7 @@ describe('R04 profile save', () => {
     await invoke('patch', '/:id/profile', { body: { city: 'Solo', nextFollowupDate: '2026-09-30', packageId: 2 } });
     const log = mocks.state.logs.at(-1)!;
     expect(log.title).toBe('Data prospek diubah');
-    expect(log.description).toContain('Kota: – → Solo');
+    expect(log.description).toContain('Domisili: – → Solo');
     expect(log.description).toContain('Follow-up berikutnya: – → 30 Sep 2026');
     expect(log.description).toContain('Paket: Paket Uji → Paket Baru');
     const count = mocks.state.logs.length;
@@ -785,15 +787,14 @@ describe('Tolak bukti transfer', () => {
 });
 
 describe('Kualifikasi: syarat, penjaga, dan pilihan baku', () => {
-  it('diisi bertahap; naik hanya bila semua lengkap (bulan, 1 dewasa, budget, paspor); bayi saja tidak cukup', async () => {
+  it('diisi bertahap; naik hanya bila bulan, 1 dewasa, dan budget lengkap; bayi saja tidak cukup; paspor opsional', async () => {
     seedProspect(2, { status: 'contact', targetMonth: null, roomPreference: null, paxQuad: 0, budgetRange: null, passportStatus: null });
-    await invoke('patch', '/:id/profile', { id: 2, body: { targetMonth: '2026-12', paxInfant: 1, budgetRange: '25–30 Juta', passportStatus: 'sudah_ada' } });
+    await invoke('patch', '/:id/profile', { id: 2, body: { targetMonth: '2026-12', paxInfant: 1, budgetRange: '25–30 Juta' } });
     expect(prospect(2).status).toBe('contact');
-    await invoke('patch', '/:id/profile', { id: 2, body: { paxDouble: 2, passportStatus: '' } });
-    expect(prospect(2).status).toBe('contact');
-    const ok = await invoke('patch', '/:id/profile', { id: 2, body: { passportStatus: 'belum_ada' } });
+    const ok = await invoke('patch', '/:id/profile', { id: 2, body: { paxDouble: 2 } });
     expect(ok.status).toBe(200);
-    expect(prospect(2)).toMatchObject({ status: 'qualified', roomPreference: 'Double' });
+    // Paspor belum diisi, tetapi kualifikasi sudah lengkap.
+    expect(prospect(2)).toMatchObject({ status: 'qualified', roomPreference: 'Double', passportStatus: null });
   });
 
   it('syarat tidak boleh dikosongkan setelah Terkualifikasi; profil lama yang belum lengkap tetap bisa disimpan', async () => {
@@ -802,9 +803,40 @@ describe('Kualifikasi: syarat, penjaga, dan pilihan baku', () => {
     expect(cleared.status).toBe(422);
     expect(cleared.error).toContain('Bulan keberangkatan');
     expect((await invoke('patch', '/:id/profile', { id: 3, body: { paxQuad: 0 } })).status).toBe(422);
-    expect((await invoke('patch', '/:id/profile', { id: 3, body: { passportStatus: '' } })).status).toBe(422);
+    // Paspor opsional: boleh dikosongkan walau sudah Terkualifikasi.
+    expect((await invoke('patch', '/:id/profile', { id: 3, body: { passportStatus: '' } })).status).toBe(200);
     seedProspect(4, { targetMonth: '' });
     expect((await invoke('patch', '/:id/profile', { id: 4, body: { city: 'Depok' } })).status).toBe(200);
+  });
+
+  it('bulan tambahan: disimpan unik tanpa bulan utama, maksimal 3, dan tidak memengaruhi syarat kualifikasi', async () => {
+    seedProspect(7, { status: 'contact', targetMonth: '2026-12', targetMonthsExtra: null });
+    const ok = await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '2027-01,2026-12,2027-02' } });
+    expect(ok.status).toBe(200);
+    // Bulan utama (2026-12) tidak ikut tersimpan sebagai tambahan.
+    expect(prospect(7).targetMonthsExtra).toBe('2027-01,2027-02');
+    expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '2027-01,2027-02,2027-03,2027-04' } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '2027-01,2027-01' } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: 'Januari' } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '' } })).status).toBe(200);
+    expect(prospect(7).targetMonthsExtra).toBeNull();
+    // Tanpa bulan utama, bulan tambahan saja tidak membuat kualifikasi lengkap dan tidak disimpan.
+    seedProspect(8, { status: 'contact', targetMonth: null, paxQuad: 2, budgetRange: '25–30 Juta' });
+    await invoke('patch', '/:id/profile', { id: 8, body: { targetMonthsExtra: '2027-01' } });
+    expect(prospect(8).status).toBe('contact');
+    expect(prospect(8).targetMonthsExtra).toBeNull();
+  });
+
+  it('bulan tambahan ikut dibersihkan saat bulan utama dikosongkan, dan tidak pernah sama dengan bulan utama', async () => {
+    seedProspect(9, { status: 'contact', targetMonth: '2026-12', targetMonthsExtra: '2027-01,2027-02' });
+    // Bulan utama pindah ke salah satu bulan tambahan: bulan itu tidak lagi tercatat ganda.
+    expect((await invoke('patch', '/:id/profile', { id: 9, body: { targetMonth: '2027-01' } })).status).toBe(200);
+    expect(prospect(9).targetMonthsExtra).toBe('2027-02');
+    expect((await invoke('patch', '/:id/profile', { id: 9, body: { targetMonth: '' } })).status).toBe(200);
+    expect(prospect(9).targetMonthsExtra).toBeNull();
+    // Pembersihan otomatis tercatat di riwayat dengan nilai yang benar-benar tersimpan.
+    const log = [...mocks.state.logs].reverse().find((l: any) => l.prospectId === 9 && l.actionType === 'profile_updated');
+    expect(log.description).toContain('Bulan tambahan: Februari 2027 → –');
   });
 
   it('tahap Terkualifikasi manual memakai syarat yang sama', async () => {
@@ -914,5 +946,42 @@ describe('Riwayat berhalaman', () => {
     } finally {
       (prisma.prospectLog as any).findMany = original;
     }
+  });
+});
+
+describe('Tugaskan PIC: masukan divalidasi', () => {
+  it('userId bukan angka atau notes terlalu panjang ditolak 422, bukan error 500', async () => {
+    expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: 'abc' } })).status).toBe(422);
+    expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: -3 } })).status).toBe(422);
+    expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: 7, notes: 'x'.repeat(501) } })).status).toBe(422);
+  });
+});
+
+describe('Celah sempit uang dan pipeline (review area 2)', () => {
+  it('pindah ke Batal ditolak bila Deal baru disahkan sebelum transaksi: seat tidak bocor', async () => {
+    seedProspect(30, { status: 'closing', packageId: 1 });
+    mocks.state.beforeTx = () => { Object.assign(mocks.state.prospects.get(30)!, { status: 'deal', seatsReserved: 2 }); };
+    const result = await invoke('patch', '/:id/status', { id: 30, body: { status: 'lose', lostReason: 'Tidak jadi' } });
+    expect(result.status).toBe(409);
+    expect(prospect(30).status).toBe('deal');
+    expect(prospect(30).seatsReserved).toBe(2);
+  });
+
+  it('penawaran dan invoice ditolak untuk prospek Batal', async () => {
+    seedProspect(31, { status: 'lose' });
+    expect((await invoke('post', '/:id/offer', { id: 31, body: { packageId: 1 } })).status).toBe(409);
+    const invoice = await invoke('post', '/:id/invoice', { id: 31, body: { invoiceAmount: 5_000_000 } });
+    expect(invoice.status).toBe(409);
+    expect(invoice.error).toContain('batal');
+    expect(prospect(31).status).toBe('lose');
+  });
+
+  it('invoice paket katalog tidak boleh melebihi nilai booking', async () => {
+    seedProspect(32, { status: 'offer', offerSentAt: new Date(), dealValue: 60_000_000 });
+    const over = await invoke('post', '/:id/invoice', { id: 32, body: { invoiceAmount: 70_000_000 } });
+    expect(over.status).toBe(422);
+    expect(over.error).toContain('melebihi nilai booking');
+    expect((await invoke('post', '/:id/invoice', { id: 32, body: { invoiceAmount: 15_000_000 } })).status).toBe(200);
+    expect(prospect(32).invoiceAmount).toBe(15_000_000);
   });
 });

@@ -34,6 +34,8 @@ import {
   TARGET_SEASONS,
   isQualificationComplete,
   parseTargetMonth,
+  joinExtraMonths,
+  validateExtraMonths,
   targetMonthLabel,
   primaryRoomOf,
   qualificationMissing,
@@ -45,7 +47,7 @@ import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { queueCapiForStatus } from '../capi/capi.service.js';
 import { updateSpamAudienceMember } from '../ads/spam-audience.js';
-import { getLivechatConversationsForBrand } from '../chat/chat.routes.js';
+import { getLivechatConversationsForPipeline } from '../chat/chat.routes.js';
 import { normalizePhoneIdentifier, sendTextToProspect } from '../chat/outbound.js';
 import { ensureAdLabels } from '../ads/meta-ads.js';
 import { detectProofType, resolveChatMediaFile } from '../../utils/safe-path.js';
@@ -125,7 +127,7 @@ prospectsRouter.get('/', asyncHandler(async (req, res) => {
   const filter = req.query.filter ? String(req.query.filter) : undefined;
 
   // STRICT RULE: Data pipeline HANYA menampilkan kontak yang ada di live chat WA
-  const livechatList = await getLivechatConversationsForBrand(brandId);
+  const livechatList = await getLivechatConversationsForPipeline(brandId);
   // Chat spam tidak ikut pipeline (tetap terlihat di Inbox dengan label Spam).
   let prospects = livechatList.filter((c) => !c.isOwn && c.remoteJid !== '0@s.whatsapp.net' && !c.spamAt);
 
@@ -162,6 +164,7 @@ prospectsRouter.get('/', asyncHandler(async (req, res) => {
           if (item.phone) params.set('phone', item.phone);
           const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/profile-pic?${params.toString()}`, {
             headers: { 'x-internal-secret': env.WA_GATEWAY_SECRET },
+            signal: AbortSignal.timeout(15_000),
           });
           if (response.ok) {
             const body = await response.json() as { success: boolean; data?: { url?: string | null } };
@@ -291,7 +294,8 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
         where: { id: existing.id, status: { in: WON_STATUSES } },
         data: { status: status as DbProspectStatus, seatsReserved: 0, ...(lostReason ? { lostReason } : {}) },
       });
-      if (flipped.count === 1 && existing.packageId && existing.seatsReserved > 0) {
+      if (flipped.count !== 1) throw new HttpError(409, 'Status prospek baru saja berubah. Muat ulang lalu coba lagi.');
+      if (existing.packageId && existing.seatsReserved > 0) {
         await tx.package.updateMany({
           where: { id: existing.packageId, quotaRemaining: { not: null } },
           data: { quotaRemaining: { increment: existing.seatsReserved } },
@@ -299,14 +303,20 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
         released = existing.seatsReserved;
       }
     }
-    const updated = await tx.prospect.update({
-      where: { id: existing.id },
-      data: {
-        status: status as DbProspectStatus,
-        ...(isNewLost && lostReason ? { lostReason } : {}),
-      },
-      include,
-    });
+    if (!isCancellingDeal) {
+      // Bersyarat pada status yang tadi divalidasi: bila Finance baru saja mengesahkan Deal (kuota terpotong),
+      // permintaan ini ditolak, bukan menimpa status tanpa mengembalikan seat.
+      const moved = await tx.prospect.updateMany({
+        where: { id: existing.id, status: existing.status as DbProspectStatus },
+        data: {
+          status: status as DbProspectStatus,
+          ...(isNewLost && lostReason ? { lostReason } : {}),
+          ...(status === 'qualified' && !existing.qualifiedAt ? { qualifiedAt: new Date() } : {}),
+        },
+      });
+      if (moved.count !== 1) throw new HttpError(409, 'Status prospek baru saja berubah. Muat ulang lalu coba lagi.');
+    }
+    const updated = await tx.prospect.findUniqueOrThrow({ where: { id: existing.id }, include });
     // Prospek batal: permintaan layanan custom yang masih berjalan tidak lagi dihitung Tim LA.
     const customCancelled = isNewLost
       ? (await tx.customRequest.updateMany({ where: { prospectId: existing.id, status: { not: 'cancelled' } }, data: { status: 'cancelled' } })).count
@@ -426,8 +436,10 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
     throw new HttpError(403, 'Hanya Admin atau Superadmin yang dapat menugaskan PIC prospek.');
   }
   const { id, brandId, existing } = await findScopedProspect(req);
-
-  const targetUserId = req.body.userId ? Number(req.body.userId) : null;
+  const { userId: targetUserId = null, notes } = z.object({
+    userId: z.coerce.number().int().positive().nullish(),
+    notes: z.string().trim().max(500).optional(),
+  }).parse(req.body ?? {});
   let targetUser = null;
   if (targetUserId) {
     targetUser = await findEligiblePic(targetUserId, brandId);
@@ -447,7 +459,7 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
         title: targetUser
           ? `PIC dialihkan ke ${targetUser.name} oleh ${req.user!.name}`
           : `Penugasan PIC dilepas oleh ${req.user!.name}`,
-        description: req.body.notes || (targetUser ? `Penugasan resmi dari ${req.user!.role}` : 'Lead kembali ke antrean publik tim CS'),
+        description: notes || (targetUser ? `Penugasan resmi dari ${req.user!.role}` : 'Lead kembali ke antrean publik tim CS'),
       },
     });
     return p;
@@ -456,7 +468,7 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
   emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: targetUserId, userName: targetUser?.name ?? null });
   dispatch(() => notifyPicChange({
     prospect: { id, brandId, name: existing.name }, kind: 'assigned', fromUserId: existing.userId, toUserId: targetUserId,
-    toName: targetUser?.name, actor: req.user!, reason: req.body.notes,
+    toName: targetUser?.name, actor: req.user!, reason: notes,
   }));
   emitToBrand(brandId, 'prospect:updated', updated);
   res.json({ success: true, data: updated });
@@ -651,6 +663,14 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
     const parsed = parseTargetMonth(v);
     return parsed.key !== null && (!parsed.season || (TARGET_SEASONS as readonly string[]).includes(parsed.season));
   }, 'Bulan keberangkatan harus dipilih dari daftar bulan.');
+  // Bulan tambahan melengkapi bulan utama: divalidasi bersama, tidak pernah sama dengan bulan utama, dan ikut
+  // dikosongkan bila bulan utama dikosongkan (tanpa bulan utama tidak ada artinya).
+  if (input.targetMonthsExtra !== undefined || input.targetMonth !== undefined) {
+    const primaryKey = parseTargetMonth(input.targetMonth !== undefined ? input.targetMonth : existing.targetMonth).key;
+    const checked = validateExtraMonths(input.targetMonthsExtra !== undefined ? input.targetMonthsExtra : existing.targetMonthsExtra, primaryKey);
+    if ('error' in checked) throw new HttpError(422, checked.error);
+    data.targetMonthsExtra = primaryKey ? joinExtraMonths(checked.keys) || null : null;
+  }
   choice('budgetRange', (v) => BUDGET_OPTIONS.some((o) => o.value === v), 'Budget harus dipilih dari daftar.');
   choice('decisionMaker', (v) => DECISION_MAKER_OPTIONS.some((o) => o.value === v), 'Pengambil keputusan harus dipilih dari daftar.');
   choice('passportStatus', (v) => PASSPORT_OPTIONS.some((o) => o.value === v), 'Status paspor harus dipilih dari daftar.');
@@ -675,7 +695,10 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
 
   // Isian boleh bertahap; naik otomatis ke Terkualifikasi hanya bila semua syarat terisi.
   const promotedToQualified = isQualificationComplete(merged) && ['new', 'contact', 'identifying'].includes(existing.status);
-  if (promotedToQualified) data.status = 'qualified';
+  if (promotedToQualified) {
+    data.status = 'qualified';
+    if (!existing.qualifiedAt) data.qualifiedAt = new Date();
+  }
 
   // Penawaran yang sudah terkirim memakai jamaah/paket lama: catat agar CS mengirim ulang sebelum invoice.
   const bookingChanged = (['paxQuad', 'paxTriple', 'paxDouble', 'paxInfant'] as const).some((f) => input[f] !== undefined && input[f] !== existing[f])
@@ -687,7 +710,7 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
   const packageNames = packageChanged
     ? await prisma.package.findMany({ where: { id: { in: [existing.packageId, packageId].filter((v): v is number => Boolean(v)) } }, select: { id: true, name: true } })
     : [];
-  const changes = describeProfileChanges(existing as unknown as Record<string, unknown>, { ...rest, ...(nextFollowupDate !== undefined ? { nextFollowupDate: data.nextFollowupDate } : {}) }, packageChanged
+  const changes = describeProfileChanges(existing as unknown as Record<string, unknown>, { ...rest, ...(data.targetMonthsExtra !== undefined ? { targetMonthsExtra: data.targetMonthsExtra } : {}), ...(nextFollowupDate !== undefined ? { nextFollowupDate: data.nextFollowupDate } : {}) }, packageChanged
     ? { before: packageNames.find((pkg) => pkg.id === existing.packageId)?.name ?? null, after: packageNames.find((pkg) => pkg.id === packageId)?.name ?? null }
     : undefined);
 
@@ -813,6 +836,9 @@ prospectsRouter.post('/:id/offer', asyncHandler(async (req, res) => {
 
   if (isWonStatus(existing.status)) {
     throw new HttpError(409, 'Booking sudah Deal; nilai dan paket terkunci. Revisi booking melalui Finance/Admin.');
+  }
+  if (isLostStatus(existing.status)) {
+    throw new HttpError(409, 'Prospek berstatus batal. Aktifkan kembali prospek sebelum mengirim penawaran.');
   }
 
   // Layanan custom: nilai penawaran = nilai deal akhir yang disepakati CS (≥ harga terendah Tim LA).
@@ -972,6 +998,7 @@ prospectsRouter.post('/:id/activities', asyncHandler(async (req, res) => {
 prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
   if (isWonStatus(existing.status)) throw new HttpError(409, 'Prospek sudah Deal; pembayaran berikutnya dicatat di luar CRM.');
+  if (isLostStatus(existing.status)) throw new HttpError(409, 'Prospek berstatus batal. Aktifkan kembali prospek sebelum mengirim invoice.');
   await assertCanActOnProspect(req.user!, existing);
   // Klien lama mengirim nominal tagihan sebagai `dpAmount`; diterima sebagai alias tagihan, bukan kas.
   const input = invoiceInputSchema.parse({ invoiceAmount: req.body?.dpAmount, ...req.body });
@@ -998,6 +1025,18 @@ prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
     }
     if (await offerIsOutdated(existing)) {
       throw new HttpError(409, 'Jamaah atau paket berubah setelah penawaran terkirim. Kirim penawaran resmi ulang sebelum invoice.');
+    }
+  }
+  if (!custom) {
+    // Tagihan tidak boleh melebihi nilai booking: nilai penawaran, atau harga katalog bila belum ada penawaran.
+    const refPackageId = input.packageId ?? existing.packageId;
+    let ceiling = Number(existing.dealValue) || 0;
+    if (ceiling <= 0 && refPackageId) {
+      const refPackage = await prisma.package.findFirst({ where: { id: refPackageId, brandId } });
+      if (refPackage) ceiling = packageBookingValue(refPackage, existing);
+    }
+    if (ceiling > 0 && input.invoiceAmount > ceiling) {
+      throw new HttpError(422, `Tagihan melebihi nilai booking (Rp ${ceiling.toLocaleString('id-ID')}).`);
     }
   }
   if (!isWon && input.packageId) {

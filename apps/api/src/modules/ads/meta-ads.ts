@@ -52,6 +52,23 @@ export function isMetaCdnUrl(value?: string | null) {
   }
 }
 
+/** Batas ukuran gambar iklan yang disalin ke server. */
+export const MAX_AD_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Unduh gambar iklan dari CDN Meta: hanya host Meta (https), tipe image/*, dan ukuran dibatasi.
+ * null bila host tidak diizinkan, gagal, atau melewati batas.
+ */
+export async function downloadMetaImage(url?: string | null): Promise<Buffer | null> {
+  if (!isMetaCdnUrl(url)) return null;
+  const response = await fetch(url!, { signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  if (!response?.ok || !(response.headers.get('content-type') ?? '').startsWith('image/')) return null;
+  const declared = Number(response.headers.get('content-length') ?? 0);
+  if (declared > MAX_AD_IMAGE_BYTES) return null;
+  const data = Buffer.from(await response.arrayBuffer());
+  return data.length <= MAX_AD_IMAGE_BYTES ? data : null;
+}
+
 const isJpeg = (data: Buffer) => data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
 
 /**
@@ -63,12 +80,10 @@ export async function cacheAdThumbnail(adId?: string, url?: string, embeddedBase
   if (!adId || !isAdId(adId) || localThumbnail(adId, false)) return;
   try {
     await fs.promises.mkdir(THUMB_DIR, { recursive: true });
-    if (isMetaCdnUrl(url)) {
-      const image = await fetch(url!, { signal: AbortSignal.timeout(15_000) }).catch(() => null);
-      if (image?.ok && (image.headers.get('content-type') ?? '').startsWith('image/')) {
-        await fs.promises.writeFile(path.join(THUMB_DIR, `${adId}.jpg`), Buffer.from(await image.arrayBuffer()));
-        return;
-      }
+    const image = await downloadMetaImage(url);
+    if (image) {
+      await fs.promises.writeFile(path.join(THUMB_DIR, `${adId}.jpg`), image);
+      return;
     }
     const data = embeddedBase64 ? Buffer.from(embeddedBase64, 'base64') : null;
     if (data && isJpeg(data) && !localThumbnail(adId)) await fs.promises.writeFile(path.join(THUMB_DIR, `${adId}-wa.jpg`), data);

@@ -74,3 +74,17 @@ describe('templateViolations', () => {
     expect(templateViolations('a'.repeat(701))).toContain('lebih dari 700 karakter');
   });
 });
+
+describe('redactPii: alamat', () => {
+  it('menyamarkan alamat jalan dan wilayah dari jamaah', () => {
+    const out = redactPii('Rumah saya Jl. Melati Raya No 12, RT 03/RW 05, Kel. Sukamaju, Kec. Cibinong');
+    expect(out).not.toMatch(/Melati|Sukamaju|Cibinong|RT 03/);
+    expect(out).toContain('[disamarkan]');
+  });
+
+  it('pesan CS sendiri: alamat kantor tidak disamarkan (dipakai mendeteksi yang sudah terkirim)', () => {
+    const text = 'Kantor kami di Jl. Raya Bogor No. 5, Jakarta';
+    expect(redactPii(text, { addresses: false })).toBe(text);
+    expect(redactPii(text)).not.toContain('Raya Bogor');
+  });
+});
