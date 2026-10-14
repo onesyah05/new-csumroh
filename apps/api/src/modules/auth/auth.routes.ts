@@ -35,6 +35,8 @@ const refreshLimiter = rateLimit({
   legacyHeaders: false,
 });
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+// Hash bcrypt (cost 12) dari teks acak: dibandingkan saat email tidak ada agar waktu respons tidak membedakannya.
+const DUMMY_PASSWORD_HASH = '$2b$12$7e11.KC0O7xMj9JC6Zx7e.vF8qojtZcrN4FVfCHjAT707SyFVNeQm';
 
 function sessionFromUser(user: {
   id: number;
@@ -81,7 +83,9 @@ authRouter.post('/login', loginLimiter, loginAccountLimiter, asyncHandler(async 
       userBrands: { select: { brand: { select: { id: true, name: true, code: true } } } },
     },
   });
-  if (!user || !user.isActive || !(await bcrypt.compare(input.password, user.password))) throw new HttpError(401, 'Email atau kata sandi tidak sesuai.');
+  // Selalu menjalankan bcrypt, juga untuk email yang tidak ada atau akun nonaktif.
+  const passwordMatches = await bcrypt.compare(input.password, user?.password ?? DUMMY_PASSWORD_HASH);
+  if (!user || !user.isActive || !passwordMatches) throw new HttpError(401, 'Email atau kata sandi tidak sesuai.');
   const session = sessionFromUser(user);
   const tokens = await issueTokens(session, req);
   setRefreshCookie(res, tokens.refreshToken);

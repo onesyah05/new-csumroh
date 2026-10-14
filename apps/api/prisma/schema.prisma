@@ -437,6 +437,7 @@ model ChatMessage {
   @@index([brandId, remoteJid])
   @@index([prospectId, timestamp])
   @@index([brandId, devicePhone])
+  @@index([mediaUrl(length: 191)], map: "chat_messages_media_url_idx")
   @@map("chat_messages")
 }
 

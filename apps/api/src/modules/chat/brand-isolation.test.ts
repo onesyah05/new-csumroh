@@ -125,3 +125,19 @@ describe('Kontrol positif: akses yang sah tidak ikut terblokir', () => {
     expect(result.error).toBeUndefined();
   });
 });
+
+describe('Gerbang role route chat', () => {
+  // Layer ke-2 pada chatRouter = requireRole (layer ke-1 = authGuard).
+  const gate = (role: string) => new Promise<any>((resolve) => {
+    const layer = (chatRouter as any).stack[1];
+    layer.handle({ user: { id: 1, role, brandId: 1, userBrands: [{ brand: { id: 1 } }] } }, {}, (error?: any) => resolve(error ?? null));
+  });
+
+  it.each(['product', 'designer'])('%s ditolak 403 walau punya penugasan brand', async (role) => {
+    expect(await gate(role)).toMatchObject({ status: 403 });
+  });
+
+  it.each(['superadmin', 'admin', 'cs', 'finance'])('%s lolos gerbang', async (role) => {
+    expect(await gate(role)).toBeNull();
+  });
+});

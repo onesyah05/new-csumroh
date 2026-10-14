@@ -946,3 +946,11 @@ describe('Riwayat berhalaman', () => {
     }
   });
 });
+
+describe('Tugaskan PIC: masukan divalidasi', () => {
+  it('userId bukan angka atau notes terlalu panjang ditolak 422, bukan error 500', async () => {
+    expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: 'abc' } })).status).toBe(422);
+    expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: -3 } })).status).toBe(422);
+    expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: 7, notes: 'x'.repeat(501) } })).status).toBe(422);
+  });
+});

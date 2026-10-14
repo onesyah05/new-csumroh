@@ -428,8 +428,10 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
     throw new HttpError(403, 'Hanya Admin atau Superadmin yang dapat menugaskan PIC prospek.');
   }
   const { id, brandId, existing } = await findScopedProspect(req);
-
-  const targetUserId = req.body.userId ? Number(req.body.userId) : null;
+  const { userId: targetUserId = null, notes } = z.object({
+    userId: z.coerce.number().int().positive().nullish(),
+    notes: z.string().trim().max(500).optional(),
+  }).parse(req.body ?? {});
   let targetUser = null;
   if (targetUserId) {
     targetUser = await findEligiblePic(targetUserId, brandId);
@@ -449,7 +451,7 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
         title: targetUser
           ? `PIC dialihkan ke ${targetUser.name} oleh ${req.user!.name}`
           : `Penugasan PIC dilepas oleh ${req.user!.name}`,
-        description: req.body.notes || (targetUser ? `Penugasan resmi dari ${req.user!.role}` : 'Lead kembali ke antrean publik tim CS'),
+        description: notes || (targetUser ? `Penugasan resmi dari ${req.user!.role}` : 'Lead kembali ke antrean publik tim CS'),
       },
     });
     return p;
@@ -458,7 +460,7 @@ prospectsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
   emitToBrand(brandId, 'prospect:claimed', { prospectIds: linked, userId: targetUserId, userName: targetUser?.name ?? null });
   dispatch(() => notifyPicChange({
     prospect: { id, brandId, name: existing.name }, kind: 'assigned', fromUserId: existing.userId, toUserId: targetUserId,
-    toName: targetUser?.name, actor: req.user!, reason: req.body.notes,
+    toName: targetUser?.name, actor: req.user!, reason: notes,
   }));
   emitToBrand(brandId, 'prospect:updated', updated);
   res.json({ success: true, data: updated });

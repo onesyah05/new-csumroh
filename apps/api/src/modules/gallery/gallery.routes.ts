@@ -1,5 +1,6 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -19,6 +20,8 @@ galleryRouter.use(requireRole(...GALLERY_ROLES));
 const IMAGE_MAX_BYTES = GALLERY_IMAGE_MAX_MB * 1024 * 1024;
 const VIDEO_MAX_BYTES = GALLERY_VIDEO_MAX_MB * 1024 * 1024;
 const PAGE_SIZE = 60;
+/** Batas piksel gambar masuk (≈64 MP: kamera HP 50 MP lolos, gambar bom dekompresi ditolak). */
+const MAX_INPUT_PIXELS = 64_000_000;
 const isManager = (role: string) => role === 'admin' || role === 'superadmin';
 /** Pengunggah atau Admin boleh mengubah/menghapus media. */
 const canModify = (user: { id: number; role: string }, uploadedById: number | null) => uploadedById === user.id || isManager(user.role);
@@ -137,7 +140,9 @@ galleryRouter.post('/assets', asyncHandler(async (req, res) => {
   let extension = 'mp4';
   let mimeType = 'video/mp4';
   if (kind === 'image') {
-    const converted = await sharp(raw).rotate().resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer({ resolveWithObject: true });
+    // Batas piksel: gambar kecil berkas tetapi puluhan ribu piksel per sisi tidak boleh menghabiskan memori server.
+    const converted = await sharp(raw, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer({ resolveWithObject: true })
+      .catch(() => { throw new HttpError(400, 'Gambar tidak dapat diproses atau resolusinya terlalu besar.'); });
     output = converted.data;
     width = converted.info.width;
     height = converted.info.height;
@@ -147,7 +152,8 @@ galleryRouter.post('/assets', asyncHandler(async (req, res) => {
 
   const dir = path.resolve(process.cwd(), 'uploads', 'gallery');
   await fs.promises.mkdir(dir, { recursive: true });
-  const fileName = `g${brandId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+  // Acak kriptografis: awalan g<brand>- dipakai pemeriksaan akses per brand, sisanya tidak boleh bisa ditebak.
+  const fileName = `g${brandId}-${Date.now()}-${randomBytes(8).toString('hex')}.${extension}`;
   await fs.promises.writeFile(path.join(dir, fileName), output);
 
   const asset = await prisma.mediaAsset.create({

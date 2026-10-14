@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn() }));
 vi.mock('../../db/prisma.js', () => ({ prisma: { whatsappSession: { findUnique: mocks.findUnique, update: mocks.update } } }));
 vi.mock('../../middleware/auth.js', () => ({
   authGuard: (_req: any, _res: any, next: any) => next(),
+  requireRole: () => (_req: any, _res: any, next: any) => next(),
   scopedBrandId: (_req: any, requested?: number) => requested ?? 1,
 }));
 vi.mock('../notifications/notification.events.js', () => ({ dispatch: vi.fn(), notifyProspectsReleased: vi.fn(), onWhatsappStatus: vi.fn(), notifyPicChange: vi.fn(), resolveReplyNotifications: vi.fn() }));

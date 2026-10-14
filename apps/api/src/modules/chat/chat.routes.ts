@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { messageInputSchema } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
-import { authGuard, scopedBrandId } from '../../middleware/auth.js';
+import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
@@ -34,7 +34,9 @@ import {
 } from '../notifications/notification.events.js';
 
 export const chatRouter = Router();
-chatRouter.use(authGuard);
+// Hanya role yang memakai chat. Tim LA (product) dan designer tidak membuka percakapan jamaah; tanpa gerbang ini
+// mereka hanya terblokir karena tidak punya brand, sehingga satu penugasan brand membuka seluruh chat.
+chatRouter.use(authGuard, requireRole('superadmin', 'admin', 'cs', 'finance'));
 
 /** Batas "hapus untuk semua" di WhatsApp (±2 hari); lewat dari itu jamaah tetap melihat pesannya. */
 const DELETE_FOR_EVERYONE_SECONDS = 2 * 24 * 60 * 60;
