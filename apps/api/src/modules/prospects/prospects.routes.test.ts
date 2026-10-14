@@ -240,7 +240,7 @@ describe('R04 profile save', () => {
     await invoke('patch', '/:id/profile', { body: { city: 'Solo', nextFollowupDate: '2026-09-30', packageId: 2 } });
     const log = mocks.state.logs.at(-1)!;
     expect(log.title).toBe('Data prospek diubah');
-    expect(log.description).toContain('Kota: – → Solo');
+    expect(log.description).toContain('Domisili: – → Solo');
     expect(log.description).toContain('Follow-up berikutnya: – → 30 Sep 2026');
     expect(log.description).toContain('Paket: Paket Uji → Paket Baru');
     const count = mocks.state.logs.length;
@@ -785,15 +785,14 @@ describe('Tolak bukti transfer', () => {
 });
 
 describe('Kualifikasi: syarat, penjaga, dan pilihan baku', () => {
-  it('diisi bertahap; naik hanya bila semua lengkap (bulan, 1 dewasa, budget, paspor); bayi saja tidak cukup', async () => {
+  it('diisi bertahap; naik hanya bila bulan, 1 dewasa, dan budget lengkap; bayi saja tidak cukup; paspor opsional', async () => {
     seedProspect(2, { status: 'contact', targetMonth: null, roomPreference: null, paxQuad: 0, budgetRange: null, passportStatus: null });
-    await invoke('patch', '/:id/profile', { id: 2, body: { targetMonth: '2026-12', paxInfant: 1, budgetRange: '25–30 Juta', passportStatus: 'sudah_ada' } });
+    await invoke('patch', '/:id/profile', { id: 2, body: { targetMonth: '2026-12', paxInfant: 1, budgetRange: '25–30 Juta' } });
     expect(prospect(2).status).toBe('contact');
-    await invoke('patch', '/:id/profile', { id: 2, body: { paxDouble: 2, passportStatus: '' } });
-    expect(prospect(2).status).toBe('contact');
-    const ok = await invoke('patch', '/:id/profile', { id: 2, body: { passportStatus: 'belum_ada' } });
+    const ok = await invoke('patch', '/:id/profile', { id: 2, body: { paxDouble: 2 } });
     expect(ok.status).toBe(200);
-    expect(prospect(2)).toMatchObject({ status: 'qualified', roomPreference: 'Double' });
+    // Paspor belum diisi, tetapi kualifikasi sudah lengkap.
+    expect(prospect(2)).toMatchObject({ status: 'qualified', roomPreference: 'Double', passportStatus: null });
   });
 
   it('syarat tidak boleh dikosongkan setelah Terkualifikasi; profil lama yang belum lengkap tetap bisa disimpan', async () => {
@@ -802,9 +801,27 @@ describe('Kualifikasi: syarat, penjaga, dan pilihan baku', () => {
     expect(cleared.status).toBe(422);
     expect(cleared.error).toContain('Bulan keberangkatan');
     expect((await invoke('patch', '/:id/profile', { id: 3, body: { paxQuad: 0 } })).status).toBe(422);
-    expect((await invoke('patch', '/:id/profile', { id: 3, body: { passportStatus: '' } })).status).toBe(422);
+    // Paspor opsional: boleh dikosongkan walau sudah Terkualifikasi.
+    expect((await invoke('patch', '/:id/profile', { id: 3, body: { passportStatus: '' } })).status).toBe(200);
     seedProspect(4, { targetMonth: '' });
     expect((await invoke('patch', '/:id/profile', { id: 4, body: { city: 'Depok' } })).status).toBe(200);
+  });
+
+  it('bulan tambahan: disimpan unik tanpa bulan utama, maksimal 3, dan tidak memengaruhi syarat kualifikasi', async () => {
+    seedProspect(7, { status: 'contact', targetMonth: '2026-12', targetMonthsExtra: null });
+    const ok = await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '2027-01,2026-12,2027-02' } });
+    expect(ok.status).toBe(200);
+    // Bulan utama (2026-12) tidak ikut tersimpan sebagai tambahan.
+    expect(prospect(7).targetMonthsExtra).toBe('2027-01,2027-02');
+    expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '2027-01,2027-02,2027-03,2027-04' } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '2027-01,2027-01' } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: 'Januari' } })).status).toBe(422);
+    expect((await invoke('patch', '/:id/profile', { id: 7, body: { targetMonthsExtra: '' } })).status).toBe(200);
+    expect(prospect(7).targetMonthsExtra).toBeNull();
+    // Tanpa bulan utama, bulan tambahan saja tidak membuat kualifikasi lengkap.
+    seedProspect(8, { status: 'contact', targetMonth: null, paxQuad: 2, budgetRange: '25–30 Juta' });
+    await invoke('patch', '/:id/profile', { id: 8, body: { targetMonthsExtra: '2027-01' } });
+    expect(prospect(8).status).toBe('contact');
   });
 
   it('tahap Terkualifikasi manual memakai syarat yang sama', async () => {

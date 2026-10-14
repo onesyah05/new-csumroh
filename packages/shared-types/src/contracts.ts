@@ -51,6 +51,8 @@ export const prospectProfileSchema = z.object({
   phone: z.string().trim().max(30).nullable().optional(),
   city: z.string().trim().max(100).nullable().optional(),
   targetMonth: z.string().trim().max(50).nullable().optional(),
+  // Bulan rencana tambahan "YYYY-MM,YYYY-MM" (maksimal 3); bulan utama tetap di targetMonth.
+  targetMonthsExtra: z.string().trim().max(40).nullable().optional(),
   budgetRange: z.string().trim().max(50).nullable().optional(),
   roomPreference: z.string().trim().max(50).nullable().optional(),
   paxQuad: z.coerce.number().int().min(0).max(200).optional(),

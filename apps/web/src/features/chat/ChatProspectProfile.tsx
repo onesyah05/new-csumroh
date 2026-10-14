@@ -448,7 +448,7 @@ export function ChatProspectProfile({
             packagesLoading={packagesLoading}
             brandName={activeBrand?.name}
             selected={selectedPackage}
-            qualification={{ targetMonth: form.targetMonth, budgetRange: form.budgetRange, passportStatus: form.passportStatus, ...formPax }}
+            qualification={{ targetMonth: form.targetMonth, targetMonthsExtra: form.targetMonthsExtra, budgetRange: form.budgetRange, passportStatus: form.passportStatus, ...formPax }}
             locked={won || locked}
             saving={packageMutation.isPending}
             connected={connected}
@@ -487,7 +487,7 @@ export function ChatProspectProfile({
             />}
             <QualificationFields
               value={{
-                targetMonth: form.targetMonth, budgetRange: form.budgetRange, passportStatus: form.passportStatus,
+                targetMonth: form.targetMonth, targetMonthsExtra: form.targetMonthsExtra, budgetRange: form.budgetRange, passportStatus: form.passportStatus, city: form.city,
                 paxQuad: Number(form.paxQuad), paxTriple: Number(form.paxTriple), paxDouble: Number(form.paxDouble), paxInfant: Number(form.paxInfant),
               }}
               onChange={(patch) => updateFormFields(patch)}

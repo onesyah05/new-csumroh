@@ -20,8 +20,10 @@ interface QualificationModalProps {
 export function QualificationModal({ open, onClose, prospect, brandId, packages, onShowToast }: QualificationModalProps) {
   const [value, setValue] = useState<QualificationValue>(() => ({
     targetMonth: prospect?.targetMonth ?? '',
+    targetMonthsExtra: prospect?.targetMonthsExtra ?? '',
     budgetRange: prospect?.budgetRange ?? '',
     passportStatus: prospect?.passportStatus ?? '',
+    city: prospect?.city ?? '',
     paxQuad: Number(prospect?.paxQuad ?? 0),
     paxTriple: Number(prospect?.paxTriple ?? 0),
     paxDouble: Number(prospect?.paxDouble ?? 0),
@@ -55,7 +57,7 @@ export function QualificationModal({ open, onClose, prospect, brandId, packages,
       onClose={onClose}
       size="lg"
       title="Kualifikasi prospek"
-      description={<>Untuk <b className="text-zinc-800">{prospect?.name}</b>. Boleh diisi bertahap; naik ke Terkualifikasi setelah bulan, jamaah, budget, dan paspor lengkap.</>}
+      description={<>Untuk <b className="text-zinc-800">{prospect?.name}</b>. Boleh diisi bertahap; naik ke Terkualifikasi setelah bulan, jamaah, dan budget lengkap. Paspor dan domisili opsional.</>}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={save.isPending}>Batal</Button>

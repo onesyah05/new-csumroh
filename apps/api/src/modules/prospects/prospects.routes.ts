@@ -34,6 +34,9 @@ import {
   TARGET_SEASONS,
   isQualificationComplete,
   parseTargetMonth,
+  parseExtraMonths,
+  joinExtraMonths,
+  MAX_EXTRA_MONTHS,
   targetMonthLabel,
   primaryRoomOf,
   qualificationMissing,
@@ -651,6 +654,15 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
     const parsed = parseTargetMonth(v);
     return parsed.key !== null && (!parsed.season || (TARGET_SEASONS as readonly string[]).includes(parsed.season));
   }, 'Bulan keberangkatan harus dipilih dari daftar bulan.');
+  // Bulan tambahan: hanya "YYYY-MM" valid, unik, bukan bulan utama, ada batas jumlahnya. Kosong menghapusnya.
+  if (input.targetMonthsExtra !== undefined) {
+    const raw = (input.targetMonthsExtra ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+    const keys = parseExtraMonths(input.targetMonthsExtra);
+    if (keys.length !== raw.length || new Set(raw).size !== raw.length) throw new HttpError(422, 'Bulan tambahan harus berupa bulan yang valid dan tidak boleh sama.');
+    if (keys.length > MAX_EXTRA_MONTHS) throw new HttpError(422, `Bulan tambahan maksimal ${MAX_EXTRA_MONTHS}.`);
+    const primary = parseTargetMonth(input.targetMonth !== undefined ? input.targetMonth : existing.targetMonth).key;
+    data.targetMonthsExtra = joinExtraMonths(keys.filter((key) => key !== primary)) || null;
+  }
   choice('budgetRange', (v) => BUDGET_OPTIONS.some((o) => o.value === v), 'Budget harus dipilih dari daftar.');
   choice('decisionMaker', (v) => DECISION_MAKER_OPTIONS.some((o) => o.value === v), 'Pengambil keputusan harus dipilih dari daftar.');
   choice('passportStatus', (v) => PASSPORT_OPTIONS.some((o) => o.value === v), 'Status paspor harus dipilih dari daftar.');

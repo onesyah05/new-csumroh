@@ -5,7 +5,7 @@ import { isLostStatus, isWonStatus, packageBookingValue, parseRupiah } from './b
  * dan penjaga) serta ketiga form (Inbox, modal Pipeline, halaman detail).
  *
  * Isian boleh diisi bertahap; status naik ke Terkualifikasi hanya bila SEMUA terisi: bulan keberangkatan,
- * minimal 1 jamaah dewasa (Quad/Triple/Double), budget per orang, dan status paspor.
+ * minimal 1 jamaah dewasa (Quad/Triple/Double), dan budget per orang. Status paspor dan domisili opsional.
  * Bayi tidak dihitung karena tidak berangkat sendiri dan tidak memakai seat. Tipe kamar utama tidak
  * diisi terpisah: diturunkan dari rincian jamaah per tipe kamar.
  */
@@ -26,7 +26,6 @@ export function qualificationMissing(p: QualificationInput) {
   if (!p.targetMonth?.trim()) missing.push('Bulan keberangkatan');
   if (adultPaxOf(p) < 1) missing.push('Minimal 1 jamaah dewasa');
   if (!p.budgetRange?.trim()) missing.push('Budget');
-  if (!p.passportStatus?.trim()) missing.push('Paspor');
   return missing;
 }
 export const isQualificationComplete = (p: QualificationInput) => qualificationMissing(p).length === 0;
@@ -45,6 +44,25 @@ export function parseTargetMonth(value?: string | null) {
   return { key: `${match[1]}-${match[2]}`, season: match[3] ?? null, legacy: null };
 }
 export const isStructuredTargetMonth = (value?: string | null) => parseTargetMonth(value).key !== null;
+// ── Bulan tambahan: calon jamaah bisa punya beberapa rencana bulan (mis. Desember atau Januari). ──
+// Bulan utama tetap di targetMonth (syarat kualifikasi dan seluruh logika lama); bulan lain disimpan terpisah
+// sebagai "YYYY-MM,YYYY-MM", tanpa label musim.
+export const MAX_EXTRA_MONTHS = 3;
+const MONTH_KEY = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Bulan tambahan yang valid dan unik, berurutan seperti disimpan. */
+export function parseExtraMonths(value?: string | null): string[] {
+  const keys = (value ?? '').split(',').map((part) => part.trim()).filter((part) => MONTH_KEY.test(part));
+  return [...new Set(keys)];
+}
+export const joinExtraMonths = (keys: string[]) => [...new Set(keys.filter((key) => MONTH_KEY.test(key)))].join(',');
+
+/** Bulan utama + bulan tambahan (tanpa duplikat), untuk pencocokan paket. */
+export function allTargetMonthKeys(p: { targetMonth?: string | null; targetMonthsExtra?: string | null }): string[] {
+  const primary = parseTargetMonth(p.targetMonth).key;
+  return [...new Set([...(primary ? [primary] : []), ...parseExtraMonths(p.targetMonthsExtra)])];
+}
+
 export const formatTargetMonth = (key: string, season?: string | null) => (season ? `${key} ${season}` : key);
 
 const monthName = (key: string) => {
@@ -118,13 +136,14 @@ export function packageFromPrice(pkg: MatchablePackage) {
   return prices.length ? Math.min(...prices) : 0;
 }
 /** Paket aktif yang berangkat di bulan target, dalam budget per orang, dan kuotanya cukup. */
-export function matchPackages(packages: MatchablePackage[], p: Pax & { targetMonth?: string | null; budgetRange?: string | null }, limit = 3) {
-  const key = parseTargetMonth(p.targetMonth).key;
-  if (!key) return [];
+export function matchPackages(packages: MatchablePackage[], p: Pax & { targetMonth?: string | null; targetMonthsExtra?: string | null; budgetRange?: string | null }, limit = 3) {
+  // Bulan utama dan bulan tambahan sama-sama dicocokkan; tanpa bulan utama tidak ada rekomendasi.
+  const keys = parseTargetMonth(p.targetMonth).key ? allTargetMonthKeys(p) : [];
+  if (keys.length === 0) return [];
   const max = BUDGET_OPTIONS.find((b) => b.value === p.budgetRange)?.max ?? Number.POSITIVE_INFINITY;
   const adults = adultPaxOf(p);
   return packages
-    .filter((pkg) => pkg.isActive !== false && pkg.departureDate && new Date(pkg.departureDate).toISOString().slice(0, 7) === key)
+    .filter((pkg) => pkg.isActive !== false && pkg.departureDate && keys.includes(new Date(pkg.departureDate).toISOString().slice(0, 7)))
     .map((pkg) => ({ pkg, fromPrice: packageFromPrice(pkg) }))
     .filter(({ pkg, fromPrice }) => fromPrice <= max && (pkg.quotaRemaining == null || pkg.quotaRemaining >= Math.max(1, adults)))
     .sort((a, b) => a.fromPrice - b.fromPrice)

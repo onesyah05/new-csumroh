@@ -205,6 +205,7 @@ model Prospect {
   currentStage            String                  @default("greeting") @map("current_stage") @db.VarChar(50)
   status                  ProspectStatus          @default(new)
   targetMonth             String?                 @map("target_month") @db.VarChar(50)
+  targetMonthsExtra       String?                 @map("target_months_extra") @db.VarChar(40)
   budgetRange             String?                 @map("budget_range") @db.VarChar(50)
   roomPreference          String?                 @map("room_preference") @db.VarChar(50)
   paxQuad                 Int                     @default(0) @map("pax_quad")
