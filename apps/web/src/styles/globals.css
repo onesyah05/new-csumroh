@@ -212,3 +212,9 @@
   .app-toasts { scrollbar-width: none; }
   .app-toasts::-webkit-scrollbar { display: none; }
 }
+
+/* Daftar percakapan ratusan baris: baris di luar layar dilewati layout/paint (tinggi baris ±72px). */
+.chat-list-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
