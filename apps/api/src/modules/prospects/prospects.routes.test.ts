@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 
 type Row = Record<string, any>;
 const mocks = vi.hoisted(() => ({
-  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[], rejections: [] as Row[], picLocked: false },
+  state: { prospects: new Map<number, Row>(), packages: new Map<number, Row>(), payments: [] as Row[], logs: [] as Row[], messages: [] as Row[], users: [] as Row[], customRequests: [] as Row[], rejections: [] as Row[], picLocked: false, beforeTx: null as null | (() => void) },
   capi: vi.fn(),
   spamAudience: vi.fn(async () => undefined),
   send: vi.fn(),
@@ -125,6 +125,8 @@ const db = vi.hoisted(() => {
     // Serialized like conflicting InnoDB row locks; state is rolled back when the callback throws.
     $transaction: (callback: any) => {
       const run = tail.then(async () => {
+        // Simulasi request lain yang menang tepat sebelum transaksi ini mulai.
+        const hook = s().beforeTx; s().beforeTx = null; hook?.();
         const snapshot = structuredClone({ prospects: [...s().prospects], packages: [...s().packages], payments: s().payments, logs: s().logs });
         try {
           return await callback(client);
@@ -952,5 +954,34 @@ describe('Tugaskan PIC: masukan divalidasi', () => {
     expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: 'abc' } })).status).toBe(422);
     expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: -3 } })).status).toBe(422);
     expect((await invoke('post', '/:id/assign', { role: 'admin', body: { userId: 7, notes: 'x'.repeat(501) } })).status).toBe(422);
+  });
+});
+
+describe('Celah sempit uang dan pipeline (review area 2)', () => {
+  it('pindah ke Batal ditolak bila Deal baru disahkan sebelum transaksi: seat tidak bocor', async () => {
+    seedProspect(30, { status: 'closing', packageId: 1 });
+    mocks.state.beforeTx = () => { Object.assign(mocks.state.prospects.get(30)!, { status: 'deal', seatsReserved: 2 }); };
+    const result = await invoke('patch', '/:id/status', { id: 30, body: { status: 'lose', lostReason: 'Tidak jadi' } });
+    expect(result.status).toBe(409);
+    expect(prospect(30).status).toBe('deal');
+    expect(prospect(30).seatsReserved).toBe(2);
+  });
+
+  it('penawaran dan invoice ditolak untuk prospek Batal', async () => {
+    seedProspect(31, { status: 'lose' });
+    expect((await invoke('post', '/:id/offer', { id: 31, body: { packageId: 1 } })).status).toBe(409);
+    const invoice = await invoke('post', '/:id/invoice', { id: 31, body: { invoiceAmount: 5_000_000 } });
+    expect(invoice.status).toBe(409);
+    expect(invoice.error).toContain('batal');
+    expect(prospect(31).status).toBe('lose');
+  });
+
+  it('invoice paket katalog tidak boleh melebihi nilai booking', async () => {
+    seedProspect(32, { status: 'offer', offerSentAt: new Date(), dealValue: 60_000_000 });
+    const over = await invoke('post', '/:id/invoice', { id: 32, body: { invoiceAmount: 70_000_000 } });
+    expect(over.status).toBe(422);
+    expect(over.error).toContain('melebihi nilai booking');
+    expect((await invoke('post', '/:id/invoice', { id: 32, body: { invoiceAmount: 15_000_000 } })).status).toBe(200);
+    expect(prospect(32).invoiceAmount).toBe(15_000_000);
   });
 });

@@ -190,7 +190,8 @@ export function PackageFormPage() {
         priceTriple: p.priceTriple || '',
         priceDouble: p.priceDouble || '',
         priceInfant: p.priceInfant || '',
-        quotaRemaining: p.quotaRemaining !== null && p.quotaRemaining !== undefined ? String(p.quotaRemaining) : '45',
+        // Kuota kosong = tanpa batas: tidak diubah menjadi angka bawaan saat paket diedit.
+        quotaRemaining: p.quotaRemaining !== null && p.quotaRemaining !== undefined ? String(p.quotaRemaining) : '',
         departureDate: p.departureDate ? p.departureDate.slice(0, 10) : '',
         duration: p.duration ? String(p.duration).replace(/\D/g, '') || '9' : '9',
         airline: p.airline || '',
@@ -232,7 +233,9 @@ export function PackageFormPage() {
         priceTriple: form.priceTriple.trim() || null,
         priceDouble: form.priceDouble.trim() || null,
         priceInfant: form.priceInfant.trim() || null,
-        quotaRemaining: form.quotaRemaining !== '' ? Number(form.quotaRemaining) : 0,
+        quotaRemaining: form.quotaRemaining !== '' ? Number(form.quotaRemaining) : (isEdit ? null : 0),
+        // Kuota yang dilihat form saat dibuka: server tidak menimpa perubahan kuota yang terjadi selagi form terbuka.
+        ...(isEdit ? { expectedQuotaRemaining: packageQuery.data?.quotaRemaining ?? null } : {}),
         departureDate: form.departureDate || null,
         duration: form.duration ? `${form.duration} Hari` : '9 Hari',
         airline: form.airline.trim() || null,

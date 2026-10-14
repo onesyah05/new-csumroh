@@ -71,11 +71,12 @@ describe('Paket per brand', () => {
     expect(mocks.findMany.mock.calls[0][0].where.brandId).toBe(6);
   });
 
-  it('filter "Habis" digabung AND dengan pencarian', async () => {
+  it('filter "Habis" hanya kuota 0 dan tetap digabung dengan pencarian', async () => {
     await call('/packages', csMulti, { q: 'Syawal', quota: 'sold_out' });
     const where = mocks.findMany.mock.calls[0][0].where;
     expect(where.OR[0]).toEqual({ name: { contains: 'Syawal' } });
-    expect(where.AND).toEqual([{ OR: [{ quotaRemaining: 0 }, { quotaRemaining: null }] }]);
+    // Tanpa batas (null) bukan habis: hanya kuota 0.
+    expect(where.quotaRemaining).toEqual({ equals: 0 });
   });
 
   it('detail paket brand kedua bisa dibuka CS yang memegangnya; brand lain ditolak', async () => {
@@ -151,5 +152,34 @@ describe('Edit paket', () => {
     mocks.findUnique.mockResolvedValue({ id: 3, brandId: 1, flyerImage: null, priceQuad: 'Rp 30.000.000', departureInfo: '10 November 2026' });
     await patch({ id: 1, role: 'superadmin', brandId: null }, 3, { departureDate: null });
     expect(mocks.update.mock.calls[0][0].data).toMatchObject({ departureDate: null, departureInfo: null });
+  });
+});
+
+describe('Kuota paket tidak tertimpa form yang basi', () => {
+  const admin: User = { id: 2, role: 'admin', brandId: 1, userBrands: [{ brand: { id: 1 } }] };
+  beforeEach(() => {
+    mocks.update.mockImplementation(async ({ data }: any) => ({ id: 3, ...data }));
+  });
+
+  it('kuota yang tidak diubah form tidak menimpa kuota yang sudah berkurang', async () => {
+    // Form dibuka saat kuota 10; sementara itu Deal memotong 2 seat (server kini 8).
+    mocks.findUnique.mockResolvedValue({ id: 3, brandId: 1, name: 'Paket', quotaRemaining: 8, itinerary: null, flyerImage: null });
+    await patch(admin, 3, { name: 'Nama baru', quotaRemaining: 10, expectedQuotaRemaining: 10 });
+    const data = mocks.update.mock.calls[0][0].data;
+    expect(data.name).toBe('Nama baru');
+    expect(data).not.toHaveProperty('quotaRemaining');
+    expect(data).not.toHaveProperty('expectedQuotaRemaining');
+  });
+
+  it('kuota diubah sengaja saat server masih sama: disimpan', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 3, brandId: 1, name: 'Paket', quotaRemaining: 10, itinerary: null, flyerImage: null });
+    await patch(admin, 3, { quotaRemaining: 20, expectedQuotaRemaining: 10 });
+    expect(mocks.update.mock.calls[0][0].data.quotaRemaining).toBe(20);
+  });
+
+  it('kuota diubah sengaja padahal server sudah berubah: 409', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 3, brandId: 1, name: 'Paket', quotaRemaining: 8, itinerary: null, flyerImage: null });
+    await expect(patch(admin, 3, { quotaRemaining: 20, expectedQuotaRemaining: 10 })).rejects.toMatchObject({ status: 409 });
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 });

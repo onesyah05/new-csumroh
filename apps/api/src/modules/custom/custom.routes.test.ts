@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ requests: [] as Row[], prospects: [] as Row[], logs: [] as Row[], notified: [] as string[] }));
+const state = vi.hoisted(() => ({ requests: [] as Row[], prospects: [] as Row[], logs: [] as Row[], notified: [] as string[], recomputeBeforeAgree: false }));
 
 vi.mock('../../db/prisma.js', () => {
   const find = (rows: Row[], where: Row = {}) => rows.filter((row) => Object.entries(where).every(([key, cond]) => {
@@ -17,6 +17,13 @@ vi.mock('../../db/prisma.js', () => {
       findMany: async ({ where }: any) => find(state.requests, where).map(withRelations),
       groupBy: async () => [],
       create: async ({ data }: any) => { const row = { id: state.requests.length + 1, updatedAt: new Date(), ...data }; state.requests.push(row); return row; },
+      updateMany: async ({ where, data }: any) => {
+        // Simulasi Tim LA menghitung ulang tepat sebelum CS menyepakati.
+        if (state.recomputeBeforeAgree) state.requests.forEach((r) => { r.quoteCount = (r.quoteCount ?? 0) + 1; });
+        const rows = find(state.requests, where);
+        rows.forEach((row) => Object.assign(row, data, { updatedAt: new Date(Date.now() + state.requests.length) }));
+        return { count: rows.length };
+      },
       update: async ({ where, data }: any) => {
         const row = state.requests.find((r) => r.id === where.id)!;
         Object.assign(row, data, { updatedAt: new Date(Date.now() + state.requests.length) });
@@ -80,7 +87,7 @@ const need = { mode: 'full', departureDate: '2027-02-10', paxQuad: 2, hotelMakka
 const quote = { offeredPrices: { quad: 38_000_000 }, floorPrices: { quad: 35_000_000 }, minDpPerPax: 10_000_000 };
 
 beforeEach(() => {
-  state.requests = []; state.logs = []; state.notified = [];
+  state.requests = []; state.logs = []; state.notified = []; state.recomputeBeforeAgree = false;
   state.prospects = [{ id: 1, brandId: 1, userId: 7, name: 'Jamaah Uji', status: 'qualified', paxQuad: 1, paxTriple: 0, paxDouble: 0, paxInfant: 0, paymentProofUrl: null,
     targetMonth: '2027-02', budgetRange: '35–40 Juta', passportStatus: 'sudah_ada', invoiceSentAt: null, invoiceAmount: 0, invoiceNumber: null }];
 });
@@ -115,6 +122,17 @@ describe('Layanan custom', () => {
     expect(ok.status).toBe(200);
     expect(state.requests[0]!.status).toBe('agreed');
     expect(state.prospects[0]!.dealValue).toBe(72_000_000);
+  });
+
+  it('kesepakatan ditolak bila Tim LA menghitung ulang sesudah harga diperiksa', async () => {
+    await call('post', '/prospect/:prospectId', { params: { prospectId: '1' }, body: need });
+    await call('post', '/:id/quote', { user: users.product, params: { id: '1' }, body: quote });
+    state.recomputeBeforeAgree = true;
+    const result = await call('post', '/:id/agree', { params: { id: '1' }, body: { agreedPrice: 72_000_000 } });
+    expect(result.status).toBe(409);
+    expect(result.error).toContain('dihitung ulang');
+    expect(state.requests[0]!.status).toBe('quoted');
+    expect(state.prospects[0]!.dealValue).toBeUndefined();
   });
 
   it('harga kedaluwarsa tidak bisa disepakati; hitung ulang mengosongkan kesepakatan dan memberi tahu Tim LA', async () => {

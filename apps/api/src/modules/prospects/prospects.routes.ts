@@ -293,7 +293,8 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
         where: { id: existing.id, status: { in: WON_STATUSES } },
         data: { status: status as DbProspectStatus, seatsReserved: 0, ...(lostReason ? { lostReason } : {}) },
       });
-      if (flipped.count === 1 && existing.packageId && existing.seatsReserved > 0) {
+      if (flipped.count !== 1) throw new HttpError(409, 'Status prospek baru saja berubah. Muat ulang lalu coba lagi.');
+      if (existing.packageId && existing.seatsReserved > 0) {
         await tx.package.updateMany({
           where: { id: existing.packageId, quotaRemaining: { not: null } },
           data: { quotaRemaining: { increment: existing.seatsReserved } },
@@ -301,14 +302,19 @@ prospectsRouter.patch('/:id/status', asyncHandler(async (req, res) => {
         released = existing.seatsReserved;
       }
     }
-    const updated = await tx.prospect.update({
-      where: { id: existing.id },
-      data: {
-        status: status as DbProspectStatus,
-        ...(isNewLost && lostReason ? { lostReason } : {}),
-      },
-      include,
-    });
+    if (!isCancellingDeal) {
+      // Bersyarat pada status yang tadi divalidasi: bila Finance baru saja mengesahkan Deal (kuota terpotong),
+      // permintaan ini ditolak, bukan menimpa status tanpa mengembalikan seat.
+      const moved = await tx.prospect.updateMany({
+        where: { id: existing.id, status: existing.status as DbProspectStatus },
+        data: {
+          status: status as DbProspectStatus,
+          ...(isNewLost && lostReason ? { lostReason } : {}),
+        },
+      });
+      if (moved.count !== 1) throw new HttpError(409, 'Status prospek baru saja berubah. Muat ulang lalu coba lagi.');
+    }
+    const updated = await tx.prospect.findUniqueOrThrow({ where: { id: existing.id }, include });
     // Prospek batal: permintaan layanan custom yang masih berjalan tidak lagi dihitung Tim LA.
     const customCancelled = isNewLost
       ? (await tx.customRequest.updateMany({ where: { prospectId: existing.id, status: { not: 'cancelled' } }, data: { status: 'cancelled' } })).count
@@ -826,6 +832,9 @@ prospectsRouter.post('/:id/offer', asyncHandler(async (req, res) => {
   if (isWonStatus(existing.status)) {
     throw new HttpError(409, 'Booking sudah Deal; nilai dan paket terkunci. Revisi booking melalui Finance/Admin.');
   }
+  if (isLostStatus(existing.status)) {
+    throw new HttpError(409, 'Prospek berstatus batal. Aktifkan kembali prospek sebelum mengirim penawaran.');
+  }
 
   // Layanan custom: nilai penawaran = nilai deal akhir yang disepakati CS (≥ harga terendah Tim LA).
   const custom = await activeCustomFor(id);
@@ -984,6 +993,7 @@ prospectsRouter.post('/:id/activities', asyncHandler(async (req, res) => {
 prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
   const { id, brandId, existing } = await findScopedProspect(req);
   if (isWonStatus(existing.status)) throw new HttpError(409, 'Prospek sudah Deal; pembayaran berikutnya dicatat di luar CRM.');
+  if (isLostStatus(existing.status)) throw new HttpError(409, 'Prospek berstatus batal. Aktifkan kembali prospek sebelum mengirim invoice.');
   await assertCanActOnProspect(req.user!, existing);
   // Klien lama mengirim nominal tagihan sebagai `dpAmount`; diterima sebagai alias tagihan, bukan kas.
   const input = invoiceInputSchema.parse({ invoiceAmount: req.body?.dpAmount, ...req.body });
@@ -1010,6 +1020,18 @@ prospectsRouter.post('/:id/invoice', asyncHandler(async (req, res) => {
     }
     if (await offerIsOutdated(existing)) {
       throw new HttpError(409, 'Jamaah atau paket berubah setelah penawaran terkirim. Kirim penawaran resmi ulang sebelum invoice.');
+    }
+  }
+  if (!custom) {
+    // Tagihan tidak boleh melebihi nilai booking: nilai penawaran, atau harga katalog bila belum ada penawaran.
+    const refPackageId = input.packageId ?? existing.packageId;
+    let ceiling = Number(existing.dealValue) || 0;
+    if (ceiling <= 0 && refPackageId) {
+      const refPackage = await prisma.package.findFirst({ where: { id: refPackageId, brandId } });
+      if (refPackage) ceiling = packageBookingValue(refPackage, existing);
+    }
+    if (ceiling > 0 && input.invoiceAmount > ceiling) {
+      throw new HttpError(422, `Tagihan melebihi nilai booking (Rp ${ceiling.toLocaleString('id-ID')}).`);
     }
   }
   if (!isWon && input.packageId) {
