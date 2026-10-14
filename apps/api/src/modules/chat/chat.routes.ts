@@ -21,6 +21,7 @@ import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.
 import { Prisma, type ChatMessage } from '@prisma/client';
 import { avatarNeedsRefresh, MEDIA_PLACEHOLDER } from '@csumroh/shared-types';
 import { refreshProspectAvatar, refreshProspectAvatars } from './avatar.service.js';
+import { normalizeWhatsappImage } from './whatsapp-image.js';
 import { resolveNotifications } from '../notifications/notify.service.js';
 import {
   dispatch,
@@ -684,6 +685,18 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
 
   if (!resolvedBase64) {
     throw new HttpError(400, 'Berkas media atau flyer paket tidak ditemukan.');
+  }
+
+  // Foto harus JPEG/PNG: gambar WebP (galeri, flyer paket) berhenti di centang satu dan tidak sampai ke HP penerima.
+  if (input.mediaType === 'imageMessage') {
+    const image = await normalizeWhatsappImage({ base64: resolvedBase64, mimeType: resolvedMimeType, fileName: resolvedFileName });
+    resolvedMimeType = image.mimeType;
+    if (image.converted) {
+      resolvedBase64 = image.base64;
+      resolvedFileName = image.fileName;
+      // Salinan lokal harus sama dengan yang terkirim, bukan berkas flyer asli.
+      resolvedLocalUrl = null;
+    }
   }
 
   // If packageId is provided and prospect does not have an assigned package, link the package
