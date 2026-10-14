@@ -15,6 +15,8 @@ export function useChatAutoScroll(identity: string, messages: unknown) {
     setShowScrollToLatest(!following.current);
   }, []);
 
+  const isFollowing = useCallback(() => following.current, []);
+
   const scrollToLatest = useCallback(() => {
     const timeline = timelineRef.current;
     if (!timeline) return;
@@ -58,5 +60,5 @@ export function useChatAutoScroll(identity: string, messages: unknown) {
     updatePosition();
   }, [identity, messages, updatePosition]);
 
-  return { timelineRef, contentRef, showScrollToLatest, scrollToLatest };
+  return { timelineRef, contentRef, showScrollToLatest, scrollToLatest, isFollowing };
 }

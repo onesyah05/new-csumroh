@@ -475,7 +475,7 @@ export function InboxPage() {
     retry: false,
   });
 
-  const { timelineRef, contentRef, showScrollToLatest, scrollToLatest } = useChatAutoScroll(`${brandId}:${selected?.id ?? ''}`, messages.data);
+  const { timelineRef, contentRef, showScrollToLatest, scrollToLatest, isFollowing } = useChatAutoScroll(`${brandId}:${selected?.id ?? ''}`, messages.data);
 
   async function loadOlderMessages() {
     const oldest = messages.data?.[0];
@@ -494,7 +494,8 @@ export function InboxPage() {
       });
       setHasOlderBy((current) => ({ ...current, [identity]: older.length >= MESSAGE_PAGE }));
       setOlderLoading(false);
-      requestAnimationFrame(() => { if (timeline) timeline.scrollTop = previousTop + (timeline.scrollHeight - previousHeight); });
+      // Dilewati bila CS sudah kembali mengikuti pesan terbaru (mis. baru mengirim pesan): jangan tarik ke atas lagi.
+      requestAnimationFrame(() => { if (timeline && !isFollowing()) timeline.scrollTop = previousTop + (timeline.scrollHeight - previousHeight); });
     } catch (error) {
       setOlderLoading(false);
       showToast((error as Error).message || 'Pesan lama gagal dimuat');
@@ -544,6 +545,8 @@ export function InboxPage() {
       if (selectedIdRef.current === vars.prospectId) {
         setReplyingTo(null);
         if (composerRef.current) composerRef.current.style.height = '44px';
+        // Mengirim pesan = ingin melihatnya: kembali mengikuti pesan terbaru walau CS sedang membaca riwayat di atas.
+        scrollToLatest();
       }
       void queryClient.invalidateQueries({ queryKey: ['messages', vars.prospectId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
@@ -871,6 +874,8 @@ export function InboxPage() {
       showToast('Draft masih memuat tanda {{…}}.');
       return;
     }
+    // Langsung ke pesan terbaru saat kirim; menunggu respons API membuat tampilan terasa tertahan.
+    scrollToLatest();
     send.mutate({ text, prospectId: selectedId, quoted: replyingTo, clearDraft: setMessage });
   }
 
@@ -1090,6 +1095,7 @@ export function InboxPage() {
     if (!canSend) return;
     const targetFile = fileToSend || mediaPreview?.file;
     if (!selectedId || uploadingMedia || !targetFile) return;
+    scrollToLatest();
     setUploadingMedia(true);
     try {
       const reader = new FileReader();
@@ -1138,6 +1144,7 @@ export function InboxPage() {
         setMediaPreview(null);
         setReplyingTo(null);
         if (composerRef.current) composerRef.current.style.height = '44px';
+        scrollToLatest();
       } else {
         // CS pindah chat saat mengunggah: lampiran yang baru terkirim tersimpan di chat asal dan harus dibuang.
         const sent = stashedMedia.current.get(selectedId);
