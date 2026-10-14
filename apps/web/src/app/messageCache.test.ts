@@ -35,9 +35,10 @@ describe('Pesan masuk realtime ke cache chat terbuka', () => {
     expect(client.getQueryData<any[]>(['messages', 100, 1])!.map((m) => m.id)).toEqual([1]);
   });
 
-  it('tanpa brandId di event: perilaku lama (dicocokkan lewat prospek/remoteJid)', () => {
+  it('event tanpa brandId tidak masuk cache mana pun (tidak bisa dipastikan brand-nya)', () => {
     const client = setup();
-    appendIncomingMessage(client, { id: 6, prospectId: 100, remoteJid: JID, timestamp: 6 });
-    expect(client.getQueryData<any[]>(['messages', 100, 1])!.map((m) => m.id)).toContain(6);
+    appendIncomingMessage(client, { id: 6, prospectId: 100, remoteJid: JID, timestamp: 6 } as any);
+    expect(client.getQueryData<any[]>(['messages', 100, 1])!.map((m) => m.id)).toEqual([1]);
+    expect(client.getQueryData<any[]>(['messages', 200, 2])!.map((m) => m.id)).toEqual([2]);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { businessDateKey } from '@csumroh/shared-types';
-import { getInboxQueue, type InboxConversation } from './inboxFilters';
+import { getInboxQueue, visibleInboxFilters, type InboxConversation, type InboxWorkFilter } from './inboxFilters';
 
 const incoming = { isFromMe: false, messageText: 'Tanya jadwal umroh', timestamp: 20 };
 const outgoing = { isFromMe: true, messageText: 'Rincian paket', timestamp: 30 };
@@ -24,7 +24,7 @@ describe('antrean kerja CS inbox', () => {
     const list = [contact(1, { name: 'Ahmad' }), contact(2, { name: 'Ahmad', userId: 8 }), contact(3, { name: 'Ahmad', messages: [outgoing] }), contact(4)];
     const result = getInboxQueue(list, { ...defaults, work: 'needs_reply', owner: 'mine', search: ' AHMAD ' });
     expect(result.conversations.map((p) => p.id)).toEqual([1]);
-    expect(result.counts).toEqual({ all: 2, needs_reply: 1, followup: 0, qualified: 0, won: 0, lost: 0 });
+    expect(result.counts).toMatchObject({ all: 2, needs_reply: 1, followup: 0, 'stage:contact': 2 });
   });
 
   it('memisahkan penugasan CS tanpa menganggap admin tanpa id sebagai PIC', () => {
@@ -67,7 +67,7 @@ describe('antrean kerja CS inbox', () => {
   });
 });
 
-describe('filter tahap: Terkualifikasi, Deal, Batal', () => {
+describe('filter tahap prospek (satu per tahap pipeline, hanya yang ada isinya)', () => {
   const list = [
     contact(1, { status: 'qualified' }),
     contact(2, { status: 'deal' }),
@@ -77,19 +77,30 @@ describe('filter tahap: Terkualifikasi, Deal, Batal', () => {
     contact(6),
     contact(7, { status: 'qualified', spamAt: '2026-09-23T01:00:00.000Z' }),
     contact(8, { status: 'deal', isGroup: true }),
+    contact(9, { status: 'identifying' }),
   ];
+  const ids = (work: InboxWorkFilter, rows = list, owner = 'all') => getInboxQueue(rows, { ...defaults, work, owner }).conversations.map((p) => p.id);
 
-  it('menyaring per tahap dan menghitung jumlah chip dari lingkup yang sama', () => {
-    expect(getInboxQueue(list, { ...defaults, work: 'qualified' }).conversations.map((p) => p.id)).toEqual([1]);
-    expect(getInboxQueue(list, { ...defaults, work: 'won' }).conversations.map((p) => p.id)).toEqual([2, 3]);
-    expect(getInboxQueue(list, { ...defaults, work: 'lost' }).conversations.map((p) => p.id)).toEqual([4, 5]);
-    expect(getInboxQueue(list, defaults).counts).toMatchObject({ all: 8, qualified: 1, won: 2, lost: 2 });
+  it('menyaring per tahap; status lama dipetakan ke tahap kanonik (Deal, Batal, Terhubung)', () => {
+    expect(ids('stage:qualified')).toEqual([1]);
+    expect(ids('stage:deal')).toEqual([2, 3]);
+    expect(ids('stage:lose')).toEqual([4, 5]);
+    expect(ids('stage:contact')).toEqual([6, 9]);
+    expect(getInboxQueue(list, defaults).counts).toMatchObject({ all: 9, 'stage:qualified': 1, 'stage:deal': 2, 'stage:lose': 2, 'stage:contact': 2, 'stage:offer': 0 });
   });
 
   it('chat spam dan grup tidak masuk antrean tahap, dan filter tahap ikut PIC + pencarian', () => {
-    expect(getInboxQueue(list, { ...defaults, work: 'qualified' }).conversations.map((p) => p.id)).not.toContain(7);
-    expect(getInboxQueue(list, { ...defaults, work: 'won' }).conversations.map((p) => p.id)).not.toContain(8);
+    expect(ids('stage:qualified')).not.toContain(7);
+    expect(ids('stage:deal')).not.toContain(8);
     const mine = [contact(1, { status: 'deal', userId: 7 }), contact(2, { status: 'deal', userId: 8 })];
-    expect(getInboxQueue(mine, { ...defaults, work: 'won', owner: 'mine' }).conversations.map((p) => p.id)).toEqual([1]);
+    expect(ids('stage:deal', mine, 'mine')).toEqual([1]);
+  });
+
+  it('chip tahap kosong disembunyikan; antrean kerja selalu tampil; pilihan aktif tetap terlihat', () => {
+    const { counts } = getInboxQueue(list, defaults);
+    const shown = (active: InboxWorkFilter) => visibleInboxFilters(counts, active).map((f) => f.id);
+    expect(shown('all')).toEqual(['all', 'needs_reply', 'followup', 'stage:contact', 'stage:qualified', 'stage:deal', 'stage:lose']);
+    expect(shown('stage:offer')).toContain('stage:offer');
+    expect(visibleInboxFilters({ all: 0, needs_reply: 0, followup: 0 }, 'all').map((f) => f.id)).toEqual(['all', 'needs_reply', 'followup']);
   });
 });

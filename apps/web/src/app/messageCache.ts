@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-export type IncomingMessage = { id?: number; brandId?: number; prospectId?: number | null; remoteJid?: string; timestamp?: number };
+export type IncomingMessage = { id?: number; brandId: number; prospectId?: number | null; remoteJid?: string; timestamp?: number };
 
 /**
  * Pesan baru langsung masuk ke chat yang sedang terbuka (tanpa memuat ulang riwayat).
@@ -11,7 +11,7 @@ export function appendIncomingMessage(queryClient: QueryClient, message?: Incomi
   if (!message?.id) return;
   const predicate = (query: { queryKey: readonly unknown[] }) => {
     const [key, , cachedBrandId] = query.queryKey;
-    return key === 'messages' && (!message.brandId || cachedBrandId === message.brandId);
+    return key === 'messages' && cachedBrandId === message.brandId;
   };
   queryClient.setQueriesData<any[]>({ predicate }, (old) => {
     if (!Array.isArray(old) || old.some((m) => m.id === message.id)) return old;

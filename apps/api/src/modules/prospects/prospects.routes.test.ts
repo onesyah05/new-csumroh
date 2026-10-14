@@ -832,6 +832,9 @@ describe('Kualifikasi: syarat, penjaga, dan pilihan baku', () => {
     expect(prospect(9).targetMonthsExtra).toBe('2027-02');
     expect((await invoke('patch', '/:id/profile', { id: 9, body: { targetMonth: '' } })).status).toBe(200);
     expect(prospect(9).targetMonthsExtra).toBeNull();
+    // Pembersihan otomatis tercatat di riwayat dengan nilai yang benar-benar tersimpan.
+    const log = [...mocks.state.logs].reverse().find((l: any) => l.prospectId === 9 && l.actionType === 'profile_updated');
+    expect(log.description).toContain('Bulan tambahan: Februari 2027 → –');
   });
 
   it('tahap Terkualifikasi manual memakai syarat yang sama', async () => {

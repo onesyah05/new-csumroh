@@ -697,7 +697,7 @@ prospectsRouter.patch('/:id/profile', asyncHandler(async (req, res) => {
   const packageNames = packageChanged
     ? await prisma.package.findMany({ where: { id: { in: [existing.packageId, packageId].filter((v): v is number => Boolean(v)) } }, select: { id: true, name: true } })
     : [];
-  const changes = describeProfileChanges(existing as unknown as Record<string, unknown>, { ...rest, ...(nextFollowupDate !== undefined ? { nextFollowupDate: data.nextFollowupDate } : {}) }, packageChanged
+  const changes = describeProfileChanges(existing as unknown as Record<string, unknown>, { ...rest, ...(data.targetMonthsExtra !== undefined ? { targetMonthsExtra: data.targetMonthsExtra } : {}), ...(nextFollowupDate !== undefined ? { nextFollowupDate: data.nextFollowupDate } : {}) }, packageChanged
     ? { before: packageNames.find((pkg) => pkg.id === existing.packageId)?.name ?? null, after: packageNames.find((pkg) => pkg.id === packageId)?.name ?? null }
     : undefined);
 

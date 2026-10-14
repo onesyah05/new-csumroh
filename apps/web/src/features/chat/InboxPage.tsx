@@ -37,7 +37,7 @@ import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickRe
 import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
-import { getInboxQueue, inboxWorkFilters, type InboxWorkFilter } from './inboxFilters';
+import { getInboxQueue, inboxFilters, visibleInboxFilters, type InboxWorkFilter } from './inboxFilters';
 import { useSpamToggle } from './useSpamToggle';
 import { waMessage } from './waFormat';
 import { showFeedback } from '../../app/toast';
@@ -697,7 +697,8 @@ export function InboxPage() {
     ];
   }, [conversations.data, user?.id, user?.role]);
 
-  const activeFilter = inboxWorkFilters.find((filter) => filter.id === chatFilter) ?? inboxWorkFilters[0];
+  const activeFilter = inboxFilters.find((filter) => filter.id === chatFilter) ?? inboxFilters[0]!;
+  const visibleFilters = visibleInboxFilters(filterCounts, chatFilter);
 
   // Chat yang sedang terbuka = sudah dibaca, apa pun cara membukanya (klik daftar, tautan notifikasi, chat pertama)
   // dan juga saat pesan baru masuk ke chat yang terbuka. Hanya saat tab terlihat. Pemantau (bukan PIC) tidak
@@ -1348,7 +1349,7 @@ export function InboxPage() {
               </div>
               </div>
               <div className="mobile-compact-filters scroll-row flex flex-nowrap items-center gap-1.5 text-xs font-medium" role="group" aria-label="Filter pekerjaan CS">
-                {inboxWorkFilters.map((filter) => (
+                {visibleFilters.map((filter) => (
                   <button
                     key={filter.id}
                     type="button"
@@ -1402,7 +1403,7 @@ export function InboxPage() {
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#8696a0]">
                 <p className="font-semibold text-[#54656f]">
-                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : chatFilter === 'qualified' ? 'Belum ada jamaah Terkualifikasi' : chatFilter === 'won' ? 'Belum ada jamaah Deal' : chatFilter === 'lost' ? 'Belum ada jamaah Batal' : 'Tidak ada percakapan'}
+                  {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : chatFilter.startsWith('stage:') ? `Belum ada jamaah ${activeFilter.label}` : 'Tidak ada percakapan'}
                 </p>
                 <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua</button>
               </div>
