@@ -24,12 +24,14 @@ type PendingDelete = { kind: 'asset'; asset: GalleryAsset } | { kind: 'folder'; 
 
 /**
  * Galeri media bersama per brand. Dipakai di halaman Galeri (mode "page") dan di Inbox saat CS memilih Foto & Video
- * (mode "picker": satu media dipilih lalu dikembalikan lewat onSelect).
+ * (mode "picker": beberapa media dipilih berurutan lalu dikembalikan sekaligus lewat onSelectMany).
  */
-export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDevice }: {
+export function GalleryBrowser({ brandId, mode, onSelectMany, maxSelect = 10, onClose, onPickFromDevice }: {
   brandId: number;
   mode: 'page' | 'picker';
-  onSelect?: (asset: GalleryAsset) => void;
+  onSelectMany?: (assets: GalleryAsset[]) => void;
+  /** Picker: batas jumlah media yang boleh dipilih sekali kirim. */
+  maxSelect?: number;
   onClose?: () => void;
   /** Picker: kirim berkas langsung dari perangkat tanpa menyimpannya ke galeri (mis. GIF, MOV). */
   onPickFromDevice?: () => void;
@@ -40,6 +42,8 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
   const [folder, setFolder] = useState<string>(RECENT);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<GalleryAsset | null>(null);
+  // Picker: pilihan berurutan (urutan klik = urutan kirim). Halaman Galeri memakai `selected` tunggal.
+  const [picked, setPicked] = useState<GalleryAsset[]>([]);
   const [newFolder, setNewFolder] = useState<string | null>(null);
   const [uploading, setUploading] = useState(0);
   const [zoom, setZoom] = useState<GalleryAsset | null>(null);
@@ -76,6 +80,15 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
   };
   const onError = (error: Error) => showFeedback(error.message, { error: true });
 
+  const togglePicked = (asset: GalleryAsset) => setPicked((list) => {
+    if (list.some((item) => item.id === asset.id)) return list.filter((item) => item.id !== asset.id);
+    if (list.length >= maxSelect) {
+      showFeedback('Maksimal ' + maxSelect + ' media sekali kirim.', { error: true });
+      return list;
+    }
+    return [...list, asset];
+  });
+
   async function handleFiles(list: ArrayLike<File> | null) {
     const all = Array.from(list ?? []);
     if (!all.length) return;
@@ -90,9 +103,11 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
     if (!files.length) return;
     setUploading(files.length);
     let last: GalleryAsset | null = null;
+    const uploaded: GalleryAsset[] = [];
     for (const file of files) {
       try {
         last = await uploadGalleryFile(brandId, file, folderId);
+        uploaded.push(last);
       } catch (error) {
         showFeedback(error instanceof Error ? error.message : 'Gagal mengunggah media.', { error: true });
       } finally {
@@ -101,7 +116,8 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
     }
     refresh();
     if (last) {
-      setSelected(last);
+      if (isPicker) setPicked((list) => [...list, ...uploaded.filter((asset) => !list.some((item) => item.id === asset.id))].slice(0, maxSelect));
+      else setSelected(last);
       showFeedback('Media berhasil diunggah.');
     }
   }
@@ -115,13 +131,13 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
   const updateAsset = useMutation({
     mutationFn: (input: { asset: GalleryAsset; patch: { name?: string; folderId?: number | null } }) =>
       api.patch<GalleryAsset>('/gallery/assets/' + input.asset.id, input.patch),
-    onSuccess: (updated) => { setSelected(updated); setRenaming(null); refresh(); },
+    onSuccess: (updated) => { setSelected(updated); setPicked((list) => list.map((item) => (item.id === updated.id ? updated : item))); setRenaming(null); refresh(); },
     onError,
   });
 
   const removeAsset = useMutation({
     mutationFn: (asset: GalleryAsset) => api.delete('/gallery/assets/' + asset.id),
-    onSuccess: () => { setSelected(null); refresh(); showFeedback('Media dihapus.'); },
+    onSuccess: (_data, removed) => { setSelected(null); setPicked((list) => list.filter((item) => item.id !== removed.id)); refresh(); showFeedback('Media dihapus.'); },
     onError,
   });
 
@@ -272,7 +288,8 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
                   <GalleryAssetCard
                     key={asset.id}
                     asset={asset}
-                    active={selected?.id === asset.id}
+                    active={isPicker ? picked.some((item) => item.id === asset.id) : selected?.id === asset.id}
+                    order={isPicker && picked.some((item) => item.id === asset.id) ? picked.findIndex((item) => item.id === asset.id) + 1 : undefined}
                     actions={canModify(asset) ? {
                       folders: folders.data?.folders ?? [],
                       move: (target) => updateAsset.mutate({ asset, patch: { folderId: target } }),
@@ -289,8 +306,8 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
                       },
                       cancel: () => setRenaming(null),
                     } : null}
-                    onSelect={() => { setSelected(asset); setRenaming(null); }}
-                    onOpen={() => { if (isPicker) onSelect?.(asset); else setZoom(asset); }}
+                    onSelect={() => { if (isPicker) togglePicked(asset); else setSelected(asset); setRenaming(null); }}
+                    onOpen={() => setZoom(asset)}
                     onZoom={() => setZoom(asset)}
                   />
                 ))}
@@ -305,16 +322,26 @@ export function GalleryBrowser({ brandId, mode, onSelect, onClose, onPickFromDev
             )}
           </div>
 
-          {selected && (
+          {isPicker && picked.length > 0 && (
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-zinc-50 px-3 py-2.5 sm:px-4">
+              <p className="min-w-0 flex-1 text-xs text-zinc-600">
+                <span className="font-semibold text-zinc-900">{picked.length} media dipilih</span>
+                <span className="hidden sm:inline"> &middot; dikirim sesuai urutan nomor &middot; maksimal {maxSelect}</span>
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button variant="secondary" onClick={() => setPicked([])}>Batalkan pilihan</Button>
+                <Button onClick={() => onSelectMany?.(picked)}>Pilih {picked.length}</Button>
+              </div>
+            </div>
+          )}
+
+          {!isPicker && selected && (
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-zinc-50 px-3 py-2.5 sm:px-4">
               <div className="min-w-0 flex-1 text-xs text-zinc-600">
                 <p className="truncate font-semibold text-zinc-900">{selected.name}</p>
                 <p className="truncate">
                   {selected.uploadedBy?.name ?? 'Pengguna dihapus'} &middot; {formatGalleryWhen(selected.createdAt)} &middot; {formatFileSize(selected.size)}
                 </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {isPicker && <Button onClick={() => onSelect?.(selected)}>Pilih</Button>}
               </div>
             </div>
           )}

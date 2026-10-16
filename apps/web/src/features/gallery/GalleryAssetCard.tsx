@@ -32,9 +32,11 @@ export interface GalleryRenameState {
  * Satu media di grid galeri: thumbnail, nama, zoom, dan menu titik tiga (ganti nama, pindahkan, hapus) di atas
  * gambar. Aksi tampil saat hover atau fokus, saat menu terbuka, pada media terpilih, dan di perangkat tanpa hover.
  */
-export function GalleryAssetCard({ asset, active, actions, rename, onSelect, onOpen, onZoom }: {
+export function GalleryAssetCard({ asset, active, order, actions, rename, onSelect, onOpen, onZoom }: {
   asset: GalleryAsset;
   active: boolean;
+  /** Urutan pilihan (1, 2, …) saat memilih banyak media; urutan ini juga urutan kirim. */
+  order?: number;
   /** Null untuk pengguna yang bukan pengunggah/Admin: hanya zoom. */
   actions: GalleryAssetActions | null;
   rename: GalleryRenameState | null;
@@ -65,6 +67,9 @@ export function GalleryAssetCard({ asset, active, actions, rename, onSelect, onO
             </>
           ) : (
             <img src={resolveMediaUrl(asset.url)} alt={asset.name} loading="lazy" className="h-full w-full object-cover" />
+          )}
+          {order !== undefined && (
+            <span aria-label={'Pilihan ke-' + order} className="absolute left-1.5 top-1.5 grid h-6 min-w-6 place-items-center rounded-full bg-zinc-950 px-1 text-xs font-bold text-white shadow-sm">{order}</span>
           )}
         </span>
         <span className={cn('mt-1 block truncate px-1 text-xs font-medium text-zinc-700', rename && 'invisible')}>{asset.name}</span>

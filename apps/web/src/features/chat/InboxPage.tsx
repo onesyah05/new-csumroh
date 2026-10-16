@@ -195,6 +195,9 @@ export function InboxPage() {
   useEffect(() => { setPackageMonth('all'); }, [brandId]);
   const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
   const [mediaPreview, setMediaPreview] = useState<MediaPreviewState | null>(null);
+  // Beberapa media dari galeri yang menunggu dikirim (milik satu chat; dibuang saat CS pindah chat).
+  const [galleryBatch, setGalleryBatch] = useState<{ chatId: number; assets: GalleryAsset[] } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   // Lampiran yang belum terkirim disimpan per chat: caption flyer ada di draf chat itu, jadi lampirannya harus ikut
   // kembali saat CS membuka chat itu lagi (kalau tidak, caption terkirim tanpa gambar).
   const mediaPreviewRef = useRef(mediaPreview);
@@ -561,6 +564,7 @@ export function InboxPage() {
   const resetSend = send.reset;
   useEffect(() => {
     setReplyingTo(null);
+    setGalleryBatch(null);
     // Lampiran chat yang ditinggalkan disimpan (bukan dibuang) dan dikembalikan saat chat itu dibuka lagi.
     const leaving = previousChatRef.current;
     const current = mediaPreviewRef.current;
@@ -1153,6 +1157,62 @@ export function InboxPage() {
     } finally {
       setUploadingMedia(false);
     }
+  }
+
+  /**
+   * Kirim media pilihan galeri satu per satu sesuai urutan pilihan (tiap media menjadi satu pesan, seperti WhatsApp).
+   * Draf ketikan tidak disentuh. Kutipan (balasan) hanya menempel di media pertama yang berhasil terkirim. Media yang
+   * gagal tetap di daftar agar bisa dicoba lagi.
+   */
+  async function sendGalleryBatch() {
+    if (!canSend || uploadingMedia || !galleryBatch || galleryBatch.chatId !== selectedId || !galleryBatch.assets.length) return;
+    const chatId = galleryBatch.chatId;
+    const assets = galleryBatch.assets;
+    const quote = replyingTo;
+    let quoteUsed = false;
+    const failed: GalleryAsset[] = [];
+    setUploadingMedia(true);
+    setBatchProgress({ done: 0, total: assets.length });
+    scrollToLatest();
+    try {
+      for (const [index, asset] of assets.entries()) {
+        try {
+          const file = await galleryAssetToFile(asset);
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(',')[1] ?? '');
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          await api.post(`/chat/messages/media${query}`, {
+            brandId,
+            prospectId: chatId,
+            fileName: file.name,
+            mimeType: file.type,
+            base64Data: base64,
+            mediaType: file.type.startsWith('video/') ? 'videoMessage' : 'imageMessage',
+            caption: '',
+            ...(quote && !quoteUsed ? { quotedMessageId: quote.messageId, quotedText: quote.text, quotedSender: quote.senderName } : {}),
+          });
+          quoteUsed = true;
+        } catch {
+          failed.push(asset);
+        }
+        setBatchProgress({ done: index + 1, total: assets.length });
+      }
+    } finally {
+      setUploadingMedia(false);
+      setBatchProgress(null);
+    }
+    const sent = assets.length - failed.length;
+    if (selectedIdRef.current === chatId) {
+      setGalleryBatch(failed.length ? { chatId, assets: failed } : null);
+      if (quoteUsed) setReplyingTo(null);
+      scrollToLatest();
+    }
+    void queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+    void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    showToast(failed.length ? (sent ? sent + ' media terkirim, ' + failed.length + ' gagal. Coba kirim ulang yang tersisa.' : 'Gagal mengirim media dari galeri.') : sent + ' media berhasil dikirim!');
   }
 
   if (!brandId) return <PageError title="Belum ada brand aktif" description="Buat brand melalui menu Administrasi dan hubungkan WhatsApp untuk menerima percakapan sebenarnya." />;
@@ -1808,6 +1868,53 @@ export function InboxPage() {
                     </div>
                   )}
 
+                  {/* Beberapa media dari galeri: pratinjau, hapus satu per satu, lalu kirim sekaligus */}
+                  {galleryBatch && galleryBatch.chatId === selectedId && (
+                    <div className="mx-auto mb-2 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="rounded-2xl border border-[#e9edef] bg-white p-2.5 shadow-sm">
+                        <div className="flex items-center justify-between gap-2 px-0.5 pb-2">
+                          <p className="text-sm font-semibold text-zinc-900">{galleryBatch.assets.length} media dari galeri</p>
+                          <p className="text-xs text-zinc-500" aria-live="polite">
+                            {batchProgress ? 'Mengirim ' + batchProgress.done + '/' + batchProgress.total + '…' : 'Dikirim satu per satu sesuai nomor'}
+                          </p>
+                        </div>
+                        <ul className="flex gap-2 overflow-x-auto pb-1">
+                          {galleryBatch.assets.map((asset, index) => (
+                            <li key={asset.id} className="relative h-16 w-16 shrink-0">
+                              <div className="h-full w-full overflow-hidden rounded-xl border border-black/10 bg-zinc-100">
+                                {asset.mimeType.startsWith('video/') ? (
+                                  <video src={resolveMediaUrl(asset.url)} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                                ) : (
+                                  <img src={resolveMediaUrl(asset.url)} alt={asset.name} className="h-full w-full object-cover" />
+                                )}
+                              </div>
+                              <span className="absolute bottom-1 left-1 grid h-5 min-w-5 place-items-center rounded-full bg-zinc-950/80 px-1 text-[11px] font-bold text-white">{index + 1}</span>
+                              <button
+                                type="button"
+                                disabled={uploadingMedia}
+                                onClick={() => setGalleryBatch((current) => {
+                                  if (!current) return current;
+                                  const assets = current.assets.filter((item) => item.id !== asset.id);
+                                  return assets.length ? { ...current, assets } : null;
+                                })}
+                                className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-full bg-white text-zinc-600 shadow ring-1 ring-black/10 transition hover:text-zinc-950 disabled:opacity-40 cursor-pointer"
+                                aria-label={'Hapus ' + asset.name + ' dari kiriman'}
+                              >
+                                <X size={13} />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-2 flex items-center justify-end gap-2">
+                          <Button variant="secondary" disabled={uploadingMedia} onClick={() => setGalleryBatch(null)}>Batal</Button>
+                          <Button disabled={!canSend || uploadingMedia} loading={uploadingMedia} onClick={() => void sendGalleryBatch()}>
+                            <Send size={14} />Kirim {galleryBatch.assets.length} media
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* WhatsApp Web Media Preview Card (before sending) */}
                   {mediaPreview && (
                     <div className="mx-auto mb-2 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -2172,11 +2279,16 @@ export function InboxPage() {
               mode="picker"
               onClose={() => setShowGalleryPicker(false)}
               onPickFromDevice={() => { setShowGalleryPicker(false); mediaInputRef.current?.click(); }}
-              onSelect={(asset: GalleryAsset) => {
+              onSelectMany={(assets: GalleryAsset[]) => {
                 setShowGalleryPicker(false);
-                void galleryAssetToFile(asset)
-                  .then((file) => handleProcessFile(file))
-                  .catch((error: Error) => showToast(error.message || 'Gagal mengambil media dari galeri.'));
+                if (assets.length === 1) {
+                  // Satu media: alur lama (pratinjau + keterangan opsional di kotak ketik).
+                  void galleryAssetToFile(assets[0]!)
+                    .then((file) => handleProcessFile(file))
+                    .catch((error: Error) => showToast(error.message || 'Gagal mengambil media dari galeri.'));
+                } else if (selectedId) {
+                  setGalleryBatch({ chatId: selectedId, assets });
+                }
               }}
             />
           )}
