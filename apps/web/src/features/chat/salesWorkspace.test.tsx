@@ -126,6 +126,7 @@ describe('Profil dan Copilot', () => {
   it('mencari lintas kategori dan menambahkan hanya satu langkah TGJP tanpa label internal', async () => {
     render(<ChatCopilotPanel brandId={1} stage="qualified" onInsertText={insert} onShowToast={vi.fn()} />, { wrapper });
     await screen.findByText('Jadwal paket');
+    fireEvent.click(screen.getByRole('button', { name: 'Cari skrip' }));
     fireEvent.change(screen.getByLabelText('Cari di semua skrip'), { target: { value: 'biaya' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Tinjau langkah tanya' }));
     fireEvent.click(screen.getByRole('button', { name: 'Tambahkan ke draft' }));
