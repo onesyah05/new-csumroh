@@ -1,4 +1,3 @@
-// @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
 import type { GalleryAsset } from '../gallery/galleryApi';
 import { sendGalleryBatch } from './galleryBatch';
@@ -11,10 +10,8 @@ function setup(options: { failIds?: number[] } = {}) {
   const posts: Record<string, any>[] = [];
   let counter = 0;
   const deps = {
-    toFile: async (a: GalleryAsset) => new File([`isi-${a.id}`], `${a.name}.${a.mimeType === 'video/mp4' ? 'mp4' : 'webp'}`, { type: a.mimeType }),
     post: vi.fn(async (body: Record<string, any>) => {
-      const id = Number(String(body.fileName).match(/\d+/)![0]);
-      if (options.failIds?.includes(id)) throw new Error('gateway putus');
+      if (options.failIds?.includes(body.galleryAssetId)) throw new Error('gateway putus');
       posts.push(body);
     }),
     newId: () => `client-id-${++counter}`,
@@ -24,17 +21,18 @@ function setup(options: { failIds?: number[] } = {}) {
 const base = { brandId: 1, prospectId: 9 };
 
 describe('Kirim media pilihan galeri', () => {
-  it('mengirim berurutan, satu pesan per media, tanpa caption, dengan tipe sesuai', async () => {
+  it('mengirim berurutan, satu pesan per media, hanya id galeri (tanpa isi berkas), tanpa caption', async () => {
     const { posts, deps } = setup();
     const progress: string[] = [];
     const result = await sendGalleryBatch({
       assets: [asset(1), asset(2, 'video/mp4'), asset(3)], base, clientIds: new Map(), deps,
       onProgress: (done, total) => progress.push(`${done}/${total}`),
     });
-    expect(posts.map((p) => p.fileName)).toEqual(['Foto 1.webp', 'Foto 2.mp4', 'Foto 3.webp']);
+    expect(posts.map((p) => p.galleryAssetId)).toEqual([1, 2, 3]);
     expect(posts.map((p) => p.mediaType)).toEqual(['imageMessage', 'videoMessage', 'imageMessage']);
     expect(posts.every((p) => p.caption === '' && p.prospectId === 9 && p.brandId === 1)).toBe(true);
-    expect(posts[0]!.base64Data).toBe(btoa('isi-1'));
+    // Isi berkas dibaca server: browser tidak mengunduh atau mengunggah ulang.
+    expect(posts.every((p) => !('base64Data' in p))).toBe(true);
     expect(progress).toEqual(['1/3', '2/3', '3/3']);
     expect(result.failed).toEqual([]);
     expect(result.sent).toHaveLength(3);
@@ -55,14 +53,14 @@ describe('Kirim media pilihan galeri', () => {
     const { posts, deps } = setup({ failIds: [1] });
     const result = await sendGalleryBatch({ assets: [asset(1), asset(2)], base, clientIds: new Map(), deps, quote: { messageId: 'WAMSG1' } });
     expect(posts).toHaveLength(1);
-    expect(posts[0]).toMatchObject({ fileName: 'Foto 2.webp', quotedMessageId: 'WAMSG1' });
+    expect(posts[0]).toMatchObject({ galleryAssetId: 2, quotedMessageId: 'WAMSG1' });
     expect(result.failed.map((a) => a.id)).toEqual([1]);
   });
 
   it('satu media gagal tidak menghentikan yang lain; yang gagal dikembalikan untuk dicoba lagi', async () => {
     const { posts, deps } = setup({ failIds: [2] });
     const result = await sendGalleryBatch({ assets: [asset(1), asset(2), asset(3)], base, clientIds: new Map(), deps });
-    expect(posts.map((p) => p.fileName)).toEqual(['Foto 1.webp', 'Foto 3.webp']);
+    expect(posts.map((p) => p.galleryAssetId)).toEqual([1, 3]);
     expect(result.failed.map((a) => a.id)).toEqual([2]);
   });
 
@@ -70,7 +68,7 @@ describe('Kirim media pilihan galeri', () => {
     const clientIds = new Map<number, string>();
     const first = setup({ failIds: [2] });
     await sendGalleryBatch({ assets: [asset(1), asset(2)], base, clientIds, deps: first.deps });
-    const failedId = first.deps.post.mock.calls.map((c) => c[0]).find((b) => b.fileName === 'Foto 2.webp')!.clientId;
+    const failedId = first.deps.post.mock.calls.map((c) => c[0]).find((b) => b.galleryAssetId === 2)!.clientId;
     expect([...clientIds.keys()]).toEqual([2]); // hanya yang gagal masih menyimpan id
 
     const retry = setup();
@@ -83,13 +81,5 @@ describe('Kirim media pilihan galeri', () => {
     const { posts, deps } = setup();
     await sendGalleryBatch({ assets: [asset(1), asset(2)], base, clientIds: new Map(), deps });
     expect(new Set(posts.map((p) => p.clientId)).size).toBe(2);
-  });
-
-  it('gagal mengunduh dari galeri dihitung gagal tanpa memanggil kirim', async () => {
-    const { deps } = setup();
-    deps.toFile = async () => { throw new Error('404'); };
-    const result = await sendGalleryBatch({ assets: [asset(1)], base, clientIds: new Map(), deps });
-    expect(deps.post).not.toHaveBeenCalled();
-    expect(result.failed).toHaveLength(1);
   });
 });

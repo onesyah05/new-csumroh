@@ -3,8 +3,6 @@ import type { GalleryAsset } from '../gallery/galleryApi';
 export type BatchQuote = { messageId: string; text?: string | null; senderName?: string | null };
 
 export type BatchDeps = {
-  /** Unduh isi media galeri sebagai File. */
-  toFile(asset: GalleryAsset): Promise<File>;
   /** Kirim satu media ke chat (POST /chat/messages/media). */
   post(body: Record<string, unknown>): Promise<unknown>;
   /** Id acak untuk kunci idempotensi satu media. */
@@ -13,17 +11,9 @@ export type BatchDeps = {
 
 export type BatchResult = { sent: GalleryAsset[]; failed: GalleryAsset[]; quoteUsed: boolean };
 
-function toBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(',')[1] ?? '');
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 /**
  * Kirim media pilihan galeri satu per satu sesuai urutan (tiap media satu pesan WhatsApp, tanpa keterangan).
+ * - Hanya id media yang dikirim; server membaca berkas galerinya sendiri (tanpa unduh dan unggah ulang lewat browser).
  * - Kutipan balasan hanya menempel di media pertama yang berhasil terkirim.
  * - Tiap media punya `clientId` yang disimpan di `clientIds` sampai berhasil: coba ulang media yang sama memakai id yang sama,
  *   sehingga server tidak mengirim dobel bila percobaan sebelumnya sebenarnya sudah sampai (habis waktu di browser).
@@ -43,16 +33,15 @@ export async function sendGalleryBatch(input: {
   let quoteUsed = false;
   for (const [index, asset] of assets.entries()) {
     try {
-      const file = await deps.toFile(asset);
       const clientId = clientIds.get(asset.id) ?? deps.newId();
       clientIds.set(asset.id, clientId);
       await deps.post({
         ...base,
         clientId,
-        fileName: file.name,
-        mimeType: file.type,
-        base64Data: await toBase64(file),
-        mediaType: file.type.startsWith('video/') ? 'videoMessage' : 'imageMessage',
+        galleryAssetId: asset.id,
+        fileName: asset.name,
+        mimeType: asset.mimeType,
+        mediaType: asset.mimeType.startsWith('video/') ? 'videoMessage' : 'imageMessage',
         caption: '',
         ...(quote && !quoteUsed ? { quotedMessageId: quote.messageId, quotedText: quote.text ?? undefined, quotedSender: quote.senderName ?? undefined } : {}),
       });

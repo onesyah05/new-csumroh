@@ -1182,7 +1182,6 @@ export function InboxPage() {
         quote: replyingTo ? { messageId: replyingTo.messageId, text: replyingTo.text, senderName: replyingTo.senderName } : null,
         clientIds: batchClientIds.current,
         deps: {
-          toFile: galleryAssetToFile,
           post: (body) => api.post(`/chat/messages/media${query}`, body),
           newId: () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
         },

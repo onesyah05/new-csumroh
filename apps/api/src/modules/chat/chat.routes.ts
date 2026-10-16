@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Router, type Request } from 'express';
 import { idempotent } from '../../utils/idempotency.js';
+import { isPathInside } from '../../utils/safe-path.js';
 import { z } from 'zod';
 import { messageInputSchema } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
@@ -653,6 +654,8 @@ async function sendChatMedia(req: Request) {
     mimeType: z.string().min(1).max(100).optional().default('image/jpeg'),
     base64Data: z.string().max(40_000_000).optional(),
     packageId: z.coerce.number().int().positive().optional(),
+    // Media dari galeri brand: server membaca berkasnya sendiri, browser tidak perlu mengunduh lalu mengunggah ulang.
+    galleryAssetId: z.coerce.number().int().positive().optional(),
     mediaType: z.enum(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage']).optional().default('imageMessage'),
     caption: z.string().max(2048).optional().default(''),
     quotedMessageId: z.string().max(100).optional(),
@@ -685,6 +688,13 @@ async function sendChatMedia(req: Request) {
     ? await prisma.package.findFirst({ where: { id: input.packageId, brandId }, select: { id: true, flyerImage: true } })
     : null;
   if (input.packageId && !linkedPackage) throw new HttpError(404, 'Paket tidak ditemukan di brand ini.');
+  // Media galeri harus milik brand percakapan ini.
+  const galleryAsset = input.galleryAssetId
+    ? await prisma.mediaAsset.findFirst({ where: { id: input.galleryAssetId, brandId }, select: { name: true, url: true, mimeType: true } })
+    : null;
+  if (input.galleryAssetId && !galleryAsset) throw new HttpError(404, 'Media galeri tidak ditemukan di brand ini.');
+  // Jenis pesan mengikuti isi berkas galeri, bukan kiriman klien.
+  const mediaType = galleryAsset ? (galleryAsset.mimeType.startsWith('video/') ? 'videoMessage' : 'imageMessage') : input.mediaType;
 
   const session = await prisma.whatsappSession.findUnique({ where: { brandId } });
   // Status di database bisa tertinggal; gateway yang memutuskan (409 bila memang putus).
@@ -712,12 +722,23 @@ async function sendChatMedia(req: Request) {
     }
   }
 
+  if (!resolvedBase64 && galleryAsset) {
+    const galleryRoot = path.resolve(process.cwd(), 'uploads', 'gallery');
+    const galleryFile = path.join(galleryRoot, path.basename(galleryAsset.url));
+    if (!isPathInside(galleryRoot, galleryFile)) throw new HttpError(404, 'Berkas media galeri tidak ditemukan.');
+    const content = await fs.promises.readFile(galleryFile).catch(() => null);
+    if (!content) throw new HttpError(404, 'Berkas media galeri tidak ditemukan.');
+    resolvedBase64 = content.toString('base64');
+    resolvedMimeType = galleryAsset.mimeType;
+    resolvedFileName = input.fileName !== 'media_file' ? input.fileName : galleryAsset.name;
+  }
+
   if (!resolvedBase64) {
     throw new HttpError(400, 'Berkas media atau flyer paket tidak ditemukan.');
   }
 
   // Foto harus JPEG/PNG: gambar WebP (galeri, flyer paket) berhenti di centang satu dan tidak sampai ke HP penerima.
-  if (input.mediaType === 'imageMessage') {
+  if (mediaType === 'imageMessage') {
     const image = await normalizeWhatsappImage({ base64: resolvedBase64, mimeType: resolvedMimeType, fileName: resolvedFileName });
     resolvedMimeType = image.mimeType;
     if (image.converted) {
@@ -768,7 +789,7 @@ async function sendChatMedia(req: Request) {
       fileName: resolvedFileName,
       mimeType: resolvedMimeType,
       base64Data: resolvedBase64,
-      mediaType: input.mediaType,
+      mediaType,
       caption: input.caption,
       quotedMessageId,
       quotedText,
@@ -787,7 +808,7 @@ async function sendChatMedia(req: Request) {
     const messageId = gatewayResult.data?.messageId ?? `local-${randomUUID()}`;
     const mediaUrl = resolvedLocalUrl || (gatewayResult.data?.mediaUrl ?? null);
     // Foto/video tanpa keterangan: penanda standar (disembunyikan di UI), bukan nama berkas. Dokumen tetap memakai nama berkas.
-    const mediaPlaceholder = input.mediaType === 'imageMessage' ? MEDIA_PLACEHOLDER.image : input.mediaType === 'videoMessage' ? MEDIA_PLACEHOLDER.video : resolvedFileName;
+    const mediaPlaceholder = mediaType === 'imageMessage' ? MEDIA_PLACEHOLDER.image : mediaType === 'videoMessage' ? MEDIA_PLACEHOLDER.video : resolvedFileName;
     const messageText = input.caption || mediaPlaceholder;
     const created = await tx.chatMessage.upsert({
       where: { brandId_messageId: { brandId, messageId } },
@@ -796,7 +817,7 @@ async function sendChatMedia(req: Request) {
         devicePhone,
         senderName: req.user!.name,
         messageText,
-        messageType: input.mediaType,
+        messageType: mediaType,
         mediaUrl,
         quotedMessageId,
         quotedText,
@@ -812,7 +833,7 @@ async function sendChatMedia(req: Request) {
         senderName: req.user!.name,
         isFromMe: true,
         messageText,
-        messageType: input.mediaType,
+        messageType: mediaType,
         mediaUrl,
         status: 'sent',
         timestamp: Math.floor(Date.now() / 1000),
