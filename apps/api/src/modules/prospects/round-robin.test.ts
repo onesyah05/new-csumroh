@@ -89,7 +89,7 @@ describe('createProspectWithRoundRobin', () => {
     expect(mocks.queryRaw).toHaveBeenCalledTimes(1);
     expect(mocks.shareUpdate).toHaveBeenCalledWith({ where: { brandId_userId: { brandId: 3, userId: 6 } }, data: { assignedCount: { increment: 1 } } });
     expect(mocks.prospectCreate).toHaveBeenCalledWith({ data: { ...data, brandId: 3, userId: 6 } });
-    expect(mocks.logCreate.mock.calls[0][0].data).toMatchObject({ prospectId: 9, actionType: 'pic_auto_assigned', userId: 6 });
+    expect(mocks.logCreate.mock.calls[0][0].data).toMatchObject({ prospectId: 9, actionType: 'pic_auto_assigned', userId: null });
   });
 
   it('tak ada CS layak: prospek tetap tanpa PIC (perilaku lama)', async () => {

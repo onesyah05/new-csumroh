@@ -59,7 +59,8 @@ export async function createProspectWithRoundRobin(brandId: number, data: Omit<P
       await tx.prospectLog.create({
         data: {
           prospectId: prospect.id,
-          userId: assigned.userId,
+          // Tanpa pelaku: dibagi sistem, bukan tindakan CS itu sendiri.
+          userId: null,
           actionType: 'pic_auto_assigned',
           title: `PIC dibagi otomatis (round robin): ${assigned.name}`,
         },
@@ -92,13 +93,14 @@ export async function getRoundRobinSettings(brandId: number) {
 export async function saveRoundRobinSettings(brandId: number, input: { enabled: boolean; shares: { userId: number; percent: number }[] }) {
   const ids = input.shares.map((s) => s.userId);
   if (new Set(ids).size !== ids.length) throw new HttpError(400, 'CS tidak boleh muncul dua kali.');
-  const eligible = await prisma.user.findMany({ where: { ...eligibleUser(brandId), id: { in: ids } }, select: { id: true } });
-  if (eligible.length !== ids.length) throw new HttpError(400, 'Ada CS yang tidak aktif atau tidak terhubung ke brand ini.');
   const total = input.shares.reduce((sum, s) => sum + s.percent, 0);
   if (input.enabled && total !== ROUND_ROBIN_TOTAL) throw new HttpError(400, `Total persen harus 100% (sekarang ${total}%).`);
   if (total > ROUND_ROBIN_TOTAL) throw new HttpError(400, `Total persen tidak boleh melebihi 100% (sekarang ${total}%).`);
   await prisma.$transaction(async (tx) => {
     await lockBrand(tx, brandId);
+    // Kelayakan dicek di dalam transaksi: CS yang baru dinonaktifkan/dicabut tidak lolos ke penyimpanan.
+    const eligible = await tx.user.findMany({ where: { ...eligibleUser(brandId), id: { in: ids } }, select: { id: true } });
+    if (eligible.length !== ids.length) throw new HttpError(400, 'Ada CS yang tidak aktif atau tidak terhubung ke brand ini.');
     await tx.brand.update({ where: { id: brandId }, data: { roundRobinEnabled: input.enabled } });
     await tx.roundRobinShare.updateMany({ where: { brandId }, data: { assignedCount: 0 } });
     for (const s of input.shares) {

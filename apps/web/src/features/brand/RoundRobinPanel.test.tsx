@@ -89,6 +89,18 @@ describe('RoundRobinPanel', () => {
     expect(nisa.disabled).toBe(true);
   });
 
+  it('pemuatan ulang yang hanya menaikkan angka "Terbagi" tidak menghapus isian yang belum disimpan', async () => {
+    renderPanel();
+    await screen.findByLabelText('Nisa');
+    fireEvent.click(screen.getByRole('switch', { name: 'Aktifkan round robin CS' }));
+    type('Nisa', '40');
+    vi.mocked(api.get).mockResolvedValue(settings({ members: [{ userId: 1, name: 'Nisa', percent: 0, assignedCount: 3 }, { userId: 2, name: 'Rafi', percent: 0, assignedCount: 1 }] }) as any);
+    await queryClient.refetchQueries({ queryKey: ['round-robin', 3] });
+    await waitFor(() => expect(screen.getByLabelText('Nisa').closest('li')!.textContent).toContain('3'));
+    expect((screen.getByLabelText('Nisa') as HTMLInputElement).value).toBe('40');
+    expect(screen.getByRole('switch', { name: 'Aktifkan round robin CS' }).getAttribute('aria-checked')).toBe('true');
+  });
+
   it('brand tanpa CS aktif: penjelasan, dan tidak bisa diaktifkan', async () => {
     vi.mocked(api.get).mockResolvedValue(settings({ members: [] }) as any);
     renderPanel();

@@ -32,12 +32,15 @@ export function RoundRobinPanel({ brandId }: { brandId: number }) {
   const [enabled, setEnabled] = useState(false);
   const [draft, setDraft] = useState<Record<number, string>>({});
 
-  // Isi ulang dari server hanya saat data server berubah (muat awal, setelah simpan), bukan saat mengetik.
+  // Isi ulang dari server hanya saat setelan berubah (muat awal, setelah simpan). Angka "Terbagi" yang naik karena lead
+  // baru tidak termasuk, jadi isian yang belum disimpan tidak terhapus oleh pemuatan ulang.
+  const settingsKey = query.data ? `${query.data.enabled}|${query.data.members.map((m) => `${m.userId}:${m.percent}`).join(',')}` : '';
   useEffect(() => {
     if (!query.data) return;
     setEnabled(query.data.enabled);
     setDraft(Object.fromEntries(query.data.members.map((m) => [m.userId, String(m.percent)])));
-  }, [query.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsKey]);
 
   const members = query.data?.members ?? [];
   const percentOf = (userId: number) => parsePercent(draft[userId] ?? '0');
