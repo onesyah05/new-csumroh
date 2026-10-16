@@ -5,7 +5,8 @@ import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
-import { decryptMetaToken, encryptMetaToken, maskMetaToken } from './meta-token.js';
+import { decryptMetaToken, encryptMetaToken, maskMetaToken, withAdsToken } from './meta-token.js';
+import { buildAuthorizeUrl, listAdAccounts, metaOauthConfigured } from './meta-oauth.js';
 import { clearAdInsightsCache } from '../ads/ad-insights.js';
 import { clearAdSpendCache } from '../reports/ad-spend.js';
 import { adLabels } from '../ads/meta-ads.js';
@@ -38,6 +39,8 @@ function settingsResponse(brand: {
   metaPixelId: string | null;
   metaAccessToken: string | null;
   metaAdsAccessToken: string | null;
+  metaAdsTokenSource: string | null;
+  metaAdsTokenExpiresAt: Date | null;
   facebookPageId: string | null;
   metaWabaId: string | null;
   metaAdAccountId: string | null;
@@ -59,6 +62,9 @@ function settingsResponse(brand: {
     accessTokenConfigured: Boolean(brand.metaAccessToken),
     maskedAccessToken: maskMetaToken(brand.metaAccessToken),
     adsAccessTokenConfigured: Boolean(brand.metaAdsAccessToken),
+    adsTokenSource: brand.metaAdsAccessToken ? (brand.metaAdsTokenSource === 'oauth' ? 'oauth' : 'manual') : null,
+    adsTokenExpiresAt: brand.metaAdsAccessToken ? brand.metaAdsTokenExpiresAt : null,
+    oauthAvailable: metaOauthConfigured(),
     connectionConfigured,
     ctwaReady,
     verifiedAt: brand.metaVerifiedAt,
@@ -85,6 +91,8 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
   if (input.clearAccessToken) metaAccessToken = null;
   else if (input.accessToken) metaAccessToken = encryptMetaToken(input.accessToken);
   let metaAdsAccessToken = current.metaAdsAccessToken;
+  // Token ditempel manual / dihapus: bukan lagi hasil OAuth, jadi tidak ikut diperbarui otomatis.
+  const adsTokenChanged = Boolean(input.clearAdsAccessToken || input.adsAccessToken);
   if (input.clearAdsAccessToken) metaAdsAccessToken = null;
   else if (input.adsAccessToken) metaAdsAccessToken = encryptMetaToken(input.adsAccessToken);
 
@@ -98,6 +106,7 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
       metaTestEventCode: input.testEventCode || null,
       metaAccessToken,
       metaAdsAccessToken,
+      ...(adsTokenChanged ? { metaAdsTokenSource: null, metaAdsTokenExpiresAt: null } : {}),
       metaVerifiedAt: null,
       metaLastError: null,
       ...(adAccountChanged ? { metaSpamAudienceId: null, metaSpamSyncedAt: null } : {}),
@@ -107,6 +116,24 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
   clearAdInsightsCache();
   clearAdSpendCache();
   res.json({ success: true, data: settingsResponse(brand) });
+}));
+
+/** Mulai "Hubungkan Meta": kembalikan URL dialog login Facebook (browser diarahkan oleh frontend). */
+capiRouter.post('/oauth/start', asyncHandler(async (req, res) => {
+  const input = z.object({ brandId: z.number().int().positive().optional(), returnTo: z.string().max(300).default('/brands') }).parse(req.body ?? {});
+  const brandId = scopedBrandId(req, input.brandId);
+  const exists = await prisma.brand.findUnique({ where: { id: brandId }, select: { id: true } });
+  if (!exists) throw new HttpError(404, 'Brand tidak ditemukan.');
+  res.json({ success: true, data: { url: buildAuthorizeUrl({ brandId, userId: req.user!.id, returnTo: input.returnTo }) } });
+}));
+
+/** Akun iklan yang dapat diakses token iklan brand, untuk dipilih di UI. */
+capiRouter.get('/oauth/ad-accounts', asyncHandler(async (req, res) => {
+  const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
+  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true, metaAdsAccessToken: true } });
+  const token = brand ? withAdsToken(brand).metaAccessToken : null;
+  if (!token) throw new HttpError(422, 'Hubungkan Meta atau simpan token iklan terlebih dahulu.');
+  res.json({ success: true, data: await listAdAccounts(decryptMetaToken(token)) });
 }));
 
 capiRouter.post('/verify', asyncHandler(async (req, res) => {

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { consumeOauthReturn, oauthFailureMessage } from '../meta/oauthReturn';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -61,6 +62,12 @@ export function BrandPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canManage = user?.role === 'superadmin';
+
+  // Callback OAuth Meta yang gagal sebelum brand diketahui (mis. sesi kedaluwarsa) kembali ke sini.
+  useEffect(() => {
+    const returned = consumeOauthReturn();
+    if (returned?.outcome === 'error') showFeedback(oauthFailureMessage(returned.reason), { error: true });
+  }, []);
 
   // Filters & Search
   const [search, setSearch] = useState('');

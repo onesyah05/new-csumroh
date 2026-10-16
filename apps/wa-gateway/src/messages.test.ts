@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WAMessage } from '@whiskeysockets/baileys';
-import { addLidMappings, normalizePhone, toGatewayContact, toGatewayMessage } from './messages.js';
+import { addLidMappings, extractQuote, normalizePhone, toGatewayContact, toGatewayMessage } from './messages.js';
 
 describe('WhatsApp history normalization', () => {
   it('normalizes Indonesian phone variants to one identifier', () => {

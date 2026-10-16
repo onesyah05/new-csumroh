@@ -28,6 +28,9 @@ export type GatewayMessagePayload = {
   isFromMe: boolean;
   status?: string;
   referral: ReturnType<typeof extractMetaReferral>;
+  /** Pesan yang dibalas (reply). Ada bila pengirim membalas sebuah pesan, dari jamaah maupun dari HP brand. */
+  quotedMessageId?: string;
+  quotedText?: string;
 };
 
 export type GatewayContactPayload = {
@@ -204,6 +207,22 @@ export function toMessageChange(message: WAMessage, lidPnMap: Map<string, string
   return null;
 }
 
+/**
+ * Pesan yang dikutip (reply). WhatsApp menaruhnya di contextInfo milik isi pesan (teks, gambar, dokumen, …):
+ * stanzaId = ID pesan yang dibalas, quotedMessage = isinya (bisa kosong di riwayat lama).
+ */
+export function extractQuote(message: WAMessage): { quotedMessageId: string; quotedText: string } | undefined {
+  const body = normalizeMessageContent(message.message);
+  if (!body) return undefined;
+  const contexts = Object.values(body as Record<string, unknown>)
+    .map((part) => (part && typeof part === 'object' ? (part as { contextInfo?: proto.IContextInfo | null }).contextInfo : undefined))
+    .filter((context): context is proto.IContextInfo => Boolean(context?.stanzaId));
+  const context = contexts[0];
+  if (!context?.stanzaId) return undefined;
+  const quotedText = context.quotedMessage ? textFromMessage({ key: message.key, message: context.quotedMessage } as WAMessage) : '';
+  return { quotedMessageId: context.stanzaId, quotedText };
+}
+
 function timestampFromMessage(message: WAMessage) {
   const timestamp = message.messageTimestamp;
   if (typeof timestamp === 'number') return timestamp;
@@ -270,6 +289,7 @@ export function toGatewayMessage(
     isFromMe,
     status,
     referral: extractMetaReferral(message),
+    ...extractQuote(message),
   };
 }
 

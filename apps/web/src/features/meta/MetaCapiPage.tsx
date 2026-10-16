@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Link2,
   Play,
   Radio,
   RefreshCw,
@@ -29,6 +30,7 @@ import { PageError, PageLoading, SectionEmpty } from '../../components/ui/page-f
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog, Modal } from '../../components/ui/modal';
 import { Pager } from '../../components/ui/pager';
+import { consumeOauthReturn, oauthFailureMessage } from './oauthReturn';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface Brand {
@@ -48,6 +50,10 @@ interface MetaSettings {
   accessTokenConfigured: boolean;
   maskedAccessToken?: string;
   adsAccessTokenConfigured?: boolean;
+  /** 'oauth' = lewat tombol Hubungkan Meta (diperbarui otomatis); 'manual' = ditempel. */
+  adsTokenSource?: 'oauth' | 'manual' | null;
+  adsTokenExpiresAt?: string | null;
+  oauthAvailable?: boolean;
   connectionConfigured: boolean;
   ctwaReady: boolean;
   verifiedAt: string | null;
@@ -117,6 +123,7 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
   // Active brand selection
   const [selectedBrandId, setSelectedBrandId] = useState<number | null>(null);
   const [confirmTokenOpen, setConfirmTokenOpen] = useState(false);
+  const [confirmAdsOpen, setConfirmAdsOpen] = useState(false);
 
   useEffect(() => {
     if (scopedId) {
@@ -181,8 +188,8 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
     setTimeout(() => setCopiedKey(null), 2000);
   }
 
-  function showToast(msg: string) {
-    showFeedback(msg);
+  function showToast(msg: string, error?: boolean) {
+    showFeedback(msg, error ? { error } : undefined);
   }
 
   // Populate form on settings load
@@ -216,6 +223,37 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
       void queryClient.invalidateQueries({ queryKey: ['brands'] });
       showToast('Konfigurasi Meta CAPI berhasil disimpan.');
     },
+  });
+
+  // Kembali dari dialog login Meta: callback API mengalihkan ke halaman ini dengan ?meta=connected|error.
+  useEffect(() => {
+    const returned = consumeOauthReturn();
+    if (!returned) return;
+    if (returned.outcome === 'connected') showToast('Meta terhubung. Pilih akun iklan lalu simpan.');
+    else showToast(oauthFailureMessage(returned.reason), true);
+    void queryClient.invalidateQueries({ queryKey: ['meta-settings'] });
+  }, []);
+
+  // Putuskan token iklan (OAuth atau manual): Laporan iklan berhenti sampai terhubung lagi.
+  const disconnectAdsMutation = useMutation<MetaSettings, Error, void>({
+    mutationFn: () => api.put<MetaSettings>('/meta/settings', { brandId: currentBrandId, ...form, accessToken: undefined, adsAccessToken: undefined, clearAdsAccessToken: true }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['meta-settings', currentBrandId], data);
+      adAccountsMutation.reset();
+      showToast('Token iklan diputuskan.');
+    },
+    onSettled: () => setConfirmAdsOpen(false),
+  });
+
+  const connectMutation = useMutation<{ url: string }, Error, void>({
+    mutationFn: () => api.post<{ url: string }>('/meta/oauth/start', { brandId: currentBrandId, returnTo: `${window.location.pathname}${window.location.search}` }),
+    onSuccess: (data) => window.location.assign(data.url),
+  });
+
+  type AdAccount = { id: string; name: string; status: number | null; businessName: string | null };
+  const adAccountsMutation = useMutation<AdAccount[], Error, void>({
+    mutationFn: () => api.get<AdAccount[]>(`/meta/oauth/ad-accounts?brandId=${currentBrandId}`),
+    onSuccess: (rows) => !rows.length && showToast('Gagal: tidak ada akun iklan yang dapat diakses oleh akun Facebook ini.', true),
   });
 
   const verifyMutation = useMutation({
@@ -477,6 +515,24 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       onChange={(e) => setForm({ ...form, adAccountId: e.target.value.trim().replace(/^act_/i, '').replace(/\D/g, '') })}
                       placeholder="1234567890"
                     />
+                    {settings?.adsAccessTokenConfigured && (
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        {adAccountsMutation.data?.length ? (
+                          <Select
+                            className="w-full"
+                            aria-label="Pilih akun iklan"
+                            placeholder="Pilih akun iklan…"
+                            value={adAccountsMutation.data.some((a) => a.id === form.adAccountId) ? form.adAccountId : undefined}
+                            onValueChange={(id) => setForm({ ...form, adAccountId: id })}
+                            options={adAccountsMutation.data.map((a) => ({ value: a.id, label: `${a.name}${a.businessName ? ` · ${a.businessName}` : ''} (${a.id})` }))}
+                          />
+                        ) : (
+                          <Button type="button" variant="secondary" size="md" className="w-full sm:w-auto" loading={adAccountsMutation.isPending} onClick={() => adAccountsMutation.mutate()}>
+                            Pilih dari akun Meta
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -570,14 +626,48 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
                       </span>
                     )}
                   </div>
-                  <input
-                    id="meta-ads-token"
-                    type={showPassword ? 'text' : 'password'}
-                    className="field font-mono text-xs"
-                    value={form.adsAccessToken}
-                    onChange={(e) => setForm({ ...form, adsAccessToken: e.target.value.trim() })}
-                    placeholder={settings?.adsAccessTokenConfigured ? 'Token baru' : 'ads_read'}
-                  />
+                  {settings?.oauthAvailable && (
+                    <div className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xs text-zinc-600">
+                        {settings.adsTokenSource === 'oauth'
+                          ? `Terhubung lewat Meta${settings.adsTokenExpiresAt ? ` · berlaku sampai ${new Date(settings.adsTokenExpiresAt).toLocaleDateString('id-ID')} (diperpanjang otomatis)` : ''}`
+                          : 'Login dengan akun Facebook yang mengelola iklan. Tanpa menempel token.'}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        className="w-full sm:w-auto"
+                        loading={connectMutation.isPending}
+                        onClick={() => connectMutation.mutate()}
+                      >
+                        <Link2 size={14} />
+                        {settings.adsTokenSource === 'oauth' ? 'Hubungkan ulang' : 'Hubungkan Meta'}
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      id="meta-ads-token"
+                      type={showPassword ? 'text' : 'password'}
+                      className="field flex-1 font-mono text-xs"
+                      value={form.adsAccessToken}
+                      onChange={(e) => setForm({ ...form, adsAccessToken: e.target.value.trim() })}
+                      placeholder={settings?.adsAccessTokenConfigured ? 'Token baru (manual)' : settings?.oauthAvailable ? 'Atau tempel token manual' : 'ads_read'}
+                    />
+                    {settings?.adsAccessTokenConfigured && (
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="md"
+                        className="w-full sm:w-auto"
+                        disabled={disconnectAdsMutation.isPending}
+                        onClick={() => setConfirmAdsOpen(true)}
+                      >
+                        Putuskan
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -964,6 +1054,16 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
         title="Hapus access token?"
         description="Token Meta tersimpan untuk brand ini dihapus. Event konversi tidak terkirim sampai token baru dimasukkan."
         confirmLabel="Hapus token"
+      />
+
+      <ConfirmDialog
+        open={confirmAdsOpen}
+        onClose={() => setConfirmAdsOpen(false)}
+        onConfirm={() => disconnectAdsMutation.mutate()}
+        pending={disconnectAdsMutation.isPending}
+        title="Putuskan token iklan?"
+        description="Token iklan brand ini dihapus. Laporan iklan dan sinkron audiens spam berhenti sampai Meta dihubungkan lagi."
+        confirmLabel="Putuskan"
       />
 
       {/* MODAL: TEST EVENT SANDBOX */}

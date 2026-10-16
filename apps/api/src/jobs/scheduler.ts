@@ -15,6 +15,7 @@ import {
   whatsappDisconnectedJob,
 } from '../modules/notifications/jobs.js';
 import { capiSyncJob } from '../modules/capi/capi.service.js';
+import { refreshOauthTokensJob } from '../modules/capi/meta-oauth.js';
 
 const TICK_MS = 60_000;
 
@@ -54,6 +55,8 @@ const dailyJobs: (Job & { hour: number })[] = [
   { name: 'morning-digest', hour: SLA.morningHour, run: morningDigestJob },
   { name: 'evening-digest', hour: SLA.eveningHour, run: eveningDigestJob },
   { name: 'retention', hour: SLA.retentionHour, run: retentionJob },
+  // Perpanjang token iklan OAuth sebelum kedaluwarsa (±60 hari).
+  { name: 'meta-token-refresh', hour: SLA.retentionHour, run: (now) => refreshOauthTokensJob(now) },
 ];
 
 /** true bila job selesai tanpa galat. */
