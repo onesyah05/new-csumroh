@@ -692,6 +692,34 @@ app.post('/sessions/:brandId/delete', async (req, res, next) => {
   }
 });
 
+/** Edit teks pesan yang kita kirim (WhatsApp hanya menerima dalam ±15 menit; penolakan menjadi galat ke API). */
+app.post('/sessions/:brandId/edit', async (req, res, next) => {
+  try {
+    const brandId = brandIdSchema.parse(req.params.brandId);
+    const input = z.object({
+      jid: z.string().min(5),
+      messageId: z.string().min(1),
+      text: z.string().min(1).max(4000),
+    }).parse(req.body);
+
+    const socket = sessions.get(brandId);
+    if (!socket || statuses.get(brandId) !== 'connected') {
+      res.status(409).json({ success: false, error: 'WhatsApp session is not connected' });
+      return;
+    }
+
+    const targetJid = resolveTargetJid(brandId, input.jid);
+    await socket.sendMessage(targetJid, {
+      text: input.text,
+      edit: { remoteJid: targetJid, id: input.messageId, fromMe: true },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/sessions/:brandId/react', async (req, res, next) => {
   try {
     const brandId = brandIdSchema.parse(req.params.brandId);

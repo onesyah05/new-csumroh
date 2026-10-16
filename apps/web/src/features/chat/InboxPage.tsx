@@ -5,9 +5,9 @@ import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
+import { EDIT_TEXT_PROBLEM_TEXT, businessDateKey, dateOnlyKey, editTextProblem, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Pencil, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useWhatsAppAvatars } from '../../lib/avatars';
@@ -197,6 +197,11 @@ export function InboxPage() {
   const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
   const [mediaPreview, setMediaPreview] = useState<MediaPreviewState | null>(null);
   // Beberapa media dari galeri yang menunggu dikirim (milik satu chat; dibuang saat CS pindah chat).
+  // Mengedit pesan terkirim: teks lama masuk ke kotak ketik. `restoreDraft` mengembalikan draf semula ke chat asalnya
+  // (setMessage terikat ke chat saat edit dimulai), juga bila CS sempat pindah chat.
+  const [editing, setEditing] = useState<{ chatId: number; id: number; original: string; restoreDraft: () => void } | null>(null);
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   const [galleryBatch, setGalleryBatch] = useState<{ chatId: number; assets: GalleryAsset[] } | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ chatId: number; done: number; total: number } | null>(null);
   // Kunci idempotensi per media yang belum berhasil: coba ulang memakai id yang sama agar server tidak mengirim dobel.
@@ -568,6 +573,11 @@ export function InboxPage() {
   useEffect(() => {
     setReplyingTo(null);
     setGalleryBatch(null);
+    const activeEdit = editingRef.current;
+    if (activeEdit && activeEdit.chatId !== selectedId) {
+      activeEdit.restoreDraft();
+      setEditing(null);
+    }
     // Lampiran chat yang ditinggalkan disimpan (bukan dibuang) dan dikembalikan saat chat itu dibuka lagi.
     const leaving = previousChatRef.current;
     const current = mediaPreviewRef.current;
@@ -843,6 +853,10 @@ export function InboxPage() {
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSend) return;
+    if (editing) {
+      submitEdit();
+      return;
+    }
     // Token {{...}} yang datanya belum ada (dari balas cepat/script) tidak boleh terkirim apa adanya ke jamaah.
     const unresolved = unresolvedTokens(message);
     if (unresolved.length) {
@@ -887,6 +901,10 @@ export function InboxPage() {
   function openSendFlyerModal(targetPkg?: any) {
     if (!selectedId) {
       showToast('Pilih kontak obrolan terlebih dahulu');
+      return;
+    }
+    if (editingRef.current) {
+      showToast('Selesaikan atau batalkan edit pesan dulu.');
       return;
     }
     const pkgToUse = targetPkg || currentPackage;
@@ -1049,6 +1067,10 @@ export function InboxPage() {
 
   async function handleProcessFile(file: File) {
     if (!file || !selectedId) return;
+    if (editingRef.current) {
+      showToast('Selesaikan atau batalkan edit pesan dulu.');
+      return;
+    }
 
     // Berkas dikirim sebagai base64 dalam JSON (+33%) dan body API dibatasi 50 MB,
     // jadi batas efektif berkas asli ±37 MB. Tolak lebih awal daripada gagal 413 setelah upload panjang.
@@ -1160,6 +1182,65 @@ export function InboxPage() {
     } finally {
       setUploadingMedia(false);
     }
+  }
+
+  /** Mulai mengedit pesan teks yang sudah terkirim: teks lama masuk ke kotak ketik dan draf semula disimpan. */
+  function startEdit(item: { id: number; messageText?: string | null }) {
+    if (!selectedId) return;
+    if (mediaPreview || galleryBatch || isCompressing) {
+      showToast('Kirim atau hapus lampiran dulu sebelum mengedit pesan.');
+      return;
+    }
+    const draftBefore = message;
+    // Sudah mengedit pesan lain: pindah ke pesan ini, draf semula tetap yang pertama.
+    const restoreDraft = editingRef.current ? editingRef.current.restoreDraft : () => setMessage(draftBefore);
+    const text = item.messageText ?? '';
+    setEditing({ chatId: selectedId, id: item.id, original: text, restoreDraft });
+    setReplyingTo(null);
+    setMessage(text);
+    requestAnimationFrame(() => {
+      const textarea = composerRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(text.length, text.length);
+      adjustTextareaHeight(textarea);
+    });
+  }
+  const startEditStable = useStableCallback(startEdit);
+
+  function cancelEdit() {
+    editingRef.current?.restoreDraft();
+    setEditing(null);
+    requestAnimationFrame(() => adjustTextareaHeight(composerRef.current));
+  }
+
+  const editMutation = useMutation({
+    mutationFn: (vars: { id: number; text: string }) => api.patch(`/chat/messages/${vars.id}${query}`, { text: vars.text }),
+    onSuccess: (_data, vars) => {
+      editingRef.current?.restoreDraft();
+      setEditing(null);
+      requestAnimationFrame(() => adjustTextareaHeight(composerRef.current));
+      void queryClient.invalidateQueries({ queryKey: ['messages'] });
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      showToast('Pesan berhasil diedit.');
+      void vars;
+    },
+    // Gagal (lewat 15 menit, WhatsApp menolak, sesi putus): mode edit tetap terbuka agar teksnya tidak hilang.
+    onError: (error: Error) => showToast(error.message || 'Gagal mengedit pesan.'),
+  });
+
+  function submitEdit() {
+    if (!editing || editMutation.isPending) return;
+    const problem = editTextProblem(message, editing.original);
+    if (problem) {
+      showToast(EDIT_TEXT_PROBLEM_TEXT[problem]);
+      return;
+    }
+    if (unresolvedScript(message.trim())) {
+      showToast('Draft masih memuat tanda {{…}}.');
+      return;
+    }
+    editMutation.mutate({ id: editing.id, text: message.trim() });
   }
 
   /**
@@ -1733,6 +1814,7 @@ export function InboxPage() {
                           setRevealedDeletedIds={setRevealedDeletedIds}
                           setReplyingTo={setReplyingTo}
                           setDeleteConfirmId={setDeleteConfirmId}
+                          startEdit={startEditStable}
                           setPreviewFlyer={setPreviewFlyer}
                           reactMutate={reactMutation.mutate}
                           starMutate={starMutation.mutate}
@@ -1955,6 +2037,29 @@ export function InboxPage() {
                     </div>
                   )}
 
+                  {/* Mengedit pesan terkirim: teks lama ada di kotak ketik; Enter menyimpan, Esc membatalkan */}
+                  {editing && (
+                    <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border-l-4 border-amber-500 bg-white p-2.5 shadow-2xs animate-fade-in" role="status">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700">
+                          <Pencil size={13} />
+                          <span>Mengedit pesan</span>
+                        </div>
+                        <p className="truncate text-xs text-[#667781] mt-0.5">{editing.original}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        disabled={editMutation.isPending}
+                        className="h-6 w-6 rounded-full flex items-center justify-center text-[#54656f] hover:bg-black/5 hover:text-[#111b21] transition cursor-pointer disabled:opacity-40"
+                        title="Batal mengedit (Esc)"
+                        aria-label="Batal mengedit pesan"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  )}
+
                   {/* WhatsApp Web Quoted Reply Preview Bar */}
                   {replyingTo && (
                     <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border-l-4 border-[#00a884] bg-white p-2.5 shadow-2xs animate-fade-in">
@@ -2100,12 +2205,17 @@ export function InboxPage() {
                       onBlur={() => setSlash(null)}
                       onKeyDown={(event) => {
                         if (handleSlashKey(event)) return;
+                        if (event.key === 'Escape' && editingRef.current) {
+                          event.preventDefault();
+                          cancelEdit();
+                          return;
+                        }
                         if (!isTouchDevice() && event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                           event.preventDefault();
                           event.currentTarget.form?.requestSubmit();
                         }
                       }}
-                      placeholder={mediaPreview ? "Tambahkan keterangan (opsional)..." : "Ketik pesan..."}
+                      placeholder={editing ? "Ubah pesan..." : mediaPreview ? "Tambahkan keterangan (opsional)..." : "Ketik pesan..."}
                       aria-label="Tulis pesan WhatsApp"
                       className={cn(
                         // Fokus cukup garis hijau tipis ala WhatsApp; cincin hitam global (globals.css) dimatikan di sini.
@@ -2117,18 +2227,18 @@ export function InboxPage() {
 
                     <button
                       type="submit"
-                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia || isCompressing}
+                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia || isCompressing || editMutation.isPending || (editing ? Boolean(editTextProblem(message, editing.original)) : false)}
                       style={mobile ? { order: 3 } : undefined}
-                      aria-label="Kirim pesan WhatsApp"
-                      title={isTouchDevice() ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
+                      aria-label={editing ? 'Simpan perubahan pesan' : 'Kirim pesan WhatsApp'}
+                      title={editing ? (isTouchDevice() ? 'Simpan perubahan' : 'Simpan perubahan (Enter)') : isTouchDevice() ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
                       className={cn(
                         'h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-white transition shadow-xs cursor-pointer',
-                        canSend && (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia
+                        canSend && (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia && !editMutation.isPending && !(editing && editTextProblem(message, editing.original))
                           ? 'bg-[#00a884] hover:bg-[#008f6f] active:scale-95'
                           : 'bg-[#8696a0] opacity-60 cursor-not-allowed'
                       )}
                     >
-                      {send.isPending || uploadingMedia ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+                      {send.isPending || uploadingMedia || editMutation.isPending ? <RefreshCw size={18} className="animate-spin" /> : editing ? <Check size={18} /> : <Send size={18} />}
                     </button>
                   </div>
 
@@ -2280,6 +2390,8 @@ export function InboxPage() {
                   void galleryAssetToFile(assets[0]!)
                     .then((file) => handleProcessFile(file))
                     .catch((error: Error) => showToast(error.message || 'Gagal mengambil media dari galeri.'));
+                } else if (selectedId && editingRef.current) {
+                  showToast('Selesaikan atau batalkan edit pesan dulu.');
                 } else if (selectedId) {
                   setGalleryBatch({ chatId: selectedId, assets });
                 }

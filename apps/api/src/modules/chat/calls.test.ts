@@ -143,7 +143,8 @@ describe('Pesan ditarik / diedit lewat protocolMessage', () => {
   it('pengirim asli tetap bisa mengedit dan menarik pesannya, termasuk lewat alamat LID', async () => {
     mocks.stored = { ...csReply, messageId: 'K1', isFromMe: false };
     await callEvent({ ...fromContact, messageId: 'K1', chatJids: ['1234@lid'], text: 'jadi 3 orang' }, '/messages/edited');
-    expect(mocks.messageUpdate.mock.calls[0]![0].data).toEqual({ messageText: 'jadi 3 orang' });
+    // Edit dari WhatsApp juga memberi penanda Diedit.
+    expect(mocks.messageUpdate.mock.calls[0]![0].data).toEqual({ messageText: 'jadi 3 orang', editedAt: expect.any(Date) });
 
     vi.clearAllMocks();
     mocks.stored = csReply;
