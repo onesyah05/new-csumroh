@@ -237,7 +237,14 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
       showToast('Meta terhubung. Pilih akun iklan lalu simpan.');
       void queryClient.invalidateQueries({ queryKey: ['meta-settings'] });
     } else {
-      showToast(`Gagal menghubungkan Meta${reason ? `: ${reason}` : '.'}`, true);
+      const reasons: Record<string, string> = {
+        denied: 'izin tidak diberikan.',
+        expired: 'sesi kedaluwarsa, ulangi.',
+        unavailable: 'Meta App belum dikonfigurasi di server.',
+        failed: 'lihat "Error terakhir dari Meta" di bawah.',
+      };
+      showToast(`Gagal menghubungkan Meta: ${(reason && reasons[reason]) || 'coba lagi.'}`, true);
+      void queryClient.invalidateQueries({ queryKey: ['meta-settings'] });
     }
   }, []);
 

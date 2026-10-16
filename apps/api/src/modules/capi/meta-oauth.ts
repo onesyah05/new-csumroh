@@ -12,6 +12,7 @@ import { isMetaSendingAllowed } from './send-guard.js';
 /** ads_read untuk Laporan & nama iklan; ads_management karena sinkron audiens spam membuat/mengubah Custom Audience. */
 export const META_OAUTH_SCOPES = ['ads_read', 'ads_management'];
 const STATE_TTL_SECONDS = 10 * 60;
+const DEFAULT_TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000;
 const REFRESH_WINDOW_MS = 20 * 24 * 60 * 60 * 1000;
 const GRAPH = () => `https://graph.facebook.com/${env.META_GRAPH_API_VERSION}`;
 
@@ -111,7 +112,13 @@ export async function listAdAccounts(token: string): Promise<MetaAdAccount[]> {
 export async function saveOauthToken(brandId: number, result: { token: string; expiresAt: Date | null }) {
   await prisma.brand.update({
     where: { id: brandId },
-    data: { metaAdsAccessToken: encryptMetaToken(result.token), metaAdsTokenSource: 'oauth', metaAdsTokenExpiresAt: result.expiresAt },
+    // Meta kadang tidak mengirim expires_in untuk token panjang: anggap 60 hari agar tetap masuk jadwal perpanjangan.
+    data: {
+      metaAdsAccessToken: encryptMetaToken(result.token),
+      metaAdsTokenSource: 'oauth',
+      metaAdsTokenExpiresAt: result.expiresAt ?? new Date(Date.now() + DEFAULT_TOKEN_TTL_MS),
+      metaLastError: null,
+    },
   });
   clearAdInsightsCache();
   clearAdSpendCache();
@@ -132,8 +139,16 @@ export async function refreshOauthTokensJob(now = new Date()) {
       refreshed += 1;
     } catch (error) {
       failed += 1;
-      console.error(`Perpanjang token Meta brand ${brand.id} gagal`, (error as Error).message);
+      const message = (error as Error).message;
+      console.error(`Perpanjang token Meta brand ${brand.id} gagal`, message);
+      // Tampil di kartu "Error terakhir dari Meta" agar admin tahu harus menghubungkan ulang sebelum token mati.
+      await prisma.brand.update({
+        where: { id: brand.id },
+        data: { metaLastError: `Token iklan gagal diperpanjang otomatis, klik "Hubungkan ulang": ${message}`.slice(0, 5000) },
+      }).catch(() => undefined);
     }
   }
+  // Dilempar agar scheduler melepas klaim harian dan mencoba lagi (maks. 3 kali).
+  if (failed > 0) throw new Error(`${failed} token Meta gagal diperpanjang`);
   return { refreshed, failed };
 }

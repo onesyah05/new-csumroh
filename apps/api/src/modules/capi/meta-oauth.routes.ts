@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { allowedOrigins } from '../../config/env.js';
 import { prisma } from '../../db/prisma.js';
-import { asyncHandler, HttpError } from '../../utils/http.js';
+import { asyncHandler } from '../../utils/http.js';
 import { consumeState, exchangeCodeForLongLivedToken, metaOauthConfigured, safeReturnPath, saveOauthToken } from './meta-oauth.js';
 
 /**
@@ -10,25 +10,32 @@ import { consumeState, exchangeCodeForLongLivedToken, metaOauthConfigured, safeR
  */
 export const metaOauthCallbackRouter = Router();
 
-const redirectBack = (path: string, outcome: 'connected' | 'error', reason?: string) => {
+/** Kode alasan tetap (bukan teks bebas): frontend memetakannya ke pesan, jadi tautan buatan tidak dapat menampilkan teks sembarang. */
+export type OauthFailure = 'denied' | 'expired' | 'unavailable' | 'failed';
+
+const redirectBack = (path: string, outcome: 'connected' | 'error', reason?: OauthFailure) => {
   const base = allowedOrigins[0] ?? '';
   const url = new URL(`${base}${safeReturnPath(path)}`, base || 'http://localhost');
   url.searchParams.set('meta', outcome);
-  if (reason) url.searchParams.set('reason', reason.slice(0, 200));
+  if (reason) url.searchParams.set('reason', reason);
   return base ? url.toString() : `${url.pathname}${url.search}`;
 };
 
 metaOauthCallbackRouter.get('/', asyncHandler(async (req, res) => {
   const state = typeof req.query.state === 'string' ? req.query.state : '';
   const code = typeof req.query.code === 'string' ? req.query.code : '';
-  if (!metaOauthConfigured()) throw new HttpError(503, 'Meta App belum dikonfigurasi di server.');
-  const parsed = await consumeState(state);
+  if (!metaOauthConfigured()) return res.redirect(redirectBack('/brands', 'error', 'unavailable'));
+
+  let parsed: Awaited<ReturnType<typeof consumeState>>;
+  try {
+    parsed = await consumeState(state);
+  } catch {
+    // State kedaluwarsa, terpakai, atau palsu: tidak ada konteks brand, kembali ke daftar Brand.
+    return res.redirect(redirectBack('/brands', 'error', 'expired'));
+  }
 
   // Pengguna menolak izin di dialog Meta.
-  if (!code) {
-    const reason = typeof req.query.error_description === 'string' ? req.query.error_description : 'Izin Meta tidak diberikan.';
-    return res.redirect(redirectBack(parsed.returnTo, 'error', reason));
-  }
+  if (!code) return res.redirect(redirectBack(parsed.returnTo, 'error', 'denied'));
 
   try {
     const brand = await prisma.brand.findUnique({ where: { id: parsed.brandId }, select: { id: true } });
@@ -38,7 +45,10 @@ metaOauthCallbackRouter.get('/', asyncHandler(async (req, res) => {
     await saveOauthToken(parsed.brandId, await exchangeCodeForLongLivedToken(code));
     res.redirect(redirectBack(parsed.returnTo, 'connected'));
   } catch (error) {
-    console.error('Meta OAuth callback gagal', (error as Error).message);
-    res.redirect(redirectBack(parsed.returnTo, 'error', (error as Error).message));
+    const message = (error as Error).message;
+    console.error('Meta OAuth callback gagal', message);
+    // Detail dari Meta tampil di kartu "Error terakhir dari Meta" milik brand (hanya terlihat admin), bukan di URL.
+    await prisma.brand.update({ where: { id: parsed.brandId }, data: { metaLastError: `Hubungkan Meta gagal: ${message}`.slice(0, 5000) } }).catch(() => undefined);
+    res.redirect(redirectBack(parsed.returnTo, 'error', 'failed'));
   }
 }));
