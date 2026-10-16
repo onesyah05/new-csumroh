@@ -49,6 +49,11 @@ export function validateProfile(form: ProfileForm): string | null {
 }
 
 // The setter captures the conversation identity, including during an async send.
+/** Tulis draf chat langsung ke sessionStorage (tanpa menunggu render), mis. saat halaman ditutup. */
+export function writeDraftNow(identity: string, value: string) {
+  try { if (value) sessionStorage.setItem(`azhan.chat-draft.${identity}`, value); else sessionStorage.removeItem(`azhan.chat-draft.${identity}`); } catch { /* Draf tetap ada di memori bila penyimpanan penuh. */ }
+}
+
 export function useConversationDraft(identity: string) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const readMessage = (key: string) => { try { return sessionStorage.getItem(`azhan.chat-draft.${key}`) || ''; } catch { return ''; } };

@@ -1,9 +1,9 @@
 import { memo, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type RefObject, type SetStateAction } from 'react';
-import { isMediaFileNameText } from '@csumroh/shared-types';
+import { editMenuState, isEditAuthor, isMediaFileNameText, type EditableMessage } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle, Ban, Check, CheckCheck, ChevronDown, Clock, Copy, CornerUpLeft, Download, Eye, FileText, ImageIcon,
-  Mic, Phone, PhoneMissed, ShieldCheck, Smile, Star, Sticker, Trash2, Video,
+  Mic, Pencil, Phone, PhoneMissed, ShieldCheck, Smile, Star, Sticker, Trash2, Video,
 } from 'lucide-react';
 import { resolveMediaUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
@@ -54,6 +54,8 @@ export type MessageBubbleProps = {
   setRevealedDeletedIds: Dispatch<SetStateAction<Set<number>>>;
   setReplyingTo: Dispatch<SetStateAction<ReplyTarget | null>>;
   setDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
+  /** Mulai mengedit pesan teks milik kita (teks masuk ke kotak ketik). */
+  startEdit: (item: EditableMessage) => void;
   setPreviewFlyer: (url: string | null) => void;
   reactMutate: (vars: { messageId: number; emoji: string }) => void;
   starMutate: (messageId: number) => void;
@@ -69,7 +71,7 @@ export type MessageBubbleProps = {
  */
 export const MessageBubble = memo(function MessageBubble({
   item, isNewDate, dateLabel, isPickerOpen, isRevealedByAdmin, isAdmin, showDeletedMessages, canSend, canReply, selected, user,
-  composerRef, setActiveReactionMessageId, setRevealedDeletedIds, setReplyingTo, setDeleteConfirmId, setPreviewFlyer,
+  composerRef, setActiveReactionMessageId, setRevealedDeletedIds, setReplyingTo, setDeleteConfirmId, startEdit, setPreviewFlyer,
   reactMutate, starMutate, proofMutate, proofPending, scrollToMessage, showToast,
 }: MessageBubbleProps) {
   const isMessageDeleted = Boolean(item.isDeleted);
@@ -227,6 +229,29 @@ export const MessageBubble = memo(function MessageBubble({
                                   </DropdownMenu.Item>
                                 )}
   
+                                {/* Edit: aturan, alasan, dan akses dari shared-types (sama dengan server). */}
+                                {item.isFromMe && !isMessageDeleted && (() => {
+                                  const edit = editMenuState(item, {
+                                    canEdit: isEditAuthor({ role: user?.role ?? '', userId: user?.id, picUserId: selected?.user?.id }),
+                                    picName: selected?.user?.name,
+                                  });
+                                  if (!edit.visible) return null;
+                                  return (
+                                    <DropdownMenu.Item
+                                      disabled={!edit.enabled}
+                                      onClick={() => { if (edit.enabled) startEdit(item); }}
+                                      title={edit.reason ?? 'Edit pesan'}
+                                      className={cn(
+                                        'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] outline-none',
+                                        edit.enabled ? 'hover:bg-[#f0f2f5] cursor-pointer' : 'opacity-40 cursor-not-allowed',
+                                      )}
+                                    >
+                                      <Pencil size={14} className="text-[#54656f]" />
+                                      <span>Edit{edit.label ? ` (${edit.label})` : ''}</span>
+                                    </DropdownMenu.Item>
+                                  );
+                                })()}
+
                                 {!isMessageDeleted && canSend && (
                                   <DropdownMenu.Item
                                     onClick={() => {
@@ -543,6 +568,7 @@ export const MessageBubble = memo(function MessageBubble({
                               <Star size={11} className="fill-amber-400 text-amber-500" />
                             </span>
                           )}
+                          {item.editedAt && !isMessageDeleted && <span className="italic">Diedit</span>}
                           <span>{formatBubbleTime(item.timestamp)}</span>
                           {item.isFromMe && !isMessageDeleted && (
                             item.status === 'failed' ? (

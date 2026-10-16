@@ -428,6 +428,8 @@ model ChatMessage {
   isDeleted        Boolean   @default(false) @map("is_deleted")
   deletedAt        DateTime? @map("deleted_at")
   isStarred        Boolean   @default(false) @map("is_starred")
+  // Terakhir kali teks pesan diedit (dari CRM, HP brand, atau jamaah); null = belum pernah diedit.
+  editedAt         DateTime? @map("edited_at")
   reaction         String?   @db.VarChar(10)
   reactionUserId   Int?      @map("reaction_user_id")
 

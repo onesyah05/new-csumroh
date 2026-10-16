@@ -21,6 +21,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { z } from 'zod';
 import { addLidMappings, normalizePhone, toGatewayCall, toGatewayContact, toGatewayMessage, toMessageChange, type HistoryContact } from './messages.js';
+import { editMessage, type EditSocket } from './edit.js';
 import { classifyDisconnect, reconnectDelayMs } from './connection.js';
 import { acquireInstanceLock } from './instance-lock.js';
 import { declaredMediaBytes, exceedsMediaLimit, MAX_INBOUND_MEDIA_BYTES } from './media-limits.js';
@@ -687,6 +688,38 @@ app.post('/sessions/:brandId/delete', async (req, res, next) => {
     });
 
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Edit teks pesan yang kita kirim (WhatsApp hanya menerima dalam ±15 menit; penolakan menjadi galat ke API). */
+app.post('/sessions/:brandId/edit', async (req, res, next) => {
+  try {
+    const brandId = brandIdSchema.parse(req.params.brandId);
+    const input = z.object({
+      jid: z.string().min(5),
+      messageId: z.string().min(1),
+      // Sama dengan EDIT_MAX_LENGTH di shared-types (gateway tidak bergantung pada paket itu).
+      text: z.string().min(1).max(4000),
+      // Pesan asli membalas pesan lain: kutipannya harus ikut di isi edit (lihat edit.ts).
+      quote: z.object({ messageId: z.string().min(1).max(100), text: z.string().max(4000).default(''), fromMe: z.boolean() }).optional(),
+    }).parse(req.body);
+
+    const socket = sessions.get(brandId);
+    if (!socket || statuses.get(brandId) !== 'connected') {
+      res.status(409).json({ success: false, error: 'WhatsApp session is not connected' });
+      return;
+    }
+
+    const targetJid = resolveTargetJid(brandId, input.jid);
+    const path = await editMessage(
+      socket as unknown as EditSocket,
+      { jid: targetJid, messageId: input.messageId, text: input.text, quote: input.quote },
+      (error) => logger.warn({ err: error, brandId }, 'Edit dengan kutipan lewat relay gagal; memakai jalur standar'),
+    );
+
+    res.json({ success: true, data: { path } });
   } catch (error) {
     next(error);
   }

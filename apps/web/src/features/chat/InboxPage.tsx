@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Pencil, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useWhatsAppAvatars } from '../../lib/avatars';
@@ -36,6 +36,7 @@ import { QuickReplyPicker } from '../quick-replies/QuickReplyPicker';
 import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickReplies, type QuickReply, type SlashToken } from '../quick-replies/quickRepliesApi';
 import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
 import { sendGalleryBatch } from './galleryBatch';
+import { useMessageEdit } from './useMessageEdit';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxFilters, visibleInboxFilters, type InboxWorkFilter } from './inboxFilters';
@@ -213,6 +214,20 @@ export function InboxPage() {
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  // Mengedit pesan terkirim (useMessageEdit): teks lama masuk ke kotak ketik, Enter menyimpan, Esc membatalkan.
+  const { editing, hint: editHint, problem: editProblem, isSaving: isSavingEdit, startEdit, cancelEdit, submitEdit, blockedWhileEditing } = useMessageEdit({
+    selectedId,
+    message,
+    setMessage,
+    draftIdentity: `${user?.id}:${brandId}:${selectedId}`,
+    query,
+    composerRef,
+    adjustHeight: adjustTextareaHeight,
+    hasPendingAttachment: Boolean(mediaPreview || galleryBatch || isCompressing),
+    clearReply: () => setReplyingTo(null),
+    showToast: (text) => showToast(text),
+  });
+  const startEditStable = useStableCallback(startEdit);
   const focusDraftAfterPanel = useRef(false);
   useEffect(() => {
     if (sidePanelTab || !focusDraftAfterPanel.current) return;
@@ -843,6 +858,10 @@ export function InboxPage() {
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSend) return;
+    if (editing) {
+      submitEdit();
+      return;
+    }
     // Token {{...}} yang datanya belum ada (dari balas cepat/script) tidak boleh terkirim apa adanya ke jamaah.
     const unresolved = unresolvedTokens(message);
     if (unresolved.length) {
@@ -889,6 +908,7 @@ export function InboxPage() {
       showToast('Pilih kontak obrolan terlebih dahulu');
       return;
     }
+    if (blockedWhileEditing()) return;
     const pkgToUse = targetPkg || currentPackage;
     if (!pkgToUse) {
       setShowPackagePickerModal(true);
@@ -1049,6 +1069,7 @@ export function InboxPage() {
 
   async function handleProcessFile(file: File) {
     if (!file || !selectedId) return;
+    if (blockedWhileEditing()) return;
 
     // Berkas dikirim sebagai base64 dalam JSON (+33%) dan body API dibatasi 50 MB,
     // jadi batas efektif berkas asli ±37 MB. Tolak lebih awal daripada gagal 413 setelah upload panjang.
@@ -1733,6 +1754,7 @@ export function InboxPage() {
                           setRevealedDeletedIds={setRevealedDeletedIds}
                           setReplyingTo={setReplyingTo}
                           setDeleteConfirmId={setDeleteConfirmId}
+                          startEdit={startEditStable}
                           setPreviewFlyer={setPreviewFlyer}
                           reactMutate={reactMutation.mutate}
                           starMutate={starMutation.mutate}
@@ -1801,7 +1823,15 @@ export function InboxPage() {
                   </div>
                 </div>
               ) : canReply ? (
-                <form onSubmit={submit} className="chat-composer relative border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
+                <form
+                  onSubmit={submit}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape' && editing && !event.defaultPrevented) {
+                      event.preventDefault();
+                      cancelEdit();
+                    }
+                  }}
+                  className="chat-composer relative border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
                   {slash && (
                     <QuickReplyPicker
                       items={slashMatches}
@@ -1955,6 +1985,32 @@ export function InboxPage() {
                     </div>
                   )}
 
+                  {/* Mengedit pesan terkirim: teks lama ada di kotak ketik; Enter menyimpan, Esc membatalkan */}
+                  {editing && (
+                    <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border-l-4 border-amber-500 bg-white p-2.5 shadow-2xs animate-fade-in" role="status">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700">
+                          <Pencil size={13} />
+                          <span>Mengedit pesan</span>
+                        </div>
+                        <p className="truncate text-xs text-[#667781] mt-0.5">{editing.original}</p>
+                        {editHint && (
+                          <p className={cn('mt-0.5 text-xs', editHint.tone === 'error' ? 'font-medium text-red-600' : 'text-[#667781]')}>{editHint.text}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        disabled={isSavingEdit}
+                        className="h-6 w-6 rounded-full flex items-center justify-center text-[#54656f] hover:bg-black/5 hover:text-[#111b21] transition cursor-pointer disabled:opacity-40"
+                        title="Batal mengedit (Esc)"
+                        aria-label="Batal mengedit pesan"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  )}
+
                   {/* WhatsApp Web Quoted Reply Preview Bar */}
                   {replyingTo && (
                     <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border-l-4 border-[#00a884] bg-white p-2.5 shadow-2xs animate-fade-in">
@@ -2105,7 +2161,7 @@ export function InboxPage() {
                           event.currentTarget.form?.requestSubmit();
                         }
                       }}
-                      placeholder={mediaPreview ? "Tambahkan keterangan (opsional)..." : "Ketik pesan..."}
+                      placeholder={editing ? "Ubah pesan..." : mediaPreview ? "Tambahkan keterangan (opsional)..." : "Ketik pesan..."}
                       aria-label="Tulis pesan WhatsApp"
                       className={cn(
                         // Fokus cukup garis hijau tipis ala WhatsApp; cincin hitam global (globals.css) dimatikan di sini.
@@ -2117,18 +2173,18 @@ export function InboxPage() {
 
                     <button
                       type="submit"
-                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia || isCompressing}
+                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia || isCompressing || isSavingEdit || Boolean(editProblem)}
                       style={mobile ? { order: 3 } : undefined}
-                      aria-label="Kirim pesan WhatsApp"
-                      title={isTouchDevice() ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
+                      aria-label={editing ? 'Simpan perubahan pesan' : 'Kirim pesan WhatsApp'}
+                      title={editing ? (editHint?.text ?? (isTouchDevice() ? 'Simpan perubahan' : 'Simpan perubahan (Enter)')) : isTouchDevice() ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
                       className={cn(
                         'h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-white transition shadow-xs cursor-pointer',
-                        canSend && (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia
+                        canSend && (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia && !isSavingEdit && !editProblem
                           ? 'bg-[#00a884] hover:bg-[#008f6f] active:scale-95'
                           : 'bg-[#8696a0] opacity-60 cursor-not-allowed'
                       )}
                     >
-                      {send.isPending || uploadingMedia ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+                      {send.isPending || uploadingMedia || isSavingEdit ? <RefreshCw size={18} className="animate-spin" /> : editing ? <Check size={18} /> : <Send size={18} />}
                     </button>
                   </div>
 
@@ -2280,7 +2336,7 @@ export function InboxPage() {
                   void galleryAssetToFile(assets[0]!)
                     .then((file) => handleProcessFile(file))
                     .catch((error: Error) => showToast(error.message || 'Gagal mengambil media dari galeri.'));
-                } else if (selectedId) {
+                } else if (selectedId && !blockedWhileEditing()) {
                   setGalleryBatch({ chatId: selectedId, assets });
                 }
               }}

@@ -110,6 +110,7 @@ Percakapan dan prospek terikat ke nomor WhatsApp brand yang menerimanya (`device
 * Token diisi server di `apps/api/src/modules/scripts/context.ts` (`TOKEN_INFO`, `buildScriptContext`). Token baru wajib didaftarkan di `TOKEN_INFO` dengan label dan cara melengkapi.
 * **Data yang tidak diketahui tidak diganti teks karangan.** Token dibiarkan, script ditandai `blocked` (fakta) atau `needs_context` (isian profil) beserta data yang perlu dilengkapi.
 * Daftar fasilitas dan biaya selalu ditulis lengkap, tidak diringkas "dan N lainnya".
+* **Edit pesan terkirim** (PATCH `/api/v1/chat/messages/:id`, aturan di `packages/shared-types/src/messageEdit.ts`): hanya teks milik kita, dalam 15 menit, Admin atau PIC. WhatsApp diedit dulu; CRM berubah hanya bila WhatsApp menerima. Setiap edit dicatat di log prospek (`message_edited`) dengan teks sebelum dan sesudah (maks. 300 karakter masing-masing). **Log itu memuat isi chat dan diperlakukan sama dengan isi chat**: dilihat hanya oleh pengguna yang boleh membuka prospeknya dan disimpan selama pesan chat disimpan (tidak ada job penghapusan terpisah). Edit beruntun dari WhatsApp pada pesan yang sama digabung dalam 5 menit. Deduplikasi edit CRM (`crmEditsInFlight`) tersimpan di memori satu proses API.
 * Format WhatsApp bersama di `apps/web/src/features/chat/waFormat.ts`: tebal satu bintang, daftar "•", baris kosong tidak ditulis.
 
 ### Asisten AI (Saran balasan)
