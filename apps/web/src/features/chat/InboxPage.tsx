@@ -35,6 +35,7 @@ import { GalleryBrowser } from '../gallery/GalleryBrowser';
 import { QuickReplyPicker } from '../quick-replies/QuickReplyPicker';
 import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickReplies, type QuickReply, type SlashToken } from '../quick-replies/quickRepliesApi';
 import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
+import { sendGalleryBatch } from './galleryBatch';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxFilters, visibleInboxFilters, type InboxWorkFilter } from './inboxFilters';
@@ -195,6 +196,11 @@ export function InboxPage() {
   useEffect(() => { setPackageMonth('all'); }, [brandId]);
   const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
   const [mediaPreview, setMediaPreview] = useState<MediaPreviewState | null>(null);
+  // Beberapa media dari galeri yang menunggu dikirim (milik satu chat; dibuang saat CS pindah chat).
+  const [galleryBatch, setGalleryBatch] = useState<{ chatId: number; assets: GalleryAsset[] } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ chatId: number; done: number; total: number } | null>(null);
+  // Kunci idempotensi per media yang belum berhasil: coba ulang memakai id yang sama agar server tidak mengirim dobel.
+  const batchClientIds = useRef(new Map<number, string>());
   // Lampiran yang belum terkirim disimpan per chat: caption flyer ada di draf chat itu, jadi lampirannya harus ikut
   // kembali saat CS membuka chat itu lagi (kalau tidak, caption terkirim tanpa gambar).
   const mediaPreviewRef = useRef(mediaPreview);
@@ -561,6 +567,7 @@ export function InboxPage() {
   const resetSend = send.reset;
   useEffect(() => {
     setReplyingTo(null);
+    setGalleryBatch(null);
     // Lampiran chat yang ditinggalkan disimpan (bukan dibuang) dan dikembalikan saat chat itu dibuka lagi.
     const leaving = previousChatRef.current;
     const current = mediaPreviewRef.current;
@@ -1153,6 +1160,47 @@ export function InboxPage() {
     } finally {
       setUploadingMedia(false);
     }
+  }
+
+  /**
+   * Kirim media pilihan galeri (logika di galleryBatch.ts): berurutan, satu pesan per media, tanpa keterangan.
+   * Draf ketikan tidak disentuh dan kutipan hanya menempel di media pertama yang terkirim. Media yang gagal tetap di
+   * tray agar bisa dicoba lagi.
+   */
+  async function sendSelectedGalleryBatch() {
+    if (!canSend || uploadingMedia || !galleryBatch || galleryBatch.chatId !== selectedId || !galleryBatch.assets.length || !brandId) return;
+    const chatId = galleryBatch.chatId;
+    const assets = galleryBatch.assets;
+    setUploadingMedia(true);
+    setBatchProgress({ chatId, done: 0, total: assets.length });
+    scrollToLatest();
+    let result: Awaited<ReturnType<typeof sendGalleryBatch>>;
+    try {
+      result = await sendGalleryBatch({
+        assets,
+        base: { brandId, prospectId: chatId },
+        quote: replyingTo ? { messageId: replyingTo.messageId, text: replyingTo.text, senderName: replyingTo.senderName } : null,
+        clientIds: batchClientIds.current,
+        deps: {
+          toFile: galleryAssetToFile,
+          post: (body) => api.post(`/chat/messages/media${query}`, body),
+          newId: () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
+        },
+        onProgress: (done, total) => setBatchProgress({ chatId, done, total }),
+      });
+    } finally {
+      setUploadingMedia(false);
+      setBatchProgress(null);
+    }
+    const { sent, failed, quoteUsed } = result;
+    if (selectedIdRef.current === chatId) {
+      setGalleryBatch(failed.length ? { chatId, assets: failed } : null);
+      if (quoteUsed) setReplyingTo(null);
+      scrollToLatest();
+    }
+    void queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+    void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    showToast(failed.length ? (sent.length ? sent.length + ' media terkirim, ' + failed.length + ' gagal. Coba kirim ulang yang tersisa.' : 'Gagal mengirim media dari galeri.') : sent.length + ' media berhasil dikirim!');
   }
 
   if (!brandId) return <PageError title="Belum ada brand aktif" description="Buat brand melalui menu Administrasi dan hubungkan WhatsApp untuk menerima percakapan sebenarnya." />;
@@ -1808,6 +1856,60 @@ export function InboxPage() {
                     </div>
                   )}
 
+                  {/* CS pindah chat saat media galeri masih terkirim: jelaskan kenapa tombol kirim terkunci */}
+                  {batchProgress && batchProgress.chatId !== selectedId && (
+                    <div role="status" className="mx-auto mb-2 max-w-3xl rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800">
+                      Masih mengirim media ke chat lain ({batchProgress.done}/{batchProgress.total}). Tombol kirim aktif lagi setelah selesai.
+                    </div>
+                  )}
+
+                  {/* Beberapa media dari galeri: pratinjau, hapus satu per satu, lalu kirim sekaligus */}
+                  {galleryBatch && galleryBatch.chatId === selectedId && (
+                    <div className="mx-auto mb-2 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="rounded-2xl border border-[#e9edef] bg-white p-2.5 shadow-sm">
+                        <div className="flex items-center justify-between gap-2 px-0.5 pb-2">
+                          <p className="text-sm font-semibold text-zinc-900">{galleryBatch.assets.length} media dari galeri</p>
+                          <p className="text-xs text-zinc-500" aria-live="polite">
+                            {batchProgress?.chatId === selectedId ? 'Mengirim ' + batchProgress.done + '/' + batchProgress.total + '…' : 'Dikirim satu per satu sesuai nomor'}
+                          </p>
+                        </div>
+                        <ul className="flex gap-2 overflow-x-auto pb-1">
+                          {galleryBatch.assets.map((asset, index) => (
+                            <li key={asset.id} className="relative h-16 w-16 shrink-0">
+                              <div className="h-full w-full overflow-hidden rounded-xl border border-black/10 bg-zinc-100">
+                                {asset.mimeType.startsWith('video/') ? (
+                                  <video src={resolveMediaUrl(asset.url)} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                                ) : (
+                                  <img src={resolveMediaUrl(asset.url)} alt={asset.name} className="h-full w-full object-cover" />
+                                )}
+                              </div>
+                              <span className="absolute bottom-1 left-1 grid h-5 min-w-5 place-items-center rounded-full bg-zinc-950/80 px-1 text-[11px] font-bold text-white">{index + 1}</span>
+                              <button
+                                type="button"
+                                disabled={uploadingMedia}
+                                onClick={() => setGalleryBatch((current) => {
+                                  if (!current) return current;
+                                  const assets = current.assets.filter((item) => item.id !== asset.id);
+                                  return assets.length ? { ...current, assets } : null;
+                                })}
+                                className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-full bg-white text-zinc-600 shadow ring-1 ring-black/10 transition hover:text-zinc-950 disabled:opacity-40 cursor-pointer"
+                                aria-label={'Hapus ' + asset.name + ' dari kiriman'}
+                              >
+                                <X size={13} />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-2 flex items-center justify-end gap-2">
+                          <Button variant="secondary" disabled={uploadingMedia} onClick={() => setGalleryBatch(null)}>Batal</Button>
+                          <Button disabled={!canSend || uploadingMedia} loading={uploadingMedia} onClick={() => void sendSelectedGalleryBatch()}>
+                            <Send size={14} />Kirim {galleryBatch.assets.length} media
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* WhatsApp Web Media Preview Card (before sending) */}
                   {mediaPreview && (
                     <div className="mx-auto mb-2 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -2172,11 +2274,16 @@ export function InboxPage() {
               mode="picker"
               onClose={() => setShowGalleryPicker(false)}
               onPickFromDevice={() => { setShowGalleryPicker(false); mediaInputRef.current?.click(); }}
-              onSelect={(asset: GalleryAsset) => {
+              onSelectMany={(assets: GalleryAsset[]) => {
                 setShowGalleryPicker(false);
-                void galleryAssetToFile(asset)
-                  .then((file) => handleProcessFile(file))
-                  .catch((error: Error) => showToast(error.message || 'Gagal mengambil media dari galeri.'));
+                if (assets.length === 1) {
+                  // Satu media: alur lama (pratinjau + keterangan opsional di kotak ketik).
+                  void galleryAssetToFile(assets[0]!)
+                    .then((file) => handleProcessFile(file))
+                    .catch((error: Error) => showToast(error.message || 'Gagal mengambil media dari galeri.'));
+                } else if (selectedId) {
+                  setGalleryBatch({ chatId: selectedId, assets });
+                }
               }}
             />
           )}

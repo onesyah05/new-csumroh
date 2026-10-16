@@ -87,6 +87,7 @@ async function verifiedPaymentsInRange(brandWhere: object, range: object) {
       prospect: {
         select: {
           id: true, status: true, createdAt: true, dealValue: true, paymentStatus: true, userId: true, leadSource: true,
+          paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true,
           brand: { select: { name: true } }, package: { select: { name: true } }, user: { select: { name: true } },
         },
       },
@@ -118,6 +119,34 @@ async function firstDeals<T extends { createdAt: Date; prospect: { id: number; s
 }
 
 // ── 1. Penjualan & funnel ────────────────────────────────────────────────────────────────────────────────
+/** Jamaah satu deal = seluruh peserta di tipe kamar (quad, triple, double) ditambah bayi. */
+const jamaahOf = (p: { paxQuad: number; paxTriple: number; paxDouble: number; paxInfant: number }) =>
+  num(p.paxQuad) + num(p.paxTriple) + num(p.paxDouble) + num(p.paxInfant);
+
+/**
+ * Total budget = biaya iklan Meta (Insights) seluruh brand dalam cakupan laporan. Hanya ad account berbiaya Rupiah yang
+ * ikut dijumlah; brand tanpa ad account atau gagal diambil disebut di catatan, bukan dihitung nol.
+ * Dilayani endpoint sendiri (/sales/budget): Meta bisa lambat (15 dtk) dan tidak boleh menahan kartu Penjualan lain.
+ */
+async function totalAdBudget(brandListWhere: object, from: string, to: string) {
+  const brands = await prisma.brand.findMany({
+    where: brandListWhere,
+    select: { id: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true },
+  });
+  const spends = await Promise.all(brands.map((brand) => fetchAdSpend(withAdsToken(brand), from, to)));
+  const measured = spends.filter((ad): ad is Extract<typeof ad, { status: 'ok' }> => ad.status === 'ok' && ad.currency === 'IDR');
+  const notConfigured = spends.filter((ad) => ad.status === 'not_configured').length;
+  const failed = brands.length - measured.length - notConfigured;
+  const issues = [
+    notConfigured ? `${notConfigured} brand belum diatur ad account` : '',
+    failed ? `${failed} brand gagal diambil dari Meta` : '',
+  ].filter(Boolean).join(', ');
+  return {
+    adSpend: measured.length ? measured.reduce((sum, ad) => sum + ad.spend, 0) : null,
+    adSpendNote: !measured.length ? (issues ? `Belum terhubung: ${issues}` : 'Ad account belum terhubung') : issues ? `Belum termasuk ${issues}` : null,
+  };
+}
+
 reportsRouter.get('/sales', asyncHandler(async (req, res) => {
   const { format, range, brandWhere } = parseRange(req);
   const [leads, spam, payments] = await Promise.all([
@@ -156,6 +185,7 @@ reportsRouter.get('/sales', asyncHandler(async (req, res) => {
     leads: leads.length,
     spam,
     deals: deals.length,
+    jamaah: deals.reduce((sum, d) => sum + jamaahOf(d.prospect), 0),
     lost: byStage.get('lose') ?? 0,
     conversion: pct(deals.length, leads.length),
     dealValue,
@@ -167,6 +197,12 @@ reportsRouter.get('/sales', asyncHandler(async (req, res) => {
     header: ['Paket', 'Deal', 'Nilai deal'],
     rows: byPackage.map((r) => [r.label, r.deals, r.value]),
   });
+}));
+
+/** Kartu Total budget Penjualan: dimuat terpisah agar Meta yang lambat tidak menunda laporan Penjualan. */
+reportsRouter.get('/sales/budget', asyncHandler(async (req, res) => {
+  const { from, to, brandListWhere } = parseRange(req);
+  res.json({ success: true, data: await totalAdBudget(brandListWhere, from, to) });
 }));
 
 // ── 1b. Daftar deal ──────────────────────────────────────────────────────────────────────────────────────
