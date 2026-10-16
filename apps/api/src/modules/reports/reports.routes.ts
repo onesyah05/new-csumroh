@@ -126,6 +126,7 @@ const jamaahOf = (p: { paxQuad: number; paxTriple: number; paxDouble: number; pa
 /**
  * Total budget = biaya iklan Meta (Insights) seluruh brand dalam cakupan laporan. Hanya ad account berbiaya Rupiah yang
  * ikut dijumlah; brand tanpa ad account atau gagal diambil disebut di catatan, bukan dihitung nol.
+ * Dilayani endpoint sendiri (/sales/budget): Meta bisa lambat (15 dtk) dan tidak boleh menahan kartu Penjualan lain.
  */
 async function totalAdBudget(brandListWhere: object, from: string, to: string) {
   const brands = await prisma.brand.findMany({
@@ -134,20 +135,24 @@ async function totalAdBudget(brandListWhere: object, from: string, to: string) {
   });
   const spends = await Promise.all(brands.map((brand) => fetchAdSpend(withAdsToken(brand), from, to)));
   const measured = spends.filter((ad): ad is Extract<typeof ad, { status: 'ok' }> => ad.status === 'ok' && ad.currency === 'IDR');
-  const missing = brands.length - measured.length;
+  const notConfigured = spends.filter((ad) => ad.status === 'not_configured').length;
+  const failed = brands.length - measured.length - notConfigured;
+  const issues = [
+    notConfigured ? `${notConfigured} brand belum diatur ad account` : '',
+    failed ? `${failed} brand gagal diambil dari Meta` : '',
+  ].filter(Boolean).join(', ');
   return {
     adSpend: measured.length ? measured.reduce((sum, ad) => sum + ad.spend, 0) : null,
-    adSpendNote: !measured.length ? 'Ad account belum terhubung' : missing ? `Belum termasuk ${missing} brand tanpa data iklan` : null,
+    adSpendNote: !measured.length ? (issues ? `Belum terhubung: ${issues}` : 'Ad account belum terhubung') : issues ? `Belum termasuk ${issues}` : null,
   };
 }
 
 reportsRouter.get('/sales', asyncHandler(async (req, res) => {
-  const { format, from, to, range, brandWhere, brandListWhere } = parseRange(req);
-  const [leads, spam, payments, budget] = await Promise.all([
+  const { format, range, brandWhere } = parseRange(req);
+  const [leads, spam, payments] = await Promise.all([
     prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range, ...notSpam }, select: { status: true } }),
     prisma.prospect.count({ where: { ...brandWhere, createdAt: range, spamAt: { not: null } } }),
     verifiedPaymentsInRange(brandWhere, range),
-    totalAdBudget(brandListWhere, from, to),
   ]);
   const deals = await firstDeals(payments, range.gte);
 
@@ -181,8 +186,6 @@ reportsRouter.get('/sales', asyncHandler(async (req, res) => {
     spam,
     deals: deals.length,
     jamaah: deals.reduce((sum, d) => sum + jamaahOf(d.prospect), 0),
-    adSpend: budget.adSpend,
-    adSpendNote: budget.adSpendNote,
     lost: byStage.get('lose') ?? 0,
     conversion: pct(deals.length, leads.length),
     dealValue,
@@ -194,6 +197,12 @@ reportsRouter.get('/sales', asyncHandler(async (req, res) => {
     header: ['Paket', 'Deal', 'Nilai deal'],
     rows: byPackage.map((r) => [r.label, r.deals, r.value]),
   });
+}));
+
+/** Kartu Total budget Penjualan: dimuat terpisah agar Meta yang lambat tidak menunda laporan Penjualan. */
+reportsRouter.get('/sales/budget', asyncHandler(async (req, res) => {
+  const { from, to, brandListWhere } = parseRange(req);
+  res.json({ success: true, data: await totalAdBudget(brandListWhere, from, to) });
 }));
 
 // ── 1b. Daftar deal ──────────────────────────────────────────────────────────────────────────────────────

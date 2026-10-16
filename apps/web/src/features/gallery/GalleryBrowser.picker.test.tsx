@@ -69,6 +69,16 @@ describe('Galeri: pilih banyak media untuk dikirim', () => {
     expect(screen.getByText('2 media dipilih')).toBeTruthy();
   });
 
+  it('total ukuran melewati batas: pilihan tambahan ditolak dengan pesan', async () => {
+    const big = (id: number): GalleryAsset => ({ ...asset(id), size: 25 * 1024 * 1024 });
+    vi.mocked(api.get).mockImplementation(async (url: string) => (url.startsWith('/gallery/folders') ? { total: 2, folders: [] } : { items: [big(1), big(2)], nextCursor: null }) as any);
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: /^Foto 1\b/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Foto 2\b/ }));
+    await waitFor(() => expect(feedback).toHaveBeenCalledWith('Total ukuran maksimal 40 MB sekali kirim. Kirim sisanya terpisah.', { error: true }));
+    expect(screen.getByText('1 media dipilih')).toBeTruthy();
+  });
+
   it('tanpa pilihan tidak ada tombol Pilih', async () => {
     open();
     await screen.findByRole('button', { name: /^Foto 1\b/ });

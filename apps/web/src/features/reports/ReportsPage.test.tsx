@@ -7,7 +7,7 @@ import { queryClient } from '../../app/query';
 import { ReportsPage, periodRange } from './ReportsPage';
 
 const sales = {
-  summary: { leads: 20, deals: 4, jamaah: 11, adSpend: 12_500_000, adSpendNote: null, lost: 3, conversion: 20, dealValue: 160_000_000, cashIn: 40_000_000, avgDealValue: 40_000_000, avgDaysToDeal: 6.5 },
+  summary: { leads: 20, deals: 4, jamaah: 11, lost: 3, conversion: 20, dealValue: 160_000_000, cashIn: 40_000_000, avgDealValue: 40_000_000, avgDaysToDeal: 6.5 },
   stages: [{ key: 'new', label: 'Baru', count: 13 }, { key: 'deal', label: 'Deal', count: 4 }, { key: 'lose', label: 'Batal', count: 3 }],
   byPackage: [{ label: 'Umroh Syawal', deals: 4, value: 160_000_000 }],
   byBrand: [{ label: 'Hana Tours', deals: 4, value: 160_000_000 }],
@@ -27,6 +27,8 @@ const creatives = {
   }],
 };
 
+let budgetResponse: () => Promise<Response> = () => json({ adSpend: 12_500_000, adSpendNote: null });
+
 function json(data: unknown) {
   return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data }), blob: async () => new Blob() } as Response);
 }
@@ -35,10 +37,12 @@ describe('Menu Laporan', () => {
   let urls: string[] = [];
   beforeEach(() => {
     queryClient.clear();
+    budgetResponse = () => json({ adSpend: 12_500_000, adSpendNote: null });
     urls = [];
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       urls.push(url);
+      if (url.includes('/reports/sales/budget')) return budgetResponse();
       if (url.includes('/reports/sales')) return json(sales);
       if (url.includes('/reports/deals')) return json(url.includes('basis=lead') ? { basis: 'lead', summary: { deals: 0, dealValue: 0 }, rows: [] } : deals);
       if (url.includes('/reports/cs')) return json(cs);
@@ -64,7 +68,7 @@ describe('Menu Laporan', () => {
     expect(screen.getByText('Umroh Syawal')).toBeTruthy();
     // Kartu: Total budget, Lead baru, Deal (jumlah deal dan jamaah), Nilai deal; Uang masuk ada di tab Pembayaran.
     expect(screen.getByText('Total budget')).toBeTruthy();
-    expect(screen.getByText(/12.500.000/)).toBeTruthy();
+    expect(await screen.findByText(/12.500.000/)).toBeTruthy();
     expect(screen.getByText('jamaah').parentElement?.textContent).toBe('4deal·11jamaah');
     expect(screen.getAllByText('Nilai deal').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/160.000.000/).length).toBeGreaterThan(0);
@@ -75,6 +79,21 @@ describe('Menu Laporan', () => {
     expect(await screen.findByText('Aisyah')).toBeTruthy();
     expect(screen.getByText('12 menit')).toBeTruthy();
     await waitFor(() => expect(urls.some((u) => u.includes('/reports/cs?'))).toBe(true));
+  });
+
+  it('Total budget dimuat terpisah: Meta gagal tidak menahan kartu lain dan tampil sebagai gagal, bukan nol', async () => {
+    budgetResponse = () => Promise.resolve({ ok: false, status: 502, json: async () => ({ success: false, error: 'Meta tidak merespons' }) } as Response);
+    render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/laporan']}><ReportsPage /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('Lead baru')).toBeTruthy();
+    expect(await screen.findByText('Gagal mengambil dari Meta')).toBeTruthy();
+    expect(screen.queryByText(/Rp 0/)).toBeNull();
+    expect(urls.some((u) => /\/reports\/sales\/budget\?from=/.test(u))).toBe(true);
+  });
+
+  it('Total budget: catatan brand yang belum diatur ditampilkan', async () => {
+    budgetResponse = () => json({ adSpend: 4_000_000, adSpendNote: 'Belum termasuk 1 brand belum diatur ad account' });
+    render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/laporan']}><ReportsPage /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('Belum termasuk 1 brand belum diatur ad account')).toBeTruthy();
   });
 
   it('Daftar deal di Penjualan: PIC, CS terakhir, dan pilihan tanggal verifikasi atau lead masuk', async () => {

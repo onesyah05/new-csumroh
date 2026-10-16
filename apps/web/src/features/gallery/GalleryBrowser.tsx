@@ -20,6 +20,10 @@ import {
 
 const RECENT = 'recent';
 
+/** Total ukuran media yang boleh dipilih untuk satu kiriman (picker Inbox). */
+export const MAX_PICK_MB = 40;
+const MAX_PICK_BYTES = MAX_PICK_MB * 1024 * 1024;
+
 type PendingDelete = { kind: 'asset'; asset: GalleryAsset } | { kind: 'folder'; id: number; name: string };
 
 /**
@@ -84,6 +88,11 @@ export function GalleryBrowser({ brandId, mode, onSelectMany, maxSelect = 10, on
     if (list.some((item) => item.id === asset.id)) return list.filter((item) => item.id !== asset.id);
     if (list.length >= maxSelect) {
       showFeedback('Maksimal ' + maxSelect + ' media sekali kirim.', { error: true });
+      return list;
+    }
+    // Tiap media dikirim sebagai base64 lewat HP/jaringan CS: total dibatasi agar kiriman tidak macet di tengah.
+    if (list.reduce((sum, item) => sum + item.size, asset.size) > MAX_PICK_BYTES) {
+      showFeedback('Total ukuran maksimal ' + MAX_PICK_MB + ' MB sekali kirim. Kirim sisanya terpisah.', { error: true });
       return list;
     }
     return [...list, asset];

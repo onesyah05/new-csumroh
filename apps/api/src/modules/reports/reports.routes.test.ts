@@ -90,36 +90,20 @@ describe('Laporan penjualan', () => {
     expect(mocks.paymentFindMany.mock.calls[0]![0].where.status).toBe('verified');
   });
 
-  it('kartu: jamaah dari seluruh tipe kamar + bayi, dan total budget dari biaya iklan Meta', async () => {
+  it('kartu Deal: jamaah dari seluruh tipe kamar + bayi; Penjualan tidak memanggil Meta', async () => {
     mocks.prospectFindMany.mockResolvedValueOnce([]);
     mocks.paymentFindMany.mockResolvedValueOnce([deal(), deal({ id: 2, paxQuad: 0, paxTriple: 3, paxDouble: 0, paxInfant: 1 })]);
-    mocks.brandFindMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
-    mocks.fetchAdSpend
-      .mockResolvedValueOnce({ status: 'ok', spend: 7_500_000, currency: 'IDR' })
-      .mockResolvedValueOnce({ status: 'ok', spend: 2_500_000, currency: 'IDR' });
     const data = await get('/sales');
-    expect(data.summary).toMatchObject({ deals: 2, jamaah: 7, adSpend: 10_000_000, adSpendNote: null });
+    expect(data.summary).toMatchObject({ deals: 2, jamaah: 7 });
+    expect(data.summary).not.toHaveProperty('adSpend');
+    expect(mocks.fetchAdSpend).not.toHaveBeenCalled();
+    expect(mocks.brandFindMany).not.toHaveBeenCalled();
   });
 
-  it('total budget: brand tanpa ad account atau bukan Rupiah tidak dihitung nol, disebut di catatan', async () => {
+  it('CSV Penjualan tidak memanggil Meta', async () => {
     mocks.prospectFindMany.mockResolvedValueOnce([]);
-    mocks.brandFindMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }]);
-    mocks.fetchAdSpend
-      .mockResolvedValueOnce({ status: 'ok', spend: 4_000_000, currency: 'IDR' })
-      .mockResolvedValueOnce({ status: 'not_configured' })
-      .mockResolvedValueOnce({ status: 'ok', spend: 100, currency: 'USD' });
-    const data = await get('/sales');
-    expect(data.summary.adSpend).toBe(4_000_000);
-    expect(data.summary.adSpendNote).toBe('Belum termasuk 2 brand tanpa data iklan');
-  });
-
-  it('total budget kosong (null) bila tidak ada ad account yang terukur', async () => {
-    mocks.prospectFindMany.mockResolvedValueOnce([]);
-    mocks.brandFindMany.mockResolvedValueOnce([{ id: 1 }]);
-    mocks.fetchAdSpend.mockResolvedValueOnce({ status: 'error', message: 'token' });
-    const data = await get('/sales');
-    expect(data.summary.adSpend).toBeNull();
-    expect(data.summary.adSpendNote).toBe('Ad account belum terhubung');
+    await get('/sales', { format: 'csv' });
+    expect(mocks.fetchAdSpend).not.toHaveBeenCalled();
   });
 
   it('CSV aman dari formula dan diawali BOM', async () => {
@@ -133,6 +117,43 @@ describe('Laporan penjualan', () => {
 
   it('menolak tanggal tidak valid', async () => {
     await expect(get('/sales', { from: '01-09-2026' })).rejects.toThrow();
+  });
+});
+
+describe('Total budget Penjualan (/sales/budget)', () => {
+  it('menjumlah biaya iklan Rupiah seluruh brand', async () => {
+    mocks.brandFindMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
+    mocks.fetchAdSpend
+      .mockResolvedValueOnce({ status: 'ok', spend: 7_500_000, currency: 'IDR' })
+      .mockResolvedValueOnce({ status: 'ok', spend: 2_500_000, currency: 'IDR' });
+    expect(await get('/sales/budget')).toEqual({ adSpend: 10_000_000, adSpendNote: null });
+  });
+
+  it('catatan membedakan brand belum diatur, gagal diambil, dan bukan Rupiah (tidak dihitung nol)', async () => {
+    mocks.brandFindMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
+    mocks.fetchAdSpend
+      .mockResolvedValueOnce({ status: 'ok', spend: 4_000_000, currency: 'IDR' })
+      .mockResolvedValueOnce({ status: 'not_configured' })
+      .mockResolvedValueOnce({ status: 'error', message: 'token' })
+      .mockResolvedValueOnce({ status: 'ok', spend: 100, currency: 'USD' });
+    const data = await get('/sales/budget');
+    expect(data.adSpend).toBe(4_000_000);
+    expect(data.adSpendNote).toBe('Belum termasuk 1 brand belum diatur ad account, 2 brand gagal diambil dari Meta');
+  });
+
+  it('tidak ada yang terukur: null dengan penyebabnya', async () => {
+    mocks.brandFindMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
+    mocks.fetchAdSpend
+      .mockResolvedValueOnce({ status: 'error', message: 'token' })
+      .mockResolvedValueOnce({ status: 'not_configured' });
+    const data = await get('/sales/budget');
+    expect(data.adSpend).toBeNull();
+    expect(data.adSpendNote).toBe('Belum terhubung: 1 brand belum diatur ad account, 1 brand gagal diambil dari Meta');
+  });
+
+  it('tanpa brand: null dan catatan bawaan', async () => {
+    mocks.brandFindMany.mockResolvedValueOnce([]);
+    expect(await get('/sales/budget')).toEqual({ adSpend: null, adSpendNote: 'Ad account belum terhubung' });
   });
 });
 

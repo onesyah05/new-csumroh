@@ -58,11 +58,12 @@ const percent = (value: number) => `${value.toLocaleString('id-ID')}%`;
 
 type Named = { label: string; deals: number; value: number };
 type SalesReport = {
-  summary: { leads: number; spam: number; deals: number; jamaah: number; adSpend: number | null; adSpendNote: string | null; lost: number; conversion: number; dealValue: number; cashIn: number; avgDealValue: number; avgDaysToDeal: number | null };
+  summary: { leads: number; spam: number; deals: number; jamaah: number; lost: number; conversion: number; dealValue: number; cashIn: number; avgDealValue: number; avgDaysToDeal: number | null };
   stages: { key: string; label: string; count: number }[];
   byPackage: Named[];
   byBrand: Named[];
 };
+type BudgetReport = { adSpend: number | null; adSpendNote: string | null };
 type CsReport = {
   rows: { id: number; name: string; isActive: boolean; leads: number; deals: number; dealValue: number; conversion: number; medianReplyMinutes: number | null; takenOver: number; openNow: number; overdueFollowups: number }[];
 };
@@ -206,7 +207,7 @@ export function ReportsPage() {
           <div className={cn('space-y-5 transition-opacity', report.isFetching && 'opacity-60')}>
             {tab === 'sales' && (
               <>
-                <SalesView data={report.data} />
+                <SalesView data={report.data} query={query} />
                 <DealsList query={query} />
               </>
             )}
@@ -273,8 +274,10 @@ function Bar({ value, max, tone = 'bg-zinc-900' }: { value: number; max: number;
 
 // ── 1. Penjualan ────────────────────────────────────────────────────────────────────────────────────────
 
-function SalesView({ data }: { data: SalesReport }) {
+function SalesView({ data, query }: { data: SalesReport; query: string }) {
   const s = data.summary;
+  // Biaya iklan datang dari Meta (bisa lambat atau gagal): dimuat terpisah agar kartu lain langsung tampil.
+  const budget = useQuery({ queryKey: ['report', 'sales-budget', query], queryFn: () => api.get<BudgetReport>(`/reports/sales/budget?${query}`), retry: false });
   const maxStage = Math.max(0, ...data.stages.map((x) => x.count));
   const columns: Column<Named>[] = [
     { label: 'Nama', cell: (r) => r.label },
@@ -284,7 +287,11 @@ function SalesView({ data }: { data: SalesReport }) {
   return (
     <>
       <StatGrid cols={4}>
-        <StatCard label="Total budget" value={s.adSpend === null ? '–' : rupiah(s.adSpend)} note={s.adSpendNote ?? 'Biaya iklan Meta'} />
+        <StatCard
+          label="Total budget"
+          value={budget.isLoading ? '…' : budget.data?.adSpend == null ? '–' : rupiah(budget.data.adSpend)}
+          note={budget.isLoading ? 'Mengambil dari Meta…' : budget.isError ? 'Gagal mengambil dari Meta' : budget.data?.adSpendNote ?? 'Biaya iklan Meta'}
+        />
         <StatCard label="Lead baru" value={num(s.leads)} note={s.spam ? `${num(s.spam)} chat spam tidak dihitung` : undefined} />
         <StatCard
           label="Deal"

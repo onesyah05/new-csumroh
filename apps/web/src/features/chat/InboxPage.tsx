@@ -35,6 +35,7 @@ import { GalleryBrowser } from '../gallery/GalleryBrowser';
 import { QuickReplyPicker } from '../quick-replies/QuickReplyPicker';
 import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickReplies, type QuickReply, type SlashToken } from '../quick-replies/quickRepliesApi';
 import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
+import { sendGalleryBatch } from './galleryBatch';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxFilters, visibleInboxFilters, type InboxWorkFilter } from './inboxFilters';
@@ -197,7 +198,9 @@ export function InboxPage() {
   const [mediaPreview, setMediaPreview] = useState<MediaPreviewState | null>(null);
   // Beberapa media dari galeri yang menunggu dikirim (milik satu chat; dibuang saat CS pindah chat).
   const [galleryBatch, setGalleryBatch] = useState<{ chatId: number; assets: GalleryAsset[] } | null>(null);
-  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ chatId: number; done: number; total: number } | null>(null);
+  // Kunci idempotensi per media yang belum berhasil: coba ulang memakai id yang sama agar server tidak mengirim dobel.
+  const batchClientIds = useRef(new Map<number, string>());
   // Lampiran yang belum terkirim disimpan per chat: caption flyer ada di draf chat itu, jadi lampirannya harus ikut
   // kembali saat CS membuka chat itu lagi (kalau tidak, caption terkirim tanpa gambar).
   const mediaPreviewRef = useRef(mediaPreview);
@@ -1160,51 +1163,36 @@ export function InboxPage() {
   }
 
   /**
-   * Kirim media pilihan galeri satu per satu sesuai urutan pilihan (tiap media menjadi satu pesan, seperti WhatsApp).
-   * Draf ketikan tidak disentuh. Kutipan (balasan) hanya menempel di media pertama yang berhasil terkirim. Media yang
-   * gagal tetap di daftar agar bisa dicoba lagi.
+   * Kirim media pilihan galeri (logika di galleryBatch.ts): berurutan, satu pesan per media, tanpa keterangan.
+   * Draf ketikan tidak disentuh dan kutipan hanya menempel di media pertama yang terkirim. Media yang gagal tetap di
+   * tray agar bisa dicoba lagi.
    */
-  async function sendGalleryBatch() {
-    if (!canSend || uploadingMedia || !galleryBatch || galleryBatch.chatId !== selectedId || !galleryBatch.assets.length) return;
+  async function sendSelectedGalleryBatch() {
+    if (!canSend || uploadingMedia || !galleryBatch || galleryBatch.chatId !== selectedId || !galleryBatch.assets.length || !brandId) return;
     const chatId = galleryBatch.chatId;
     const assets = galleryBatch.assets;
-    const quote = replyingTo;
-    let quoteUsed = false;
-    const failed: GalleryAsset[] = [];
     setUploadingMedia(true);
-    setBatchProgress({ done: 0, total: assets.length });
+    setBatchProgress({ chatId, done: 0, total: assets.length });
     scrollToLatest();
+    let result: Awaited<ReturnType<typeof sendGalleryBatch>>;
     try {
-      for (const [index, asset] of assets.entries()) {
-        try {
-          const file = await galleryAssetToFile(asset);
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(',')[1] ?? '');
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-          await api.post(`/chat/messages/media${query}`, {
-            brandId,
-            prospectId: chatId,
-            fileName: file.name,
-            mimeType: file.type,
-            base64Data: base64,
-            mediaType: file.type.startsWith('video/') ? 'videoMessage' : 'imageMessage',
-            caption: '',
-            ...(quote && !quoteUsed ? { quotedMessageId: quote.messageId, quotedText: quote.text, quotedSender: quote.senderName } : {}),
-          });
-          quoteUsed = true;
-        } catch {
-          failed.push(asset);
-        }
-        setBatchProgress({ done: index + 1, total: assets.length });
-      }
+      result = await sendGalleryBatch({
+        assets,
+        base: { brandId, prospectId: chatId },
+        quote: replyingTo ? { messageId: replyingTo.messageId, text: replyingTo.text, senderName: replyingTo.senderName } : null,
+        clientIds: batchClientIds.current,
+        deps: {
+          toFile: galleryAssetToFile,
+          post: (body) => api.post(`/chat/messages/media${query}`, body),
+          newId: () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
+        },
+        onProgress: (done, total) => setBatchProgress({ chatId, done, total }),
+      });
     } finally {
       setUploadingMedia(false);
       setBatchProgress(null);
     }
-    const sent = assets.length - failed.length;
+    const { sent, failed, quoteUsed } = result;
     if (selectedIdRef.current === chatId) {
       setGalleryBatch(failed.length ? { chatId, assets: failed } : null);
       if (quoteUsed) setReplyingTo(null);
@@ -1212,7 +1200,7 @@ export function InboxPage() {
     }
     void queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
     void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-    showToast(failed.length ? (sent ? sent + ' media terkirim, ' + failed.length + ' gagal. Coba kirim ulang yang tersisa.' : 'Gagal mengirim media dari galeri.') : sent + ' media berhasil dikirim!');
+    showToast(failed.length ? (sent.length ? sent.length + ' media terkirim, ' + failed.length + ' gagal. Coba kirim ulang yang tersisa.' : 'Gagal mengirim media dari galeri.') : sent.length + ' media berhasil dikirim!');
   }
 
   if (!brandId) return <PageError title="Belum ada brand aktif" description="Buat brand melalui menu Administrasi dan hubungkan WhatsApp untuk menerima percakapan sebenarnya." />;
@@ -1868,6 +1856,13 @@ export function InboxPage() {
                     </div>
                   )}
 
+                  {/* CS pindah chat saat media galeri masih terkirim: jelaskan kenapa tombol kirim terkunci */}
+                  {batchProgress && batchProgress.chatId !== selectedId && (
+                    <div role="status" className="mx-auto mb-2 max-w-3xl rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800">
+                      Masih mengirim media ke chat lain ({batchProgress.done}/{batchProgress.total}). Tombol kirim aktif lagi setelah selesai.
+                    </div>
+                  )}
+
                   {/* Beberapa media dari galeri: pratinjau, hapus satu per satu, lalu kirim sekaligus */}
                   {galleryBatch && galleryBatch.chatId === selectedId && (
                     <div className="mx-auto mb-2 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -1875,7 +1870,7 @@ export function InboxPage() {
                         <div className="flex items-center justify-between gap-2 px-0.5 pb-2">
                           <p className="text-sm font-semibold text-zinc-900">{galleryBatch.assets.length} media dari galeri</p>
                           <p className="text-xs text-zinc-500" aria-live="polite">
-                            {batchProgress ? 'Mengirim ' + batchProgress.done + '/' + batchProgress.total + '…' : 'Dikirim satu per satu sesuai nomor'}
+                            {batchProgress?.chatId === selectedId ? 'Mengirim ' + batchProgress.done + '/' + batchProgress.total + '…' : 'Dikirim satu per satu sesuai nomor'}
                           </p>
                         </div>
                         <ul className="flex gap-2 overflow-x-auto pb-1">
@@ -1907,7 +1902,7 @@ export function InboxPage() {
                         </ul>
                         <div className="mt-2 flex items-center justify-end gap-2">
                           <Button variant="secondary" disabled={uploadingMedia} onClick={() => setGalleryBatch(null)}>Batal</Button>
-                          <Button disabled={!canSend || uploadingMedia} loading={uploadingMedia} onClick={() => void sendGalleryBatch()}>
+                          <Button disabled={!canSend || uploadingMedia} loading={uploadingMedia} onClick={() => void sendSelectedGalleryBatch()}>
                             <Send size={14} />Kirim {galleryBatch.assets.length} media
                           </Button>
                         </div>

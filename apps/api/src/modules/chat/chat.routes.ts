@@ -3,7 +3,8 @@ import { secretMatches } from '../../utils/secrets.js';
 import { ensureConversationStats, loadConversationWindows, scheduleConversationStats, summarizeMessages } from './conversation-stats.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Router } from 'express';
+import { Router, type Request } from 'express';
+import { idempotent } from '../../utils/idempotency.js';
 import { z } from 'zod';
 import { messageInputSchema } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
@@ -638,6 +639,13 @@ chatRouter.post('/messages', asyncHandler(async (req, res) => {
 
 // Media upload endpoint (base64 encoded or package flyer reference)
 chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
+  // clientId dari klien: permintaan ulang (mis. habis waktu di browser padahal sudah terkirim) tidak mengirim dobel ke jamaah.
+  const clientId = typeof req.body?.clientId === 'string' && /^[\w-]{8,64}$/.test(req.body.clientId) ? req.body.clientId : undefined;
+  const message = await idempotent(clientId && `${req.user!.id}:media:${clientId}`, () => sendChatMedia(req));
+  res.status(201).json({ success: true, data: message });
+}));
+
+async function sendChatMedia(req: Request) {
   const input = z.object({
     brandId: z.coerce.number().int().positive().optional(),
     prospectId: z.coerce.number().int().positive(),
@@ -859,10 +867,8 @@ chatRouter.post('/messages/media', asyncHandler(async (req, res) => {
   }
   scheduleConversationStats([prospect.id]);
   emitToBrand(brandId, 'message:new', message);
-  res.status(201).json({ success: true, data: message });
-}));
-
-
+  return message;
+}
 
 chatRouter.post('/messages/:id/react', asyncHandler(async (req, res) => {
   const id = z.coerce.number().int().positive().parse(req.params.id);
