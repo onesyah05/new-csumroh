@@ -18,6 +18,7 @@ import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { scriptsRouter } from './modules/scripts/scripts.routes.js';
 import { chatRouter, internalRouter } from './modules/chat/chat.routes.js';
 import { capiRouter } from './modules/capi/capi.routes.js';
+import { metaOauthCallbackRouter } from './modules/capi/meta-oauth.routes.js';
 import { whatsappRouter } from './modules/whatsapp/whatsapp.routes.js';
 import { contactsRouter } from './modules/contacts/contacts.routes.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
@@ -58,6 +59,8 @@ app.use('/api/v1/dashboard', dashboardRouter);
 app.use('/api/v1/catalog', catalogRouter);
 app.use('/api/v1/scripts', scriptsRouter);
 app.use('/api/v1/chat', chatRouter);
+// Callback OAuth Meta dipasang sebelum capiRouter karena dipanggil browser tanpa token login (dijaga oleh state bertanda tangan).
+app.use('/api/v1/meta/oauth/callback', metaOauthCallbackRouter);
 app.use('/api/v1/meta', capiRouter);
 app.use('/api/v1/whatsapp', whatsappRouter);
 app.use('/api/v1/contacts', contactsRouter);

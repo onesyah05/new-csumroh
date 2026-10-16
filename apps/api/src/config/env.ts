@@ -27,6 +27,11 @@ const schema = z.object({
   META_ALLOW_NON_PRODUCTION: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   // Kunci enkripsi lama (dipisah koma) agar token yang dienkripsi sebelum rotasi tetap terbaca sampai dienkripsi ulang.
   META_TOKEN_ENCRYPTION_KEY_PREVIOUS: z.string().optional(),
+  // Meta App untuk tombol "Hubungkan Meta" (OAuth). Kosong = tombol tidak tampil, token ditempel manual.
+  META_APP_ID: z.string().regex(/^\d+$/).optional(),
+  META_APP_SECRET: z.string().min(16).optional(),
+  // URL publik callback, harus sama persis dengan "Valid OAuth Redirect URIs" di Meta App. Contoh: https://crm.example.com/api/v1/meta/oauth/callback
+  META_OAUTH_REDIRECT_URI: z.string().url().optional(),
 });
 
 export const env = schema.parse(process.env);
