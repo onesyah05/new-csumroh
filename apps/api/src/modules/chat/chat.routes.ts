@@ -16,6 +16,7 @@ import { emitToBrand } from '../../realtime/socket.js';
 import { asyncHandler, HttpError, isDatabaseUnavailable } from '../../utils/http.js';
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker, storedReferral } from '../prospects/referral.service.js';
+import { createProspectWithRoundRobin } from '../prospects/round-robin.js';
 import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, resolveQuote, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { adLabels, cacheAdThumbnail, withAdPreviews } from '../ads/meta-ads.js';
@@ -31,6 +32,7 @@ import {
   notifyCallEnded,
   notifyIncomingCall,
   notifyInboundMessage,
+  notifyLeadAssigned,
   notifyPicChange,
   onWhatsappStatus,
   resolveReplyNotifications,
@@ -1362,13 +1364,12 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
     : (validSenderName || (phone ? `+${phone}` : 'Kontak WhatsApp'));
 
   const isNewProspect = !prospect;
+  let autoAssignedTo: number | null = null;
   if (!prospect) {
-    // Lead baru tidak diberi PIC otomatis: semua CS brand diberi tahu, dan CS yang pertama membalas menjadi PIC
-    // (klaim bersyarat di sendTextToProspect / kirim media). Lead yang belum dibalas ada di antrean "Belum ada PIC".
-    prospect = await prisma.prospect.create({
-      data: {
-        brandId,
-        userId: null,
+    // Lead baru: bila round robin brand aktif, PIC dibagi otomatis sesuai persen (hanya pesan masuk realtime non-grup;
+    // sinkron riwayat dan pesan keluar dari HP tidak dibagi). Selain itu tanpa PIC: semua CS brand diberi tahu, dan CS
+    // yang pertama membalas menjadi PIC (klaim bersyarat di sendTextToProspect / kirim media).
+    const prospectData = {
         name: isGroup ? 'Grup WhatsApp' : fallbackName,
         phone: isGroup ? null : (phone || null),
         remoteJid: isGroup ? remoteJid : phone ? `${phone}@s.whatsapp.net` : remoteJid,
@@ -1379,8 +1380,14 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
         campaignId: referralMarker?.campaignId,
         adHeadline: referralMarker?.headline,
         adSourceUrl: referralMarker?.sourceUrl
-      }
-    });
+    };
+    if (!isGroup && !isFromMe && options.realtime) {
+      const created = await createProspectWithRoundRobin(brandId, prospectData);
+      prospect = created.prospect;
+      autoAssignedTo = created.assigned?.userId ?? null;
+    } else {
+      prospect = await prisma.prospect.create({ data: { ...prospectData, brandId, userId: null } });
+    }
     referralCaptured = Boolean(referralMarker?.ctwaClid);
   } else {
     referralCaptured = await attachReferralMarker(prospect.id, referralMarker);
@@ -1461,7 +1468,9 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       dispatch(() => resolveReplyNotifications(ref.id));
     } else if ((isNewProspect || !alreadyStored) && options.notifyInbound !== false) {
       // Prospek tanpa PIC (termasuk lead baru): semua CS brand diberi tahu, siapa cepat membalas menjadi PIC.
-      dispatch(() => notifyInboundMessage(ref, { text, messageType }));
+      // Lead yang dibagi round robin: hanya CS terpilih yang diberi tahu.
+      if (autoAssignedTo) dispatch(() => notifyLeadAssigned(ref, autoAssignedTo!, { text, messageType }));
+      else dispatch(() => notifyInboundMessage(ref, { text, messageType }));
     }
   }
   if (options.realtime && referralCaptured) void dispatchCapiEvent(prospect.id, 'LeadSubmitted').catch((error) => console.error('CAPI LeadSubmitted dispatch failed', error));
