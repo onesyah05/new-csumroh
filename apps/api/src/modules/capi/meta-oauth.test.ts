@@ -24,8 +24,10 @@ vi.mock('./send-guard.js', () => ({ isMetaSendingAllowed: () => mocks.allowed })
 const realFetch = globalThis.fetch;
 const jsonResponse =(body: unknown, ok = true, status = 200) => ({ ok, status, json: async () => body });
 
-async function load() {
+async function load(configId?: string) {
   vi.resetModules();
+  vi.unstubAllEnvs();
+  if (configId) vi.stubEnv('META_OAUTH_CONFIG_ID', configId);
   vi.stubEnv('META_APP_ID', '123456789');
   vi.stubEnv('META_APP_SECRET', 'app-secret-0123456789abcdef');
   vi.stubEnv('META_OAUTH_REDIRECT_URI', 'https://crm.example.com/api/v1/meta/oauth/callback');
@@ -64,6 +66,32 @@ describe('meta oauth', { timeout: 30_000 }, () => {
     await expect(consumeState(state)).resolves.toEqual({ brandId: 7, userId: 2, returnTo: '/brands/7?tab=meta' });
     mocks.claimOnce.mockResolvedValue(false);
     await expect(consumeState(state)).rejects.toThrow(/sudah dipakai/);
+  });
+
+  it('app Facebook Login for Business: memakai config_id, bukan scope', async () => {
+    const { buildAuthorizeUrl } = await load('987654321');
+    const url = new URL(buildAuthorizeUrl({ brandId: 7, userId: 2, returnTo: '/brands/7' }));
+    expect(url.searchParams.get('config_id')).toBe('987654321');
+    expect(url.searchParams.get('override_default_response_type')).toBe('true');
+    expect(url.searchParams.get('response_type')).toBe('code');
+    expect(url.searchParams.has('scope')).toBe(false);
+  });
+
+  it('penukaran token panjang ditolak: dengan config_id memakai token hasil kode', async () => {
+    const { exchangeCodeForLongLivedToken } = await load('987654321');
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.fetch
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'FROM_CONFIG', expires_in: 5_184_000 }))
+      .mockResolvedValueOnce(jsonResponse({ error: { message: 'Cannot exchange' } }, false, 400));
+    await expect(exchangeCodeForLongLivedToken('CODE')).resolves.toMatchObject({ token: 'FROM_CONFIG' });
+  });
+
+  it('penukaran token panjang ditolak tanpa config_id: galat diteruskan', async () => {
+    const { exchangeCodeForLongLivedToken } = await load();
+    mocks.fetch
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'SHORT' }))
+      .mockResolvedValueOnce(jsonResponse({ error: { message: 'Cannot exchange' } }, false, 400));
+    await expect(exchangeCodeForLongLivedToken('CODE')).rejects.toThrow('Cannot exchange');
   });
 
   it('state palsu ditolak', async () => {
