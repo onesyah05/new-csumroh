@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   sessionFind: vi.fn(),
   brandFind: vi.fn(),
   messageFind: vi.fn(),
+  messageFindFirst: vi.fn(),
   notifyInbound: vi.fn(),
 }));
 
@@ -23,7 +24,7 @@ vi.mock('../../db/prisma.js', () => ({
     brand: { findUnique: mocks.brandFind },
     prospect: { findMany: mocks.prospectFindMany, create: mocks.prospectCreate, update: mocks.prospectUpdate, updateMany: mocks.prospectUpdateMany },
     prospectLog: { create: mocks.logCreate },
-    chatMessage: { findUnique: mocks.messageFind, findFirst: async () => null, upsert: mocks.messageUpsert },
+    chatMessage: { findUnique: mocks.messageFind, findFirst: mocks.messageFindFirst, upsert: mocks.messageUpsert },
     whatsappContact: { findFirst: mocks.contactFindFirst },
   },
 }));
@@ -53,6 +54,7 @@ beforeEach(() => {
   mocks.sessionFind.mockResolvedValue({ brandId: 1, status: 'connected', phoneNumber: '628222' });
   mocks.brandFind.mockResolvedValue({ phone: null });
   mocks.messageFind.mockImplementation(async () => mocks.stored);
+  mocks.messageFindFirst.mockResolvedValue(null);
   mocks.prospectFindMany.mockResolvedValue([]);
   mocks.prospectCreate.mockImplementation(async ({ data }: any) => ({ id: 9, userId: null, ...data }));
   mocks.messageUpsert.mockImplementation(async ({ create }: any) => ({ id: 1, ...create }));
@@ -63,6 +65,30 @@ beforeEach(() => {
 const base = { brandId: 1, messageId: 'M1', remoteJid: '62811@s.whatsapp.net', phone: '62811', text: 'halo', timestamp: 1_790_000_000 };
 
 describe('Pesan WhatsApp masuk', () => {
+  it('jamaah membalas pesan brand: kutipan tersimpan dengan pengirim "Anda"', async () => {
+    mocks.messageFindFirst.mockResolvedValue({ messageText: 'Paket Hana 9 hari', senderName: null, isFromMe: true });
+    await incoming({ ...base, senderName: 'Ibu Aisyah', quotedMessageId: 'ORIG1', quotedText: '' });
+    expect(mocks.messageUpsert.mock.calls[0]![0].create).toMatchObject({ quotedMessageId: 'ORIG1', quotedText: 'Paket Hana 9 hari', quotedSender: 'Anda' });
+  });
+
+  it('kutipan ke pesan jamaah memakai nama pengirim tersimpan; teks dari gateway diutamakan', async () => {
+    mocks.messageFindFirst.mockResolvedValue({ messageText: 'lama', senderName: 'Ibu Aisyah', isFromMe: false });
+    await incoming({ ...base, quotedMessageId: 'ORIG2', quotedText: 'teks dari WhatsApp' });
+    expect(mocks.messageUpsert.mock.calls[0]![0].create).toMatchObject({ quotedText: 'teks dari WhatsApp', quotedSender: 'Ibu Aisyah' });
+  });
+
+  it('kutipan yang sudah tersimpan tidak ditimpa saat pesan yang sama dikirim ulang', async () => {
+    mocks.stored = { id: 5, prospectId: 9, status: 'sent', messageText: 'x', mediaUrl: null, quotedMessageId: 'ORIG1' };
+    await incoming({ ...base, isFromMe: true, quotedMessageId: 'ORIG1', quotedText: 'baru' });
+    expect(mocks.messageUpsert.mock.calls[0]![0].update).not.toHaveProperty('quotedText');
+    mocks.stored = null;
+  });
+
+  it('pesan tanpa balasan tidak memuat kolom kutipan', async () => {
+    await incoming({ ...base });
+    expect(mocks.messageUpsert.mock.calls[0]![0].create).not.toHaveProperty('quotedMessageId');
+  });
+
   it('nama akun brand pada pesan keluar tidak menjadi nama kontak', async () => {
     await incoming({ ...base, isFromMe: true, senderName: 'Hana Tours Travel' });
     expect(mocks.prospectCreate.mock.calls[0]![0].data.name).toBe('+62811');

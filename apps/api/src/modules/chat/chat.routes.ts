@@ -1084,11 +1084,31 @@ const gatewayMessageSchema = z.object({
   isFromMe: z.boolean().optional().default(false),
   status: clipped(30).optional().default('delivered'),
   referral: z.unknown().optional(),
+  // Pesan yang dibalas (reply) oleh pengirim; teksnya boleh kosong (mis. riwayat lama), dilengkapi dari pesan tersimpan.
+  quotedMessageId: z.string().min(1).max(100).optional(),
+  quotedText: clipped(4000).optional(),
   // Nomor akun WhatsApp yang menerima/mengirim pesan (dari gateway).
   devicePhone: z.string().max(40).optional(),
 });
 
 type GatewayMessageInput = z.infer<typeof gatewayMessageSchema>;
+
+/**
+ * Kutipan pada pesan masuk (jamaah membalas pesan). Pengirim kutipan diambil dari pesan tersimpan: 'Anda' bila pesan
+ * itu dari brand, selain itu nama jamaah. Pesan yang dikutip belum tentu ada di CRM (riwayat sebelum tertaut).
+ */
+async function resolveIncomingQuote(brandId: number, prospectName: string | null | undefined, input: Pick<GatewayMessageInput, 'quotedMessageId' | 'quotedText'>) {
+  if (!input.quotedMessageId) return {};
+  const quoted = await prisma.chatMessage.findFirst({
+    where: { brandId, messageId: input.quotedMessageId },
+    select: { messageText: true, senderName: true, isFromMe: true },
+  });
+  return {
+    quotedMessageId: input.quotedMessageId,
+    quotedText: (input.quotedText || quoted?.messageText || '').slice(0, 4000),
+    quotedSender: quoted ? (quoted.isFromMe ? 'Anda' : quoted.senderName || prospectName || 'Jamaah') : undefined,
+  };
+}
 
 /**
  * Prospek Baru yang sudah dibalas (dari HP maupun CRM) berpindah ke Terhubung. Bersyarat status 'new' agar balasan
@@ -1247,8 +1267,10 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
 
   // Satu pembacaan untuk dua kebutuhan: pemilik/isi sebelumnya, dan apakah pesan ini baru (gateway bisa mengirim ulang
   // pesan yang sama; notifikasi pesan masuk hanya untuk pesan yang baru tersimpan).
-  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true, prospectId: true, status: true, messageText: true, mediaUrl: true } });
+  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true, prospectId: true, status: true, messageText: true, mediaUrl: true, quotedMessageId: true } });
   const alreadyStored = options.realtime && !isFromMe ? previousOwner : null;
+  // Kutipan tidak ditimpa bila sudah tersimpan (mis. kiriman CRM yang bergema kembali dari gateway).
+  const quote = previousOwner?.quotedMessageId ? {} : await resolveIncomingQuote(brandId, prospect.name, input);
   const message = await prisma.chatMessage.upsert({
     where: { brandId_messageId: { brandId, messageId } },
     update: {
@@ -1265,7 +1287,8 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       ...(mediaUrl && !previousOwner?.mediaUrl ? { mediaUrl } : {}),
       timestamp: timestamp || Math.floor(Date.now() / 1000),
       status: laterMessageStatus(previousOwner?.status, input.status || 'delivered'),
-      metaReferralData: storedReferral(referralMarker)
+      metaReferralData: storedReferral(referralMarker),
+      ...quote,
     },
     create: {
       brandId,
@@ -1281,7 +1304,8 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       mediaUrl,
       timestamp: timestamp || Math.floor(Date.now() / 1000),
       status: input.status || 'delivered',
-      metaReferralData: storedReferral(referralMarker)
+      metaReferralData: storedReferral(referralMarker),
+      ...quote,
     }
   });
 
