@@ -278,6 +278,8 @@ export function MetaCapiPage({ brandId: fixedBrandId }: { brandId?: number } = {
     onSuccess: (res) => {
       setTestResult(res);
       void queryClient.invalidateQueries({ queryKey: ['meta-logs', currentBrandId] });
+      // Event uji yang diterima Meta juga menandai dataset terverifikasi (dilakukan server).
+      if (res.status === 'success') void queryClient.invalidateQueries({ queryKey: ['meta-settings', currentBrandId] });
       showToast(res.status === 'success' ? 'Event uji coba berhasil dikirim ke Meta!' : 'Event uji coba gagal diproses Meta.');
     },
     onError: (error) => showToast(error.message),

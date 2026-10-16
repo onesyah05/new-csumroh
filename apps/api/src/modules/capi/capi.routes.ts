@@ -82,7 +82,7 @@ capiRouter.get('/settings', asyncHandler(async (req, res) => {
 capiRouter.put('/settings', asyncHandler(async (req, res) => {
   const input = settingsSchema.parse(req.body);
   const brandId = scopedBrandId(req, input.brandId);
-  const current = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true, metaAdsAccessToken: true, metaAdAccountId: true } });
+  const current = await prisma.brand.findUnique({ where: { id: brandId }, select: { metaAccessToken: true, metaAdsAccessToken: true, metaAdAccountId: true, metaPixelId: true } });
   if (!current) throw new HttpError(404, 'Brand tidak ditemukan.');
   // Audiens spam milik ad account lama: tidak bisa dipakai set iklan ad account baru. Dibuat ulang saat sinkron berikutnya.
   const adAccountChanged = (input.adAccountId || null) !== (current.metaAdAccountId ?? null);
@@ -96,6 +96,8 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
   if (input.clearAdsAccessToken) metaAdsAccessToken = null;
   else if (input.adsAccessToken) metaAdsAccessToken = encryptMetaToken(input.adsAccessToken);
 
+  const capiCredentialsChanged = Boolean(input.clearAccessToken || input.accessToken) || (input.pixelId || null) !== (current.metaPixelId ?? null);
+
   const brand = await prisma.brand.update({
     where: { id: brandId },
     data: {
@@ -107,7 +109,8 @@ capiRouter.put('/settings', asyncHandler(async (req, res) => {
       metaAccessToken,
       metaAdsAccessToken,
       ...(adsTokenChanged ? { metaAdsTokenSource: null, metaAdsTokenExpiresAt: null } : {}),
-      metaVerifiedAt: null,
+      // Verifikasi memeriksa Pixel/Dataset + token CAPI saja: menyimpan akun/token iklan atau ID lain tidak membatalkannya.
+      ...(capiCredentialsChanged ? { metaVerifiedAt: null } : {}),
       metaLastError: null,
       ...(adAccountChanged ? { metaSpamAudienceId: null, metaSpamSyncedAt: null } : {}),
     },
@@ -318,6 +321,8 @@ capiRouter.post('/test-event', asyncHandler(async (req, res) => {
   } catch (error) {
     responseBody = error instanceof Error ? error.message : 'Network error';
   }
+  // Event uji diterima Meta = Pixel/Dataset dan token CAPI valid, sama seperti Tes Koneksi.
+  if (status === 'success') await prisma.brand.update({ where: { id: brandId }, data: { metaVerifiedAt: new Date(), metaLastError: null } });
 
   res.json({
     // Permintaan uji tetap sukses walau Meta menolak: jawaban Meta (data.status/responseBody) ditampilkan di kotak hasil,
