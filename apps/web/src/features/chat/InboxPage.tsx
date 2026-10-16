@@ -5,7 +5,7 @@ import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { EDIT_TEXT_PROBLEM_TEXT, businessDateKey, dateOnlyKey, editTextProblem, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
+import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Pencil, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
@@ -36,6 +36,7 @@ import { QuickReplyPicker } from '../quick-replies/QuickReplyPicker';
 import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickReplies, type QuickReply, type SlashToken } from '../quick-replies/quickRepliesApi';
 import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
 import { sendGalleryBatch } from './galleryBatch';
+import { useMessageEdit } from './useMessageEdit';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
 import { getInboxQueue, inboxFilters, visibleInboxFilters, type InboxWorkFilter } from './inboxFilters';
@@ -197,11 +198,6 @@ export function InboxPage() {
   const [linkPackageToProspect, setLinkPackageToProspect] = useState(true);
   const [mediaPreview, setMediaPreview] = useState<MediaPreviewState | null>(null);
   // Beberapa media dari galeri yang menunggu dikirim (milik satu chat; dibuang saat CS pindah chat).
-  // Mengedit pesan terkirim: teks lama masuk ke kotak ketik. `restoreDraft` mengembalikan draf semula ke chat asalnya
-  // (setMessage terikat ke chat saat edit dimulai), juga bila CS sempat pindah chat.
-  const [editing, setEditing] = useState<{ chatId: number; id: number; original: string; restoreDraft: () => void } | null>(null);
-  const editingRef = useRef(editing);
-  editingRef.current = editing;
   const [galleryBatch, setGalleryBatch] = useState<{ chatId: number; assets: GalleryAsset[] } | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ chatId: number; done: number; total: number } | null>(null);
   // Kunci idempotensi per media yang belum berhasil: coba ulang memakai id yang sama agar server tidak mengirim dobel.
@@ -218,6 +214,21 @@ export function InboxPage() {
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  // Mengedit pesan terkirim (useMessageEdit): teks lama masuk ke kotak ketik, Enter menyimpan, Esc membatalkan.
+  const { editing, hint: editHint, problem: editProblem, isSaving: isSavingEdit, startEdit, cancelEdit, submitEdit, blockedWhileEditing } = useMessageEdit({
+    selectedId,
+    message,
+    setMessage,
+    draftIdentity: `${user?.id}:${brandId}:${selectedId}`,
+    query,
+    composerRef,
+    adjustHeight: adjustTextareaHeight,
+    hasPendingAttachment: Boolean(mediaPreview || galleryBatch || isCompressing),
+    clearReply: () => setReplyingTo(null),
+    showToast: (text) => showToast(text),
+    hasUnresolvedTokens: (text) => Boolean(unresolvedScript(text)),
+  });
+  const startEditStable = useStableCallback(startEdit);
   const focusDraftAfterPanel = useRef(false);
   useEffect(() => {
     if (sidePanelTab || !focusDraftAfterPanel.current) return;
@@ -573,11 +584,6 @@ export function InboxPage() {
   useEffect(() => {
     setReplyingTo(null);
     setGalleryBatch(null);
-    const activeEdit = editingRef.current;
-    if (activeEdit && activeEdit.chatId !== selectedId) {
-      activeEdit.restoreDraft();
-      setEditing(null);
-    }
     // Lampiran chat yang ditinggalkan disimpan (bukan dibuang) dan dikembalikan saat chat itu dibuka lagi.
     const leaving = previousChatRef.current;
     const current = mediaPreviewRef.current;
@@ -903,10 +909,7 @@ export function InboxPage() {
       showToast('Pilih kontak obrolan terlebih dahulu');
       return;
     }
-    if (editingRef.current) {
-      showToast('Selesaikan atau batalkan edit pesan dulu.');
-      return;
-    }
+    if (blockedWhileEditing()) return;
     const pkgToUse = targetPkg || currentPackage;
     if (!pkgToUse) {
       setShowPackagePickerModal(true);
@@ -1067,10 +1070,7 @@ export function InboxPage() {
 
   async function handleProcessFile(file: File) {
     if (!file || !selectedId) return;
-    if (editingRef.current) {
-      showToast('Selesaikan atau batalkan edit pesan dulu.');
-      return;
-    }
+    if (blockedWhileEditing()) return;
 
     // Berkas dikirim sebagai base64 dalam JSON (+33%) dan body API dibatasi 50 MB,
     // jadi batas efektif berkas asli ±37 MB. Tolak lebih awal daripada gagal 413 setelah upload panjang.
@@ -1182,65 +1182,6 @@ export function InboxPage() {
     } finally {
       setUploadingMedia(false);
     }
-  }
-
-  /** Mulai mengedit pesan teks yang sudah terkirim: teks lama masuk ke kotak ketik dan draf semula disimpan. */
-  function startEdit(item: { id: number; messageText?: string | null }) {
-    if (!selectedId) return;
-    if (mediaPreview || galleryBatch || isCompressing) {
-      showToast('Kirim atau hapus lampiran dulu sebelum mengedit pesan.');
-      return;
-    }
-    const draftBefore = message;
-    // Sudah mengedit pesan lain: pindah ke pesan ini, draf semula tetap yang pertama.
-    const restoreDraft = editingRef.current ? editingRef.current.restoreDraft : () => setMessage(draftBefore);
-    const text = item.messageText ?? '';
-    setEditing({ chatId: selectedId, id: item.id, original: text, restoreDraft });
-    setReplyingTo(null);
-    setMessage(text);
-    requestAnimationFrame(() => {
-      const textarea = composerRef.current;
-      if (!textarea) return;
-      textarea.focus();
-      textarea.setSelectionRange(text.length, text.length);
-      adjustTextareaHeight(textarea);
-    });
-  }
-  const startEditStable = useStableCallback(startEdit);
-
-  function cancelEdit() {
-    editingRef.current?.restoreDraft();
-    setEditing(null);
-    requestAnimationFrame(() => adjustTextareaHeight(composerRef.current));
-  }
-
-  const editMutation = useMutation({
-    mutationFn: (vars: { id: number; text: string }) => api.patch(`/chat/messages/${vars.id}${query}`, { text: vars.text }),
-    onSuccess: (_data, vars) => {
-      editingRef.current?.restoreDraft();
-      setEditing(null);
-      requestAnimationFrame(() => adjustTextareaHeight(composerRef.current));
-      void queryClient.invalidateQueries({ queryKey: ['messages'] });
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      showToast('Pesan berhasil diedit.');
-      void vars;
-    },
-    // Gagal (lewat 15 menit, WhatsApp menolak, sesi putus): mode edit tetap terbuka agar teksnya tidak hilang.
-    onError: (error: Error) => showToast(error.message || 'Gagal mengedit pesan.'),
-  });
-
-  function submitEdit() {
-    if (!editing || editMutation.isPending) return;
-    const problem = editTextProblem(message, editing.original);
-    if (problem) {
-      showToast(EDIT_TEXT_PROBLEM_TEXT[problem]);
-      return;
-    }
-    if (unresolvedScript(message.trim())) {
-      showToast('Draft masih memuat tanda {{…}}.');
-      return;
-    }
-    editMutation.mutate({ id: editing.id, text: message.trim() });
   }
 
   /**
@@ -1883,7 +1824,15 @@ export function InboxPage() {
                   </div>
                 </div>
               ) : canReply ? (
-                <form onSubmit={submit} className="chat-composer relative border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
+                <form
+                  onSubmit={submit}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape' && editing && !event.defaultPrevented) {
+                      event.preventDefault();
+                      cancelEdit();
+                    }
+                  }}
+                  className="chat-composer relative border-t border-[#e9edef] bg-[#f0f2f5] p-2.5 sm:px-4 sm:py-2.5 shrink-0">
                   {slash && (
                     <QuickReplyPicker
                       items={slashMatches}
@@ -2046,11 +1995,14 @@ export function InboxPage() {
                           <span>Mengedit pesan</span>
                         </div>
                         <p className="truncate text-xs text-[#667781] mt-0.5">{editing.original}</p>
+                        {editHint && (
+                          <p className={cn('mt-0.5 text-xs', editHint.tone === 'error' ? 'font-medium text-red-600' : 'text-[#667781]')}>{editHint.text}</p>
+                        )}
                       </div>
                       <button
                         type="button"
                         onClick={cancelEdit}
-                        disabled={editMutation.isPending}
+                        disabled={isSavingEdit}
                         className="h-6 w-6 rounded-full flex items-center justify-center text-[#54656f] hover:bg-black/5 hover:text-[#111b21] transition cursor-pointer disabled:opacity-40"
                         title="Batal mengedit (Esc)"
                         aria-label="Batal mengedit pesan"
@@ -2205,11 +2157,6 @@ export function InboxPage() {
                       onBlur={() => setSlash(null)}
                       onKeyDown={(event) => {
                         if (handleSlashKey(event)) return;
-                        if (event.key === 'Escape' && editingRef.current) {
-                          event.preventDefault();
-                          cancelEdit();
-                          return;
-                        }
                         if (!isTouchDevice() && event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                           event.preventDefault();
                           event.currentTarget.form?.requestSubmit();
@@ -2227,18 +2174,18 @@ export function InboxPage() {
 
                     <button
                       type="submit"
-                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia || isCompressing || editMutation.isPending || (editing ? Boolean(editTextProblem(message, editing.original)) : false)}
+                      disabled={!canSend || (!message.trim() && !mediaPreview) || send.isPending || uploadingMedia || isCompressing || isSavingEdit || Boolean(editProblem)}
                       style={mobile ? { order: 3 } : undefined}
                       aria-label={editing ? 'Simpan perubahan pesan' : 'Kirim pesan WhatsApp'}
-                      title={editing ? (isTouchDevice() ? 'Simpan perubahan' : 'Simpan perubahan (Enter)') : isTouchDevice() ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
+                      title={editing ? (editHint?.text ?? (isTouchDevice() ? 'Simpan perubahan' : 'Simpan perubahan (Enter)')) : isTouchDevice() ? 'Kirim pesan' : 'Kirim pesan (Enter)'}
                       className={cn(
                         'h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-white transition shadow-xs cursor-pointer',
-                        canSend && (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia && !editMutation.isPending && !(editing && editTextProblem(message, editing.original))
+                        canSend && (message.trim() || mediaPreview) && !send.isPending && !uploadingMedia && !isSavingEdit && !editProblem
                           ? 'bg-[#00a884] hover:bg-[#008f6f] active:scale-95'
                           : 'bg-[#8696a0] opacity-60 cursor-not-allowed'
                       )}
                     >
-                      {send.isPending || uploadingMedia || editMutation.isPending ? <RefreshCw size={18} className="animate-spin" /> : editing ? <Check size={18} /> : <Send size={18} />}
+                      {send.isPending || uploadingMedia || isSavingEdit ? <RefreshCw size={18} className="animate-spin" /> : editing ? <Check size={18} /> : <Send size={18} />}
                     </button>
                   </div>
 
@@ -2390,9 +2337,7 @@ export function InboxPage() {
                   void galleryAssetToFile(assets[0]!)
                     .then((file) => handleProcessFile(file))
                     .catch((error: Error) => showToast(error.message || 'Gagal mengambil media dari galeri.'));
-                } else if (selectedId && editingRef.current) {
-                  showToast('Selesaikan atau batalkan edit pesan dulu.');
-                } else if (selectedId) {
+                } else if (selectedId && !blockedWhileEditing()) {
                   setGalleryBatch({ chatId: selectedId, assets });
                 }
               }}

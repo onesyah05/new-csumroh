@@ -699,6 +699,7 @@ app.post('/sessions/:brandId/edit', async (req, res, next) => {
     const input = z.object({
       jid: z.string().min(5),
       messageId: z.string().min(1),
+      // Sama dengan EDIT_MAX_LENGTH di shared-types (gateway tidak bergantung pada paket itu).
       text: z.string().min(1).max(4000),
     }).parse(req.body);
 

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   notifyCallEnded: vi.fn(),
   notifyInboundMessage: vi.fn(),
   emitToBrand: vi.fn(),
+  logCreate: vi.fn(),
 }));
 
 vi.mock('../../db/prisma.js', () => ({
@@ -26,6 +27,7 @@ vi.mock('../../db/prisma.js', () => ({
       update: mocks.messageUpdate,
     },
     whatsappContact: { findFirst: async () => null },
+    prospectLog: { create: mocks.logCreate },
   },
 }));
 vi.mock('./conversation-stats.js', () => ({ ensureConversationStats: vi.fn(), loadConversationWindows: vi.fn(), scheduleConversationStats: vi.fn(), summarizeMessages: vi.fn() }));
@@ -145,6 +147,8 @@ describe('Pesan ditarik / diedit lewat protocolMessage', () => {
     await callEvent({ ...fromContact, messageId: 'K1', chatJids: ['1234@lid'], text: 'jadi 3 orang' }, '/messages/edited');
     // Edit dari WhatsApp juga memberi penanda Diedit.
     expect(mocks.messageUpdate.mock.calls[0]![0].data).toEqual({ messageText: 'jadi 3 orang', editedAt: expect.any(Date) });
+    // Jejak audit: edit dari jamaah juga dicatat, tanpa pengguna CRM.
+    expect(mocks.logCreate.mock.calls[0]![0].data).toMatchObject({ prospectId: 9, userId: null, actionType: 'message_edited', title: 'Pesan diedit oleh jamaah' });
 
     vi.clearAllMocks();
     mocks.stored = csReply;

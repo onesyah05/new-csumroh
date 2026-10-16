@@ -71,12 +71,32 @@ describe('Menu Edit pada gelembung pesan', () => {
     ['pesan jamaah', { isFromMe: false }],
     ['foto/video', { messageType: 'imageMessage' }],
     ['dokumen', { messageType: 'documentMessage' }],
-    ['pesan lokal', { messageId: 'local-abc' }],
+    ['pesan terhapus', { isDeleted: true }],
   ])('tidak ada menu Edit untuk %s', (_name, overrides) => {
     renderBubble(baseItem(overrides));
     openMenu();
-    expect(screen.getByRole('menuitem', { name: /Salin/ })).toBeTruthy();
+    // Menu terbuka (item Balas selalu ada), tetapi tanpa item Edit.
+    expect(screen.getByRole('menuitem', { name: /Balas/ })).toBeTruthy();
     expect(editItem()).toBeNull();
+  });
+});
+
+describe('Menu Edit: alasan ditampilkan', () => {
+  it('pesan teks ber-id lokal (tidak tercatat di WhatsApp) tampil tetapi nonaktif dengan alasannya', () => {
+    renderBubble(baseItem({ messageId: 'local-abc' }));
+    openMenu();
+    const menuItem = editItem()!;
+    expect(menuItem.textContent).toContain('Tidak tercatat di WhatsApp');
+    expect(menuItem.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('bukan Admin/PIC dan lewat 15 menit: tooltip menyebut kedua alasan', () => {
+    renderBubble(baseItem({ timestamp: nowSeconds() - 20 * 60 }), { user: { id: 11, role: 'cs' } });
+    openMenu();
+    const menuItem = editItem()!;
+    expect(menuItem.textContent).toContain('Hanya Admin/PIC');
+    expect(menuItem.getAttribute('title')).toContain('Hanya Admin dan PIC (Aisyah)');
+    expect(menuItem.getAttribute('title')).toContain('Lewat 15 menit');
   });
 });
 

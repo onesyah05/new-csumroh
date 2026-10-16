@@ -16,7 +16,7 @@ vi.mock('../../db/prisma.js', () => {
     return /Many$/.test(method) ? [] : null;
   };
   const prisma: any = new Proxy({}, {
-    get: (_t, model: string) => new Proxy({}, { get: (_m, method: string) => async (args: any) => handle(model, method, args) }),
+    get: (_t, model: string) => (model === '$transaction' ? (callback: any) => callback(prisma) : new Proxy({}, { get: (_m, method: string) => async (args: any) => handle(model, method, args) })),
   });
   return { prisma };
 });
@@ -130,10 +130,34 @@ describe('Edit pesan dari CRM', () => {
     expect(db.updates).toEqual([]);
   });
 
-  it('WhatsApp menolak: CRM tidak berubah dan tidak ada log', async () => {
-    gateway.mockImplementation(async () => ({ ok: false, status: 502, json: async () => ({ success: false, error: 'edit gagal' }) }) as any);
+  it('WhatsApp menolak mendekati 15 menit: pesan galat menyebut batas waktu', async () => {
+    db.message = { ...baseMessage(), timestamp: Math.floor(Date.now() / 1000) - 14 * 60 - 30 };
+    gateway.mockImplementation(async () => ({ ok: false, status: 502, text: async () => 'ditolak' }) as any);
     const result = await edit(pic, 'Harga paket 28 juta');
-    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('15 menit');
+    gateway.mockClear();
+    db.message = baseMessage();
+    const early = await edit(pic, 'Harga paket 28 juta');
+    expect(early.error?.message ?? '').not.toContain('15 menit');
+  });
+
+  it('gema edit dari gateway yang tiba selagi edit CRM berjalan tidak diproses ulang (satu pembaruan, satu log)', async () => {
+    gateway.mockImplementation(async () => {
+      await inboundEdit('Harga paket 28 juta'); // WhatsApp menggemakan edit sebelum CRM selesai menyimpan
+      return { ok: true, json: async () => ({ success: true }) };
+    });
+    const result = await edit(pic, 'Harga paket 28 juta');
+    expect(result.error).toBeUndefined();
+    expect(db.updates).toHaveLength(1);
+    expect(db.logs).toHaveLength(1);
+    expect(db.logs[0]).toMatchObject({ userId: 10, title: 'Pesan diedit oleh Aisyah' });
+  });
+
+  it('WhatsApp menolak: CRM tidak berubah dan tidak ada log', async () => {
+    gateway.mockImplementation(async () => ({ ok: false, status: 502, text: async () => 'ditolak' }) as any);
+    const result = await edit(pic, 'Harga paket 28 juta');
+    expect(result.error?.status).toBe(502);
+    expect(result.error?.message).toBe('Gagal mengedit pesan di WhatsApp. Pesan tidak diubah.');
     expect(db.updates).toEqual([]);
     expect(db.logs).toEqual([]);
     expect(emitToBrand).not.toHaveBeenCalled();
@@ -146,6 +170,9 @@ describe('Edit dari WhatsApp (HP brand atau jamaah)', () => {
     expect(db.updates[0]).toMatchObject({ messageText: 'Harga paket 27 juta' });
     expect(db.updates[0]!.editedAt).toBeInstanceOf(Date);
     expect(emitToBrand).toHaveBeenCalledWith(1, 'message:edited', expect.objectContaining({ editedAt: expect.any(Date) }));
+    // Jejak audit untuk edit dari HP brand (pesan milik kita) maupun jamaah.
+    expect(db.logs[0]).toMatchObject({ prospectId: 200, userId: null, actionType: 'message_edited', title: 'Pesan diedit dari HP brand' });
+    expect(db.logs[0]!.description).toBe('Sebelum: Harga paket 30 juta\nSesudah: Harga paket 27 juta');
   });
 
   it('gema edit yang kita lakukan sendiri (teks sudah sama) tidak diproses ulang', async () => {

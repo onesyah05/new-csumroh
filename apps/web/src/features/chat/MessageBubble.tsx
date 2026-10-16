@@ -1,5 +1,5 @@
 import { memo, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type RefObject, type SetStateAction } from 'react';
-import { EDIT_BLOCK_TEXT, isMediaFileNameText, messageEditBlock } from '@csumroh/shared-types';
+import { editMenuState, isEditAuthor, isMediaFileNameText, type EditableMessage } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle, Ban, Check, CheckCheck, ChevronDown, Clock, Copy, CornerUpLeft, Download, Eye, FileText, ImageIcon,
@@ -55,7 +55,7 @@ export type MessageBubbleProps = {
   setReplyingTo: Dispatch<SetStateAction<ReplyTarget | null>>;
   setDeleteConfirmId: Dispatch<SetStateAction<number | null>>;
   /** Mulai mengedit pesan teks milik kita (teks masuk ke kotak ketik). */
-  startEdit: (item: any) => void;
+  startEdit: (item: EditableMessage) => void;
   setPreviewFlyer: (url: string | null) => void;
   reactMutate: (vars: { messageId: number; emoji: string }) => void;
   starMutate: (messageId: number) => void;
@@ -229,26 +229,25 @@ export const MessageBubble = memo(function MessageBubble({
                                   </DropdownMenu.Item>
                                 )}
   
-                                {/* Edit: hanya pesan teks milik kita. Lewat 15 menit atau bukan Admin/PIC: tampil tetapi nonaktif dengan alasannya. */}
+                                {/* Edit: aturan, alasan, dan akses dari shared-types (sama dengan server). */}
                                 {item.isFromMe && !isMessageDeleted && (() => {
-                                  const block = messageEditBlock(item);
-                                  if (block && block !== 'expired') return null;
-                                  const isPic = selected?.user?.id != null && selected.user.id === user?.id;
-                                  const reason = !(isAdmin || isPic)
-                                    ? `Hanya Admin dan PIC (${selected?.user?.name || 'CS lain'}) yang dapat mengedit`
-                                    : block ? EDIT_BLOCK_TEXT[block] : null;
+                                  const edit = editMenuState(item, {
+                                    canEdit: isEditAuthor({ role: user?.role ?? '', userId: user?.id, picUserId: selected?.user?.id }),
+                                    picName: selected?.user?.name,
+                                  });
+                                  if (!edit.visible) return null;
                                   return (
                                     <DropdownMenu.Item
-                                      disabled={Boolean(reason)}
-                                      onClick={() => { if (!reason) startEdit(item); }}
-                                      title={reason ?? 'Edit pesan'}
+                                      disabled={!edit.enabled}
+                                      onClick={() => { if (edit.enabled) startEdit(item); }}
+                                      title={edit.reason ?? 'Edit pesan'}
                                       className={cn(
                                         'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] outline-none',
-                                        reason ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#f0f2f5] cursor-pointer',
+                                        edit.enabled ? 'hover:bg-[#f0f2f5] cursor-pointer' : 'opacity-40 cursor-not-allowed',
                                       )}
                                     >
                                       <Pencil size={14} className="text-[#54656f]" />
-                                      <span>Edit{reason ? (block === 'expired' ? ' (Lewat 15 menit)' : ' (Hanya Admin/PIC)') : ''}</span>
+                                      <span>Edit{edit.label ? ` (${edit.label})` : ''}</span>
                                     </DropdownMenu.Item>
                                   );
                                 })()}

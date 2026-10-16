@@ -7,7 +7,7 @@ import { Router, type Request } from 'express';
 import { idempotent } from '../../utils/idempotency.js';
 import { resolveGalleryFile } from '../../utils/safe-path.js';
 import { z } from 'zod';
-import { EDIT_BLOCK_TEXT, EDIT_TEXT_PROBLEM_TEXT, editTextProblem, messageEditBlock, messageInputSchema } from '@csumroh/shared-types';
+import { EDIT_BLOCK_STATUS, EDIT_BLOCK_TEXT, EDIT_TEXT_PROBLEM_STATUS, EDIT_TEXT_PROBLEM_TEXT, EDIT_WINDOW_SECONDS, editTextProblem, isEditAuthor, messageEditBlock, messageInputSchema } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
@@ -904,6 +904,14 @@ async function sendChatMedia(req: Request) {
 }
 
 /**
+ * Pesan yang sedang kita edit lewat CRM (kunci brand:messageId). WhatsApp menggemakan edit itu kembali lewat gateway; gema
+ * yang tiba sebelum pembaruan CRM selesai harus dilewati jalur inbound, kalau tidak edit tercatat dua kali dan salah
+ * dianggap edit dari HP/jamaah. Satu proses API (lihat docs/deploy.md).
+ */
+const crmEditsInFlight = new Set<string>();
+const crmEditKey = (brandId: number, messageId: string) => `${brandId}:${messageId}`;
+
+/**
  * Edit teks pesan yang sudah terkirim. Aturan sama dengan hapus (pesan sendiri, Admin atau PIC), ditambah: hanya teks,
  * dalam 15 menit, bukan pesan lokal. WhatsApp diedit lebih dulu; CRM baru berubah setelah WhatsApp menerima, jadi teks di
  * CRM tidak pernah berbeda dari yang diterima jamaah. Teks lama disimpan di log prospek sebagai jejak audit.
@@ -922,16 +930,16 @@ chatRouter.patch('/messages/:id', asyncHandler(async (req, res) => {
   const brandId = scopedBrandId(req, requestedBrandId ?? message.brandId);
   if (message.brandId !== brandId) throw new HttpError(404, 'Pesan tidak ditemukan.');
 
-  const isAdmin = req.user!.role === 'superadmin' || req.user!.role === 'admin';
-  const isPic = Boolean(message.prospect?.userId && message.prospect.userId === req.user!.id);
-  if (!isAdmin && !isPic) throw new HttpError(403, 'Hanya Admin dan PIC yang dapat mengedit pesan.');
+  if (!isEditAuthor({ role: req.user!.role, userId: req.user!.id, picUserId: message.prospect?.userId })) {
+    throw new HttpError(403, 'Hanya Admin dan PIC yang dapat mengedit pesan.');
+  }
 
   const block = messageEditBlock(message);
-  if (block) throw new HttpError(block === 'not_mine' || block === 'not_text' ? 400 : block === 'deleted' ? 409 : 422, EDIT_BLOCK_TEXT[block]);
+  if (block) throw new HttpError(EDIT_BLOCK_STATUS[block], EDIT_BLOCK_TEXT[block]);
 
   const text = input.text.trim();
   const problem = editTextProblem(text, message.messageText);
-  if (problem) throw new HttpError(problem === 'unchanged' ? 409 : 400, EDIT_TEXT_PROBLEM_TEXT[problem]);
+  if (problem) throw new HttpError(EDIT_TEXT_PROBLEM_STATUS[problem], EDIT_TEXT_PROBLEM_TEXT[problem]);
 
   const remoteJid = message.remoteJid || (message.phone ? `${message.phone.replace(/\D/g, '')}@s.whatsapp.net` : null);
   if (!remoteJid) throw new HttpError(422, 'Remote JID tidak valid.');
@@ -941,29 +949,43 @@ chatRouter.patch('/messages/:id', asyncHandler(async (req, res) => {
   sendingDevicePhone(message, session);
 
   // Edit di WhatsApp dulu; CRM baru berubah bila WhatsApp menerimanya.
-  const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/edit`, {
-    method: 'POST', signal: AbortSignal.timeout(20000),
-    headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
-    body: JSON.stringify({ jid: remoteJid, messageId: message.messageId, text }),
-  }).catch(() => null);
-  if (!gatewayResponse?.ok) throw await gatewayFailure(brandId, gatewayResponse, 'Gagal mengedit pesan di WhatsApp. Pesan tidak diubah.');
+  const inFlightKey = crmEditKey(brandId, message.messageId);
+  crmEditsInFlight.add(inFlightKey);
+  try {
+    const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/edit`, {
+      method: 'POST', signal: AbortSignal.timeout(20000),
+      headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
+      body: JSON.stringify({ jid: remoteJid, messageId: message.messageId, text }),
+    }).catch(() => null);
+    if (!gatewayResponse?.ok) {
+      // Jam WhatsApp bisa selisih sedikit dari jam server: bila pesan hampir 15 menit, kemungkinan itu sebabnya.
+      const nearLimit = Date.now() / 1000 - message.timestamp > EDIT_WINDOW_SECONDS - 60;
+      throw await gatewayFailure(brandId, gatewayResponse, 'Gagal mengedit pesan di WhatsApp. Pesan tidak diubah.' + (nearLimit ? ' Batas edit WhatsApp 15 menit mungkin sudah lewat.' : ''));
+    }
 
-  const previousText = message.messageText ?? '';
-  const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { messageText: text, editedAt: new Date() } });
-  if (message.prospectId) {
-    await prisma.prospectLog.create({
-      data: {
-        prospectId: message.prospectId,
-        userId: req.user!.id,
-        actionType: 'message_edited',
-        title: `Pesan diedit oleh ${req.user!.name}`,
-        description: `Sebelum: ${previousText.slice(0, 300)}\nSesudah: ${text.slice(0, 300)}`,
-      },
-    }).catch((error) => console.warn('Gagal mencatat log edit pesan:', error));
-  }
-  scheduleConversationStats([updated.prospectId]);
-  emitToBrand(brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText, editedAt: updated.editedAt });
+    // Perubahan dan jejak audit satu transaksi: tidak ada edit tanpa catatan.
+    const previousText = message.messageText ?? '';
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.chatMessage.update({ where: { id: message.id }, data: { messageText: text, editedAt: new Date() } });
+      if (message.prospectId) {
+        await tx.prospectLog.create({
+          data: {
+            prospectId: message.prospectId,
+            userId: req.user!.id,
+            actionType: 'message_edited',
+            title: `Pesan diedit oleh ${req.user!.name}`,
+            description: `Sebelum: ${previousText.slice(0, 300)}\nSesudah: ${text.slice(0, 300)}`,
+          },
+        });
+      }
+      return row;
+    });
+    scheduleConversationStats([updated.prospectId]);
+    emitToBrand(brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText, editedAt: updated.editedAt });
   res.json({ success: true, data: updated });
+  } finally {
+    crmEditsInFlight.delete(inFlightKey);
+  }
 }));
 
 chatRouter.post('/messages/:id/react', asyncHandler(async (req, res) => {
@@ -1595,10 +1617,29 @@ internalRouter.post('/messages/revoked', asyncHandler(async (req, res) => {
 /** Pengirim mengedit pesannya di WhatsApp: teks di CRM ikut berubah. */
 internalRouter.post('/messages/edited', asyncHandler(async (req, res) => {
   const input = messageChangeSchema.extend({ text: z.string().max(65_000) }).parse(req.body);
-  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { ...changeOwnerSelect, messageText: true } });
-  // Teks sama = gema dari edit yang kita lakukan sendiri lewat CRM (sudah tersimpan dan dicatat): tidak diproses ulang.
-  if (message && isMessageChangeAuthor(message, input) && message.messageText !== input.text) {
+  const message = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId: input.brandId, messageId: input.messageId } }, select: { ...changeOwnerSelect, messageText: true, prospectId: true } });
+  // Dilewati: gema edit kita sendiri yang tiba selagi edit lewat CRM berjalan (jalur CRM yang mencatat), atau teks sudah sama
+  // (gema yang tiba sesudahnya).
+  const echoOfCrmEdit = message ? crmEditsInFlight.has(crmEditKey(input.brandId, message.messageId)) : false;
+  if (message && !echoOfCrmEdit && isMessageChangeAuthor(message, input) && message.messageText !== input.text) {
+    const previousText = message.messageText ?? '';
     const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { messageText: input.text, editedAt: new Date() } });
+    if (message.prospectId) {
+      // Jejak audit untuk edit dari HP brand atau jamaah; gagal mencatat tidak membatalkan perubahan yang sudah terjadi di WhatsApp.
+      try {
+        await prisma.prospectLog.create({
+          data: {
+            prospectId: message.prospectId,
+            userId: null,
+            actionType: 'message_edited',
+            title: message.isFromMe ? 'Pesan diedit dari HP brand' : 'Pesan diedit oleh jamaah',
+            description: `Sebelum: ${previousText.slice(0, 300)}\nSesudah: ${input.text.slice(0, 300)}`,
+          },
+        });
+      } catch (error) {
+        console.error('Gagal mencatat log edit pesan dari WhatsApp:', error);
+      }
+    }
     scheduleConversationStats([updated.prospectId]);
     emitToBrand(input.brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText, editedAt: updated.editedAt });
   }
