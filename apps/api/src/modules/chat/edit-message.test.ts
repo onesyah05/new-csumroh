@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 /** Edit pesan terkirim dari CRM (PATCH /chat/messages/:id) dan gema/edit dari WhatsApp (/internal/messages/edited). */
 const db = vi.hoisted(() => ({
   message: null as Record<string, any> | null,
+  /** Pesan yang dikutip oleh pesan yang diedit (hasil chatMessage.findFirst). */
+  quoted: null as Record<string, any> | null,
   updates: [] as Record<string, any>[],
   logs: [] as Record<string, any>[],
 }));
@@ -10,6 +12,7 @@ const db = vi.hoisted(() => ({
 vi.mock('../../db/prisma.js', () => {
   const handle = (model: string, method: string, args: any): any => {
     if (model === 'chatMessage' && method === 'findUnique') return db.message;
+    if (model === 'chatMessage' && method === 'findFirst') return db.quoted;
     if (model === 'chatMessage' && method === 'update') { db.updates.push(args.data); db.message = { ...db.message!, ...args.data }; return db.message; }
     if (model === 'prospectLog' && method === 'create') { db.logs.push(args.data); return args.data; }
     if (model === 'whatsappSession' && method === 'findUnique') return { brandId: args?.where?.brandId, status: 'connected', phoneNumber: '62822', qrCode: null };
@@ -63,6 +66,7 @@ const gateway = vi.fn(async (_url: string, _init: { body: string }) => ({ ok: tr
 
 beforeEach(() => {
   db.message = baseMessage();
+  db.quoted = null;
   db.updates.length = 0;
   db.logs.length = 0;
   gateway.mockClear();
@@ -126,6 +130,60 @@ describe('Edit pesan dari CRM', () => {
   ])('teks %s ditolak sebelum menyentuh WhatsApp', async (_name, text, status) => {
     const result = await edit(pic, text);
     expect(result.error?.status).toBe(status);
+    expect(gateway).not.toHaveBeenCalled();
+    expect(db.updates).toEqual([]);
+  });
+
+  it('dua edit bersamaan pada pesan yang sama: yang kedua ditolak 409, hanya satu yang sampai ke WhatsApp', async () => {
+    let release!: () => void;
+    gateway.mockImplementation(() => new Promise((resolve) => {
+      release = () => resolve({ ok: true, json: async () => ({ success: true }) });
+    }) as any);
+    const first = edit(pic, 'Harga paket 28 juta');
+    await vi.waitFor(() => expect(gateway).toHaveBeenCalledTimes(1));
+
+    const second = await edit(admin, 'Harga paket 27 juta');
+    expect(second.error?.status).toBe(409);
+    expect(second.error?.message).toContain('sedang diedit');
+
+    release();
+    expect((await first).error).toBeUndefined();
+    expect(gateway).toHaveBeenCalledTimes(1);
+    expect(db.updates).toHaveLength(1);
+    expect(db.logs).toHaveLength(1);
+
+    // Setelah selesai, edit berikutnya boleh lagi (penanda dilepas).
+    gateway.mockImplementation(async () => ({ ok: true, json: async () => ({ success: true }) }));
+    expect((await edit(pic, 'Harga paket 26 juta')).error).toBeUndefined();
+  });
+
+  it('penanda edit dilepas juga saat WhatsApp menolak, jadi bisa dicoba lagi', async () => {
+    gateway.mockImplementationOnce(async () => ({ ok: false, status: 502, text: async () => 'ditolak' }) as any);
+    expect((await edit(pic, 'Harga paket 28 juta')).error?.status).toBe(502);
+    expect((await edit(pic, 'Harga paket 28 juta')).error).toBeUndefined();
+  });
+
+  it('pesan balasan: kutipan asli ikut ke gateway agar tidak hilang di HP penerima', async () => {
+    db.message = { ...baseMessage(), quotedMessageId: 'ORIG1', quotedText: 'Berapa harganya?' };
+    db.quoted = { isFromMe: false };
+    await edit(pic, 'Harga paket 28 juta');
+    expect(JSON.parse(gateway.mock.calls[0]![1].body).quote).toEqual({ messageId: 'ORIG1', text: 'Berapa harganya?', fromMe: false });
+
+    gateway.mockClear();
+    db.message = { ...baseMessage(), quotedMessageId: 'ORIG2', quotedText: 'Transfer ke BSI' };
+    db.quoted = { isFromMe: true };
+    await edit(pic, 'Harga paket 28 juta');
+    expect(JSON.parse(gateway.mock.calls[0]![1].body).quote).toEqual({ messageId: 'ORIG2', text: 'Transfer ke BSI', fromMe: true });
+  });
+
+  it('pesan bukan balasan: tidak ada kutipan di permintaan ke gateway', async () => {
+    await edit(pic, 'Harga paket 28 juta');
+    expect(JSON.parse(gateway.mock.calls[0]![1].body)).not.toHaveProperty('quote');
+  });
+
+  it('teks yang masih memuat {{token}} ditolak server (422) tanpa menyentuh WhatsApp', async () => {
+    const result = await edit(pic, 'Harga paket {{harga}}');
+    expect(result.error?.status).toBe(422);
     expect(gateway).not.toHaveBeenCalled();
     expect(db.updates).toEqual([]);
   });

@@ -226,7 +226,6 @@ export function InboxPage() {
     hasPendingAttachment: Boolean(mediaPreview || galleryBatch || isCompressing),
     clearReply: () => setReplyingTo(null),
     showToast: (text) => showToast(text),
-    hasUnresolvedTokens: (text) => Boolean(unresolvedScript(text)),
   });
   const startEditStable = useStableCallback(startEdit);
   const focusDraftAfterPanel = useRef(false);

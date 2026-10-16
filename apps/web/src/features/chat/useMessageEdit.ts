@@ -41,10 +41,8 @@ export function useMessageEdit(options: {
   hasPendingAttachment: boolean;
   clearReply: () => void;
   showToast: (message: string) => void;
-  /** Teks yang masih memuat tanda {{…}} tidak boleh tersimpan. */
-  hasUnresolvedTokens: (text: string) => boolean;
 }) {
-  const { selectedId, message, setMessage, draftIdentity, query, composerRef, adjustHeight, hasPendingAttachment, clearReply, showToast, hasUnresolvedTokens } = options;
+  const { selectedId, message, setMessage, draftIdentity, query, composerRef, adjustHeight, hasPendingAttachment, clearReply, showToast } = options;
   const [editing, setEditing] = useState<EditingState | null>(null);
   const editingRef = useRef(editing);
   editingRef.current = editing;
@@ -130,10 +128,6 @@ export function useMessageEdit(options: {
     if (!editing || mutation.isPending) return;
     if (problem) {
       showToast(EDIT_TEXT_PROBLEM_TEXT[problem]);
-      return;
-    }
-    if (hasUnresolvedTokens(message.trim())) {
-      showToast('Draft masih memuat tanda {{…}}.');
       return;
     }
     mutation.mutate({ id: editing.id, text: message.trim() });

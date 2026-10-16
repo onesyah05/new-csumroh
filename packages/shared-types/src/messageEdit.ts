@@ -79,11 +79,12 @@ export function messageEditBlock(
   return null;
 }
 
-export type EditTextProblem = 'empty' | 'too_long' | 'unchanged';
+export type EditTextProblem = 'empty' | 'too_long' | 'unresolved' | 'unchanged';
 
 export const EDIT_TEXT_PROBLEM_TEXT: Record<EditTextProblem, string> = {
   empty: 'Isi pesan tidak boleh kosong.',
   too_long: 'Pesan maksimal ' + EDIT_MAX_LENGTH + ' karakter.',
+  unresolved: 'Draft masih memuat tanda {{…}}. Lengkapi datanya dulu.',
   unchanged: 'Isi pesan belum diubah.',
 };
 
@@ -91,6 +92,7 @@ export const EDIT_TEXT_PROBLEM_TEXT: Record<EditTextProblem, string> = {
 export const EDIT_TEXT_PROBLEM_STATUS: Record<EditTextProblem, number> = {
   empty: 400,
   too_long: 400,
+  unresolved: 422,
   unchanged: 409,
 };
 
@@ -99,6 +101,8 @@ export function editTextProblem(next: string, current: string | null | undefined
   const text = next.trim();
   if (!text) return 'empty';
   if (text.length > EDIT_MAX_LENGTH) return 'too_long';
+  // Token {{...}} dari balas cepat/script yang datanya belum ada tidak boleh sampai ke jamaah.
+  if (/\{\{[^}]*\}\}/.test(text)) return 'unresolved';
   if (text === (current ?? '').trim()) return 'unchanged';
   return null;
 }

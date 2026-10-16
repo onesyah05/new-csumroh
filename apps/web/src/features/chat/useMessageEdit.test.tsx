@@ -22,7 +22,7 @@ function useHarness({ chatId, pending = false }: Props) {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const edit = useMessageEdit({
     selectedId: chatId, message, setMessage, draftIdentity: identityOf(chatId), query: '?brandId=1', composerRef, adjustHeight,
-    hasPendingAttachment: pending, clearReply, showToast: (text) => toasts.push(text), hasUnresolvedTokens: (text) => text.includes('{{'),
+    hasPendingAttachment: pending, clearReply, showToast: (text) => toasts.push(text),
   });
   return { message, setMessage, edit };
 }
@@ -87,8 +87,9 @@ describe('Mode edit pesan', () => {
     act(() => result.current.edit.submitEdit());
     expect(toasts).toContain('Isi pesan belum diubah.');
     act(() => result.current.setMessage('Harga {{harga}}'));
+    expect(result.current.edit.hint).toEqual({ tone: 'error', text: 'Draft masih memuat tanda {{…}}. Lengkapi datanya dulu.' });
     act(() => result.current.edit.submitEdit());
-    expect(toasts).toContain('Draft masih memuat tanda {{…}}.');
+    expect(toasts).toContain('Draft masih memuat tanda {{…}}. Lengkapi datanya dulu.');
     expect(api.patch).not.toHaveBeenCalled();
   });
 

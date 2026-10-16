@@ -21,6 +21,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { z } from 'zod';
 import { addLidMappings, normalizePhone, toGatewayCall, toGatewayContact, toGatewayMessage, toMessageChange, type HistoryContact } from './messages.js';
+import { editMessage, type EditSocket } from './edit.js';
 import { classifyDisconnect, reconnectDelayMs } from './connection.js';
 import { acquireInstanceLock } from './instance-lock.js';
 import { declaredMediaBytes, exceedsMediaLimit, MAX_INBOUND_MEDIA_BYTES } from './media-limits.js';
@@ -701,6 +702,8 @@ app.post('/sessions/:brandId/edit', async (req, res, next) => {
       messageId: z.string().min(1),
       // Sama dengan EDIT_MAX_LENGTH di shared-types (gateway tidak bergantung pada paket itu).
       text: z.string().min(1).max(4000),
+      // Pesan asli membalas pesan lain: kutipannya harus ikut di isi edit (lihat edit.ts).
+      quote: z.object({ messageId: z.string().min(1).max(100), text: z.string().max(4000).default(''), fromMe: z.boolean() }).optional(),
     }).parse(req.body);
 
     const socket = sessions.get(brandId);
@@ -710,12 +713,13 @@ app.post('/sessions/:brandId/edit', async (req, res, next) => {
     }
 
     const targetJid = resolveTargetJid(brandId, input.jid);
-    await socket.sendMessage(targetJid, {
-      text: input.text,
-      edit: { remoteJid: targetJid, id: input.messageId, fromMe: true },
-    });
+    const path = await editMessage(
+      socket as unknown as EditSocket,
+      { jid: targetJid, messageId: input.messageId, text: input.text, quote: input.quote },
+      (error) => logger.warn({ err: error, brandId }, 'Edit dengan kutipan lewat relay gagal; memakai jalur standar'),
+    );
 
-    res.json({ success: true });
+    res.json({ success: true, data: { path } });
   } catch (error) {
     next(error);
   }

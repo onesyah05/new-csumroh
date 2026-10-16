@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Router, type Request } from 'express';
 import { idempotent } from '../../utils/idempotency.js';
 import { resolveGalleryFile } from '../../utils/safe-path.js';
+import { recordInboundEditLog } from './edit-log.js';
 import { z } from 'zod';
 import { EDIT_BLOCK_STATUS, EDIT_BLOCK_TEXT, EDIT_TEXT_PROBLEM_STATUS, EDIT_TEXT_PROBLEM_TEXT, EDIT_WINDOW_SECONDS, editTextProblem, isEditAuthor, messageEditBlock, messageInputSchema } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
@@ -950,12 +951,21 @@ chatRouter.patch('/messages/:id', asyncHandler(async (req, res) => {
 
   // Edit di WhatsApp dulu; CRM baru berubah bila WhatsApp menerimanya.
   const inFlightKey = crmEditKey(brandId, message.messageId);
+  // Dua edit bersamaan (dua admin, klik ganda lintas tab) memakai teks lama yang sama dan saling menimpa penanda gema.
+  if (crmEditsInFlight.has(inFlightKey)) throw new HttpError(409, 'Pesan ini sedang diedit. Tunggu sebentar lalu coba lagi.');
   crmEditsInFlight.add(inFlightKey);
   try {
+    // Balasan: kutipannya harus ikut di isi edit, kalau tidak kutipan hilang di HP penerima.
+    const quotedOriginal = message.quotedMessageId
+      ? await prisma.chatMessage.findFirst({ where: { brandId, messageId: message.quotedMessageId }, select: { isFromMe: true } })
+      : null;
+    const quote = message.quotedMessageId
+      ? { messageId: message.quotedMessageId, text: message.quotedText ?? '', fromMe: Boolean(quotedOriginal?.isFromMe) }
+      : undefined;
     const gatewayResponse = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/edit`, {
       method: 'POST', signal: AbortSignal.timeout(20000),
       headers: { 'content-type': 'application/json', 'x-internal-secret': env.WA_GATEWAY_SECRET },
-      body: JSON.stringify({ jid: remoteJid, messageId: message.messageId, text }),
+      body: JSON.stringify({ jid: remoteJid, messageId: message.messageId, text, quote }),
     }).catch(() => null);
     if (!gatewayResponse?.ok) {
       // Jam WhatsApp bisa selisih sedikit dari jam server: bila pesan hampir 15 menit, kemungkinan itu sebabnya.
@@ -982,7 +992,7 @@ chatRouter.patch('/messages/:id', asyncHandler(async (req, res) => {
     });
     scheduleConversationStats([updated.prospectId]);
     emitToBrand(brandId, 'message:edited', { id: updated.id, messageId: updated.messageId, messageText: updated.messageText, editedAt: updated.editedAt });
-  res.json({ success: true, data: updated });
+    res.json({ success: true, data: updated });
   } finally {
     crmEditsInFlight.delete(inFlightKey);
   }
@@ -1625,17 +1635,10 @@ internalRouter.post('/messages/edited', asyncHandler(async (req, res) => {
     const previousText = message.messageText ?? '';
     const updated = await prisma.chatMessage.update({ where: { id: message.id }, data: { messageText: input.text, editedAt: new Date() } });
     if (message.prospectId) {
-      // Jejak audit untuk edit dari HP brand atau jamaah; gagal mencatat tidak membatalkan perubahan yang sudah terjadi di WhatsApp.
+      // Jejak audit untuk edit dari HP brand atau jamaah (edit beruntun digabung); gagal mencatat tidak membatalkan
+      // perubahan yang sudah terjadi di WhatsApp.
       try {
-        await prisma.prospectLog.create({
-          data: {
-            prospectId: message.prospectId,
-            userId: null,
-            actionType: 'message_edited',
-            title: message.isFromMe ? 'Pesan diedit dari HP brand' : 'Pesan diedit oleh jamaah',
-            description: `Sebelum: ${previousText.slice(0, 300)}\nSesudah: ${input.text.slice(0, 300)}`,
-          },
-        });
+        await recordInboundEditLog({ prospectId: message.prospectId, fromMe: message.isFromMe, previousText, nextText: input.text });
       } catch (error) {
         console.error('Gagal mencatat log edit pesan dari WhatsApp:', error);
       }

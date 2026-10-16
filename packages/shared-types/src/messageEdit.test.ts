@@ -30,6 +30,13 @@ describe('Teks hasil edit', () => {
     expect(editTextProblem('  halo ', 'halo')).toBe('unchanged');
   });
 
+  it('masih memuat {{token}} yang belum terisi ditolak; kurung kurawal biasa diterima', () => {
+    expect(editTextProblem('Harga paket {{harga}}', 'halo')).toBe('unresolved');
+    expect(editTextProblem('Halo {{nama}}, jadwal {{berangkat}}', 'halo')).toBe('unresolved');
+    expect(editTextProblem('Format {kurung} tunggal aman', 'halo')).toBeNull();
+    expect(editTextProblem('Kode {{}} kosong juga ditolak', 'halo')).toBe('unresolved');
+  });
+
   it('teks berbeda (termasuk batas 4.000 karakter) diterima', () => {
     expect(editTextProblem('halo, selamat pagi', 'halo')).toBeNull();
     expect(editTextProblem('a'.repeat(4000), 'halo')).toBeNull();
@@ -51,7 +58,7 @@ describe('Siapa yang boleh mengedit', () => {
 describe('Status penolakan', () => {
   it('tiap alasan dan masalah punya kode HTTP', () => {
     expect(EDIT_BLOCK_STATUS).toEqual({ not_mine: 400, not_text: 400, deleted: 409, not_in_whatsapp: 422, expired: 422 });
-    expect(EDIT_TEXT_PROBLEM_STATUS).toEqual({ empty: 400, too_long: 400, unchanged: 409 });
+    expect(EDIT_TEXT_PROBLEM_STATUS).toEqual({ empty: 400, too_long: 400, unresolved: 422, unchanged: 409 });
   });
 });
 

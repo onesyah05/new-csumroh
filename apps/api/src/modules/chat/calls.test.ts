@@ -27,7 +27,7 @@ vi.mock('../../db/prisma.js', () => ({
       update: mocks.messageUpdate,
     },
     whatsappContact: { findFirst: async () => null },
-    prospectLog: { create: mocks.logCreate },
+    prospectLog: { create: mocks.logCreate, findFirst: async () => null, update: vi.fn() },
   },
 }));
 vi.mock('./conversation-stats.js', () => ({ ensureConversationStats: vi.fn(), loadConversationWindows: vi.fn(), scheduleConversationStats: vi.fn(), summarizeMessages: vi.fn() }));
