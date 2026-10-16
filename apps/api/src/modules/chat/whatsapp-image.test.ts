@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { normalizeWhatsappImage } from './whatsapp-image.js';
+import { beforeEach } from 'vitest';
+import { normalizeWhatsappImage, whatsappImageCache } from './whatsapp-image.js';
 
 type Format = 'jpeg' | 'png' | 'webp';
 const make = (format: Format, { width = 40, height = 30, channels = 3 as 3 | 4 } = {}) =>
@@ -72,4 +73,29 @@ describe('Batas piksel gambar masuk', () => {
     expect(out.converted).toBe(false);
     expect(out.fileName).toBe('bom.webp');
   }, 60_000);
+});
+
+describe('Cache konversi gambar keluar', () => {
+  beforeEach(() => whatsappImageCache.clear());
+
+  it('kunci yang sama memakai hasil sebelumnya tanpa mengonversi ulang', async () => {
+    const first = await normalizeWhatsappImage({ base64: b64(await make('webp')), mimeType: 'image/webp', fileName: 'Brosur.webp' }, { cacheKey: 'gallery:1:100:1' });
+    expect(whatsappImageCache.size()).toBe(1);
+    // Isi masukan sengaja berbeda: bila hasilnya sama persis dengan yang pertama, berarti berasal dari cache.
+    const second = await normalizeWhatsappImage({ base64: b64(await make('webp', { width: 200, height: 100 })), mimeType: 'image/webp', fileName: 'Lain.webp' }, { cacheKey: 'gallery:1:100:1' });
+    expect(second).toEqual(first);
+  });
+
+  it('versi berkas berubah (ukuran/waktu ubah beda) berarti kunci beda dan dikonversi ulang', async () => {
+    const first = await normalizeWhatsappImage({ base64: b64(await make('webp')), mimeType: 'image/webp', fileName: 'a.webp' }, { cacheKey: 'gallery:1:100:1' });
+    const second = await normalizeWhatsappImage({ base64: b64(await make('webp', { width: 200, height: 100 })), mimeType: 'image/webp', fileName: 'a.webp' }, { cacheKey: 'gallery:1:100:2' });
+    expect(second.base64).not.toBe(first.base64);
+    expect(whatsappImageCache.size()).toBe(2);
+  });
+
+  it('tanpa kunci tidak ada yang disimpan; gambar yang tidak dikonversi juga tidak', async () => {
+    await normalizeWhatsappImage({ base64: b64(await make('webp')), mimeType: 'image/webp', fileName: 'a.webp' });
+    await normalizeWhatsappImage({ base64: b64(await make('jpeg')), mimeType: 'image/jpeg', fileName: 'a.jpg' }, { cacheKey: 'gallery:9:1:1' });
+    expect(whatsappImageCache.size()).toBe(0);
+  });
 });

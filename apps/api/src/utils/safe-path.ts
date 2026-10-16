@@ -13,6 +13,9 @@ export function isPathInside(root: string, candidate: string, pathImpl: typeof p
 /** Satu-satunya bentuk flyer yang sah: hasil endpoint upload-flyer. */
 export const FLYER_URL_PATTERN = /^\/uploads\/packages\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)$/;
 
+/** Satu-satunya bentuk media galeri yang sah: hasil endpoint unggah galeri (webp untuk gambar, mp4 untuk video). */
+export const GALLERY_URL_PATTERN = /^\/uploads\/gallery\/[A-Za-z0-9._-]+\.(?:webp|mp4)$/;
+
 /** Satu-satunya bentuk logo brand yang sah: hasil endpoint upload-logo (selalu .webp). */
 export const LOGO_URL_PATTERN = /^\/uploads\/brands\/[A-Za-z0-9_-]+\.webp$/;
 
@@ -27,6 +30,21 @@ export async function resolveFlyerFile(flyerImage: string | null | undefined, cw
   const candidate = path.join(packagesRoot, path.basename(flyerImage));
   if (!isPathInside(packagesRoot, candidate) || !fs.existsSync(candidate)) return null;
   const [realRoot, realCandidate] = await Promise.all([fs.promises.realpath(packagesRoot), fs.promises.realpath(candidate)]);
+  if (!isPathInside(realRoot, realCandidate)) return null;
+  const stat = await fs.promises.stat(realCandidate);
+  return stat.isFile() ? realCandidate : null;
+}
+
+/**
+ * Resolve url media galeri menjadi path file nyata di `uploads/gallery`. Null bila url bukan bentuk hasil unggah galeri,
+ * berkas tidak ada, atau realpath keluar dari folder galeri (mis. symlink).
+ */
+export async function resolveGalleryFile(url: string | null | undefined, cwd = process.cwd()) {
+  if (!url || !GALLERY_URL_PATTERN.test(url)) return null;
+  const galleryRoot = path.resolve(cwd, 'uploads', 'gallery');
+  const candidate = path.join(galleryRoot, path.basename(url));
+  if (!isPathInside(galleryRoot, candidate) || !fs.existsSync(candidate)) return null;
+  const [realRoot, realCandidate] = await Promise.all([fs.promises.realpath(galleryRoot), fs.promises.realpath(candidate)]);
   if (!isPathInside(realRoot, realCandidate)) return null;
   const stat = await fs.promises.stat(realCandidate);
   return stat.isFile() ? realCandidate : null;
