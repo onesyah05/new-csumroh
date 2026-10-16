@@ -35,6 +35,7 @@ import { ConfirmDialog } from '../../components/ui/modal';
 import { cn } from '../../lib/cn';
 import { WhatsAppDevicePanel } from '../admin/WhatsAppDevicePanel';
 import { MetaCapiPage } from '../meta/MetaCapiPage';
+import { RoundRobinPanel } from './RoundRobinPanel';
 import { onRovingKey, rovingTabIndex } from '../../lib/roving';
 
 /** Semua pengaturan satu brand di satu tempat (dulu menu Perangkat WhatsApp & Meta CAPI terpisah). */
@@ -42,6 +43,7 @@ const BRAND_TABS = [
   { id: 'profil', label: 'Profil & rekening', short: 'Profil' },
   { id: 'perangkat', label: 'Perangkat WhatsApp', short: 'Perangkat' },
   { id: 'meta', label: 'Meta CAPI', short: 'Meta CAPI' },
+  { id: 'roundrobin', label: 'Pembagian CS', short: 'Bagi CS' },
 ] as const;
 type BrandTab = (typeof BRAND_TABS)[number]['id'];
 
@@ -278,7 +280,7 @@ export function BrandDetailPage() {
         />
       </StatGrid>
 
-      <div role="tablist" aria-label="Pengaturan brand" className="segmented grid grid-cols-3 gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1 md:hidden" onKeyDown={(e) => onRovingKey(e, BRAND_TABS.map((t) => t.id), tab, setTab)}>
+      <div role="tablist" aria-label="Pengaturan brand" className="segmented scroll-row flex gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1 md:hidden" onKeyDown={(e) => onRovingKey(e, BRAND_TABS.map((t) => t.id), tab, setTab)}>
         {BRAND_TABS.map((t) => (
           <button
             key={t.id}
@@ -287,7 +289,7 @@ export function BrandDetailPage() {
             aria-selected={tab === t.id}
             tabIndex={rovingTabIndex(t.id, tab, 'profil')}
             onClick={() => setTab(t.id)}
-            className={cn('rounded-lg px-2 text-sm font-medium transition', tab === t.id ? 'bg-white font-semibold text-zinc-950 shadow-xs' : 'text-zinc-600')}
+            className={cn('shrink-0 flex-1 whitespace-nowrap rounded-lg px-1.5 text-sm font-medium transition', tab === t.id ? 'bg-white font-semibold text-zinc-950 shadow-xs' : 'text-zinc-600')}
           >
             {t.short}
           </button>
@@ -316,6 +318,7 @@ export function BrandDetailPage() {
           <WhatsAppDevicePanel brandId={brand.id} brandName={brand.name} canManage={canManageDevice} />
         </div>
       )}
+      {tab === 'roundrobin' && <RoundRobinPanel brandId={brand.id} />}
       {tab === 'meta' && (
         <div role="tabpanel" id="brand-panel-meta" aria-labelledby="brand-tab-meta">
           <MetaCapiPage brandId={brand.id} />

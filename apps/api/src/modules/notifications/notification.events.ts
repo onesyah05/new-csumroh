@@ -32,12 +32,13 @@ async function brandName(brandId: number) {
 
 // ── Lead & pesan masuk ──────────────────────────────────────────────────────────
 
-export async function notifyLeadAssigned(p: ProspectRef, assigneeId: number) {
+export async function notifyLeadAssigned(p: ProspectRef, assigneeId: number, message?: { text?: string | null; messageType?: string | null }) {
+  const preview = message ? (message.text?.trim() || MEDIA_LABELS[message.messageType ?? ''] || 'Pesan baru') : '';
   return notify({
     type: 'lead.assigned', priority: 'action', brandId: p.brandId,
     userIds: await picOf({ userId: assigneeId, brandId: p.brandId }),
     title: `Lead baru: ${p.name}`,
-    body: 'Anda ditetapkan sebagai PIC.',
+    body: preview ? `Anda PIC-nya. ${preview.length > 80 ? `${preview.slice(0, 79)}…` : preview}` : 'Anda ditetapkan sebagai PIC.',
     link: inboxLink(p), entity: prospectEntity(p), activeKey: `lead.assigned:p${p.id}`,
   });
 }

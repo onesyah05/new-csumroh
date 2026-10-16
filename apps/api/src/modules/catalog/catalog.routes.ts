@@ -12,6 +12,7 @@ import { revokeUserSessions } from '../auth/sessions.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { FLYER_URL_PATTERN, LOGO_URL_PATTERN } from '../../utils/safe-path.js';
 import { releaseProspectsOf } from '../prospects/pic.js';
+import { getRoundRobinSettings, saveRoundRobinSettings } from '../prospects/round-robin.js';
 import { emitToBrand } from '../../realtime/socket.js';
 import { ITINERARY_CANVAS, ITINERARY_MAX_CHARS, ITINERARY_TONES, itineraryDateText, itineraryFits, renderItineraryGuide, renderItineraryImage, renderItineraryPreview, type ItineraryTone } from './itinerary-image.js';
 
@@ -282,6 +283,32 @@ catalogRouter.patch('/brands/:id', requireRole('superadmin'), asyncHandler(async
     const oldFile = path.resolve(process.cwd(), 'uploads', 'brands', path.basename(existing.logoUrl));
     fs.promises.unlink(oldFile).catch(() => {});
   }
+  res.json({ success: true, data });
+}));
+
+// Round robin CS: Admin (brand yang dipegang) dan Superadmin. Endpoint terpisah agar izin ubah pengaturan brand lain tidak melonggar.
+const roundRobinBrandId = (req: { params: { id?: string }; user?: Parameters<typeof canAccessBrand>[0] }) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, 'Brand tidak valid.');
+  if (!req.user || !canAccessBrand(req.user, id)) throw new HttpError(403, 'Akses ke brand yang diminta tidak diizinkan.');
+  return id;
+};
+
+catalogRouter.get('/brands/:id/round-robin', requireRole('admin', 'superadmin'), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await getRoundRobinSettings(roundRobinBrandId(req)) });
+}));
+
+catalogRouter.put('/brands/:id/round-robin', requireRole('admin', 'superadmin'), asyncHandler(async (req, res) => {
+  const id = roundRobinBrandId(req);
+  const input = z.object({
+    enabled: z.boolean(),
+    shares: z.array(z.object({ userId: z.number().int().positive(), percent: z.number().int().min(0).max(100) })).max(100),
+  }).parse(req.body);
+  const before = await getRoundRobinSettings(id);
+  const data = await saveRoundRobinSettings(id, input);
+  // Jejak perubahan setelan (tidak ada tabel audit brand): siapa, kapan, dari apa ke apa.
+  const share = (members: { userId: number; percent: number }[]) => members.filter((m) => m.percent > 0).map((m) => `${m.userId}:${m.percent}%`).join(',') || '-';
+  console.info(`[audit] brand ${id} roundRobin ${before.enabled ? 'on' : 'off'}[${share(before.members)}] -> ${data.enabled ? 'on' : 'off'}[${share(data.members)}] oleh user ${req.user!.id} (${req.user!.name})`);
   res.json({ success: true, data });
 }));
 

@@ -75,6 +75,8 @@ model Brand {
   itineraryTone      String                  @default("light") @map("itinerary_tone") @db.VarChar(10)
   // true: PIC yang sudah terpasang tidak bisa diambil alih atau diserahkan CS; hanya Admin yang menggantinya.
   picLocked          Boolean                 @default(false) @map("pic_locked")
+  // true: prospek baru dibagi otomatis ke CS sesuai persen di RoundRobinShare.
+  roundRobinEnabled  Boolean                 @default(false) @map("round_robin_enabled")
   ppiuNumber         String?                 @map("ppiu_number") @db.VarChar(100)
   bankName           String?                 @map("bank_name") @db.VarChar(50)
   bankAccountNumber  String?                 @map("bank_account_number") @db.VarChar(50)
@@ -114,6 +116,7 @@ model Brand {
   mediaAssets        MediaAsset[]
   quickReplies       QuickReply[]
   aiSuggestions      AiSuggestion[]
+  roundRobinShares   RoundRobinShare[]
 
   @@map("brands")
 }
@@ -142,6 +145,7 @@ model User {
   quickReplies            QuickReply[]
   proofRejections         PaymentProofRejection[]
   aiSuggestions           AiSuggestion[]
+  roundRobinShares        RoundRobinShare[]
 
   @@index([brandId, isActive])
   @@map("users")
@@ -158,6 +162,22 @@ model UserBrand {
   @@unique([userId, brandId])
   @@index([brandId])
   @@map("user_brands")
+}
+
+/// Jatah prospek baru per CS per brand (persen) dan berapa yang sudah dibagi sejak setelan terakhir disimpan.
+model RoundRobinShare {
+  id            Int      @id @default(autoincrement())
+  brandId       Int      @map("brand_id")
+  userId        Int      @map("user_id")
+  percent       Int      @default(0)
+  assignedCount Int      @default(0) @map("assigned_count")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  brand         Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, userId])
+  @@index([userId])
+  @@map("round_robin_shares")
 }
 
 model Package {

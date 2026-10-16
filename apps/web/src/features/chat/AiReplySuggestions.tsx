@@ -78,14 +78,14 @@ export function AiReplySuggestions({ brandId, prospectId, onReview }: Props) {
 
   const detected = result?.detected;
   return <section aria-labelledby="ai-suggestions-title" className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-    <div className="flex items-start justify-between gap-2">
+    {/* Satu baris di HP (judul + tombol); keterangan hanya di layar lebih lebar. */}
+    <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <h3 id="ai-suggestions-title" className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900"><BotMessageSquare size={15} aria-hidden="true" />Saran balasan AI</h3>
-        <p className="mt-0.5 text-xs leading-relaxed text-zinc-600">Draf dari chat terakhir. Harga, DP, dan tanggal diisi dari data paket.</p>
+        <p className="mt-0.5 hidden text-xs leading-relaxed text-zinc-600 sm:block">Draf dari chat terakhir. Harga, DP, dan tanggal diisi dari data paket.</p>
       </div>
+      {!result && <Button size="sm" className="shrink-0" aria-label="Sarankan balasan" loading={suggest.isPending} icon={<BotMessageSquare size={14} />} onClick={request}>{suggest.isPending ? 'Menyusun…' : 'Sarankan'}</Button>}
     </div>
-
-    {!result && <Button className="w-full" loading={suggest.isPending} icon={<BotMessageSquare size={14} />} onClick={request}>{suggest.isPending ? 'Menyusun saran…' : 'Sarankan balasan'}</Button>}
     {suggest.isError && <p role="alert" className="text-xs leading-relaxed text-rose-700">{(suggest.error as Error)?.message || 'Saran tidak dapat dimuat.'}</p>}
 
     {result && <div className="space-y-3">
