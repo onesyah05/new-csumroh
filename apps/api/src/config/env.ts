@@ -32,6 +32,8 @@ const schema = z.object({
   META_APP_SECRET: z.string().min(16).optional(),
   // URL publik callback, harus sama persis dengan "Valid OAuth Redirect URIs" di Meta App. Contoh: https://crm.example.com/api/v1/meta/oauth/callback
   META_OAUTH_REDIRECT_URI: z.string().url().optional(),
+  // App bertipe "Facebook Login for Business" tidak menerima scope: izin diatur di Configuration, dipanggil lewat config_id.
+  META_OAUTH_CONFIG_ID: z.string().regex(/^\d+$/).optional(),
 });
 
 export const env = schema.parse(process.env);

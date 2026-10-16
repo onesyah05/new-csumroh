@@ -41,7 +41,10 @@ export function buildAuthorizeUrl(input: { brandId: number; userId: number; retu
     redirect_uri: redirectUri,
     state,
     response_type: 'code',
-    scope: META_OAUTH_SCOPES.join(','),
+    // Facebook Login for Business: izin berasal dari Configuration (config_id), scope tidak dikirim.
+    ...(env.META_OAUTH_CONFIG_ID
+      ? { config_id: env.META_OAUTH_CONFIG_ID, override_default_response_type: 'true' }
+      : { scope: META_OAUTH_SCOPES.join(',') }),
   });
   return `https://www.facebook.com/${env.META_GRAPH_API_VERSION}/dialog/oauth?${params}`;
 }
@@ -82,7 +85,15 @@ async function graphToken(body: Record<string, string>): Promise<{ token: string
 export async function exchangeCodeForLongLivedToken(code: string) {
   const { appId, appSecret, redirectUri } = requireConfig();
   const short = await graphToken({ client_id: appId, client_secret: appSecret, redirect_uri: redirectUri, code });
-  return graphToken({ grant_type: 'fb_exchange_token', client_id: appId, client_secret: appSecret, fb_exchange_token: short.token });
+  try {
+    return await graphToken({ grant_type: 'fb_exchange_token', client_id: appId, client_secret: appSecret, fb_exchange_token: short.token });
+  } catch (error) {
+    // Token dari Configuration (Facebook Login for Business) sudah berumur sesuai pengaturan Configuration dan dapat
+    // menolak penukaran ulang. Pakai token hasil kode apa adanya; bila token tanpa masa berlaku, anggap token panjang.
+    if (!env.META_OAUTH_CONFIG_ID) throw error;
+    console.warn('Penukaran token panjang Meta ditolak, memakai token dari Configuration:', (error as Error).message);
+    return short;
+  }
 }
 
 export function refreshLongLivedToken(currentToken: string) {
