@@ -95,7 +95,7 @@ Percakapan dan prospek terikat ke nomor WhatsApp brand yang menerimanya (`device
 
 ## 5. Pipeline & uang
 
-* **Kolom Pipeline** (`pipelineStatuses` di `packages/shared-types/src/contracts.ts`): `new` (Baru) → `contact` (Terhubung) → `qualified` (Terkualifikasi) → `offer` (Ditawarkan) → `objection` (Keberatan) → `followup` (Follow-up) → `closing` (Tunggu Verifikasi) → `deal` (Deal) / `lose` (Batal).
+* **Kolom Pipeline** (`pipelineStatuses` di `packages/shared-types/src/contracts.ts`): `new` (Baru) → `contact` (Terhubung) → `qualified` (Terkualifikasi) → `offer` (Ditawarkan) → `objection` (Keberatan) → `followup` (Follow-up) → `closing` (Tunggu Verifikasi) → `deal` (Deal) / `lose` (Batal). Label baku ini ada di `PROSPECT_STATUS_LABELS` (`packages/shared-types/src/business.ts`); web dan API memakai sumber yang sama.
 * `identifying`, `offered`, `closed_won`, `closed_lost` (`legacyStatuses`) dan `nurture` dipertahankan di enum untuk data lama; **jangan hapus nilai enum tanpa instruksi user**.
 * Prospek Baru yang sudah dibalas (dari CRM atau HP) otomatis menjadi Terhubung.
 * **Deal hanya setelah Finance memverifikasi pembayaran.** CS tidak bisa menetapkan Deal manual.
@@ -111,6 +111,15 @@ Percakapan dan prospek terikat ke nomor WhatsApp brand yang menerimanya (`device
 * **Data yang tidak diketahui tidak diganti teks karangan.** Token dibiarkan, script ditandai `blocked` (fakta) atau `needs_context` (isian profil) beserta data yang perlu dilengkapi.
 * Daftar fasilitas dan biaya selalu ditulis lengkap, tidak diringkas "dan N lainnya".
 * Format WhatsApp bersama di `apps/web/src/features/chat/waFormat.ts`: tebal satu bintang, daftar "•", baris kosong tidak ditulis.
+
+### Asisten AI (Saran balasan)
+
+* Modul `apps/api/src/modules/ai` (route `/api/v1/ai`), UI di Copilot (`apps/web/src/features/chat/AiReplySuggestions.tsx`). Model lewat Claude API (`@anthropic-ai/sdk`, structured outputs).
+* **AI hanya menyiapkan draf; CS yang memilih, mengedit, dan mengirim.** Jangan menambah pengiriman otomatis.
+* **Fakta tidak dikarang AI.** AI menulis token `{{...}}` yang diisi server lewat `buildScriptContext` (aturan yang sama dengan Script Copilot). Validator `guard.ts` menolak nominal, tanggal, dan tahun yang tidak ada di token atau di riwayat chat (dibandingkan sebagai fakta utuh: nilai + satuan, hari + bulan), serta nomor panjang dan tautan. Draf yang gagal dicoba ulang sekali, lalu jatuh ke skrip bank.
+* Akses sama dengan membalas chat: PIC atau prospek tanpa PIC, perangkat tersambung, role CS/Admin/Superadmin. Data pribadi di chat disamarkan sebelum dikirim ke model.
+* Pengaturan (aktif/mati, kunci API, model, peserta pilot, batas harian) dikelola **Superadmin** di `/pengaturan/ai` dan disimpan di tabel `ai_settings`; kunci API terenkripsi dan tidak pernah dikirim balik ke browser. Hanya `AI_TIMEOUT_MS` yang ada di `.env`.
+* Log `ai_suggestions` menyimpan template, token, latensi, dan tindakan CS (tanpa riwayat chat), dihapus setelah 180 hari oleh job retensi.
 
 ---
 
@@ -138,8 +147,8 @@ crm-azhan/
 │   ├── api/                 # Express REST + Socket.io
 │   │   ├── prisma/          # schema, migrations, seed, skrip data
 │   │   └── src/
-│   │       ├── modules/     # ads, auth, capi, catalog, chat, contacts, custom, dashboard,
-│   │       │                # finance, notifications, prospects, reports, scripts, whatsapp
+│   │       ├── modules/     # ads, ai, auth, capi, catalog, chat, contacts, custom, dashboard,
+│   │       │                # finance, gallery, notifications, prospects, reports, scripts, whatsapp
 │   │       ├── jobs/  middleware/  realtime/  db/  config/  utils/
 │   │       └── server.ts
 │   └── wa-gateway/          # Baileys, proses terpisah
@@ -162,10 +171,10 @@ crm-azhan/
 
 1. **Tidak commit atau push** tanpa instruksi eksplisit user.
 2. **Hanya kerjakan yang diminta.** Temuan di luar cakupan dilaporkan, bukan langsung diubah.
-3. **Tidak ada secret di kode.** Semua kredensial lewat `.env`; `.env.example` tanpa nilai asli. Temukan secret di kode → berhenti dan tanya.
+3. **Tidak ada secret di kode.** Kredensial server lewat `.env`; `.env.example` tanpa nilai asli. Pengecualian: kredensial yang dikelola dari dashboard (token Meta per brand, kunci API Asisten AI) disimpan terenkripsi di database dengan `META_TOKEN_ENCRYPTION_KEY`, tidak pernah dikirim balik ke browser. Temukan secret di kode → berhenti dan tanya.
 4. **Repo ini publik.** Jangan commit detail infrastruktur (IP server, panel hosting, nama service, panduan deploy). Catatan semacam itu di `docs/` (diabaikan git).
 5. **Query lewat Prisma.** Raw SQL hanya dengan `Prisma.sql`/parameter binding.
-6. **Unit test wajib** untuk logika bisnis kritikal: transisi status pipeline, kalkulasi nilai booking/pax, konteks dan status script, payload Meta CAPI, scope brand, klaim PIC, notifikasi, dan pemetaan event gateway.
+6. **Unit test wajib** untuk logika bisnis kritikal: transisi status pipeline, kalkulasi nilai booking/pax, konteks dan status script, payload Meta CAPI, scope brand, klaim PIC, notifikasi, pemetaan event gateway, dan validator draf Asisten AI.
 7. **Klaim PIC aman konkuren** (conditional update).
 8. **CORS & auth:** tidak ada `origin: '*'`; access token tidak disimpan di `localStorage`.
 9. **Produksi:** jangan mengubah data produksi atau menjalankan deploy tanpa persetujuan user untuk tindakan itu.
