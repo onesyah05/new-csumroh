@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronDown, Copy, CornerDownLeft, Search, Sparkles, X } from 'lucide-react';
 import { objectionLabel, recommendedCategory } from '@csumroh/shared-types';
 import { draftWarnings, OBJECTION_SCRIPT_CATEGORIES, unresolvedScript, useScriptLibrary, type ScriptStatus } from './scriptLibrary';
@@ -17,6 +17,20 @@ const categories = [
 ];
 export { recommendedCategory };
 const statusRank: Record<ScriptStatus, number> = { ready: 0, needs_context: 1, blocked: 2 };
+
+/** Deretan pilihan satu baris yang bisa digeser ke samping: jauh lebih hemat tinggi daripada kolom pilihan penuh. */
+function ChipRow({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string; title?: string }[]; onChange(value: string): void }) {
+  const row = useRef<HTMLDivElement>(null);
+  // Pilihan aktif diganti dari luar (mis. "Lihat semua skrip"): pastikan chip-nya terlihat di deretan yang bisa digeser.
+  useEffect(() => {
+    row.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [value]);
+  return <div ref={row} role="group" aria-label={label} className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-4 sm:px-4">
+    {options.map(option => <button key={option.value} type="button" aria-pressed={value === option.value} title={option.title}
+      onClick={() => onChange(option.value)}
+      className={cn('h-8 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition', value === option.value ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300')}>{option.label}</button>)}
+  </div>;
+}
 
 /** Sumber teks yang sedang ditinjau, agar draft bisa disegarkan dari data terbaru tanpa menimpa suntingan CS. */
 type ReviewSource = { key: string; step?: number; variant?: number };
@@ -121,18 +135,22 @@ export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/I
   const unresolved = review ? unresolvedScript(review.text) : false;
 
   return <div className="sales-panel flex h-full min-h-0 flex-col bg-white">
-    <header className="shrink-0 space-y-3 border-b border-zinc-200 p-4">
-      <div><h2 className="text-sm font-semibold">Bantuan percakapan</h2><p className="mt-1 break-words text-xs text-zinc-600">{prospectName} · {brandName || 'Brand aktif'}</p>{packageName && <p className="mt-1 line-clamp-2 text-xs text-zinc-600" title={packageName}>{packageName}</p>}</div>
+    <header className="shrink-0 space-y-2 border-b border-zinc-200 px-3 py-2.5 sm:space-y-3 sm:px-4 sm:py-3">
+      {/* Nama prospek dan brand sudah ada di header panel; judul hanya untuk pembaca layar. */}
+      <h2 className="sr-only">Bantuan percakapan untuk {prospectName} · {brandName || 'Brand aktif'}</h2>
       <label className="relative block"><span className="sr-only">Cari di semua skrip</span><Search size={15} className="absolute left-3 top-3 text-zinc-500" /><input className="field w-full pl-9 pr-10" value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari di semua skrip…" />{search && <Button size="icon" variant="ghost" className="absolute right-0 top-0" aria-label="Hapus pencarian" onClick={() => setSearch('')}><X size={14} /></Button>}</label>
-      <Select aria-label="Kategori skrip" className="w-full" value={category} onValueChange={value => { setCategory(value); setFramework('all'); }} options={[{ value: 'recommended', label: `Sesuai tahap prospek · ${contextCategory}` }, { value: 'all', label: 'Semua skrip' }, ...categories.map(item => ({ value: item.id, label: item.label }))]} />
-      {category === 'identification' && !search && <Select aria-label="Jenis pertanyaan kualifikasi" className="w-full" value={framework} onValueChange={setFramework} options={[{ value: 'all', label: 'Semua pertanyaan' }, { value: 'need', label: 'Kebutuhan' }, { value: 'pain', label: 'Hambatan' }, { value: 'gain', label: 'Manfaat yang dicari' }, { value: 'dream', label: 'Harapan' }, { value: 'qualification', label: 'Informasi praktis' }]} />}
+      {!search && <ChipRow label="Kategori skrip" value={category} onChange={value => { setCategory(value); setFramework('all'); }} options={[{ value: 'recommended', label: 'Sesuai tahap', title: `Sesuai tahap prospek · ${contextCategory}` }, { value: 'all', label: 'Semua' }, ...categories.map(item => ({ value: item.id, label: item.label }))]} />}
+      {category === 'identification' && !search && <ChipRow label="Jenis pertanyaan kualifikasi" value={framework} onChange={setFramework} options={[{ value: 'all', label: 'Semua pertanyaan' }, { value: 'need', label: 'Kebutuhan' }, { value: 'pain', label: 'Hambatan' }, { value: 'gain', label: 'Manfaat yang dicari' }, { value: 'dream', label: 'Harapan' }, { value: 'qualification', label: 'Informasi praktis' }]} />}
     </header>
-    <div className="thin-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
+    <div className="thin-scrollbar flex-1 space-y-3 overflow-y-auto p-3 sm:space-y-4 sm:p-4">
       {!search && prospectId && hasInboundMessage && aiStatus.data?.enabled && <AiReplySuggestions key={prospectId} brandId={brandId} prospectId={prospectId} onReview={openAi} />}
       {warnings.length > 0 && <ul className="space-y-1 text-xs leading-relaxed text-amber-800">{warnings.map(text => <li key={text} className="flex gap-1.5"><AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />{text}</li>)}</ul>}
-      {category === 'recommended' && !search && <div className="space-y-1 text-xs leading-relaxed text-zinc-600"><p className="flex items-center gap-1 font-semibold text-zinc-800"><Sparkles size={14} />Skrip yang datanya sudah tersedia</p>{stage === 'objection' && <p>Keberatan tercatat: {objectionCategory ? objectionLabel(objectionCategory) : objection || 'belum dipilih'}</p>}</div>}
+      {stage === 'objection' && category === 'recommended' && !search && <p className="text-xs leading-relaxed text-zinc-600">Keberatan tercatat: {objectionCategory ? objectionLabel(objectionCategory) : objection || 'belum dipilih'}</p>}
       {scripts.isLoading ? <p role="status" className="text-sm text-zinc-600">Memuat pustaka skrip…</p> : scripts.isError ? <div role="alert" className="space-y-2 text-sm"><p>Skrip tidak dapat dimuat. Silakan coba lagi.</p><Button variant="secondary" onClick={() => void scripts.refetch()}>Coba lagi</Button></div> : <>
-        <p role="status" className="text-xs text-zinc-600">{filtered.length} skrip{search ? ' dari semua kategori' : ''}</p>
+        <p role="status" className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-600" title={packageName ? `Paket: ${packageName}` : undefined}>
+          {category === 'recommended' && !search && <Sparkles size={13} aria-hidden="true" className="shrink-0 text-zinc-800" />}
+          <span className="truncate"><span className="font-semibold text-zinc-800">{search ? 'Hasil pencarian' : category === 'recommended' ? `Siap dipakai · tahap ${contextCategory}` : category === 'all' ? 'Semua kategori' : categories.find(item => item.id === category)?.label}</span> · {filtered.length} skrip{search ? ' dari semua kategori' : ''}{packageName && !search ? ` · ${packageName}` : ''}</span>
+        </p>
         {filtered.length === 0 && <div className="space-y-2 text-sm text-zinc-600"><p>{category === 'recommended' ? 'Belum ada skrip tahap ini yang datanya lengkap.' : 'Tidak ada skrip yang sesuai.'}</p><Button variant="secondary" onClick={() => { setSearch(''); setCategory(category === 'recommended' ? recommended : 'all'); setFramework('all'); }}>{category === 'recommended' ? `Lihat semua skrip ${contextCategory?.toLowerCase()}` : 'Lihat semua skrip'}</Button></div>}
         {filtered.map(item => {
           const blocked = item.status === 'blocked';
@@ -158,18 +176,18 @@ export function ChatCopilotPanel({ prospectId, revision, prospectName = 'Bapak/I
           }
           return <article key={item.key} className="space-y-3 border-b border-zinc-200 pb-4">
             <div>
-              <p className="mb-1 text-xs text-zinc-600">{item.categoryLabel}</p>
+              {(search || category === 'all') && <p className="mb-1 text-xs text-zinc-600">{item.categoryLabel}</p>}
               <h3 className={cn('text-sm font-semibold leading-snug', blocked && 'text-zinc-500')}>{item.title}</h3>
               {item.use_when && <p className="mt-1 text-xs leading-relaxed text-zinc-600">{item.use_when}</p>}
               {reasons}
             </div>
-            <WhatsAppText text={item.script || ''} className={cn('text-sm leading-relaxed', blocked ? 'text-zinc-500' : 'text-zinc-700')} /><Button variant="secondary" className="w-full" disabled={blocked} onClick={() => open(item.title, item.script || '', { key: item.key })}>Tinjau & gunakan</Button>
+            <WhatsAppText text={item.script || ''} className={cn('text-sm leading-relaxed max-sm:line-clamp-4', blocked ? 'text-zinc-500' : 'text-zinc-700')} /><Button variant="secondary" className="w-full" disabled={blocked} onClick={() => open(item.title, item.script || '', { key: item.key })}>Tinjau & gunakan</Button>
           </article>;
         })}
         {category === 'recommended' && !search && filtered.length > 0 && <Button variant="ghost" className="w-full" onClick={() => setCategory(recommended)}>Lihat semua skrip {contextCategory?.toLowerCase()}</Button>}
       </>}
     </div>
-    <footer className="shrink-0 border-t border-zinc-200 px-4 py-3 text-xs text-zinc-600">Skrip ditambahkan ke draft. Pengiriman tetap melalui tombol WhatsApp.</footer>
+    <footer className="shrink-0 border-t border-zinc-200 px-3 py-2 text-xs text-zinc-600 sm:px-4 sm:py-3">Skrip masuk ke draft; dikirim lewat tombol WhatsApp.</footer>
     {review && <Modal open onClose={() => setReview(null)} size="md" title={review.title} description={`${prospectName}${review.step ? ` · Langkah ${review.step}` : ''}`}
       footer={<><Button variant="secondary" disabled={!review.text.trim() || unresolved} icon={<Copy size={14} />} onClick={() => void copy(review.text)}>Salin</Button><Button disabled={!review.text.trim() || unresolved} icon={<CornerDownLeft size={14} />} onClick={() => insertReview(review)}>Tambahkan ke draft</Button></>}>
       <div className="space-y-3">
