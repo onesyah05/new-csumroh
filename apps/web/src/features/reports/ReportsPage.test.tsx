@@ -7,7 +7,7 @@ import { queryClient } from '../../app/query';
 import { ReportsPage, periodRange } from './ReportsPage';
 
 const sales = {
-  summary: { leads: 20, deals: 4, lost: 3, conversion: 20, dealValue: 160_000_000, cashIn: 40_000_000, avgDealValue: 40_000_000, avgDaysToDeal: 6.5 },
+  summary: { leads: 20, deals: 4, jamaah: 11, adSpend: 12_500_000, adSpendNote: null, lost: 3, conversion: 20, dealValue: 160_000_000, cashIn: 40_000_000, avgDealValue: 40_000_000, avgDaysToDeal: 6.5 },
   stages: [{ key: 'new', label: 'Baru', count: 13 }, { key: 'deal', label: 'Deal', count: 4 }, { key: 'lose', label: 'Batal', count: 3 }],
   byPackage: [{ label: 'Umroh Syawal', deals: 4, value: 160_000_000 }],
   byBrand: [{ label: 'Hana Tours', deals: 4, value: 160_000_000 }],
@@ -62,6 +62,13 @@ describe('Menu Laporan', () => {
     render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/laporan']}><ReportsPage /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText('Lead baru')).toBeTruthy();
     expect(screen.getByText('Umroh Syawal')).toBeTruthy();
+    // Kartu: Total budget, Lead baru, Deal (jumlah deal dan jamaah), Nilai deal; Uang masuk ada di tab Pembayaran.
+    expect(screen.getByText('Total budget')).toBeTruthy();
+    expect(screen.getByText(/12.500.000/)).toBeTruthy();
+    expect(screen.getByText('jamaah').parentElement?.textContent).toBe('4deal·11jamaah');
+    expect(screen.getAllByText('Nilai deal').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/160.000.000/).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Uang masuk')).toBeNull();
     expect(urls.find((u) => u.includes('/reports/sales'))).toMatch(/from=\d{4}-\d{2}-01&to=\d{4}-\d{2}-\d{2}&brandId=all/);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Kinerja CS' }));

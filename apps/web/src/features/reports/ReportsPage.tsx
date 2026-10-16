@@ -58,7 +58,7 @@ const percent = (value: number) => `${value.toLocaleString('id-ID')}%`;
 
 type Named = { label: string; deals: number; value: number };
 type SalesReport = {
-  summary: { leads: number; spam: number; deals: number; lost: number; conversion: number; dealValue: number; cashIn: number; avgDealValue: number; avgDaysToDeal: number | null };
+  summary: { leads: number; spam: number; deals: number; jamaah: number; adSpend: number | null; adSpendNote: string | null; lost: number; conversion: number; dealValue: number; cashIn: number; avgDealValue: number; avgDaysToDeal: number | null };
   stages: { key: string; label: string; count: number }[];
   byPackage: Named[];
   byBrand: Named[];
@@ -284,10 +284,22 @@ function SalesView({ data }: { data: SalesReport }) {
   return (
     <>
       <StatGrid cols={4}>
+        <StatCard label="Total budget" value={s.adSpend === null ? '–' : rupiah(s.adSpend)} note={s.adSpendNote ?? 'Biaya iklan Meta'} />
         <StatCard label="Lead baru" value={num(s.leads)} note={s.spam ? `${num(s.spam)} chat spam tidak dihitung` : undefined} />
-        <StatCard label="Deal" value={num(s.deals)} note={`Konversi ${percent(s.conversion)}`} />
+        <StatCard
+          label="Deal"
+          value={
+            <>
+              {num(s.deals)}
+              <span className="ml-1 text-xs font-medium text-zinc-500 sm:text-sm">deal</span>
+              <span aria-hidden="true" className="mx-1.5 font-normal text-zinc-300 sm:mx-2">·</span>
+              {num(s.jamaah)}
+              <span className="ml-1 text-xs font-medium text-zinc-500 sm:text-sm">jamaah</span>
+            </>
+          }
+          note={`Konversi ${percent(s.conversion)}`}
+        />
         <StatCard label="Nilai deal" value={rupiah(s.dealValue)} note={s.deals ? `Rata-rata ${rupiah(s.avgDealValue)}` : undefined} />
-        <StatCard label="Uang masuk" value={rupiah(s.cashIn)} note={s.avgDaysToDeal !== null ? `Lead → deal ${num(s.avgDaysToDeal)} hari` : undefined} />
       </StatGrid>
       <section className="rounded-xl border border-zinc-200 bg-white">
         <header className="border-b border-zinc-200 bg-zinc-50/75 px-4 py-2.5">

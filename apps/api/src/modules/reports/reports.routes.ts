@@ -87,6 +87,7 @@ async function verifiedPaymentsInRange(brandWhere: object, range: object) {
       prospect: {
         select: {
           id: true, status: true, createdAt: true, dealValue: true, paymentStatus: true, userId: true, leadSource: true,
+          paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true,
           brand: { select: { name: true } }, package: { select: { name: true } }, user: { select: { name: true } },
         },
       },
@@ -118,12 +119,35 @@ async function firstDeals<T extends { createdAt: Date; prospect: { id: number; s
 }
 
 // ── 1. Penjualan & funnel ────────────────────────────────────────────────────────────────────────────────
+/** Jamaah satu deal = seluruh peserta di tipe kamar (quad, triple, double) ditambah bayi. */
+const jamaahOf = (p: { paxQuad: number; paxTriple: number; paxDouble: number; paxInfant: number }) =>
+  num(p.paxQuad) + num(p.paxTriple) + num(p.paxDouble) + num(p.paxInfant);
+
+/**
+ * Total budget = biaya iklan Meta (Insights) seluruh brand dalam cakupan laporan. Hanya ad account berbiaya Rupiah yang
+ * ikut dijumlah; brand tanpa ad account atau gagal diambil disebut di catatan, bukan dihitung nol.
+ */
+async function totalAdBudget(brandListWhere: object, from: string, to: string) {
+  const brands = await prisma.brand.findMany({
+    where: brandListWhere,
+    select: { id: true, metaAdAccountId: true, metaAccessToken: true, metaAdsAccessToken: true },
+  });
+  const spends = await Promise.all(brands.map((brand) => fetchAdSpend(withAdsToken(brand), from, to)));
+  const measured = spends.filter((ad): ad is Extract<typeof ad, { status: 'ok' }> => ad.status === 'ok' && ad.currency === 'IDR');
+  const missing = brands.length - measured.length;
+  return {
+    adSpend: measured.length ? measured.reduce((sum, ad) => sum + ad.spend, 0) : null,
+    adSpendNote: !measured.length ? 'Ad account belum terhubung' : missing ? `Belum termasuk ${missing} brand tanpa data iklan` : null,
+  };
+}
+
 reportsRouter.get('/sales', asyncHandler(async (req, res) => {
-  const { format, range, brandWhere } = parseRange(req);
-  const [leads, spam, payments] = await Promise.all([
+  const { format, from, to, range, brandWhere, brandListWhere } = parseRange(req);
+  const [leads, spam, payments, budget] = await Promise.all([
     prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range, ...notSpam }, select: { status: true } }),
     prisma.prospect.count({ where: { ...brandWhere, createdAt: range, spamAt: { not: null } } }),
     verifiedPaymentsInRange(brandWhere, range),
+    totalAdBudget(brandListWhere, from, to),
   ]);
   const deals = await firstDeals(payments, range.gte);
 
@@ -156,6 +180,9 @@ reportsRouter.get('/sales', asyncHandler(async (req, res) => {
     leads: leads.length,
     spam,
     deals: deals.length,
+    jamaah: deals.reduce((sum, d) => sum + jamaahOf(d.prospect), 0),
+    adSpend: budget.adSpend,
+    adSpendNote: budget.adSpendNote,
     lost: byStage.get('lose') ?? 0,
     conversion: pct(deals.length, leads.length),
     dealValue,
