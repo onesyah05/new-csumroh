@@ -9,6 +9,7 @@ import { resolveMediaUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { linkifyText } from '../../lib/linkify';
 import { AdReplyCard } from './AdReplyCard';
+import { SWIPE_REPLY_THRESHOLD, useSwipeToReply } from './swipeReply';
 
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
 
@@ -47,6 +48,8 @@ export type MessageBubbleProps = {
   showDeletedMessages: boolean;
   canSend: boolean;
   canReply: boolean;
+  /** HP: geser bubble ke kanan untuk membalas (hanya bila boleh membalas). */
+  swipeToReply?: boolean;
   selected: any;
   user: any;
   composerRef: RefObject<HTMLTextAreaElement | null>;
@@ -70,11 +73,22 @@ export type MessageBubbleProps = {
  * dan pesan masuk hanya merender gelembung barunya.
  */
 export const MessageBubble = memo(function MessageBubble({
-  item, isNewDate, dateLabel, isPickerOpen, isRevealedByAdmin, isAdmin, showDeletedMessages, canSend, canReply, selected, user,
+  item, isNewDate, dateLabel, isPickerOpen, isRevealedByAdmin, isAdmin, showDeletedMessages, canSend, canReply, swipeToReply, selected, user,
   composerRef, setActiveReactionMessageId, setRevealedDeletedIds, setReplyingTo, setDeleteConfirmId, startEdit, setPreviewFlyer,
   reactMutate, starMutate, proofMutate, proofPending, scrollToMessage, showToast,
 }: MessageBubbleProps) {
   const isMessageDeleted = Boolean(item.isDeleted);
+  const startReply = () => {
+    if (!canReply) return;
+    setReplyingTo({
+      id: item.id,
+      messageId: item.messageId,
+      senderName: item.isFromMe ? 'Anda' : (item.senderName || selected.name),
+      text: item.messageText || (item.messageType === 'imageMessage' ? 'Foto' : 'Pesan'),
+    });
+    composerRef.current?.focus();
+  };
+  const swipe = useSwipeToReply({ enabled: Boolean(swipeToReply) && !isMessageDeleted, onReply: startReply });
   return (
               <div id={`msg-${item.messageId}`} className="transition-colors duration-500 rounded-lg">
                 {isNewDate && (
@@ -161,11 +175,25 @@ export const MessageBubble = memo(function MessageBubble({
                   );
   
                   return (
-                    <div className={cn(
-                      'group relative flex items-center gap-1.5 my-1',
-                      item.isFromMe ? 'justify-end' : 'justify-start',
-                      item.reaction ? 'mb-3' : 'mb-1'
-                    )}>
+                    <div
+                      className={cn(
+                        'group relative flex items-center gap-1.5 my-1',
+                        item.isFromMe ? 'justify-end' : 'justify-start',
+                        item.reaction ? 'mb-3' : 'mb-1',
+                        swipeToReply && !isMessageDeleted && 'touch-pan-y',
+                      )}
+                      {...swipe.handlers}
+                      style={swipe.offset ? { transform: `translateX(${swipe.offset}px)` } : undefined}
+                    >
+                      {swipe.offset > 0 && (
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute left-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-black/10 text-[#54656f]"
+                          style={{ transform: `translate(${-swipe.offset}px, -50%) scale(${Math.min(1, swipe.offset / SWIPE_REPLY_THRESHOLD)})`, opacity: Math.min(1, swipe.offset / (SWIPE_REPLY_THRESHOLD * 0.6)) }}
+                        >
+                          <CornerUpLeft size={16} />
+                        </span>
+                      )}
                       {item.isFromMe && !isMessageDeleted && canSend && reactionTrigger}
   
                       <div className={cn(
@@ -196,16 +224,7 @@ export const MessageBubble = memo(function MessageBubble({
                               >
                                 <DropdownMenu.Item
                                   disabled={!canReply}
-                                  onClick={() => {
-                                    if (!canReply) return;
-                                    setReplyingTo({
-                                      id: item.id,
-                                      messageId: item.messageId,
-                                      senderName: item.isFromMe ? 'Anda' : (item.senderName || selected.name),
-                                      text: item.messageText || (item.messageType === 'imageMessage' ? 'Foto' : 'Pesan'),
-                                    });
-                                    composerRef.current?.focus();
-                                  }}
+                                  onClick={startReply}
                                   className={cn(
                                     'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] outline-none',
                                     canReply ? 'hover:bg-[#f0f2f5] cursor-pointer' : 'opacity-40 cursor-not-allowed'

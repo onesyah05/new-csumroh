@@ -1803,6 +1803,7 @@ export function InboxPage() {
                           showDeletedMessages={showDeletedMessages}
                           canSend={canSend}
                           canReply={canReply}
+                          swipeToReply={mobile && canReply}
                           selected={selected}
                           user={user}
                           composerRef={composerRef}
