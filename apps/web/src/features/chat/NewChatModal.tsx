@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { ChevronDown, TriangleAlert } from 'lucide-react';
 import { SOSMED_SOURCES, isQualificationComplete, type SosmedSource } from '@csumroh/shared-types';
@@ -8,7 +8,6 @@ import { Button } from '../../components/ui/button';
 import { Modal } from '../../components/ui/modal';
 import { Select } from '../../components/ui/select';
 import { QualificationFields, type QualificationValue } from '../prospects/QualificationFields';
-import { unresolvedTokens, useQuickReplies } from '../quick-replies/quickRepliesApi';
 
 export interface NewChatBrand { id: number; name: string }
 
@@ -40,20 +39,13 @@ export function NewChatModal({ open, onClose, brands, defaultBrandId, onStarted,
   const [name, setName] = useState('');
   const [source, setSource] = useState<SosmedSource | ''>('');
   const [notes, setNotes] = useState('');
-  const [text, setText] = useState('');
   const [showQualification, setShowQualification] = useState(false);
   const [qualification, setQualification] = useState<QualificationValue>(EMPTY_QUALIFICATION);
   const [error, setError] = useState('');
   const [handled, setHandled] = useState<Handled | null>(null);
 
-  const quickReplies = useQuickReplies(brandId);
-  const quickOptions = useMemo(
-    () => [{ value: 'none', label: 'Sisipkan balas cepat…' }, ...(quickReplies.data ?? []).map((item) => ({ value: String(item.id), label: item.title }))],
-    [quickReplies.data],
-  );
-  const missingTokens = unresolvedTokens(text);
   const digits = phone.replace(/\D/g, '');
-  const ready = Boolean(brandId && digits.length >= 8 && source && text.trim() && missingTokens.length === 0);
+  const ready = Boolean(brandId && digits.length >= 8 && source);
 
   const start = useMutation({
     mutationFn: () => api.post<{ prospectId: number; created: boolean }>('/chat/new', {
@@ -62,7 +54,6 @@ export function NewChatModal({ open, onClose, brands, defaultBrandId, onStarted,
       name: name.trim() || undefined,
       source,
       notes: notes.trim() || undefined,
-      text: text.trim(),
       targetMonth: qualification.targetMonth || undefined,
       budgetRange: qualification.budgetRange || undefined,
       paxQuad: qualification.paxQuad,
@@ -93,11 +84,11 @@ export function NewChatModal({ open, onClose, brands, defaultBrandId, onStarted,
       onClose={onClose}
       size="lg"
       title="Chat baru"
-      description="Mulai chat ke nomor dari tim sosmed. Anda menjadi PIC prospek ini setelah pesan pertama terkirim."
+      description="Buka chat ke nomor dari tim sosmed. Anda langsung menjadi PIC prospek ini; pesan pertama diketik di Inbox."
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={start.isPending}>Batal</Button>
-          <Button onClick={submit} disabled={!ready || start.isPending}>{start.isPending ? 'Mengirim...' : 'Kirim & mulai chat'}</Button>
+          <Button onClick={submit} disabled={!ready || start.isPending}>{start.isPending ? 'Memeriksa...' : 'Mulai chat'}</Button>
         </>
       }
     >
@@ -177,41 +168,9 @@ export function NewChatModal({ open, onClose, brands, defaultBrandId, onStarted,
           )}
         </div>
 
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-zinc-600">Pesan pertama *</span>
-            {quickOptions.length > 1 && (
-              <div className="w-44">
-                <Select
-                  aria-label="Sisipkan balas cepat"
-                  value="none"
-                  onValueChange={(value) => {
-                    const item = quickReplies.data?.find((reply) => String(reply.id) === value);
-                    if (item) setText((current) => (current.trim() ? `${current}\n${item.text}` : item.text));
-                  }}
-                  options={quickOptions}
-                  size="sm"
-                  className="w-full"
-                />
-              </div>
-            )}
-          </div>
-          <textarea
-            className="min-h-24 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-xs outline-none transition focus:border-black focus:ring-1 focus:ring-black disabled:opacity-60"
-            maxLength={4000}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            disabled={start.isPending}
-            aria-label="Pesan pertama"
-          />
-          {missingTokens.length > 0 && (
-            <p className="mt-1 text-xs text-amber-800">Lengkapi dulu: {missingTokens.map((token) => `{{${token}}}`).join(', ')}</p>
-          )}
-        </div>
-
         <p className="flex items-start gap-1.5 text-xs text-amber-800">
           <TriangleAlert size={13} className="mt-px shrink-0" aria-hidden="true" />
-          <span>Nomor ini belum pernah chat dengan brand. Kirim pesan sopan dan bukan salinan massal; pesan dingin yang sering dilaporkan bisa membuat nomor WhatsApp diblokir.</span>
+          <span>Nomor ini belum pernah chat dengan brand. Saat mengirim pesan pertama, tulis dengan sopan dan bukan salinan massal; pesan dingin yang sering dilaporkan bisa membuat nomor WhatsApp diblokir.</span>
         </p>
       </div>
     </Modal>

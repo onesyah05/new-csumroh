@@ -12,7 +12,7 @@ import { env } from '../../config/env.js';
 import { prisma } from '../../db/prisma.js';
 import { HttpError } from '../../utils/http.js';
 import { activeDevicePhone } from './device-scope.js';
-import { gatewayFailure, normalizePhoneIdentifier, sendTextToProspect } from './outbound.js';
+import { gatewayFailure, normalizePhoneIdentifier } from './outbound.js';
 
 const phoneVariants = (phone: string) => [...new Set([phone, `+${phone}`, phone.startsWith('62') ? `0${phone.slice(2)}` : phone])];
 
@@ -44,8 +44,8 @@ function qualificationData(input: NewChatInput) {
 }
 
 /**
- * Chat baru ke nomor yang diberikan tim sosmed. Pembuat otomatis menjadi PIC (tanpa round robin). Prospek baru hanya
- * ada bila pesan pertama benar-benar terkirim; kirim gagal membatalkan prospeknya.
+ * Chat baru ke nomor yang diberikan tim sosmed. Pembuat otomatis menjadi PIC (tanpa round robin). Tidak ada pesan yang
+ * dikirim di sini: percakapan kosong dibuka di Inbox dan CS mengetik pesan pertamanya sendiri.
  */
 export async function startNewChat(user: SessionUser, brandId: number, input: NewChatInput) {
   const phone = normalizePhoneIdentifier(input.phone);
@@ -69,8 +69,7 @@ export async function startNewChat(user: SessionUser, brandId: number, input: Ne
         code: 'already_handled', prospectId: existing.id, prospectName: existing.name, picName: existing.user?.name ?? null,
       });
     }
-    const message = await sendTextToProspect({ user, brandId, prospectId: existing.id, text: input.text });
-    return { prospectId: existing.id, created: false, message };
+    return { prospectId: existing.id, created: false };
   }
 
   await assertOnWhatsapp(brandId, phone);
@@ -86,6 +85,9 @@ export async function startNewChat(user: SessionUser, brandId: number, input: Ne
         devicePhone,
         leadSource: sosmedLeadSource(input.source),
         notes: input.notes || null,
+        // Percakapan kosong tetap tampil di Inbox (daftar hanya memuat prospek ber-lastMessageAt) sampai pesan pertama terkirim.
+        lastMessageAt: Math.floor(Date.now() / 1000),
+        conversationStatsAt: new Date(),
         ...qualification.data,
         ...(qualification.complete ? { status: 'qualified' as const, qualifiedAt: new Date() } : {}),
       },
@@ -96,15 +98,5 @@ export async function startNewChat(user: SessionUser, brandId: number, input: Ne
     return created;
   });
 
-  try {
-    const message = await sendTextToProspect({ user, brandId, prospectId: prospect.id, text: input.text });
-    return { prospectId: prospect.id, created: true, message };
-  } catch (error) {
-    // Kirim gagal: jangan tinggalkan prospek yatim. Bila pesan ternyata sudah tersimpan, prospek dipertahankan.
-    await prisma.$transaction([
-      prisma.prospectLog.deleteMany({ where: { prospectId: prospect.id } }),
-      prisma.prospect.delete({ where: { id: prospect.id } }),
-    ]).catch(() => undefined);
-    throw error;
-  }
+  return { prospectId: prospect.id, created: true };
 }

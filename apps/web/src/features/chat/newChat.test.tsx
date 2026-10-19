@@ -32,12 +32,11 @@ describe('Modal Chat Baru', () => {
     expect(screen.getByLabelText('Brand')).toBeTruthy();
   });
 
-  it('tombol kirim tertutup sampai nomor, sumber, dan pesan terisi', () => {
+  it('tombol mulai tertutup sampai nomor dan sumber terisi', () => {
     renderModal();
-    const send = screen.getByRole('button', { name: 'Kirim & mulai chat' }) as HTMLButtonElement;
+    const send = screen.getByRole('button', { name: 'Mulai chat' }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     fireEvent.change(screen.getByPlaceholderText('08xx atau 628xx'), { target: { value: '081234567890' } });
-    fireEvent.change(screen.getByLabelText('Pesan pertama'), { target: { value: 'Assalamualaikum' } });
     expect(send.disabled).toBe(true); // sumber belum dipilih
   });
 
@@ -48,11 +47,10 @@ describe('Modal Chat Baru', () => {
     const props = renderModal();
     // Sumber diisi lewat nilai internal: pilih lewat Select Radix tidak praktis di happy-dom, jadi kirim langsung via form.
     fireEvent.change(screen.getByPlaceholderText('08xx atau 628xx'), { target: { value: '081234567890' } });
-    fireEvent.change(screen.getByLabelText('Pesan pertama'), { target: { value: 'Assalamualaikum' } });
     const trigger = screen.getByLabelText('Sumber prospek');
     fireEvent.click(trigger);
     fireEvent.click(await screen.findByRole('option', { name: 'Instagram' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Kirim & mulai chat' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mulai chat' }));
     expect(await screen.findByText('Rani')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Buka percakapan' }));
     await waitFor(() => expect(props.onOpenExisting).toHaveBeenCalledWith({ prospectId: 5, brandId: 1 }));

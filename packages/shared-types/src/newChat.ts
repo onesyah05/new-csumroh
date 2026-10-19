@@ -24,7 +24,6 @@ export const newChatInputSchema = z.object({
   name: z.string().trim().max(100).optional(),
   source: z.enum(['instagram', 'facebook', 'tiktok', 'lainnya']),
   notes: z.string().trim().max(1000).optional(),
-  text: z.string().trim().min(1).max(4000),
   targetMonth: z.string().trim().max(50).optional(),
   budgetRange: z.string().trim().max(50).optional(),
   paxQuad: pax,
