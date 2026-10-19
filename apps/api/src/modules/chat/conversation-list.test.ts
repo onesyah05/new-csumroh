@@ -102,3 +102,25 @@ describe('Daftar percakapan Pipeline: tanpa teks panjang yang tidak ditampilkan'
     expect(item).toHaveProperty('status');
   });
 });
+
+describe('Chat baru dari nomor sosmed (belum ada pesan)', () => {
+  const empty = (id: number, extra: Record<string, unknown> = {}) => row(id, { leadSource: 'sosmed_instagram', messageCount: 0, lastMessage: null, unreadCount: 0, awaitingSince: null, userId: 7, ...extra });
+
+  it('query memuat prospek sosmed tanpa pesan di samping yang sudah punya pesan', async () => {
+    await getLivechatConversationListForBrand(1);
+    const where = mocks.conversationQuery.mock.calls[0]![0].where;
+    expect(where.OR).toEqual([{ lastMessageAt: { not: null } }, { leadSource: { startsWith: 'sosmed_' }, messageCount: 0 }]);
+  });
+
+  it('percakapan kosong sosmed tampil di daftar, diurutkan menurut waktu dibuat', async () => {
+    mocks.rows = [row(1), empty(2, { createdAt: new Date('2027-01-01') })];
+    const list = await getLivechatConversationListForBrand(1);
+    expect(list.map((item) => item.id)).toEqual([2, 1]);
+    expect(list[0]!.messages).toEqual([]);
+  });
+
+  it('prospek biasa tanpa pesan tetap disembunyikan', async () => {
+    mocks.rows = [row(1, { messageCount: 0, lastMessage: null })];
+    expect(await getLivechatConversationListForBrand(1)).toEqual([]);
+  });
+});

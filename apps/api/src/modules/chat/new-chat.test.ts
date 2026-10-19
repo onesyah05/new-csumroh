@@ -45,8 +45,6 @@ describe('Chat baru dari nomor sosmed', () => {
     const data = mocks.prospectCreate.mock.calls[0]![0].data;
     expect(data).toMatchObject({ brandId: 1, userId: 7, phone: '6281234567890', remoteJid: '6281234567890@s.whatsapp.net', devicePhone: '628222', leadSource: 'sosmed_instagram', name: '+6281234567890' });
     expect(data).not.toHaveProperty('status');
-    expect(data.lastMessageAt).toBeGreaterThan(0);
-    expect(data.conversationStatsAt).toBeInstanceOf(Date);
     expect(result).toMatchObject({ prospectId: 21, created: true });
   });
 

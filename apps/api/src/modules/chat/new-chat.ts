@@ -16,7 +16,7 @@ import { gatewayFailure, normalizePhoneIdentifier } from './outbound.js';
 
 const phoneVariants = (phone: string) => [...new Set([phone, `+${phone}`, phone.startsWith('62') ? `0${phone.slice(2)}` : phone])];
 
-/** Pesan pertama ke nomor yang belum pernah chat: nomor harus terdaftar di WhatsApp, jangan kirim ke nomor mati. */
+/** Nomor yang belum pernah chat harus terdaftar di WhatsApp; jangan membuka chat ke nomor mati. */
 async function assertOnWhatsapp(brandId: number, phone: string) {
   const response = await fetch(`${env.WA_GATEWAY_URL}/sessions/${brandId}/check-number`, {
     method: 'POST', signal: AbortSignal.timeout(15000),
@@ -85,9 +85,6 @@ export async function startNewChat(user: SessionUser, brandId: number, input: Ne
         devicePhone,
         leadSource: sosmedLeadSource(input.source),
         notes: input.notes || null,
-        // Percakapan kosong tetap tampil di Inbox (daftar hanya memuat prospek ber-lastMessageAt) sampai pesan pertama terkirim.
-        lastMessageAt: Math.floor(Date.now() / 1000),
-        conversationStatsAt: new Date(),
         ...qualification.data,
         ...(qualification.complete ? { status: 'qualified' as const, qualifiedAt: new Date() } : {}),
       },

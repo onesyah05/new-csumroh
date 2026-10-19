@@ -207,7 +207,8 @@ const conversationRelations = {
 const conversationWhere = (brandId: number, devicePhone: string) => ({
   brandId,
   devicePhone,
-  lastMessageAt: { not: null },
+  // Chat baru dari nomor sosmed belum punya pesan, tetapi harus tampil agar CS bisa mengetik pesan pertama.
+  OR: [{ lastMessageAt: { not: null } }, { leadSource: { startsWith: 'sosmed_' }, messageCount: 0 }],
   NOT: [
     { remoteJid: { contains: '@newsletter' } },
     { remoteJid: { contains: '@broadcast' } },
@@ -358,9 +359,10 @@ async function buildLivechatConversations<P extends ConversationProspect>(
     };
   }))).filter((item) => {
     const m = item.messages[0];
-    return m && (Boolean(m.messageText?.trim()) || Boolean(m.mediaUrl) || ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'].includes(m.messageType));
+    if (!m) return item.messageCount === 0 && item.leadSource.startsWith('sosmed_');
+    return (Boolean(m.messageText?.trim()) || Boolean(m.mediaUrl) || ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'].includes(m.messageType));
   })
-    .sort((a, b) => (b.messages[0]?.timestamp ?? 0) - (a.messages[0]?.timestamp ?? 0));
+    .sort((a, b) => (b.messages[0]?.timestamp ?? Math.floor(b.createdAt.getTime() / 1000)) - (a.messages[0]?.timestamp ?? Math.floor(a.createdAt.getTime() / 1000)));
 
   return data;
 }
