@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Pencil, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
+import { AlertCircle, MessageSquarePlus, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Pencil, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useWhatsAppAvatars } from '../../lib/avatars';
@@ -33,6 +33,7 @@ import { ConversationTagButton, ConversationTagChip, PicChip, StageChip } from '
 
 import { GalleryBrowser } from '../gallery/GalleryBrowser';
 import { QuickReplyPicker } from '../quick-replies/QuickReplyPicker';
+import { NewChatModal } from './NewChatModal';
 import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickReplies, type QuickReply, type SlashToken } from '../quick-replies/quickRepliesApi';
 import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
 import { sendGalleryBatch } from './galleryBatch';
@@ -286,6 +287,27 @@ export function InboxPage() {
 
   // Chat yang baru diklik dan URL-nya belum diperbarui (lihat efek di bawah).
   const pendingSelection = useRef<number | null>(null);
+
+  const canStartNewChat = user?.role === 'cs' || user?.role === 'admin' || user?.role === 'superadmin';
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const newChatBrands = useMemo(
+    () => (brandsQuery.data ?? []).filter((b: any) => canAccessBrand(user, b.id)).map((b: any) => ({ id: b.id as number, name: b.name as string })),
+    [brandsQuery.data, user],
+  );
+  function openStartedChat({ prospectId, brandId: targetBrandId }: { prospectId: number; brandId: number }) {
+    setNewChatOpen(false);
+    pendingSelection.current = prospectId;
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('brandId', String(targetBrandId));
+      next.set('prospectId', String(prospectId));
+      next.delete('phone');
+      next.delete('jid');
+      return next;
+    });
+    setActiveBrandId(targetBrandId);
+    setSelectedId(prospectId);
+  }
 
   // Riwayat tetap dapat dibaca saat WhatsApp terputus (A10); hanya pengiriman yang dikunci.
   useEffect(() => {
@@ -1375,6 +1397,11 @@ export function InboxPage() {
             <div className="flex items-center gap-1">
               {/* Inbox tanpa header aplikasi: di layar kecil lonceng notifikasi ada di sini (desktop: rail sidebar). */}
               <NotificationBell placement="header" className="lg:hidden" />
+              {canStartNewChat && (
+                <Button size="icon" variant="ghost" className="text-[#54656f] hover:text-[#111b21]" title="Chat baru" aria-label="Chat baru" onClick={() => setNewChatOpen(true)}>
+                  <MessageSquarePlus size={18} />
+                </Button>
+              )}
               {isConnected && canManageDevice && (
                 <Link to={`/devices/${brandId}`} title="Kelola Perangkat WA">
                   <Button size="icon" variant="ghost" className="text-[#54656f] hover:text-[#111b21]">
@@ -2309,6 +2336,17 @@ export function InboxPage() {
         alt="Pratinjau media"
         download
       />
+
+      {canStartNewChat && newChatOpen && (
+        <NewChatModal
+          open
+          onClose={() => setNewChatOpen(false)}
+          brands={newChatBrands}
+          defaultBrandId={brandId}
+          onStarted={openStartedChat}
+          onOpenExisting={openStartedChat}
+        />
+      )}
 
       <ConfirmDialog
         open={deleteConfirmId !== null}

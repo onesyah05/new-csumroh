@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Loader2, MessageCircle, UserPlus2 } from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  CUSTOM_MODES, adultPaxOf, businessDateKey, customStatusLabel, isLostStatus, isWonStatus, objectionLabel,
+  CUSTOM_MODES, SOSMED_SOURCES, adultPaxOf, leadSourceLabel, sosmedLeadSource, businessDateKey, customStatusLabel, isLostStatus, isWonStatus, objectionLabel,
   offerOutdated, packageBookingValue, targetMonthLabel,
 } from '@csumroh/shared-types';
 import { ProspectNotes, ProspectTimeline } from '../prospects/ProspectHistory';
@@ -29,7 +29,7 @@ const rupiah = (value: unknown) =>
 const dateText = (value?: string | null, dateOnly = false) =>
   value ? new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: dateOnly ? 'UTC' : 'Asia/Jakarta' }).format(new Date(value)) : null;
 
-const SOURCE_LABEL: Record<string, string> = { whatsapp: 'WhatsApp', meta_ads: 'Meta Ads', website: 'Website', referral: 'Referral', walk_in: 'Walk-in', whatsapp_group: 'Grup WhatsApp' };
+const SOURCE_LABEL: Record<string, string> = { whatsapp: 'WhatsApp', meta_ads: 'Meta Ads', website: 'Website', referral: 'Referral', walk_in: 'Walk-in', whatsapp_group: 'Grup WhatsApp', ...Object.fromEntries(SOSMED_SOURCES.map((item) => [sosmedLeadSource(item.value), leadSourceLabel(sosmedLeadSource(item.value))!])) };
 const STAGES = ['Terhubung', 'Terkualifikasi', 'Ditawarkan', 'Tunggu verifikasi', 'Deal'] as const;
 const TABS = [{ key: 'profile', label: 'Profil' }, { key: 'activity', label: 'Catatan & riwayat' }] as const;
 type TabKey = (typeof TABS)[number]['key'];

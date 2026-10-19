@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import { businessDateKey, canonicalStatus, isLostStatus, isWonStatus, objectionLabel } from '@csumroh/shared-types';
+import { SOSMED_SOURCES, businessDateKey, canonicalStatus, isLostStatus, isWonStatus, leadSourceLabel, objectionLabel, sosmedLeadSource } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { authGuard, requireRole, scopedBrandId, visibleBrandIds } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
@@ -27,7 +27,7 @@ const STATUS_LABEL: Record<string, string> = {
   new: 'Baru', contact: 'Terhubung', qualified: 'Terkualifikasi', offer: 'Ditawarkan', objection: 'Keberatan',
   followup: 'Follow-up', closing: 'Tunggu verifikasi', deal: 'Deal', lose: 'Batal', nurture: 'Nurture',
 };
-const SOURCE_LABEL: Record<string, string> = { whatsapp: 'WhatsApp', meta_ads: 'Meta Ads', website: 'Website', referral: 'Referral', walk_in: 'Walk-in' };
+const SOURCE_LABEL: Record<string, string> = { whatsapp: 'WhatsApp', meta_ads: 'Meta Ads', website: 'Website', referral: 'Referral', walk_in: 'Walk-in', ...Object.fromEntries(SOSMED_SOURCES.map((item) => [sosmedLeadSource(item.value), leadSourceLabel(sosmedLeadSource(item.value))!])) };
 
 const rangeSchema = z.object({
   from: z.string().date(),
