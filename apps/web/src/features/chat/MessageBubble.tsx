@@ -185,7 +185,7 @@ export const MessageBubble = memo(function MessageBubble({
                       {...swipe.handlers}
                       ref={swipe.rowRef}
                     >
-                      {swipeToReply && !isMessageDeleted && (
+                      {swipe.iconMounted && (
                         <span
                           aria-hidden="true"
                           ref={swipe.iconRef}

@@ -1,4 +1,4 @@
-import { useCallback, useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 /** Jarak geser (px) yang memicu balas, dan batas geser maksimum bubble. */
 export const SWIPE_REPLY_THRESHOLD = 48;
@@ -27,6 +27,8 @@ export const isSwipeReplyTriggered = (dx: number) => dx >= SWIPE_REPLY_THRESHOLD
  * (tanpa state React): merender ulang bubble di setiap gerakan jari membuat geseran patah-patah.
  */
 export function useSwipeToReply({ enabled, onReply }: { enabled: boolean; onReply: () => void }) {
+  // Ikon baru dipasang saat bubble pertama kali disentuh: satu SVG per pesan di seluruh daftar membuat chat panjang berat di HP.
+  const [iconMounted, setIconMounted] = useState(false);
   const rowRef = useRef<HTMLElement | null>(null);
   const iconRef = useRef<HTMLElement | null>(null);
   const start = useRef<{ x: number; y: number; id: number; mode: 'pending' | 'swipe'; armed: boolean } | null>(null);
@@ -50,6 +52,7 @@ export function useSwipeToReply({ enabled, onReply }: { enabled: boolean; onRepl
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (!enabled || event.pointerType !== 'touch') return;
     start.current = { x: event.clientX, y: event.clientY, id: event.pointerId, mode: 'pending', armed: false };
+    setIconMounted(true);
   }, [enabled]);
 
   const onPointerMove = useCallback((event: ReactPointerEvent<HTMLElement>) => {
@@ -79,6 +82,7 @@ export function useSwipeToReply({ enabled, onReply }: { enabled: boolean; onRepl
   }, [onReply, reset]);
 
   return {
+    iconMounted,
     rowRef: (element: HTMLElement | null) => { rowRef.current = element; },
     iconRef: (element: HTMLElement | null) => { iconRef.current = element; },
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: reset },
