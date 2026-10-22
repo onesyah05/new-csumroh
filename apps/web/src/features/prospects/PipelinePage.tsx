@@ -38,6 +38,9 @@ import {
   isLostStatus,
   isWonStatus,
   isTakeoverOpen,
+  SOSMED_SOURCES,
+  leadSourceLabel,
+  sosmedLeadSource,
   isQualificationComplete,
   objectionLabel,
   offerOutdated,
@@ -95,6 +98,7 @@ const LEAD_SOURCES = [
   { value: 'website', label: 'Website' },
   { value: 'referral', label: 'Referral' },
   { value: 'walk_in', label: 'Walk-in' },
+  ...SOSMED_SOURCES.map((item) => ({ value: sosmedLeadSource(item.value), label: leadSourceLabel(sosmedLeadSource(item.value))! })),
 ];
 
 const digits = (value: unknown) => String(value ?? '').replace(/\D/g, '');

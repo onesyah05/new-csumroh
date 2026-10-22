@@ -17,13 +17,14 @@ import { asyncHandler, HttpError, isDatabaseUnavailable } from '../../utils/http
 import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker, storedReferral } from '../prospects/referral.service.js';
 import { createProspectWithRoundRobin } from '../prospects/round-robin.js';
+import { startNewChat } from './new-chat.js';
 import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, resolveQuote, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { adLabels, cacheAdThumbnail, withAdPreviews } from '../ads/meta-ads.js';
 import { syncSessionWithGateway } from '../whatsapp/gateway-probe.js';
 import { resolveFlyerFile, safeChatMediaExtension } from '../../utils/safe-path.js';
 import { Prisma, type ChatMessage } from '@prisma/client';
-import { avatarNeedsRefresh, MEDIA_PLACEHOLDER } from '@csumroh/shared-types';
+import { avatarNeedsRefresh, MEDIA_PLACEHOLDER, newChatInputSchema } from '@csumroh/shared-types';
 import { refreshProspectAvatar, refreshProspectAvatars } from './avatar.service.js';
 import { normalizeWhatsappImage } from './whatsapp-image.js';
 import { resolveNotifications } from '../notifications/notify.service.js';
@@ -206,7 +207,8 @@ const conversationRelations = {
 const conversationWhere = (brandId: number, devicePhone: string) => ({
   brandId,
   devicePhone,
-  lastMessageAt: { not: null },
+  // Chat baru dari nomor sosmed belum punya pesan, tetapi harus tampil agar CS bisa mengetik pesan pertama.
+  OR: [{ lastMessageAt: { not: null } }, { leadSource: { startsWith: 'sosmed_' }, messageCount: 0 }],
   NOT: [
     { remoteJid: { contains: '@newsletter' } },
     { remoteJid: { contains: '@broadcast' } },
@@ -357,9 +359,10 @@ async function buildLivechatConversations<P extends ConversationProspect>(
     };
   }))).filter((item) => {
     const m = item.messages[0];
-    return m && (Boolean(m.messageText?.trim()) || Boolean(m.mediaUrl) || ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'].includes(m.messageType));
+    if (!m) return item.messageCount === 0 && item.leadSource.startsWith('sosmed_');
+    return (Boolean(m.messageText?.trim()) || Boolean(m.mediaUrl) || ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'].includes(m.messageType));
   })
-    .sort((a, b) => (b.messages[0]?.timestamp ?? 0) - (a.messages[0]?.timestamp ?? 0));
+    .sort((a, b) => (b.messages[0]?.timestamp ?? Math.floor(b.createdAt.getTime() / 1000)) - (a.messages[0]?.timestamp ?? Math.floor(a.createdAt.getTime() / 1000)));
 
   return data;
 }
@@ -639,6 +642,14 @@ chatRouter.post('/messages', asyncHandler(async (req, res) => {
     quotedSender: input.quotedSender,
   });
   res.status(201).json({ success: true, data: message });
+}));
+
+// Chat baru ke nomor dari tim sosmed: membuat prospek (pembuat = PIC) lalu mengirim pesan pertama.
+chatRouter.post('/new', requireRole('superadmin', 'admin', 'cs'), asyncHandler(async (req, res) => {
+  const input = newChatInputSchema.parse(req.body);
+  const brandId = scopedBrandId(req, input.brandId);
+  const result = await startNewChat(req.user!, brandId, input);
+  res.status(result.created ? 201 : 200).json({ success: true, data: result });
 }));
 
 // Media upload endpoint (base64 encoded or package flyer reference)

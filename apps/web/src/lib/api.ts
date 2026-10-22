@@ -106,10 +106,10 @@ async function raw<T>(path: string, options: RequestInit = {}, retry = true): Pr
     if (session) return raw(path, options, false);
     throw new SessionExpiredError();
   }
-  const body = await response.json().catch(() => ({ success: false, error: 'Respons server tidak valid.' })) as { success?: boolean; data?: T; error?: string };
+  const body = await response.json().catch(() => ({ success: false, error: 'Respons server tidak valid.' })) as { success?: boolean; data?: T; error?: string; details?: unknown };
   if (!response.ok || !body.success) {
     // Status HTTP ikut dibawa: pemanggil membedakan penolakan validasi (4xx) dari gangguan jaringan/server.
-    throw Object.assign(new Error(body.error ?? 'Permintaan gagal.'), { status: response.status });
+    throw Object.assign(new Error(body.error ?? 'Permintaan gagal.'), { status: response.status, details: body.details });
   }
   return body.data as T;
 }

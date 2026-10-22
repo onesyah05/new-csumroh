@@ -549,6 +549,23 @@ function resolveTargetJid(brandId: number, jid: string) {
   return jid;
 }
 
+// Cek apakah nomor terdaftar di WhatsApp sebelum chat pertama ke nomor yang belum pernah menghubungi.
+app.post('/sessions/:brandId/check-number', async (req, res, next) => {
+  try {
+    const brandId = brandIdSchema.parse(req.params.brandId);
+    const input = z.object({ phone: z.string().regex(/^\d{6,20}$/) }).parse(req.body);
+    const socket = sessions.get(brandId);
+    if (!socket || statuses.get(brandId) !== 'connected') {
+      res.status(409).json({ success: false, error: 'WhatsApp session is not connected' });
+      return;
+    }
+    const [result] = (await socket.onWhatsApp(`${input.phone}@s.whatsapp.net`)) ?? [];
+    res.json({ success: true, data: { exists: Boolean(result?.exists), jid: result?.jid ?? null } });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/sessions/:brandId/messages', async (req, res, next) => {
   try {
     const brandId = brandIdSchema.parse(req.params.brandId);

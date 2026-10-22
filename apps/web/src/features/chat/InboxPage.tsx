@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { AlertCircle, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Pencil, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
+import { AlertCircle, MessageSquarePlus, ArrowLeft, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CornerUpLeft, CreditCard, FileText, HandCoins, ImageIcon, Lock, Menu, MessageSquareText, Video, Paperclip, Pencil, Plane, RefreshCw, Search, Send, ShieldAlert, ShieldCheck, MapPin, Smartphone, Sparkles, Upload, User, UserPlus2, WifiOff, Smile, X } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, resolveMediaUrl } from '../../lib/api';
 import { useWhatsAppAvatars } from '../../lib/avatars';
@@ -33,6 +33,8 @@ import { ConversationTagButton, ConversationTagChip, PicChip, StageChip } from '
 
 import { GalleryBrowser } from '../gallery/GalleryBrowser';
 import { QuickReplyPicker } from '../quick-replies/QuickReplyPicker';
+import { NewChatModal } from './NewChatModal';
+import { composerFocusDecision, type ComposerFocusRequest } from './composerFocus';
 import { matchQuickReplies, slashKey, slashQueryAt, unresolvedTokens, useQuickReplies, type QuickReply, type SlashToken } from '../quick-replies/quickRepliesApi';
 import { galleryAssetToFile, type GalleryAsset } from '../gallery/galleryApi';
 import { sendGalleryBatch } from './galleryBatch';
@@ -286,6 +288,36 @@ export function InboxPage() {
 
   // Chat yang baru diklik dan URL-nya belum diperbarui (lihat efek di bawah).
   const pendingSelection = useRef<number | null>(null);
+  // Percakapan yang baru dibuka CS (klik, tautan, Chat Baru): kolom pesan langsung aktif di desktop. Pilihan yang berubah
+  // sendiri (hasil pencarian, daftar dimuat) tidak meminta fokus agar kolom pencarian tidak direbut.
+  const composerFocusRequest = useRef<ComposerFocusRequest | null>(null);
+  const [composerFocusTick, setComposerFocusTick] = useState(0);
+  const requestComposerFocus = (id: number) => {
+    composerFocusRequest.current = { id, at: Date.now() };
+    setComposerFocusTick((tick) => tick + 1);
+  };
+
+  const canStartNewChat = user?.role === 'cs' || user?.role === 'admin' || user?.role === 'superadmin';
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const newChatBrands = useMemo(
+    () => (brandsQuery.data ?? []).filter((b: any) => canAccessBrand(user, b.id)).map((b: any) => ({ id: b.id as number, name: b.name as string })),
+    [brandsQuery.data, user],
+  );
+  function openStartedChat({ prospectId, brandId: targetBrandId }: { prospectId: number; brandId: number }) {
+    setNewChatOpen(false);
+    pendingSelection.current = prospectId;
+    requestComposerFocus(prospectId);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('brandId', String(targetBrandId));
+      next.set('prospectId', String(prospectId));
+      next.delete('phone');
+      next.delete('jid');
+      return next;
+    });
+    setActiveBrandId(targetBrandId);
+    setSelectedId(prospectId);
+  }
 
   // Riwayat tetap dapat dibaca saat WhatsApp terputus (A10); hanya pengiriman yang dikunci.
   useEffect(() => {
@@ -313,6 +345,7 @@ export function InboxPage() {
     const nextId = requested?.id ?? (currentExists ? selectedId : items[0].id);
     if (nextId !== selectedId) {
       setSelectedId(nextId);
+      if (requested) requestComposerFocus(nextId);
     }
   }, [conversations.data, searchParams, selectedId]);
 
@@ -359,6 +392,23 @@ export function InboxPage() {
   // Hak membalas (role/PIC) dan kemampuan mengirim (perangkat terhubung) dibedakan.
   const online = useOnline();
   const canSend = canReply && isConnected && online;
+
+  // Fokus kolom pesan setelah percakapan dibuka. Tidak di HP (keyboard menutup pesan, sama seperti WhatsApp), tidak saat
+  // dialog atau panel samping aktif, dan hanya selama permintaan masih baru agar tidak merebut fokus belakangan.
+  useEffect(() => {
+    const decision = composerFocusDecision({ request: composerFocusRequest.current, selectedId, now: Date.now(), mobile, canSend, panelOpen: Boolean(sidePanelTab) });
+    if (decision === 'drop') composerFocusRequest.current = null;
+    if (decision !== 'focus') return;
+    const frame = requestAnimationFrame(() => {
+      const element = composerRef.current;
+      if (!element || document.querySelector('[role="dialog"]')) return;
+      composerFocusRequest.current = null;
+      element.focus({ preventScroll: true });
+      const end = element.value.length;
+      element.setSelectionRange(end, end);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, composerFocusTick, canSend, mobile, sidePanelTab]);
 
   const currentPackage = useMemo(() => {
     return packages.data?.find((p) => p.id === (selected?.packageId || selected?.package?.id));
@@ -759,6 +809,7 @@ export function InboxPage() {
     }, { state: mobile ? { inboxList: true } : null });
     pendingSelection.current = id;
     setSelectedId(id);
+    requestComposerFocus(id);
   }
 
   function adjustTextareaHeight(element: HTMLTextAreaElement | null) {
@@ -1375,6 +1426,11 @@ export function InboxPage() {
             <div className="flex items-center gap-1">
               {/* Inbox tanpa header aplikasi: di layar kecil lonceng notifikasi ada di sini (desktop: rail sidebar). */}
               <NotificationBell placement="header" className="lg:hidden" />
+              {canStartNewChat && (
+                <Button size="icon" variant="ghost" className="text-[#54656f] hover:text-[#111b21]" title="Chat baru" aria-label="Chat baru" onClick={() => setNewChatOpen(true)}>
+                  <MessageSquarePlus size={18} />
+                </Button>
+              )}
               {isConnected && canManageDevice && (
                 <Link to={`/devices/${brandId}`} title="Kelola Perangkat WA">
                   <Button size="icon" variant="ghost" className="text-[#54656f] hover:text-[#111b21]">
@@ -1747,6 +1803,7 @@ export function InboxPage() {
                           showDeletedMessages={showDeletedMessages}
                           canSend={canSend}
                           canReply={canReply}
+                          swipeToReply={mobile && canReply}
                           selected={selected}
                           user={user}
                           composerRef={composerRef}
@@ -2309,6 +2366,17 @@ export function InboxPage() {
         alt="Pratinjau media"
         download
       />
+
+      {canStartNewChat && newChatOpen && (
+        <NewChatModal
+          open
+          onClose={() => setNewChatOpen(false)}
+          brands={newChatBrands}
+          defaultBrandId={brandId}
+          onStarted={openStartedChat}
+          onOpenExisting={openStartedChat}
+        />
+      )}
 
       <ConfirmDialog
         open={deleteConfirmId !== null}
