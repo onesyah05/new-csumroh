@@ -78,7 +78,9 @@ export const MessageBubble = memo(function MessageBubble({
   reactMutate, starMutate, proofMutate, proofPending, scrollToMessage, showToast,
 }: MessageBubbleProps) {
   const isMessageDeleted = Boolean(item.isDeleted);
-  const startReply = () => {
+  // Geser di HP tidak membuka keyboard: tinggi aplikasi mengikuti visualViewport yang berubah belakangan, sehingga
+  // layar sempat putih selama keyboard bergerak. CS mengetuk kolom pesan sendiri untuk mengetik.
+  const startReply = (focusComposer = true) => {
     if (!canReply) return;
     setReplyingTo({
       id: item.id,
@@ -86,9 +88,9 @@ export const MessageBubble = memo(function MessageBubble({
       senderName: item.isFromMe ? 'Anda' : (item.senderName || selected.name),
       text: item.messageText || (item.messageType === 'imageMessage' ? 'Foto' : 'Pesan'),
     });
-    composerRef.current?.focus();
+    if (focusComposer) composerRef.current?.focus();
   };
-  const swipe = useSwipeToReply({ enabled: Boolean(swipeToReply) && !isMessageDeleted, onReply: startReply });
+  const swipe = useSwipeToReply({ enabled: Boolean(swipeToReply) && !isMessageDeleted, onReply: () => startReply(false) });
   return (
               <div id={`msg-${item.messageId}`} className="transition-colors duration-500 rounded-lg">
                 {isNewDate && (
@@ -224,7 +226,7 @@ export const MessageBubble = memo(function MessageBubble({
                               >
                                 <DropdownMenu.Item
                                   disabled={!canReply}
-                                  onClick={startReply}
+                                  onClick={() => startReply()}
                                   className={cn(
                                     'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[#111b21] outline-none',
                                     canReply ? 'hover:bg-[#f0f2f5] cursor-pointer' : 'opacity-40 cursor-not-allowed'

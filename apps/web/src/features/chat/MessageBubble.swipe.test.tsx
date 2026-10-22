@@ -36,11 +36,11 @@ function swipe(row: HTMLElement, dx: number, dy = 0, pointerType = 'touch') {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('Geser bubble untuk membalas (HP)', () => {
-  it('geser kanan melewati ambang membalas pesan itu dan mengaktifkan kolom pesan', () => {
+  it('geser kanan melewati ambang membalas pesan itu tanpa membuka keyboard', () => {
     const { row, setReplyingTo, focus } = renderBubble();
     swipe(row, 90);
     expect(setReplyingTo).toHaveBeenCalledWith({ id: 900, messageId: 'WA900', senderName: 'Ibu Aisyah', text: 'Berapa harga paket?' });
-    expect(focus).toHaveBeenCalled();
+    expect(focus).not.toHaveBeenCalled();
   });
 
   it('geser pendek membatalkan dan bubble kembali ke posisi semula', () => {
