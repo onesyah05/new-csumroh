@@ -9,7 +9,7 @@ import { resolveMediaUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { linkifyText } from '../../lib/linkify';
 import { AdReplyCard } from './AdReplyCard';
-import { SWIPE_REPLY_THRESHOLD, useSwipeToReply } from './swipeReply';
+import { useSwipeToReply } from './swipeReply';
 
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
 
@@ -183,13 +183,13 @@ export const MessageBubble = memo(function MessageBubble({
                         swipeToReply && !isMessageDeleted && 'touch-pan-y',
                       )}
                       {...swipe.handlers}
-                      style={swipe.offset ? { transform: `translateX(${swipe.offset}px)` } : undefined}
+                      ref={swipe.rowRef}
                     >
-                      {swipe.offset > 0 && (
+                      {swipeToReply && !isMessageDeleted && (
                         <span
                           aria-hidden="true"
-                          className="pointer-events-none absolute left-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-black/10 text-[#54656f]"
-                          style={{ transform: `translate(${-swipe.offset}px, -50%) scale(${Math.min(1, swipe.offset / SWIPE_REPLY_THRESHOLD)})`, opacity: Math.min(1, swipe.offset / (SWIPE_REPLY_THRESHOLD * 0.6)) }}
+                          ref={swipe.iconRef}
+                          className="pointer-events-none absolute left-2 top-1/2 grid h-8 w-8 place-items-center rounded-full bg-black/10 text-[#54656f] opacity-0"
                         >
                           <CornerUpLeft size={16} />
                         </span>
