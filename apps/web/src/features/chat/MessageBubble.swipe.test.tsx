@@ -50,6 +50,16 @@ describe('Geser bubble untuk membalas (HP)', () => {
     expect(row.style.transform).toBe('');
   });
 
+  it('bubble mengikuti jari langsung di DOM selama geser (tanpa render ulang) dan kembali saat dilepas', () => {
+    const { row } = renderBubble();
+    pointer(row, 'pointerDown', 10, 10);
+    pointer(row, 'pointerMove', 30, 10);
+    pointer(row, 'pointerMove', 40, 10);
+    expect(row.style.transform).toBe('translate3d(30px,0,0)');
+    pointer(row, 'pointerUp', 40, 10);
+    expect(row.style.transform).toBe('');
+  });
+
   it('scroll vertikal tidak membalas', () => {
     const { row, setReplyingTo } = renderBubble();
     swipe(row, 20, 90);
