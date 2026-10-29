@@ -1,9 +1,10 @@
 import { useSessionState } from '../../lib/useSessionState';
+import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import { useInboxNavigation } from './useInboxNavigation';
 import { useOnline } from '../../app/pwa';
 import { useChatAutoScroll } from './useChatAutoScroll';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { businessDateKey, dateOnlyKey, formatCatalogRupiah, isLostStatus, isTakeoverOpen, isWonStatus, targetMonthLabel, waDisconnectReasonText } from '@csumroh/shared-types';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -41,7 +42,8 @@ import { sendGalleryBatch } from './galleryBatch';
 import { useMessageEdit } from './useMessageEdit';
 import { EmojiPicker } from './EmojiPicker';
 import { autoCompressMedia, formatFileSize } from './mediaCompressor';
-import { getInboxQueue, inboxFilters, visibleInboxFilters, type InboxWorkFilter } from './inboxFilters';
+import { getInboxQueue, inboxFilters, phoneSearchDigits, visibleInboxFilters, type InboxWorkFilter } from './inboxFilters';
+import { MESSAGE_SEARCH_MIN_LENGTH, type MessageSearchMatch } from './messageSearch';
 import { useSpamToggle } from './useSpamToggle';
 import { waMessage } from './waFormat';
 import { showFeedback } from '../../app/toast';
@@ -146,6 +148,7 @@ export function InboxPage() {
   }, [brandId]);
   const listKey = `azhan.inbox.${user?.id}:${brandId}`;
   const [search, setSearch] = useSessionState(`${listKey}.search`, '');
+  const deferredSearch = useDeferredValue(search);
   const [chatFilter, setChatFilter] = useSessionState<InboxWorkFilter>(`${listKey}.filter`, 'all');
   const [ownerFilter, setOwnerFilter] = useSessionState(`${listKey}.owner`, 'all');
   const restoreList = useCallback((node: HTMLDivElement | null) => {
@@ -271,6 +274,30 @@ export function InboxPage() {
     enabled: !!brandId,
   });
 
+  // Pencarian isi chat (pesan jamaah dan PIC) di server; nama/nomor/pesan terakhir langsung dicari di klien.
+  const searchTerm = useDebouncedValue(search.trim(), 300);
+  const messageSearch = useQuery({
+    queryKey: ['conversation-search', brandId, searchTerm],
+    queryFn: async () => ({ term: searchTerm, matches: await api.get<MessageSearchMatch[]>(`/chat/conversations/search${query}${query ? '&' : '?'}q=${encodeURIComponent(searchTerm)}`) }),
+    enabled: !!brandId && searchTerm.length >= MESSAGE_SEARCH_MIN_LENGTH,
+    staleTime: 30_000,
+  });
+  // Hasil basi (kata kunci sudah berubah) tidak dipakai agar daftar tidak menampilkan percakapan yang tidak cocok.
+  const messageHits = useMemo(() => {
+    const hits = new Map<number, MessageSearchMatch>();
+    if (messageSearch.data?.term === search.trim()) for (const match of messageSearch.data.matches) hits.set(match.prospectId, match);
+    return hits;
+  }, [messageSearch.data, search]);
+  const messageHitIds = useMemo(() => new Set(messageHits.keys()), [messageHits]);
+  const hitFor = useCallback((item: any) => {
+    let best: MessageSearchMatch | undefined;
+    for (const id of item.duplicateIds ?? [item.id]) {
+      const hit = messageHits.get(id);
+      if (hit && (!best || hit.timestamp > best.timestamp)) best = hit;
+    }
+    return best;
+  }, [messageHits]);
+
   // Foto profil WhatsApp untuk percakapan teratas (sisanya disalin API di latar belakang saat daftar dimuat).
   const photoFor = useWhatsAppAvatars(conversations.data?.slice(0, 80), brandId);
 
@@ -299,6 +326,11 @@ export function InboxPage() {
 
   const canStartNewChat = user?.role === 'cs' || user?.role === 'admin' || user?.role === 'superadmin';
   const [newChatOpen, setNewChatOpen] = useState(false);
+  // Kata pencarian berbentuk nomor lengkap yang belum punya percakapan → tawarkan "Mulai chat" dengan nomor terisi.
+  const newChatPhone = useMemo(() => {
+    const digits = phoneSearchDigits(search);
+    return digits && digits.length >= 8 ? digits : null;
+  }, [search]);
   const newChatBrands = useMemo(
     () => (brandsQuery.data ?? []).filter((b: any) => canAccessBrand(user, b.id)).map((b: any) => ({ id: b.id as number, name: b.name as string })),
     [brandsQuery.data, user],
@@ -755,8 +787,8 @@ export function InboxPage() {
 
   const { conversations: filtered, counts: filterCounts } = useMemo(() =>
     getInboxQueue(conversations.data ?? [], {
-      work: chatFilter, owner: ownerFilter, userId: user?.id, search, today,
-    }), [conversations.data, chatFilter, ownerFilter, user?.id, search, today]);
+      work: chatFilter, owner: ownerFilter, userId: user?.id, search: deferredSearch, today, messageMatches: messageHitIds,
+    }), [conversations.data, chatFilter, ownerFilter, user?.id, deferredSearch, today, messageHitIds]);
 
   const ownerOptions = useMemo(() => {
     const team = new Map<number, string>();
@@ -1448,11 +1480,11 @@ export function InboxPage() {
               <div className="relative flex min-w-0 flex-1 items-center">
                 <Search className="absolute left-3 text-[#54656f]" size={15} />
                 <input
-                  aria-label="Cari atau mulai chat baru"
+                  aria-label="Cari nama, nomor, atau isi chat"
                   className="h-9 w-full rounded-lg bg-[#f0f2f5] pl-9 pr-8 text-xs text-[#111b21] placeholder:text-[#8696a0] outline-none transition focus:bg-white focus:ring-1 focus:ring-[#00a884]"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Cari atau mulai chat baru"
+                  placeholder="Cari nama, nomor, atau isi chat"
                 />
                 {search && (
                   <button
@@ -1533,7 +1565,10 @@ export function InboxPage() {
                 <p className="font-semibold text-[#54656f]">
                   {search.trim() ? 'Percakapan tidak ditemukan' : chatFilter === 'needs_reply' ? 'Tidak ada pesan yang perlu dibalas' : chatFilter === 'followup' ? 'Tidak ada follow-up jatuh tempo' : chatFilter.startsWith('stage:') ? `Belum ada jamaah ${activeFilter.label}` : 'Tidak ada percakapan'}
                 </p>
-                <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 font-semibold text-[#008069] hover:underline">Tampilkan semua</button>
+                {canStartNewChat && newChatPhone && (
+                  <button type="button" onClick={() => setNewChatOpen(true)} className="mt-3 block w-full font-semibold text-[#008069] hover:underline">Mulai chat ke {formatWaNumber(newChatPhone)}</button>
+                )}
+                <button type="button" onClick={() => { setSearch(''); setOwnerFilter('all'); setChatFilter('all'); }} className="mt-3 block w-full font-semibold text-[#008069] hover:underline">Tampilkan semua</button>
               </div>
             ) : (
               <>
@@ -1541,6 +1576,8 @@ export function InboxPage() {
                 <ConversationRow
                   key={item.id}
                   item={item}
+                  hit={hitFor(item)}
+                  searchTerm={search.trim()}
                   active={item.id === selectedId}
                   today={today}
                   photoUrl={photoFor(item)}
@@ -2373,6 +2410,7 @@ export function InboxPage() {
           onClose={() => setNewChatOpen(false)}
           brands={newChatBrands}
           defaultBrandId={brandId}
+          initialPhone={newChatPhone ?? ''}
           onStarted={openStartedChat}
           onOpenExisting={openStartedChat}
         />

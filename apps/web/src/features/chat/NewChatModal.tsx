@@ -25,17 +25,19 @@ type Handled = { prospectId: number; picName: string | null };
  * Mulai chat ke nomor yang diberikan tim sosmed. Pembuat menjadi PIC; prospek baru hanya tersimpan bila pesan
  * pertama terkirim. Brand hanya dipilih bila akun punya lebih dari satu brand.
  */
-export function NewChatModal({ open, onClose, brands, defaultBrandId, onStarted, onOpenExisting }: {
+export function NewChatModal({ open, onClose, brands, defaultBrandId, initialPhone = '', onStarted, onOpenExisting }: {
   open: boolean;
   onClose: () => void;
   /** Brand yang boleh dipakai akun ini. Satu brand = tanpa pilihan. */
   brands: NewChatBrand[];
   defaultBrandId: number | null;
+  /** Nomor yang sudah diketik di pencarian Inbox. */
+  initialPhone?: string;
   onStarted: (result: { prospectId: number; brandId: number }) => void;
   onOpenExisting: (result: { prospectId: number; brandId: number }) => void;
 }) {
   const [brandId, setBrandId] = useState<number | null>(defaultBrandId ?? brands[0]?.id ?? null);
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(initialPhone);
   const [name, setName] = useState('');
   const [source, setSource] = useState<SosmedSource | ''>('');
   const [notes, setNotes] = useState('');
