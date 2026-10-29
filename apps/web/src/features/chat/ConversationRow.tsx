@@ -6,6 +6,7 @@ import { customBadge } from '../custom/customApi';
 import { conversationTags, conversationTrip } from './conversationTags';
 import { ConversationTagChip } from './ConversationTagChip';
 import { CallIcon, activateWithKeyboard, isMissedCall } from './MessageBubble';
+import { splitByTerm, type MessageSearchMatch } from './messageSearch';
 
 /**
  * Avatar kontak = foto profil WhatsApp (lihat ProspectAvatar: tanpa foto tampil siluet, bukan inisial).
@@ -71,13 +72,16 @@ function formatWaTimestamp(timestampSeconds?: number): string {
  * hanya merender ulang baris yang datanya berubah, bukan seluruh daftar.
  */
 export const ConversationRow = memo(function ConversationRow({
-  item, active, today, photoUrl, onSelect,
+  item, active, today, photoUrl, onSelect, hit, searchTerm,
 }: {
   item: any;
   active: boolean;
   today: string;
   photoUrl?: string | null;
   onSelect: (id: number) => void;
+  /** Pesan yang cocok dengan kata pencarian (menggantikan pratinjau pesan terakhir). */
+  hit?: MessageSearchMatch;
+  searchTerm?: string;
 }) {
   const last = item.messages?.[0];
   const hasUnread = (item.unreadCount ?? 0) > 0;
@@ -140,7 +144,15 @@ export const ConversationRow = memo(function ConversationRow({
                       </span>
                     )
                   )}
-                  {last?.messageType === 'imageMessage' ? (
+                  {hit ? (
+                    <span className="truncate" title={hit.count > 1 ? `${hit.count} pesan cocok` : undefined}>
+                      {hit.isFromMe && <span className="text-[#8696a0]">Anda: </span>}
+                      {splitByTerm(hit.snippet, searchTerm ?? '').map((part, index) => part.match
+                        ? <mark key={index} className="rounded-sm bg-[#fff3a3] px-px text-[#111b21]">{part.text}</mark>
+                        : <span key={index}>{part.text}</span>)}
+                      {hit.count > 1 && <span className="ml-1 text-[#8696a0]">({hit.count})</span>}
+                    </span>
+                  ) : last?.messageType === 'imageMessage' ? (
                     <span className="inline-flex items-center gap-1"><ImageIcon size={13} /> Foto</span>
                   ) : last?.messageType === 'documentMessage' ? (
                     <span className="inline-flex items-center gap-1"><FileText size={13} /> Dokumen</span>

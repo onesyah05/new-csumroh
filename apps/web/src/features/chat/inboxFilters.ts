@@ -28,6 +28,8 @@ export interface InboxConversation {
   name?: string | null;
   phone?: string | null;
   remoteJid?: string | null;
+  /** Id semua prospek yang digabung dalam satu percakapan. */
+  duplicateIds?: number[];
   isGroup?: boolean;
   isOwn?: boolean;
   userId?: number | null;
@@ -58,18 +60,39 @@ function matchesWork(item: InboxConversation, work: InboxWorkFilter, today: stri
 /** Nilai filter dari sesi lama atau sumber luar bisa tidak dikenal: diperlakukan sebagai "Semua". */
 const isKnownFilter = (id: string): id is InboxWorkFilter => inboxFilters.some((filter) => filter.id === id);
 
+/**
+ * Kata kunci yang berbentuk nomor telepon (08xx, +62 8xx-xxx, 62 8xx) → digit saja berawalan 62; selain itu null.
+ * Nomor di daftar disimpan sebagai 62xxx, jadi "0812…" harus dipetakan ke "62812…" agar ketemu.
+ */
+export function phoneSearchDigits(search: string) {
+  const trimmed = search.trim();
+  if (!/^[\d\s+\-().]+$/.test(trimmed)) return null;
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length < 3) return null;
+  return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
+}
+
+function matchesSearch(item: InboxConversation, term: string, phoneDigits: string | null, messageMatches?: ReadonlySet<number>) {
+  if (messageMatches?.size && (item.duplicateIds ?? [item.id]).some((id) => messageMatches.has(id))) return true;
+  if (`${item.name ?? ''} ${item.phone ?? ''} ${item.messages?.[0]?.messageText ?? ''}`.toLowerCase().includes(term)) return true;
+  return phoneDigits !== null && (item.phone ?? '').replace(/\D/g, '').includes(phoneDigits);
+}
+
 export function getInboxQueue<T extends InboxConversation>(items: T[], options: {
   work: InboxWorkFilter;
   owner: string;
   userId?: number;
   search: string;
   today: string;
+  /** Id prospek yang punya pesan berisi kata kunci (hasil pencarian riwayat chat di server). */
+  messageMatches?: ReadonlySet<number>;
 }) {
-  const { owner, userId, today } = options;
+  const { owner, userId, today, messageMatches } = options;
   const work: InboxWorkFilter = isKnownFilter(options.work) ? options.work : 'all';
   const search = options.search.trim().toLowerCase();
+  const phoneDigits = phoneSearchDigits(search);
   const scoped = items.filter((item) => {
-    if (search && !`${item.name ?? ''} ${item.phone ?? ''} ${item.messages?.[0]?.messageText ?? ''}`.toLowerCase().includes(search)) return false;
+    if (search && !matchesSearch(item, search, phoneDigits, messageMatches)) return false;
     if (owner === 'all') return true;
     if (!isJamaahConversation(item)) return false;
     if (owner === 'mine') return userId !== undefined && item.userId === userId;

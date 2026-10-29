@@ -18,6 +18,7 @@ import { dispatchCapiEvent, queueCapiForStatus } from '../capi/capi.service.js';
 import { attachReferralMarker, normalizeReferralMarker, storedReferral } from '../prospects/referral.service.js';
 import { createProspectWithRoundRobin } from '../prospects/round-robin.js';
 import { startNewChat } from './new-chat.js';
+import { searchConversationMessages } from './message-search.js';
 import { gatewayFailure, normalizePhoneIdentifier, prospectChatJid, resolveQuote, sendingDevicePhone, sendTextToProspect } from './outbound.js';
 import { activeDevicePhone, adoptUnassignedProspects } from './device-scope.js';
 import { adLabels, cacheAdThumbnail, withAdPreviews } from '../ads/meta-ads.js';
@@ -382,6 +383,13 @@ chatRouter.get('/conversations', asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, data });
+}));
+
+// Cari kata di seluruh riwayat chat (jamaah dan PIC); klien menggabungkan hasilnya dengan pencarian nama/nomor.
+chatRouter.get('/conversations/search', asyncHandler(async (req, res) => {
+  const brandId = scopedBrandId(req, req.query.brandId ? Number(req.query.brandId) : undefined);
+  const { q } = z.object({ q: z.string().max(100).default('') }).parse(req.query);
+  res.json({ success: true, data: await searchConversationMessages(brandId, q) });
 }));
 
 chatRouter.get('/prospects/:id/avatar', asyncHandler(async (req, res) => {

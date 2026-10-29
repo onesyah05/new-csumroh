@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { businessDateKey } from '@csumroh/shared-types';
-import { getInboxQueue, visibleInboxFilters, type InboxConversation, type InboxWorkFilter } from './inboxFilters';
+import { getInboxQueue, phoneSearchDigits, visibleInboxFilters, type InboxConversation, type InboxWorkFilter } from './inboxFilters';
 
 const incoming = { isFromMe: false, messageText: 'Tanya jadwal umroh', timestamp: 20 };
 const outgoing = { isFromMe: true, messageText: 'Rincian paket', timestamp: 30 };
@@ -102,5 +102,35 @@ describe('filter tahap prospek (satu per tahap pipeline, hanya yang ada isinya)'
     expect(shown('all')).toEqual(['all', 'needs_reply', 'followup', 'stage:contact', 'stage:qualified', 'stage:deal', 'stage:lose']);
     expect(shown('stage:offer')).toContain('stage:offer');
     expect(visibleInboxFilters({ all: 0, needs_reply: 0, followup: 0 }, 'all').map((f) => f.id)).toEqual(['all', 'needs_reply', 'followup']);
+  });
+});
+
+describe('pencarian inbox', () => {
+  const search = (list: InboxConversation[], term: string, messageMatches?: ReadonlySet<number>) =>
+    getInboxQueue(list, { ...defaults, search: term, messageMatches }).conversations.map((p) => p.id);
+
+  it('nomor dengan format apa pun cocok dengan nomor tersimpan 62xxx', () => {
+    const list = [contact(1, { phone: '6281234567890' }), contact(2, { phone: '6289999999999' })];
+    for (const term of ['081234567890', '+62 812-3456-7890', '62812345', '0812 3456', '812345']) expect(search(list, term), term).toEqual([1]);
+  });
+
+  it('kata biasa tetap mencari nama dan pesan terakhir, bukan nomor', () => {
+    const list = [contact(1, { name: 'Ahmad', phone: '6281234567890' }), contact(2, { messages: [{ ...incoming, messageText: 'Mau berangkat Desember' }] })];
+    expect(search(list, 'ahmad')).toEqual([1]);
+    expect(search(list, 'desember')).toEqual([2]);
+  });
+
+  it('percakapan yang riwayat chat-nya cocok ikut tampil, termasuk lewat id prospek gabungan', () => {
+    const list = [contact(1), contact(2, { duplicateIds: [2, 22] }), contact(3)];
+    expect(search(list, 'desember', new Set([1, 22]))).toEqual([1, 2]);
+    expect(search(list, 'desember')).toEqual([]);
+  });
+
+  it('phoneSearchDigits hanya mengenali kata kunci berbentuk nomor', () => {
+    expect(phoneSearchDigits('0812-345')).toBe('62812345');
+    expect(phoneSearchDigits('+62 812')).toBe('62812');
+    expect(phoneSearchDigits('62')).toBeNull();
+    expect(phoneSearchDigits('desember 2026')).toBeNull();
+    expect(phoneSearchDigits('')).toBeNull();
   });
 });
