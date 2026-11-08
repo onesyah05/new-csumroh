@@ -97,6 +97,7 @@ export const ConversationRow = memo(function ConversationRow({
             onKeyDown={(event) => activateWithKeyboard(event, () => onSelect(item.id))}
             aria-current={active ? 'true' : undefined}
             aria-label={`Percakapan dengan ${item.name}`}
+            data-row-id={item.id}
             className={cn(
               'chat-list-row flex min-h-[72px] items-center gap-3 px-3.5 py-2 cursor-pointer transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00a884]',
               active ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'
