@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   fetchAdSpend: vi.fn(),
   fetchAdInsights: vi.fn(),
   syncSpamAudience: vi.fn(),
+  leadHandling: vi.fn(),
 }));
 
 vi.mock('../../db/prisma.js', () => ({
@@ -39,6 +40,7 @@ vi.mock('../../middleware/auth.js', async () => ({
   scopedBrandId: (_req: any, requested?: number) => requested ?? 1,
 }));
 
+vi.mock('./lead-handling.js', () => ({ leadHandling: mocks.leadHandling }));
 vi.mock('./ad-spend.js', () => ({ fetchAdSpend: mocks.fetchAdSpend }));
 vi.mock('../ads/ad-insights.js', () => ({ fetchAdInsights: mocks.fetchAdInsights }));
 vi.mock('../ads/spam-audience.js', () => ({ syncSpamAudience: mocks.syncSpamAudience, SpamAudienceError: class extends Error {} }));
@@ -72,6 +74,7 @@ beforeEach(() => {
   mocks.prospectCount.mockResolvedValue(0);
   mocks.paymentFindMany.mockResolvedValue([]);
   mocks.brandFindMany.mockResolvedValue([]);
+  mocks.leadHandling.mockResolvedValue([]);
 });
 
 describe('Laporan penjualan', () => {
@@ -209,8 +212,30 @@ describe('Laporan kinerja CS', () => {
     mocks.prospectGroupBy.mockResolvedValueOnce([{ userId: 7, _count: 5 }]).mockResolvedValueOnce([{ userId: 7, _count: 2 }]);
     mocks.logFindMany.mockResolvedValueOnce([{ title: 'PIC diambil alih oleh Citra dari Aisyah' }]);
     mocks.queryRaw.mockResolvedValueOnce([{ prospect_id: 1, first_in: 1000, first_out: 1600 }, { prospect_id: 2, first_in: 1000, first_out: null }]);
+    mocks.leadHandling.mockResolvedValueOnce([{ key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 4, oldLeads: 9, medianReplyMinutes: 3 }]);
     const { rows } = await get('/cs');
-    expect(rows).toEqual([expect.objectContaining({ name: 'Aisyah', leads: 2, deals: 1, conversion: 50, dealValue: 40_000_000, medianReplyMinutes: 10, takenOver: 1, openNow: 5, overdueFollowups: 2 })]);
+    expect(rows).toEqual([expect.objectContaining({ name: 'Aisyah', leads: 2, handledNew: 4, handledOld: 9, deals: 1, conversion: 50, dealValue: 40_000_000, medianReplyMinutes: 10, takenOver: 1, openNow: 5, overdueFollowups: 2 })]);
+  });
+});
+
+describe('Laporan Lead Harian', () => {
+  it('CS tanpa brand dipilih memakai brand pertamanya dan melihat semua CS brand itu', async () => {
+    mocks.userFindMany.mockResolvedValueOnce([{ id: 7, name: 'Aisyah', isActive: true }]);
+    mocks.leadHandling.mockResolvedValueOnce([
+      { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 3, oldLeads: 5, medianReplyMinutes: 4 },
+      { key: 'hp', userId: null, name: 'Dari HP (tanpa nama)', isActive: true, newLeads: 1, oldLeads: 2, medianReplyMinutes: null },
+    ]);
+    const layer = (reportsRouter as any).stack.find((l: any) => l.route?.path === '/leads');
+    const data = await new Promise<any>((resolve, reject) => {
+      layer.route.stack.at(-1).handle(
+        { query: { from: '2026-09-01', to: '2026-09-01' }, user: { id: 7, role: 'cs', brandId: 3 } },
+        { setHeader: () => undefined, json: (body: any) => resolve(body.data) },
+        reject,
+      );
+    });
+    expect(data.brandId).toBe(3);
+    expect(data.totals).toEqual({ newLeads: 4, oldLeads: 7 });
+    expect(mocks.leadHandling).toHaveBeenCalledWith([3], [{ id: 7, name: 'Aisyah', isActive: true }], expect.objectContaining({ gte: new Date('2026-08-31T17:00:00.000Z') }));
   });
 });
 

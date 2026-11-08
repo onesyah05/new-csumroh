@@ -35,7 +35,7 @@ export function navGroupsFor(role?: string): NavGroup[] {
       label: 'Utama',
       items: [
         ...(is('superadmin', 'admin', 'cs') ? [{ to: '/', label: 'Ringkasan', icon: BarChart3 }] : []),
-        ...(is('superadmin', 'admin') ? [{ to: '/laporan', label: 'Laporan', icon: TrendingUp }] : []),
+        ...(is('superadmin', 'admin', 'cs') ? [{ to: '/laporan', label: 'Laporan', icon: TrendingUp }] : []),
         ...(is('superadmin', 'admin', 'cs', 'finance') ? [
           { to: '/inbox', label: 'Kotak masuk', icon: Inbox },
           { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },

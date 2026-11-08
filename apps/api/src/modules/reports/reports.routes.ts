@@ -13,6 +13,7 @@ import { normalizePhone } from '../capi/capi.payload.js';
 import { withAdsToken } from '../capi/meta-token.js';
 import { adLabels, ensureAdLabels } from '../ads/meta-ads.js';
 import { phoneSearchDigits } from '../../utils/phone-search.js';
+import { leadHandling } from './lead-handling.js';
 
 /**
  * Laporan manajemen (Superadmin & Admin): penjualan, kinerja CS, sumber lead, alasan batal, pembayaran, iklan Meta,
@@ -21,7 +22,41 @@ import { phoneSearchDigits } from '../../utils/phone-search.js';
  * `format=csv` mengunduh tabel utama laporan.
  */
 export const reportsRouter = Router();
-reportsRouter.use(authGuard, requireRole('superadmin', 'admin'));
+reportsRouter.use(authGuard);
+
+/** CS satu brand atau beberapa brand (cakupan laporan); dipakai Lead Harian dan Kinerja CS. */
+const csUsersOf = (brandFilter: number | { in: number[] } | undefined) => prisma.user.findMany({
+  where: { role: 'cs', ...(brandFilter ? { OR: [{ brandId: brandFilter }, { userBrands: { some: { brandId: brandFilter } } }] } : {}) },
+  select: { id: true, name: true, isActive: true },
+  orderBy: { name: 'asc' },
+});
+const brandIdsOf = (brandFilter: number | { in: number[] } | undefined) =>
+  brandFilter === undefined ? null : typeof brandFilter === 'number' ? [brandFilter] : brandFilter.in;
+
+// ── Lead Harian (CS juga boleh melihat) ─────────────────────────────────────────────────────────────────
+/**
+ * Lead baru dan lead lama yang ditangani tiap CS (lihat lead-handling.ts). CS selalu satu brand miliknya dan melihat
+ * semua CS di brand itu; tanpa brand dipilih, brand pertamanya yang dipakai.
+ */
+reportsRouter.get('/leads', requireRole('superadmin', 'admin', 'cs'), asyncHandler(async (req, res) => {
+  // Express 5: req.query hanya-baca, jadi brand bawaan CS disisipkan ke salinannya.
+  let query: Record<string, unknown> = { ...req.query };
+  if (req.user!.role === 'cs' && (!query.brandId || query.brandId === 'all')) {
+    const first = visibleBrandIds(req.user!)?.[0];
+    if (!first) throw new HttpError(403, 'Akun CS belum punya brand.');
+    query = { ...query, brandId: String(first) };
+  }
+  const { format, range, brandFilter, brandId } = parseRange(req, query);
+  const rows = await leadHandling(brandIdsOf(brandFilter), await csUsersOf(brandFilter), range);
+  const total = (key: 'newLeads' | 'oldLeads') => rows.reduce((sum, r) => sum + r[key], 0);
+  send(res, format, 'lead-harian', { brandId: brandId ?? null, rows, totals: { newLeads: total('newLeads'), oldLeads: total('oldLeads') } }, {
+    header: ['CS', 'Lead baru', 'Lead lama', 'Balas pertama (menit, median)'],
+    rows: rows.map((r) => [r.name, r.newLeads, r.oldLeads, r.medianReplyMinutes ?? '']),
+  });
+}));
+
+// Laporan lain: hanya Superadmin & Admin.
+reportsRouter.use(requireRole('superadmin', 'admin'));
 
 const STATUS_LABEL: Record<string, string> = {
   new: 'Baru', contact: 'Terhubung', qualified: 'Terkualifikasi', offer: 'Ditawarkan', objection: 'Keberatan',
@@ -36,8 +71,8 @@ const rangeSchema = z.object({
   format: z.enum(['json', 'csv']).default('json'),
 });
 
-function parseRange(req: Request) {
-  const input = rangeSchema.parse(req.query);
+function parseRange(req: Request, query: unknown = req.query) {
+  const input = rangeSchema.parse(query);
   const from = new Date(`${input.from}T00:00:00.000+07:00`);
   const to = new Date(`${input.to}T23:59:59.999+07:00`);
   const brandId = input.brandId === 'all' ? undefined : scopedBrandId(req, Number(input.brandId));
@@ -291,21 +326,19 @@ reportsRouter.get('/deals', asyncHandler(async (req, res) => {
 // ── 2. Kinerja CS ────────────────────────────────────────────────────────────────────────────────────────
 reportsRouter.get('/cs', asyncHandler(async (req, res) => {
   const { format, range, brandWhere, brandFilter } = parseRange(req);
-  const csUsers = await prisma.user.findMany({
-    where: { role: 'cs', ...(brandFilter ? { OR: [{ brandId: brandFilter }, { userBrands: { some: { brandId: brandFilter } } }] } : {}) },
-    select: { id: true, name: true, isActive: true },
-    orderBy: { name: 'asc' },
-  });
+  const csUsers = await csUsersOf(brandFilter);
   const ids = csUsers.map((u) => u.id);
   const today = new Date(`${businessDateKey()}T00:00:00.000Z`);
-  const [leads, payments, openNow, overdue, takeovers] = await Promise.all([
+  const [leads, payments, openNow, overdue, takeovers, handled] = await Promise.all([
     prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range, userId: { in: ids }, ...notSpam }, select: { id: true, userId: true } }),
     verifiedPaymentsInRange(brandWhere, range),
     prisma.prospect.groupBy({ by: ['userId'], where: { ...brandWhere, userId: { in: ids }, ...notSpam, status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] } }, _count: true }),
     prisma.prospect.groupBy({ by: ['userId'], where: { ...brandWhere, userId: { in: ids }, ...notSpam, status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] }, nextFollowupDate: { lt: today } }, _count: true }),
     prisma.prospectLog.findMany({ where: { actionType: 'pic_taken_over', createdAt: range, ...(brandFilter ? { prospect: { brandId: brandFilter } } : {}) }, select: { title: true } }),
+    leadHandling(brandIdsOf(brandFilter), csUsers, range),
   ]);
   const deals = await firstDeals(payments, range.gte);
+  const handledBy = new Map(handled.map((r) => [r.userId, r]));
 
   // Waktu balas pertama: pesan jamaah pertama → balasan pertama sesudahnya (lead periode ini, menit kalender).
   const leadIds = leads.map((l) => l.id);
@@ -330,6 +363,8 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
       name: user.name,
       isActive: user.isActive,
       leads: myLeads.length,
+      handledNew: handledBy.get(user.id)?.newLeads ?? 0,
+      handledOld: handledBy.get(user.id)?.oldLeads ?? 0,
       deals: myDeals.length,
       dealValue: myDeals.reduce((sum, d) => sum + num(d.prospect.dealValue), 0),
       conversion: pct(myDeals.length, myLeads.length),
@@ -338,11 +373,11 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
       openNow: openNow.find((o) => o.userId === user.id)?._count ?? 0,
       overdueFollowups: overdue.find((o) => o.userId === user.id)?._count ?? 0,
     };
-  }).filter((r) => r.isActive || r.leads || r.deals).sort((a, b) => b.dealValue - a.dealValue || b.deals - a.deals);
+  }).filter((r) => r.isActive || r.leads || r.deals || r.handledNew || r.handledOld).sort((a, b) => b.dealValue - a.dealValue || b.deals - a.deals);
 
   send(res, format, 'kinerja-cs', { rows }, {
-    header: ['CS', 'Lead baru', 'Deal', 'Nilai deal', 'Konversi (%)', 'Balas pertama (menit, median)', 'Diambil alih', 'Prospek aktif', 'Follow-up terlambat'],
-    rows: rows.map((r) => [r.name, r.leads, r.deals, r.dealValue, r.conversion, r.medianReplyMinutes ?? '', r.takenOver, r.openNow, r.overdueFollowups]),
+    header: ['CS', 'Lead baru', 'Ditangani: lead baru', 'Ditangani: lead lama', 'Deal', 'Nilai deal', 'Konversi (%)', 'Balas pertama (menit, median)', 'Diambil alih', 'Prospek aktif', 'Follow-up terlambat'],
+    rows: rows.map((r) => [r.name, r.leads, r.handledNew, r.handledOld, r.deals, r.dealValue, r.conversion, r.medianReplyMinutes ?? '', r.takenOver, r.openNow, r.overdueFollowups]),
   });
 }));
 

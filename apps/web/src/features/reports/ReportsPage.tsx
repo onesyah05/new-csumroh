@@ -15,9 +15,12 @@ import { showFeedback } from '../../app/toast';
 import { durationLabel, rupiah } from '../finance/verificationApi';
 import { CreativesView, roasText } from './CreativesView';
 import { DealsList } from './DealsList';
+import { LeadsView } from './LeadsView';
+import { useOptionalAuth } from '../../app/auth';
 
 export const REPORT_TABS = [
   { key: 'sales', label: 'Penjualan', file: 'penjualan' },
+  { key: 'leads', label: 'Lead Harian', file: 'lead-harian' },
   { key: 'cs', label: 'Kinerja CS', file: 'kinerja-cs' },
   { key: 'sources', label: 'Sumber lead', file: 'sumber-lead' },
   { key: 'ads', label: 'Iklan Meta', file: 'iklan-meta' },
@@ -27,8 +30,10 @@ export const REPORT_TABS = [
 ] as const;
 type ReportKey = (typeof REPORT_TABS)[number]['key'];
 
-type Period = 'this_month' | 'last_month' | '7d' | '30d' | 'custom';
+type Period = 'today' | 'yesterday' | 'this_month' | 'last_month' | '7d' | '30d' | 'custom';
 const PERIOD_OPTIONS = [
+  { value: 'today', label: 'Hari ini' },
+  { value: 'yesterday', label: 'Kemarin' },
   { value: 'this_month', label: 'Bulan ini' },
   { value: 'last_month', label: 'Bulan lalu' },
   { value: '7d', label: '7 hari terakhir' },
@@ -44,6 +49,8 @@ const shiftKey = (key: string, days: number) => {
 
 /** Rentang tanggal bisnis (WIB) untuk preset periode. */
 export function periodRange(period: Exclude<Period, 'custom'>, today = businessDateKey()) {
+  if (period === 'today') return { from: today, to: today };
+  if (period === 'yesterday') { const day = shiftKey(today, -1); return { from: day, to: day }; }
   const monthStart = `${today.slice(0, 8)}01`;
   if (period === 'this_month') return { from: monthStart, to: today };
   if (period === 'last_month') {
@@ -65,7 +72,7 @@ type SalesReport = {
 };
 type BudgetReport = { adSpend: number | null; adSpendNote: string | null };
 type CsReport = {
-  rows: { id: number; name: string; isActive: boolean; leads: number; deals: number; dealValue: number; conversion: number; medianReplyMinutes: number | null; takenOver: number; openNow: number; overdueFollowups: number }[];
+  rows: { id: number; name: string; isActive: boolean; leads: number; handledNew: number; handledOld: number; deals: number; dealValue: number; conversion: number; medianReplyMinutes: number | null; takenOver: number; openNow: number; overdueFollowups: number }[];
 };
 type SourcesReport = { total: number; rows: { source: string; label: string; leads: number; spam: number; deals: number; lost: number; open: number; conversion: number; dealValue: number }[] };
 type AdsRow = { brandId: number; brand: string; status: 'ok' | 'not_configured' | 'error'; message: string | null; spend: number | null; leads: number; deals: number; purchaseValue: number; cpl: number | null; cac: number | null; roas: number | null };
@@ -85,8 +92,12 @@ type PaymentsReport = {
 };
 
 export function ReportsPage() {
+  const user = useOptionalAuth()?.user;
+  // CS hanya melihat Lead Harian, selalu untuk satu brand miliknya (lihat /reports/leads).
+  const isCs = user?.role === 'cs';
+  const tabs = isCs ? REPORT_TABS.filter((t) => t.key === 'leads') : REPORT_TABS;
   const [params, setParams] = useSearchParams();
-  const tab = (REPORT_TABS.find((t) => t.key === params.get('tab'))?.key ?? 'sales') as ReportKey;
+  const tab = (tabs.find((t) => t.key === params.get('tab'))?.key ?? tabs[0]!.key) as ReportKey;
   const setTab = (key: ReportKey) => setParams((p) => { p.set('tab', key); return p; }, { replace: true });
 
   // Periode & brand bisa datang dari tautan (mis. tombol kembali dari daftar lead per iklan).
@@ -95,13 +106,16 @@ export function ReportsPage() {
   const isDateKey = (value: string | null): value is string => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
   const linkedRange = isDateKey(linkedFrom) && isDateKey(linkedTo) ? { from: linkedFrom, to: linkedTo } : null;
   const [brandScope, setBrandScope] = useState(() => params.get('brandId') ?? 'all');
-  const [period, setPeriod] = useState<Period>(linkedRange ? 'custom' : 'this_month');
+  const [period, setPeriod] = useState<Period>(linkedRange ? 'custom' : tab === 'leads' ? 'today' : 'this_month');
   const [custom, setCustom] = useState(() => linkedRange ?? periodRange('this_month'));
   const range = period === 'custom' ? custom : periodRange(period);
   const [downloading, setDownloading] = useState(false);
 
   const brands = useQuery({ queryKey: ['brands'], queryFn: () => api.get<any[]>('/catalog/brands') });
-  const query = `from=${range.from}&to=${range.to}&brandId=${brandScope}`;
+  // CS tanpa pilihan "Semua brand": bawaannya brand pertama miliknya.
+  const brandValue = isCs && brandScope === 'all' ? String(brands.data?.[0]?.id ?? 'all') : brandScope;
+  const brandOptions = [...(isCs ? [] : [{ value: 'all', label: 'Semua brand' }]), ...(brands.data ?? []).map(brandOption)];
+  const query = `from=${range.from}&to=${range.to}&brandId=${brandValue}`;
   const report = useQuery({
     queryKey: ['report', tab, query],
     queryFn: () => api.get<any>(`/reports/${tab}?${query}`),
@@ -131,39 +145,21 @@ export function ReportsPage() {
     <div className="app-page space-y-5">
       <PageHeader
         className="hidden md:flex"
-        kicker="Manajemen"
+        kicker={isCs ? 'Kinerja tim' : 'Manajemen'}
         kickerIcon={<BarChart3 size={13} />}
         title="Laporan"
         actions={
-          <Select
-            value={brandScope}
-            onValueChange={setBrandScope}
-            aria-label="Cakupan brand"
-            className="w-48"
-            options={[
-              { value: 'all', label: 'Semua brand' },
-              ...(brands.data ?? []).map(brandOption),
-            ]}
-          />
+          <Select value={brandValue} onValueChange={setBrandScope} aria-label="Cakupan brand" className="w-48" options={brandOptions} />
         }
       />
 
       <div className="grid grid-cols-2 gap-2 md:hidden">
-        <Select
-          value={brandScope}
-          onValueChange={setBrandScope}
-          aria-label="Cakupan brand"
-          className="w-full"
-          options={[
-            { value: 'all', label: 'Semua brand' },
-            ...(brands.data ?? []).map(brandOption),
-          ]}
-        />
+        <Select value={brandValue} onValueChange={setBrandScope} aria-label="Cakupan brand" className="w-full" options={brandOptions} />
         <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={PERIOD_OPTIONS} className="w-full" />
       </div>
 
-      <div role="tablist" aria-label="Jenis laporan" className="scroll-row flex gap-1 border-b border-zinc-200" onKeyDown={(e) => onRovingKey(e, REPORT_TABS.map((t) => t.key), tab, setTab)}>
-        {REPORT_TABS.map((t) => (
+      <div role="tablist" aria-label="Jenis laporan" className="scroll-row flex gap-1 border-b border-zinc-200" onKeyDown={(e) => onRovingKey(e, tabs.map((t) => t.key), tab, setTab)}>
+        {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
@@ -171,7 +167,7 @@ export function ReportsPage() {
             id={`report-tab-${t.key}`}
             aria-selected={tab === t.key}
             aria-controls="report-panel"
-            tabIndex={rovingTabIndex(t.key, tab, 'sales')}
+            tabIndex={rovingTabIndex(t.key, tab, tabs[0]!.key)}
             onClick={() => setTab(t.key)}
             className={cn('-mb-px shrink-0 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs font-medium', tab === t.key ? 'border-zinc-950 font-semibold text-zinc-950' : 'border-transparent text-zinc-500 hover:text-zinc-950')}
           >
@@ -193,9 +189,9 @@ export function ReportsPage() {
         ) : (
           <span className="text-xs tabular-nums text-zinc-500">{dateText(range.from)} – {dateText(range.to)}</span>
         )}
-        <Button variant="secondary" className="ml-auto" onClick={() => void download()} loading={downloading} disabled={!report.data} icon={<Download size={14} />}>
+        {!isCs && <Button variant="secondary" className="ml-auto" onClick={() => void download()} loading={downloading} disabled={!report.data} icon={<Download size={14} />}>
           Unduh CSV
-        </Button>
+        </Button>}
       </div>
 
       <div role="tabpanel" id="report-panel" aria-labelledby={`report-tab-${tab}`} className="space-y-5">
@@ -211,6 +207,7 @@ export function ReportsPage() {
                 <DealsList query={query} />
               </>
             )}
+            {tab === 'leads' && <LeadsView data={report.data} currentUserId={user?.id} />}
             {tab === 'cs' && <CsView data={report.data} />}
             {tab === 'sources' && <SourcesView data={report.data} />}
             {tab === 'ads' && <AdsView data={report.data} />}
@@ -347,6 +344,8 @@ function CsView({ data }: { data: CsReport }) {
       columns={[
         { label: 'CS', cell: (r) => <span className={cn('font-medium', !r.isActive && 'text-zinc-500')}>{r.name}{!r.isActive && ' (nonaktif)'}</span> },
         { label: 'Lead baru', cell: (r) => num(r.leads), align: 'right' },
+        { label: 'Ditangani baru', cell: (r) => num(r.handledNew), align: 'right' },
+        { label: 'Ditangani lama', cell: (r) => num(r.handledOld), align: 'right' },
         { label: 'Deal', cell: (r) => num(r.deals), align: 'right' },
         { label: 'Konversi', cell: (r) => percent(r.conversion), align: 'right' },
         { label: 'Nilai deal', cell: (r) => rupiah(r.dealValue), align: 'right' },

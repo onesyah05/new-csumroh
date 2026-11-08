@@ -850,6 +850,7 @@ async function sendChatMedia(req: Request) {
         prospectId: prospect.id,
         devicePhone,
         senderName: req.user!.name,
+        senderUserId: req.user!.id,
         messageText,
         messageType: mediaType,
         mediaUrl,
@@ -865,6 +866,7 @@ async function sendChatMedia(req: Request) {
         phone,
         devicePhone,
         senderName: req.user!.name,
+        senderUserId: req.user!.id,
         isFromMe: true,
         messageText,
         messageType: mediaType,
@@ -1427,7 +1429,7 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
 
   // Satu pembacaan untuk dua kebutuhan: pemilik/isi sebelumnya, dan apakah pesan ini baru (gateway bisa mengirim ulang
   // pesan yang sama; notifikasi pesan masuk hanya untuk pesan yang baru tersimpan).
-  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true, prospectId: true, status: true, messageText: true, mediaUrl: true, quotedMessageId: true } });
+  const previousOwner = await prisma.chatMessage.findUnique({ where: { brandId_messageId: { brandId, messageId } }, select: { id: true, prospectId: true, status: true, messageText: true, mediaUrl: true, quotedMessageId: true, senderUserId: true } });
   const alreadyStored = options.realtime && !isFromMe ? previousOwner : null;
   // Kutipan tidak ditimpa bila sudah tersimpan (mis. kiriman CRM yang bergema kembali dari gateway).
   const quote = previousOwner?.quotedMessageId ? {} : await resolveIncomingQuote(brandId, prospect.name, input);
@@ -1438,7 +1440,8 @@ async function ingestGatewayMessage(input: GatewayMessageInput, options: { realt
       remoteJid,
       phone: phone || (input.phone || ''),
       ...(devicePhone ? { devicePhone } : {}),
-      senderName,
+      // Gema kiriman CRM membawa nama akun WhatsApp brand; nama CS pengirimnya tetap dipertahankan.
+      ...(previousOwner?.senderUserId ? {} : { senderName }),
       isFromMe,
       // Pesan yang sudah tersimpan dikirim ulang (gema kiriman CRM, sinkron riwayat, retry outbox): isi tidak berubah
       // (edit lewat /messages/edited) dan status tidak boleh mundur, mis. 'sent' kiriman CRM menjadi 'pending'.

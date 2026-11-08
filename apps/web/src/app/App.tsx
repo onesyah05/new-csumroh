@@ -96,7 +96,8 @@ export function App() {
             <Route path="inbox" element={<InboxPage />} />
             <Route path="pipeline" element={<PipelinePage />} />
             <Route path="prospects/:id" element={<ProspectDetailPage />} />
-            <Route path="laporan" element={managerOnly(<ReportsPage />)} />
+            {/* CS hanya melihat tab Lead Harian (dibatasi di halaman dan API). */}
+            <Route path="laporan" element={isManager || user.role === 'cs' ? <ReportsPage /> : <Navigate to="/" replace />} />
             <Route path="laporan/iklan/:adId" element={managerOnly(<AdLeadsPage />)} />
             <Route path="verifikasi" element={canVerifyPayments ? <VerificationPage /> : <Navigate to="/" replace />} />
             <Route path="packages" element={<PackagesPage />} />

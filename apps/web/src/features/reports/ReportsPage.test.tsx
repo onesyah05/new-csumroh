@@ -18,6 +18,15 @@ const deals = {
 };
 const cs = { rows: [{ id: 7, name: 'Aisyah', isActive: true, leads: 10, deals: 2, dealValue: 80_000_000, conversion: 20, medianReplyMinutes: 12, takenOver: 1, openNow: 6, overdueFollowups: 2 }] };
 
+const leads = {
+  brandId: 2,
+  totals: { newLeads: 4, oldLeads: 7 },
+  rows: [
+    { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 3, oldLeads: 5, medianReplyMinutes: 4 },
+    { key: 'hp', userId: null, name: 'Dari HP (tanpa nama)', isActive: true, newLeads: 1, oldLeads: 2, medianReplyMinutes: null },
+  ],
+};
+
 const creatives = {
   brands: [{ brandId: 2, brand: 'Hana Tours', status: 'error', message: 'Token belum punya izin ads_read untuk ad account ini.' }],
   rows: [{
@@ -46,6 +55,7 @@ describe('Menu Laporan', () => {
       if (url.includes('/reports/sales')) return json(sales);
       if (url.includes('/reports/deals')) return json(url.includes('basis=lead') ? { basis: 'lead', summary: { deals: 0, dealValue: 0 }, rows: [] } : deals);
       if (url.includes('/reports/cs')) return json(cs);
+      if (url.includes('/reports/leads')) return json(leads);
       if (url.includes('/reports/creatives')) return json(creatives);
       if (url.includes('/catalog/brands')) return json([{ id: 2, name: 'Hana Tours' }]);
       return json({});
@@ -79,6 +89,23 @@ describe('Menu Laporan', () => {
     expect(await screen.findByText('Aisyah')).toBeTruthy();
     expect(screen.getByText('12 menit')).toBeTruthy();
     await waitFor(() => expect(urls.some((u) => u.includes('/reports/cs?'))).toBe(true));
+  });
+
+  it('tab Lead Harian: default hari ini, pie lead baru dan lama, baris Dari HP di tabel', async () => {
+    render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/laporan?tab=leads']}><ReportsPage /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('Lead baru ditangani · 4')).toBeTruthy();
+    expect(screen.getByText('Lead lama ditangani · 7')).toBeTruthy();
+    expect(screen.getAllByText('Dari HP (tanpa nama)').length).toBe(3);
+    expect(screen.getByText('4 menit')).toBeTruthy();
+    // Arahkan ke irisan: tooltip nama, jumlah, dan persen; label tengah ikut berganti.
+    const slice = document.querySelector('circle[stroke="#0f766e"]')!;
+    fireEvent.pointerEnter(slice, { pointerType: 'mouse', clientX: 10, clientY: 10 });
+    expect(screen.getByRole('tooltip').textContent).toBe('Aisyah3 nomor · 75%');
+    fireEvent.pointerLeave(slice, { pointerType: 'mouse' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    const today = urls.find((u) => u.includes('/reports/leads?'))!;
+    const from = /from=([\d-]+)/.exec(today)![1];
+    expect(today).toContain(`to=${from}`);
   });
 
   it('Total budget dimuat terpisah: Meta gagal tidak menahan kartu lain dan tampil sebagai gagal, bukan nol', async () => {
