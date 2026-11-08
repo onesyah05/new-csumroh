@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
@@ -28,6 +28,7 @@ import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { StatusBadge } from '../../components/ui/status-badge';
 import { PackageItem } from './PackageDetailPage';
 import { showFeedback } from '../../app/toast';
+import { rememberPackagesList } from './listLocation';
 import { ConfirmDialog } from '../../components/ui/modal';
 import { EmptyState } from '../../components/ui/page-feedback';
 
@@ -172,19 +173,43 @@ export function PackagesPage() {
   const assigned = assignedBrandIds(user);
   const brandOptions = unrestricted ? brands : brands.filter((b) => assigned.includes(b.id));
 
-  // null = semua brand yang boleh dilihat. Brand aktif dari halaman lain dipakai hanya bila termasuk pilihan.
-  const [filterBrandId, setFilterBrandId] = useState<number | null>(() =>
-    activeBrandId && (unrestricted || assigned.includes(activeBrandId)) ? activeBrandId : null
-  );
+  // Halaman dan filter tersimpan di URL: kembali dari detail/edit paket membuka halaman yang sama, bukan halaman 1.
+  const [params, setParams] = useSearchParams();
+  const brandParam = Number(params.get('brand')) || null;
+
+  // null = semua brand yang boleh dilihat. Brand dari URL, lalu brand aktif dari halaman lain, dipakai hanya bila termasuk pilihan.
+  const [filterBrandId, setFilterBrandId] = useState<number | null>(() => {
+    const preferred = params.has('brand') ? brandParam : activeBrandId;
+    return preferred && (unrestricted || assigned.includes(preferred)) ? preferred : null;
+  });
 
   // Filters state
-  const [search, setSearch] = useState('');
-  const [monthFilter, setMonthFilter] = useState('');
-  const [quotaFilter, setQuotaFilter] = useState<'' | 'available' | 'low' | 'sold_out'>('');
-  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'archived'>('');
+  const [search, setSearch] = useState(() => params.get('q') ?? '');
+  const [monthFilter, setMonthFilter] = useState(() => (/^d{4}-d{2}$/.test(params.get('month') ?? '') ? params.get('month')! : ''));
+  const [quotaFilter, setQuotaFilter] = useState<'' | 'available' | 'low' | 'sold_out'>(() => {
+    const value = params.get('quota');
+    return value === 'available' || value === 'low' || value === 'sold_out' ? value : '';
+  });
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'archived'>(() => {
+    const value = params.get('status');
+    return value === 'active' || value === 'archived' ? value : '';
+  });
 
   // Pagination state
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.max(1, Math.floor(Number(params.get('page'))) || 1));
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (search) next.set('q', search);
+    // "Semua brand" dicatat agar brand aktif dari halaman lain tidak menimpa pilihan itu saat kembali.
+    next.set('brand', filterBrandId ? String(filterBrandId) : 'all');
+    if (monthFilter) next.set('month', monthFilter);
+    if (quotaFilter) next.set('quota', quotaFilter);
+    if (statusFilter) next.set('status', statusFilter);
+    if (page > 1) next.set('page', String(page));
+    rememberPackagesList(`?${next}`);
+    if (next.toString() !== params.toString()) setParams(next, { replace: true });
+  }, [search, filterBrandId, monthFilter, quotaFilter, statusFilter, page, params, setParams]);
   const pageSize = 10;
 
   // Delete modal state
