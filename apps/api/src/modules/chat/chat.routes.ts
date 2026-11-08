@@ -8,7 +8,7 @@ import { idempotent } from '../../utils/idempotency.js';
 import { resolveGalleryFile } from '../../utils/safe-path.js';
 import { recordInboundEditLog } from './edit-log.js';
 import { z } from 'zod';
-import { EDIT_BLOCK_STATUS, EDIT_BLOCK_TEXT, EDIT_TEXT_PROBLEM_STATUS, EDIT_TEXT_PROBLEM_TEXT, EDIT_WINDOW_SECONDS, editTextProblem, isEditAuthor, messageEditBlock, messageInputSchema } from '@csumroh/shared-types';
+import { EDIT_BLOCK_STATUS, EDIT_BLOCK_TEXT, EDIT_TEXT_PROBLEM_STATUS, EDIT_TEXT_PROBLEM_TEXT, EDIT_WINDOW_SECONDS, editTextProblem, isEditAuthor, messageEditBlock, messageInputSchema, quotedPreview } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { authGuard, requireRole, scopedBrandId } from '../../middleware/auth.js';
@@ -681,7 +681,7 @@ async function sendChatMedia(req: Request) {
     mediaType: z.enum(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage']).optional().default('imageMessage'),
     caption: z.string().max(2048).optional().default(''),
     quotedMessageId: z.string().max(100).optional(),
-    quotedText: z.string().max(4000).optional(),
+    quotedText: quotedPreview.optional(),
     quotedSender: z.string().max(100).optional(),
   }).parse(req.body);
 

@@ -136,11 +136,16 @@ export const statusUpdateSchema = z.object({
   lostReason: z.string().max(500).optional().nullable(),
 });
 
+/** Teks kutipan balasan, dipotong ke 4.000 karakter (batas teks pesan). */
+export const quotedPreview = z.string().transform((value) => value.slice(0, 4000));
+
 export const messageInputSchema = z.object({
   prospectId: z.number().int().positive(),
   text: z.string().trim().min(1).max(4000),
   quotedMessageId: z.string().max(100).optional(),
-  quotedText: z.string().max(1000).optional(),
+  // Kutipan hanya pratinjau pesan yang dibalas (pesan bisa sampai 4.000 karakter, mis. ringkasan paket): dipotong, tidak
+  // pernah menolak balasan CS.
+  quotedText: quotedPreview.optional(),
   quotedSender: z.string().max(100).optional(),
 });
 
