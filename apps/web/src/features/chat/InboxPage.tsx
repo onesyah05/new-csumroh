@@ -3,6 +3,7 @@ import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import { useInboxNavigation } from './useInboxNavigation';
 import { useOnline } from '../../app/pwa';
 import { useChatAutoScroll } from './useChatAutoScroll';
+import { useKeepListPosition } from './useKeepListPosition';
 import { appendDraft, appendFlyerCaption, useConversationDraft } from './profileDraft';
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -789,6 +790,9 @@ export function InboxPage() {
     getInboxQueue(conversations.data ?? [], {
       work: chatFilter, owner: ownerFilter, userId: user?.id, search: deferredSearch, today, messageMatches: messageHitIds,
     }), [conversations.data, chatFilter, ownerFilter, user?.id, deferredSearch, today, messageHitIds]);
+  // Membalas chat lama di bawah memindahkannya ke atas; daftar tetap di posisi CS, tidak ikut naik.
+  const { nodeRef: listNodeRef } = useKeepListPosition([filtered, rowLimit]);
+  const listRef = useCallback((node: HTMLDivElement | null) => { listNodeRef.current = node; restoreList(node); }, [listNodeRef, restoreList]);
 
   const ownerOptions = useMemo(() => {
     const team = new Map<number, string>();
@@ -1559,7 +1563,7 @@ export function InboxPage() {
             </div>
           )}
           {(
-            <div ref={restoreList} onScroll={event => { if (event.currentTarget.clientHeight) { try { sessionStorage.setItem(`${listKey}.scroll`, String(event.currentTarget.scrollTop)); } catch { /* Optional scroll restore. */ } } }} className="thin-scrollbar flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
+            <div ref={listRef} onScroll={event => { if (event.currentTarget.clientHeight) { try { sessionStorage.setItem(`${listKey}.scroll`, String(event.currentTarget.scrollTop)); } catch { /* Optional scroll restore. */ } } }} className="thin-scrollbar flex-1 overflow-y-auto divide-y divide-[#f0f2f5] [overflow-anchor:none]">
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#8696a0]">
                 <p className="font-semibold text-[#54656f]">

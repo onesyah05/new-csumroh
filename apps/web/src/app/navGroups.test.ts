@@ -5,9 +5,9 @@ import { navGroupsFor } from './AppShell';
 const shape = (role: string) => navGroupsFor(role).map((g) => [g.label, g.items.map((i) => i.label)]);
 
 describe('Navigasi sidebar per role', () => {
-  it('CS: kerja harian dulu; status custom di Utama; tanpa Verifikasi & Pengelolaan', () => {
+  it('CS: kerja harian dulu; Laporan (Lead Harian) dan status custom di Utama; tanpa Verifikasi & Pengelolaan', () => {
     expect(shape('cs')).toEqual([
-      ['Utama', ['Ringkasan', 'Kotak masuk', 'Pipeline', 'Status custom', 'Paket Umroh', 'Galeri', 'Balas cepat', 'Akademi CS']],
+      ['Utama', ['Ringkasan', 'Laporan', 'Kotak masuk', 'Pipeline', 'Status custom', 'Paket Umroh', 'Galeri', 'Balas cepat', 'Akademi CS']],
     ]);
   });
 

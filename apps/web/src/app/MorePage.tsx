@@ -18,9 +18,9 @@ export function MorePage() {
     ...(canUseQuickReplies(user?.role) ? [{ to: '/balas-cepat', label: 'Balas cepat', icon: MessageSquareText }] : []),
     ...(!product && !finance && !designer ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
     ...(!finance && !designer ? [{ to: '/layanan-custom', label: product || user?.role === 'superadmin' ? 'Layanan custom' : 'Status custom', icon: SlidersHorizontal }] : []),
+    ...(manager || user?.role === 'cs' ? [{ to: '/laporan', label: 'Laporan', icon: TrendingUp }] : []),
     ...(manager ? [
       { to: '/template-itinerary', label: 'Template itinerary', icon: ImageIcon },
-      { to: '/laporan', label: 'Laporan', icon: TrendingUp },
       { to: '/verifikasi', label: 'Verifikasi pembayaran', icon: ShieldCheck },
       { to: '/staff', label: 'Staf', icon: Users2 },
       { to: '/brands', label: 'Brand Travel', icon: Building2 },

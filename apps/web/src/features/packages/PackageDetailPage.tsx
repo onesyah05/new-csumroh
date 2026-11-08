@@ -26,6 +26,7 @@ import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { StatGrid, StatCard } from '../../components/ui/stat-card';
 import { StatusBadge } from '../../components/ui/status-badge';
+import { packagesListUrl } from './listLocation';
 import { showFeedback } from '../../app/toast';
 import { ConfirmDialog } from '../../components/ui/modal';
 import { ImageLightbox } from '../../components/ui/image-lightbox';
@@ -164,7 +165,7 @@ export function PackageDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['packages'] });
       void queryClient.invalidateQueries({ queryKey: ['brands'] });
-      navigate('/packages', { replace: true });
+      navigate(packagesListUrl(), { replace: true });
     },
     onError: (err: any) => showToast(err?.message || 'Gagal menghapus paket.'),
   });
@@ -231,7 +232,7 @@ export function PackageDetailPage() {
     <div className="app-page space-y-5 pb-16">
       {/* Header */}
       <PageHeader
-        backUrl="/packages"
+        backUrl={packagesListUrl()}
         title={pkg.name}
         badges={
           <>

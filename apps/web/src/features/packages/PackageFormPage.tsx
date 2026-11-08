@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -25,6 +25,7 @@ import { Button } from '../../components/ui/button';
 import { StatusBadge } from '../../components/ui/status-badge';
 import type { PackageItem } from './PackageDetailPage';
 import { compressImageToWebp } from './compressImage';
+import { packagesListUrl } from './listLocation';
 
 /** Sama dengan ITINERARY_MAX_CHARS di API (itinerary-image.ts); API juga memeriksa muat-tidaknya di gambar. */
 const ITINERARY_MAX_CHARS = 1600;
@@ -114,6 +115,7 @@ export function PackageFormPage() {
   const { id } = useParams<{ id?: string }>();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { activeBrandId } = useUiStore();
@@ -262,12 +264,11 @@ export function PackageFormPage() {
     onSuccess: (saved) => {
       void queryClient.invalidateQueries({ queryKey: ['packages'] });
       void queryClient.invalidateQueries({ queryKey: ['brands'] });
-      if (saved?.id) {
-        void queryClient.invalidateQueries({ queryKey: ['package', String(saved.id)] });
-        navigate(`/packages/${saved.id}`, { replace: true });
-      } else {
-        navigate('/packages', { replace: true });
-      }
+      if (saved?.id) void queryClient.invalidateQueries({ queryKey: ['package', String(saved.id)] });
+      // Sunting dibuka dari dalam aplikasi (daftar atau detail): kembali ke sana, termasuk halaman daftar terakhir.
+      // Tanpa riwayat (tautan langsung) atau paket baru: buka detailnya.
+      if (isEdit && location.key !== 'default') navigate(-1);
+      else navigate(saved?.id ? `/packages/${saved.id}` : packagesListUrl(), { replace: true });
     },
     onError: (err: any) => {
       setErrorMessage(err?.message || 'Gagal menyimpan paket.');
@@ -324,7 +325,7 @@ export function PackageFormPage() {
     );
   }
 
-  const backUrl = isEdit && id ? `/packages/${id}` : '/packages';
+  const backUrl = isEdit && id ? `/packages/${id}` : packagesListUrl();
 
   return (
     <div className="app-page space-y-5 pb-16">
