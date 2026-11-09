@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ComponentType } from 'react';
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
-import { canUseGallery, canUseQuickReplies } from '@csumroh/shared-types';
+import { canSeeReports, canUseGallery, canUseQuickReplies } from '@csumroh/shared-types';
 import { useBrandScope } from '../lib/scope';
 import { useAuth } from './auth';
 import { AppShell } from './AppShell';
@@ -97,7 +97,7 @@ export function App() {
             <Route path="pipeline" element={<PipelinePage />} />
             <Route path="prospects/:id" element={<ProspectDetailPage />} />
             {/* CS hanya melihat tab Lead Harian (dibatasi di halaman dan API). */}
-            <Route path="laporan" element={isManager || user.role === 'cs' ? <ReportsPage /> : <Navigate to="/" replace />} />
+            <Route path="laporan" element={canSeeReports(user.role) ? <ReportsPage /> : <Navigate to="/" replace />} />
             <Route path="laporan/iklan/:adId" element={managerOnly(<AdLeadsPage />)} />
             <Route path="verifikasi" element={canVerifyPayments ? <VerificationPage /> : <Navigate to="/" replace />} />
             <Route path="packages" element={<PackagesPage />} />

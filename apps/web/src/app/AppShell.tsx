@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { canUseGallery, canUseQuickReplies } from '@csumroh/shared-types';
+import { canSeeReports, canUseGallery, canUseQuickReplies } from '@csumroh/shared-types';
 import { ArrowLeft, BarChart3, Bell, BookOpen, Building2, ChevronDown, Image as ImageIcon, Images, Inbox, MessageSquareText, KanbanSquare, LogOut, Menu, PackageOpen, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Users2, X } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -35,7 +35,7 @@ export function navGroupsFor(role?: string): NavGroup[] {
       label: 'Utama',
       items: [
         ...(is('superadmin', 'admin', 'cs') ? [{ to: '/', label: 'Ringkasan', icon: BarChart3 }] : []),
-        ...(is('superadmin', 'admin', 'cs') ? [{ to: '/laporan', label: 'Laporan', icon: TrendingUp }] : []),
+        ...(canSeeReports(role) ? [{ to: '/laporan', label: 'Laporan', icon: TrendingUp }] : []),
         ...(is('superadmin', 'admin', 'cs', 'finance') ? [
           { to: '/inbox', label: 'Kotak masuk', icon: Inbox },
           { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },

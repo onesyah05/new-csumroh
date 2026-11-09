@@ -10,3 +10,4 @@ export * from './gallery.js';
 export * from './quickReplies.js';
 export * from './messageEdit.js';
 export * from './newChat.js';
+export * from './reports.js';

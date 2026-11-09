@@ -1,4 +1,4 @@
-import { canUseGallery, canUseQuickReplies } from '@csumroh/shared-types';
+import { canSeeReports, canUseGallery, canUseQuickReplies } from '@csumroh/shared-types';
 import { Bell, BookOpen, Building2, ChevronRight, Image as ImageIcon, Images, LogOut, MessageSquareText, PackageOpen, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Users2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from './auth';
@@ -18,7 +18,7 @@ export function MorePage() {
     ...(canUseQuickReplies(user?.role) ? [{ to: '/balas-cepat', label: 'Balas cepat', icon: MessageSquareText }] : []),
     ...(!product && !finance && !designer ? [{ to: '/lms', label: 'Akademi CS', icon: BookOpen }] : []),
     ...(!finance && !designer ? [{ to: '/layanan-custom', label: product || user?.role === 'superadmin' ? 'Layanan custom' : 'Status custom', icon: SlidersHorizontal }] : []),
-    ...(manager || user?.role === 'cs' ? [{ to: '/laporan', label: 'Laporan', icon: TrendingUp }] : []),
+    ...(canSeeReports(user?.role) ? [{ to: '/laporan', label: 'Laporan', icon: TrendingUp }] : []),
     ...(manager ? [
       { to: '/template-itinerary', label: 'Template itinerary', icon: ImageIcon },
       { to: '/verifikasi', label: 'Verifikasi pembayaran', icon: ShieldCheck },

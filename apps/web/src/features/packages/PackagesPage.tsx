@@ -185,7 +185,7 @@ export function PackagesPage() {
 
   // Filters state
   const [search, setSearch] = useState(() => params.get('q') ?? '');
-  const [monthFilter, setMonthFilter] = useState(() => (/^d{4}-d{2}$/.test(params.get('month') ?? '') ? params.get('month')! : ''));
+  const [monthFilter, setMonthFilter] = useState(() => (/^\d{4}-\d{2}$/.test(params.get('month') ?? '') ? params.get('month')! : ''));
   const [quotaFilter, setQuotaFilter] = useState<'' | 'available' | 'low' | 'sold_out'>(() => {
     const value = params.get('quota');
     return value === 'available' || value === 'low' || value === 'sold_out' ? value : '';

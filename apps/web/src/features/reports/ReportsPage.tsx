@@ -16,7 +16,7 @@ import { durationLabel, rupiah } from '../finance/verificationApi';
 import { CreativesView, roasText } from './CreativesView';
 import { DealsList } from './DealsList';
 import { LeadsView } from './LeadsView';
-import { useOptionalAuth } from '../../app/auth';
+import { useAuth } from '../../app/auth';
 
 export const REPORT_TABS = [
   { key: 'sales', label: 'Penjualan', file: 'penjualan' },
@@ -40,6 +40,10 @@ const PERIOD_OPTIONS = [
   { value: '30d', label: '30 hari terakhir' },
   { value: 'custom', label: 'Pilih tanggal' },
 ];
+// "Hari ini" dan "Kemarin" hanya untuk Lead Harian (laporan harian CS); laporan lain dibaca per bulan.
+const DAY_PERIODS: readonly Period[] = ['today', 'yesterday'];
+const periodOptionsFor = (tab: ReportKey) => (tab === 'leads' ? PERIOD_OPTIONS : PERIOD_OPTIONS.filter((o) => !DAY_PERIODS.includes(o.value as Period)));
+const defaultPeriod = (tab: ReportKey): Period => (tab === 'leads' ? 'today' : 'this_month');
 
 const shiftKey = (key: string, days: number) => {
   const date = new Date(`${key}T00:00:00.000Z`);
@@ -92,13 +96,12 @@ type PaymentsReport = {
 };
 
 export function ReportsPage() {
-  const user = useOptionalAuth()?.user;
+  const { user } = useAuth();
   // CS hanya melihat Lead Harian, selalu untuk satu brand miliknya (lihat /reports/leads).
   const isCs = user?.role === 'cs';
   const tabs = isCs ? REPORT_TABS.filter((t) => t.key === 'leads') : REPORT_TABS;
   const [params, setParams] = useSearchParams();
   const tab = (tabs.find((t) => t.key === params.get('tab'))?.key ?? tabs[0]!.key) as ReportKey;
-  const setTab = (key: ReportKey) => setParams((p) => { p.set('tab', key); return p; }, { replace: true });
 
   // Periode & brand bisa datang dari tautan (mis. tombol kembali dari daftar lead per iklan).
   const linkedFrom = params.get('from');
@@ -106,16 +109,21 @@ export function ReportsPage() {
   const isDateKey = (value: string | null): value is string => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
   const linkedRange = isDateKey(linkedFrom) && isDateKey(linkedTo) ? { from: linkedFrom, to: linkedTo } : null;
   const [brandScope, setBrandScope] = useState(() => params.get('brandId') ?? 'all');
-  const [period, setPeriod] = useState<Period>(linkedRange ? 'custom' : tab === 'leads' ? 'today' : 'this_month');
+  const [period, setPeriod] = useState<Period>(linkedRange ? 'custom' : defaultPeriod(tab));
   const [custom, setCustom] = useState(() => linkedRange ?? periodRange('this_month'));
   const range = period === 'custom' ? custom : periodRange(period);
   const [downloading, setDownloading] = useState(false);
+  const periodOptions = periodOptionsFor(tab);
+
+  const setTab = (key: ReportKey) => {
+    setParams((p) => { p.set('tab', key); return p; }, { replace: true });
+    // Pindah ke/dari Lead Harian memakai periode bawaan tab itu; tanggal pilihan sendiri tetap dipakai.
+    if (period !== 'custom' && (key === 'leads' || tab === 'leads')) setPeriod(defaultPeriod(key));
+  };
 
   const brands = useQuery({ queryKey: ['brands'], queryFn: () => api.get<any[]>('/catalog/brands') });
-  // CS tanpa pilihan "Semua brand": bawaannya brand pertama miliknya.
-  const brandValue = isCs && brandScope === 'all' ? String(brands.data?.[0]?.id ?? 'all') : brandScope;
   const brandOptions = [...(isCs ? [] : [{ value: 'all', label: 'Semua brand' }]), ...(brands.data ?? []).map(brandOption)];
-  const query = `from=${range.from}&to=${range.to}&brandId=${brandValue}`;
+  const query = `from=${range.from}&to=${range.to}&brandId=${brandScope}`;
   const report = useQuery({
     queryKey: ['report', tab, query],
     queryFn: () => api.get<any>(`/reports/${tab}?${query}`),
@@ -123,6 +131,8 @@ export function ReportsPage() {
     placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === tab ? previous : undefined),
     enabled: range.from <= range.to,
   });
+  // CS tanpa pilihan "Semua brand": API memilih brand bawaannya dan mengembalikannya, jadi pilihan yang tampil = data yang tampil.
+  const brandValue = isCs && brandScope === 'all' ? String(report.data?.brandId ?? '') : brandScope;
 
   const download = async () => {
     setDownloading(true);
@@ -155,7 +165,7 @@ export function ReportsPage() {
 
       <div className="grid grid-cols-2 gap-2 md:hidden">
         <Select value={brandValue} onValueChange={setBrandScope} aria-label="Cakupan brand" className="w-full" options={brandOptions} />
-        <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={PERIOD_OPTIONS} className="w-full" />
+        <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={periodOptions} className="w-full" />
       </div>
 
       <div role="tablist" aria-label="Jenis laporan" className="scroll-row flex gap-1 border-b border-zinc-200" onKeyDown={(e) => onRovingKey(e, tabs.map((t) => t.key), tab, setTab)}>
@@ -178,7 +188,7 @@ export function ReportsPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="hidden md:block">
-          <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={PERIOD_OPTIONS} className="w-44" />
+          <Select aria-label="Periode" value={period} onValueChange={(v) => setPeriod(v as Period)} options={periodOptions} className="w-44" />
         </div>
         {period === 'custom' ? (
           <>
@@ -343,7 +353,7 @@ function CsView({ data }: { data: CsReport }) {
       empty=""
       columns={[
         { label: 'CS', cell: (r) => <span className={cn('font-medium', !r.isActive && 'text-zinc-500')}>{r.name}{!r.isActive && ' (nonaktif)'}</span> },
-        { label: 'Lead baru', cell: (r) => num(r.leads), align: 'right' },
+        { label: 'Lead masuk', cell: (r) => num(r.leads), align: 'right' },
         { label: 'Ditangani baru', cell: (r) => num(r.handledNew), align: 'right' },
         { label: 'Ditangani lama', cell: (r) => num(r.handledOld), align: 'right' },
         { label: 'Deal', cell: (r) => num(r.deals), align: 'right' },

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, type DependencyList } from 'react';
 
-type Snapshot = { top: number; rows: Map<string, number> };
+/** Baris yang terlihat: jarak dari atas kotak (px) dan urutannya di daftar. */
+type Snapshot = { top: number; rows: Map<string, { offset: number; index: number }> };
 
 /**
  * Menjaga posisi gulir daftar chat saat urutannya berubah (chat yang dibalas atau menerima pesan baru pindah ke atas).
@@ -8,7 +9,7 @@ type Snapshot = { top: number; rows: Map<string, number> };
  * Scroll anchoring bawaan browser bisa memilih baris yang pindah itu sebagai jangkar, lalu ikut menggulir daftar sampai
  * ke paling atas. Karena itu kontainer memakai `overflow-anchor: none` dan posisinya dijaga di sini: baris yang terlihat
  * dicatat (urut dari atas) tepat sebelum DOM berubah, lalu setelah render daftar digeser agar baris teratas yang tidak
- * pindah tetap di tempatnya. Bila sebelumnya di paling atas, daftar tetap di atas agar chat baru terlihat.
+ * naik urutan tetap di tempatnya. Bila sebelumnya di paling atas, daftar tetap di atas agar chat baru terlihat.
  *
  * Setiap baris harus punya atribut `data-row-id`.
  */
@@ -24,13 +25,14 @@ export function useKeepListPosition(deps: DependencyList) {
     const node = nodeRef.current;
     if (!node || !node.clientHeight || !snapshot || snapshot.top <= 1) return;
     const box = node.getBoundingClientRect();
-    // Jangkar = baris teratas yang tadi terlihat dan masih di sekitar tempatnya. Baris yang pindah ke atas (dibalas,
-    // pesan baru) bergeser lebih dari satu layar, jadi dilewati.
+    const rows = [...node.querySelectorAll<HTMLElement>('[data-row-id]')];
+    const indexOf = new Map(rows.map((row, index) => [row.dataset.rowId!, index]));
+    // Jangkar = baris teratas yang tadi terlihat dan tidak naik urutan. Baris yang naik (dibalas, menerima pesan baru)
+    // dilewati berapa pun jaraknya, agar daftar tidak ikut naik bersamanya.
     for (const [id, before] of snapshot.rows) {
-      const row = node.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`);
-      if (!row) continue;
-      const shift = row.getBoundingClientRect().top - box.top - before;
-      if (Math.abs(shift) > node.clientHeight) continue;
+      const index = indexOf.get(id);
+      if (index === undefined || index < before.index) continue;
+      const shift = rows[index]!.getBoundingClientRect().top - box.top - before.offset;
       if (Math.abs(shift) >= 1) node.scrollTop += shift;
       break;
     }
@@ -43,10 +45,10 @@ function measure(node: HTMLDivElement | null): Snapshot | null {
   // Tersembunyi (mis. layar HP sedang membuka chat) atau belum terpasang: tidak ada posisi yang bisa dicatat.
   if (!node || !node.clientHeight) return null;
   const box = node.getBoundingClientRect();
-  const rows = new Map<string, number>();
-  for (const row of node.querySelectorAll<HTMLElement>('[data-row-id]')) {
+  const rows: Snapshot['rows'] = new Map();
+  node.querySelectorAll<HTMLElement>('[data-row-id]').forEach((row, index) => {
     const rect = row.getBoundingClientRect();
-    if (rect.bottom > box.top && rect.top < box.bottom) rows.set(row.dataset.rowId!, rect.top - box.top);
-  }
+    if (rect.bottom > box.top && rect.top < box.bottom) rows.set(row.dataset.rowId!, { offset: rect.top - box.top, index });
+  });
   return { top: node.scrollTop, rows };
 }

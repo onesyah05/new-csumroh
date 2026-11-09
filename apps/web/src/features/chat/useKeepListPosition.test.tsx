@@ -67,6 +67,13 @@ describe('Daftar chat tetap di posisinya setelah urutan berubah', () => {
     expect(scrollTop).toBe(10 * ROW);
   });
 
+  it('dekat puncak daftar, chat teratas yang terlihat dibalas: daftar tidak ikut naik ke atas', async () => {
+    const view = mount(ids);
+    await scrollTo(2 * ROW); // terlihat Jamaah 2..6; Jamaah 2 pindah ke atas, hanya dua baris (kurang dari satu layar)
+    view.rerender(<List ids={moveToTop(2)} />);
+    expect(scrollTop).toBe(2 * ROW); // Jamaah 3 tetap di tempatnya
+  });
+
   it('chat baru masuk di atas saat menggulir ke bawah: daftar tidak bergeser', async () => {
     const view = mount(ids);
     await scrollTo(10 * ROW);
