@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ queryRaw: vi.fn(), userFindMany: vi.fn(), chatFindMany: vi.fn() }));
+const mocks = vi.hoisted(() => ({ queryRaw: vi.fn(), userFindMany: vi.fn() }));
 vi.mock('../../db/prisma.js', () => ({
-  prisma: { $queryRaw: mocks.queryRaw, user: { findMany: mocks.userFindMany }, chatMessage: { findMany: mocks.chatFindMany } },
+  prisma: { $queryRaw: mocks.queryRaw, user: { findMany: mocks.userFindMany } },
 }));
 
 import { leadHandling } from './lead-handling.js';
@@ -16,7 +16,6 @@ const users = [{ id: 7, name: 'Aisyah', isActive: true }, { id: 8, name: 'Budi',
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.userFindMany.mockResolvedValue([]);
-  mocks.chatFindMany.mockResolvedValue([]);
 });
 
 describe('Lead Harian', () => {
@@ -38,14 +37,14 @@ describe('Lead Harian', () => {
         { prospect_id: 3, first_out: sep1 - 90_000 },
         { prospect_id: 4, first_out: sep1 + 7200 },
       ])
-      // Pesan jamaah pertama untuk lead baru.
-      .mockResolvedValueOnce([{ prospect_id: 1, first_in: sep1 + 3000 }, { prospect_id: 4, first_in: sep1 + 6000 }]);
-    mocks.chatFindMany.mockResolvedValueOnce([
-      { prospectId: 1, timestamp: sep1 + 3600, senderUserId: 7, senderName: 'Aisyah' },
-      { prospectId: 4, timestamp: sep1 + 7200, senderUserId: null, senderName: 'Hana Tours Travel' },
-    ]);
+      // Balasan pertama lead baru: pesan jamaah pertama → pesan keluar pertama sesudahnya, dengan pengirimnya.
+      .mockResolvedValueOnce([
+        { prospect_id: 1, first_in: sep1 + 3000, first_out: sep1 + 3600, sender_user_id: 7, sender_name: 'Aisyah' },
+        { prospect_id: 4, first_in: sep1 + 6000, first_out: sep1 + 7200, sender_user_id: null, sender_name: 'Hana Tours Travel' },
+      ]);
 
-    const rows = await leadHandling([1], users, range);
+    const { rows, totals } = await leadHandling([1], users, range);
+    expect(totals).toEqual({ newLeads: 2, oldLeads: 2 });
     expect(rows).toEqual([
       { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 1, oldLeads: 1, medianReplyMinutes: 10 },
       { key: 'user:8', userId: 8, name: 'Budi', isActive: true, newLeads: 0, oldLeads: 1, medianReplyMinutes: null },
@@ -63,7 +62,21 @@ describe('Lead Harian', () => {
       .mockResolvedValueOnce([{ prospect_id: 5, first_out: sep1 + 100 }])
       .mockResolvedValueOnce([]);
     const twoDays = { gte: range.gte, lte: new Date((sep1 + 2 * 86_400 - 1) * 1000) };
-    const rows = await leadHandling([1], users, twoDays);
+    const { rows } = await leadHandling([1], users, twoDays);
     expect(rows.map((r) => [r.name, r.newLeads, r.oldLeads])).toEqual([['Aisyah', 1, 1], ['Budi', 0, 0]]);
+  });
+
+  it('nomor baru yang dichat dua CS pada hari yang sama: masuk di kedua CS, total menghitungnya sekali', async () => {
+    const d = day(sep1 + 100);
+    mocks.queryRaw
+      .mockResolvedValueOnce([
+        { day: d, prospect_id: 6, sender_user_id: 7, sender_name: 'Aisyah' },
+        { day: d, prospect_id: 6, sender_user_id: 8, sender_name: 'Budi' },
+      ])
+      .mockResolvedValueOnce([{ prospect_id: 6, first_out: sep1 + 100 }])
+      .mockResolvedValueOnce([]);
+    const { rows, totals } = await leadHandling([1], users, range);
+    expect(rows.map((r) => [r.name, r.newLeads])).toEqual([['Aisyah', 1], ['Budi', 1]]);
+    expect(totals).toEqual({ newLeads: 1, oldLeads: 0 });
   });
 });

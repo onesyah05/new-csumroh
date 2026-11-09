@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import { SOSMED_SOURCES, businessDateKey, canonicalStatus, isLostStatus, isWonStatus, leadSourceLabel, objectionLabel, sosmedLeadSource } from '@csumroh/shared-types';
+import { REPORT_ROLES, SOSMED_SOURCES, businessDateKey, canonicalStatus, isLostStatus, isWonStatus, leadSourceLabel, objectionLabel, sosmedLeadSource } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { authGuard, requireRole, scopedBrandId, visibleBrandIds } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
@@ -13,7 +13,7 @@ import { normalizePhone } from '../capi/capi.payload.js';
 import { withAdsToken } from '../capi/meta-token.js';
 import { adLabels, ensureAdLabels } from '../ads/meta-ads.js';
 import { phoneSearchDigits } from '../../utils/phone-search.js';
-import { leadHandling } from './lead-handling.js';
+import { firstReplies, leadHandling, median } from './lead-handling.js';
 
 /**
  * Laporan manajemen (Superadmin & Admin): penjualan, kinerja CS, sumber lead, alasan batal, pembayaran, iklan Meta,
@@ -24,21 +24,19 @@ import { leadHandling } from './lead-handling.js';
 export const reportsRouter = Router();
 reportsRouter.use(authGuard);
 
-/** CS satu brand atau beberapa brand (cakupan laporan); dipakai Lead Harian dan Kinerja CS. */
-const csUsersOf = (brandFilter: number | { in: number[] } | undefined) => prisma.user.findMany({
-  where: { role: 'cs', ...(brandFilter ? { OR: [{ brandId: brandFilter }, { userBrands: { some: { brandId: brandFilter } } }] } : {}) },
+/** CS di brand dalam cakupan laporan (null = semua brand); dipakai Lead Harian dan Kinerja CS. */
+const csUsersOf = (brandIds: number[] | null) => prisma.user.findMany({
+  where: { role: 'cs', ...(brandIds ? { OR: [{ brandId: { in: brandIds } }, { userBrands: { some: { brandId: { in: brandIds } } } }] } : {}) },
   select: { id: true, name: true, isActive: true },
   orderBy: { name: 'asc' },
 });
-const brandIdsOf = (brandFilter: number | { in: number[] } | undefined) =>
-  brandFilter === undefined ? null : typeof brandFilter === 'number' ? [brandFilter] : brandFilter.in;
 
 // ── Lead Harian (CS juga boleh melihat) ─────────────────────────────────────────────────────────────────
 /**
  * Lead baru dan lead lama yang ditangani tiap CS (lihat lead-handling.ts). CS selalu satu brand miliknya dan melihat
  * semua CS di brand itu; tanpa brand dipilih, brand pertamanya yang dipakai.
  */
-reportsRouter.get('/leads', requireRole('superadmin', 'admin', 'cs'), asyncHandler(async (req, res) => {
+reportsRouter.get('/leads', requireRole(...REPORT_ROLES), asyncHandler(async (req, res) => {
   // Express 5: req.query hanya-baca, jadi brand bawaan CS disisipkan ke salinannya.
   let query: Record<string, unknown> = { ...req.query };
   if (req.user!.role === 'cs' && (!query.brandId || query.brandId === 'all')) {
@@ -46,11 +44,10 @@ reportsRouter.get('/leads', requireRole('superadmin', 'admin', 'cs'), asyncHandl
     if (!first) throw new HttpError(403, 'Akun CS belum punya brand.');
     query = { ...query, brandId: String(first) };
   }
-  const { format, range, brandFilter, brandId } = parseRange(req, query);
-  const rows = await leadHandling(brandIdsOf(brandFilter), await csUsersOf(brandFilter), range);
-  const total = (key: 'newLeads' | 'oldLeads') => rows.reduce((sum, r) => sum + r[key], 0);
-  send(res, format, 'lead-harian', { brandId: brandId ?? null, rows, totals: { newLeads: total('newLeads'), oldLeads: total('oldLeads') } }, {
-    header: ['CS', 'Lead baru', 'Lead lama', 'Balas pertama (menit, median)'],
+  const { format, range, brandIds, brandId } = parseRange(req, query);
+  const { rows, totals } = await leadHandling(brandIds, await csUsersOf(brandIds), range);
+  send(res, format, 'lead-harian', { brandId: brandId ?? null, rows, totals }, {
+    header: ['CS', 'Lead baru', 'Lead lama', 'Balas pertama lead baru (menit, median)'],
     rows: rows.map((r) => [r.name, r.newLeads, r.oldLeads, r.medianReplyMinutes ?? '']),
   });
 }));
@@ -79,8 +76,10 @@ function parseRange(req: Request, query: unknown = req.query) {
   // "Semua brand" bagi admin yang punya brand = semua brand tugasnya saja.
   const visible = visibleBrandIds(req.user!);
   const brandFilter = brandId ?? (visible ? { in: visible } : undefined);
+  // Daftar brand dalam cakupan untuk query mentah; null = semua brand.
+  const brandIds = brandId !== undefined ? [brandId] : visible;
   return {
-    ...input, range: { gte: from, lte: to }, brandId, visible, brandFilter,
+    ...input, range: { gte: from, lte: to }, brandId, visible, brandFilter, brandIds,
     brandWhere: brandFilter ? { brandId: brandFilter } : {},
     brandListWhere: brandFilter ? { id: brandFilter } : {},
   };
@@ -102,12 +101,6 @@ const notSpam = { spamAt: null };
 
 const num = (value: unknown) => Number(value ?? 0) || 0;
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
-const median = (values: number[]) => {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
-};
 const stageKey = (status: string) => {
   const s = canonicalStatus(status);
   return isWonStatus(s) ? 'deal' : isLostStatus(s) ? 'lose' : s;
@@ -325,8 +318,8 @@ reportsRouter.get('/deals', asyncHandler(async (req, res) => {
 
 // ── 2. Kinerja CS ────────────────────────────────────────────────────────────────────────────────────────
 reportsRouter.get('/cs', asyncHandler(async (req, res) => {
-  const { format, range, brandWhere, brandFilter } = parseRange(req);
-  const csUsers = await csUsersOf(brandFilter);
+  const { format, range, brandWhere, brandFilter, brandIds } = parseRange(req);
+  const csUsers = await csUsersOf(brandIds);
   const ids = csUsers.map((u) => u.id);
   const today = new Date(`${businessDateKey()}T00:00:00.000Z`);
   const [leads, payments, openNow, overdue, takeovers, handled] = await Promise.all([
@@ -335,28 +328,18 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
     prisma.prospect.groupBy({ by: ['userId'], where: { ...brandWhere, userId: { in: ids }, ...notSpam, status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] } }, _count: true }),
     prisma.prospect.groupBy({ by: ['userId'], where: { ...brandWhere, userId: { in: ids }, ...notSpam, status: { notIn: ['deal', 'closed_won', 'lose', 'closed_lost'] }, nextFollowupDate: { lt: today } }, _count: true }),
     prisma.prospectLog.findMany({ where: { actionType: 'pic_taken_over', createdAt: range, ...(brandFilter ? { prospect: { brandId: brandFilter } } : {}) }, select: { title: true } }),
-    leadHandling(brandIdsOf(brandFilter), csUsers, range),
+    leadHandling(brandIds, csUsers, range),
   ]);
   const deals = await firstDeals(payments, range.gte);
-  const handledBy = new Map(handled.map((r) => [r.userId, r]));
+  const handledBy = new Map(handled.rows.map((r) => [r.userId, r]));
 
-  // Waktu balas pertama: pesan jamaah pertama → balasan pertama sesudahnya (lead periode ini, menit kalender).
-  const leadIds = leads.map((l) => l.id);
-  const firstReply = leadIds.length ? await prisma.$queryRaw<{ prospect_id: number; first_in: number; first_out: number | null }[]>`
-    SELECT fi.prospect_id, fi.first_in, MIN(o.timestamp) AS first_out
-    FROM (
-      SELECT prospect_id, MIN(timestamp) AS first_in FROM chat_messages
-      WHERE prospect_id IN (${Prisma.join(leadIds)}) AND is_from_me = 0 AND is_deleted = 0
-      GROUP BY prospect_id
-    ) fi
-    LEFT JOIN chat_messages o ON o.prospect_id = fi.prospect_id AND o.is_from_me = 1 AND o.timestamp >= fi.first_in
-    GROUP BY fi.prospect_id, fi.first_in` : [];
-  const replyByProspect = new Map(firstReply.filter((r) => r.first_out !== null).map((r) => [Number(r.prospect_id), (Number(r.first_out) - Number(r.first_in)) / 60]));
+  // Waktu balas pertama lead periode ini (definisi yang sama dengan Lead Harian), dihitung untuk PIC lead itu.
+  const replyByProspect = await firstReplies(leads.map((l) => l.id));
 
   const rows = csUsers.map((user) => {
     const myLeads = leads.filter((l) => l.userId === user.id);
     const myDeals = deals.filter((d) => d.prospect.userId === user.id);
-    const replies = myLeads.map((l) => replyByProspect.get(l.id)).filter((m): m is number => typeof m === 'number');
+    const replies = myLeads.map((l) => replyByProspect.get(l.id)?.minutes).filter((m): m is number => typeof m === 'number');
     const lostToTakeover = takeovers.filter((t) => t.title.endsWith(` dari ${user.name}`)).length;
     return {
       id: user.id,
@@ -368,7 +351,7 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
       deals: myDeals.length,
       dealValue: myDeals.reduce((sum, d) => sum + num(d.prospect.dealValue), 0),
       conversion: pct(myDeals.length, myLeads.length),
-      medianReplyMinutes: median(replies.map((m) => Math.round(m))),
+      medianReplyMinutes: median(replies),
       takenOver: lostToTakeover,
       openNow: openNow.find((o) => o.userId === user.id)?._count ?? 0,
       overdueFollowups: overdue.find((o) => o.userId === user.id)?._count ?? 0,
@@ -376,7 +359,7 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
   }).filter((r) => r.isActive || r.leads || r.deals || r.handledNew || r.handledOld).sort((a, b) => b.dealValue - a.dealValue || b.deals - a.deals);
 
   send(res, format, 'kinerja-cs', { rows }, {
-    header: ['CS', 'Lead baru', 'Ditangani: lead baru', 'Ditangani: lead lama', 'Deal', 'Nilai deal', 'Konversi (%)', 'Balas pertama (menit, median)', 'Diambil alih', 'Prospek aktif', 'Follow-up terlambat'],
+    header: ['CS', 'Lead masuk', 'Ditangani baru', 'Ditangani lama', 'Deal', 'Nilai deal', 'Konversi (%)', 'Balas pertama (menit, median)', 'Diambil alih', 'Prospek aktif', 'Follow-up terlambat'],
     rows: rows.map((r) => [r.name, r.leads, r.handledNew, r.handledOld, r.deals, r.dealValue, r.conversion, r.medianReplyMinutes ?? '', r.takenOver, r.openNow, r.overdueFollowups]),
   });
 }));

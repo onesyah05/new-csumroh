@@ -74,5 +74,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 /** Seperti useAuth, tetapi null di luar AuthProvider (mis. tes halaman yang dirender tanpa login). */
-export function useOptionalAuth() { return useContext(AuthContext); }
 export function useAuth() { const value = useContext(AuthContext); if (!value) throw new Error('AuthProvider missing'); return value; }

@@ -54,6 +54,13 @@ describe('Daftar paket: halaman tetap setelah kembali', () => {
     expect(packagesListUrl()).toBe('/packages?brand=all&page=2');
   });
 
+  it('filter bulan dari alamat kembali ikut dipulihkan, bukan dibuang', async () => {
+    renderAt('/packages?brand=all&month=2027-01&page=2');
+    expect((await screen.findAllByText('Paket 11')).length).toBeGreaterThan(0);
+    expect(currentUrl).toBe('/packages?brand=all&month=2027-01&page=2');
+    expect(packagesListUrl()).toBe('/packages?brand=all&month=2027-01&page=2');
+  });
+
   it('pindah halaman dicatat di URL dan di alamat kembali detail/edit paket', async () => {
     renderAt('/packages');
     expect((await screen.findAllByText('Paket 1')).length).toBeGreaterThan(0);

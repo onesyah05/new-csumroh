@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { compareLeadRows, LEAD_PHONE_KEY, type LeadHandlingReport, type LeadHandlingRow } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 
 /**
@@ -9,7 +10,8 @@ import { prisma } from '../../db/prisma.js';
  * - Rentang beberapa hari = jumlah hitungan per hari; nomor lama yang dichat tiga hari dihitung tiga kali.
  * - Pengirim = akun CRM (sender_user_id). Pesan lama sebelum kolom itu ada dicocokkan lewat nama CS. Selain itu
  *   (diketik langsung di HP WhatsApp brand) masuk baris "Dari HP".
- * - Waktu balas = median menit dari pesan jamaah pertama sampai balasan pertama, untuk lead baru, milik pengirim balasan itu.
+ * - Waktu balas = median waktu balas pertama (lihat firstReplies) untuk lead baru, milik pengirim balasan itu.
+ * - Total = nomor berbeda per hari: nomor yang dichat dua CS pada hari yang sama dihitung sekali.
  * Chat spam tidak dihitung.
  */
 
@@ -17,24 +19,13 @@ const WIB_OFFSET_SECONDS = 7 * 3600;
 const DAY_SECONDS = 86_400;
 const dayOf = (timestamp: number) => Math.floor((timestamp + WIB_OFFSET_SECONDS) / DAY_SECONDS);
 
-export const PHONE_KEY = 'hp';
-
 export type LeadHandlingUser = { id: number; name: string; isActive: boolean };
-export type LeadHandlingRow = {
-  key: string;
-  userId: number | null;
-  name: string;
-  isActive: boolean;
-  newLeads: number;
-  oldLeads: number;
-  medianReplyMinutes: number | null;
-};
 
 type OutboundRow = { day: number | bigint; prospect_id: number; sender_user_id: number | null; sender_name: string | null };
 type FirstOutRow = { prospect_id: number; first_out: number | bigint };
-type FirstInRow = { prospect_id: number; first_in: number | bigint };
+type FirstReplyRow = { prospect_id: number; first_in: number | bigint; first_out: number | bigint; sender_user_id: number | null; sender_name: string | null };
 
-const median = (values: number[]) => {
+export const median = (values: number[]) => {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -47,14 +38,52 @@ const chunks = <T,>(items: T[], size = 2000) => {
   return out;
 };
 
+export type FirstReply = { minutes: number; senderUserId: number | null; senderName: string | null };
+
+/**
+ * Waktu balas pertama, satu definisi untuk Lead Harian dan Kinerja CS: menit kalender dari pesan jamaah pertama
+ * (yang tidak dihapus) sampai pesan keluar pertama sesudahnya, beserta pengirim pesan keluar itu.
+ * Nomor tanpa pesan jamaah, atau belum dibalas, tidak punya waktu balas.
+ */
+export async function firstReplies(prospectIds: number[]): Promise<Map<number, FirstReply>> {
+  const result = new Map<number, FirstReply>();
+  for (const ids of chunks(prospectIds)) {
+    const rows = await prisma.$queryRaw<FirstReplyRow[]>`
+      SELECT fi.prospect_id, fi.first_in, o.timestamp AS first_out, o.sender_user_id, o.sender_name
+      FROM (
+        SELECT prospect_id, MIN(timestamp) AS first_in FROM chat_messages
+        WHERE prospect_id IN (${Prisma.join(ids)}) AND is_from_me = 0 AND is_deleted = 0
+        GROUP BY prospect_id
+      ) fi
+      JOIN chat_messages o ON o.id = (
+        SELECT o2.id FROM chat_messages o2
+        WHERE o2.prospect_id = fi.prospect_id AND o2.is_from_me = 1 AND o2.timestamp >= fi.first_in
+        ORDER BY o2.timestamp, o2.id LIMIT 1
+      )`;
+    for (const row of rows) {
+      result.set(Number(row.prospect_id), {
+        minutes: Math.round((Number(row.first_out) - Number(row.first_in)) / 60),
+        senderUserId: row.sender_user_id === null ? null : Number(row.sender_user_id),
+        senderName: row.sender_name,
+      });
+    }
+  }
+  return result;
+}
+
 /**
  * @param brandIds brand dalam cakupan; null = semua brand.
  * @param users CS yang selalu tampil (meski nol). Pengirim lain yang tercatat (mis. admin) ikut tampil bila punya aktivitas.
  * @param range batas waktu periode (awal hari pertama sampai akhir hari terakhir, WIB).
  */
-export async function leadHandling(brandIds: number[] | null, users: LeadHandlingUser[], range: { gte: Date; lte: Date }): Promise<LeadHandlingRow[]> {
+export async function leadHandling(
+  brandIds: number[] | null,
+  users: LeadHandlingUser[],
+  range: { gte: Date; lte: Date },
+): Promise<Omit<LeadHandlingReport, 'brandId'>> {
   const fromTs = Math.floor(range.gte.getTime() / 1000);
   const toTs = Math.floor(range.lte.getTime() / 1000);
+  // Cakupan kosong (admin tanpa brand) tidak cocok dengan brand mana pun.
   const brandSql = brandIds ? Prisma.sql`AND m.brand_id IN (${Prisma.join(brandIds.length ? brandIds : [0])})` : Prisma.empty;
 
   // Satu baris per hari × nomor × pengirim: cukup untuk menghitung per nomor tanpa memuat setiap pesan.
@@ -66,17 +95,13 @@ export async function leadHandling(brandIds: number[] | null, users: LeadHandlin
     GROUP BY day, m.prospect_id, m.sender_user_id, m.sender_name`;
 
   const prospectIds = [...new Set(outbound.map((r) => Number(r.prospect_id)))];
-  const firstOutDay = new Map<number, number>();
   const firstOutTs = new Map<number, number>();
   for (const ids of chunks(prospectIds)) {
     const rows = await prisma.$queryRaw<FirstOutRow[]>`
       SELECT prospect_id, MIN(timestamp) AS first_out FROM chat_messages
       WHERE prospect_id IN (${Prisma.join(ids)}) AND is_from_me = 1
       GROUP BY prospect_id`;
-    for (const row of rows) {
-      firstOutTs.set(Number(row.prospect_id), Number(row.first_out));
-      firstOutDay.set(Number(row.prospect_id), dayOf(Number(row.first_out)));
-    }
+    for (const row of rows) firstOutTs.set(Number(row.prospect_id), Number(row.first_out));
   }
 
   // Pengirim: akun CRM; pesan lama tanpa akun dicocokkan lewat nama CS; sisanya dari HP.
@@ -98,12 +123,14 @@ export async function leadHandling(brandIds: number[] | null, users: LeadHandlin
   };
   const senderOf = (senderUserId: number | null, senderName: string | null) => {
     const user = senderUserId !== null ? usersById.get(Number(senderUserId)) : byName.get((senderName ?? '').trim().toLowerCase());
-    return user ? { key: `user:${user.id}`, user } : { key: PHONE_KEY, user: null };
+    return user ? { key: `user:${user.id}`, user } : { key: LEAD_PHONE_KEY, user: null };
   };
   for (const user of users) rowFor(`user:${user.id}`, user);
 
   // Satu nomor dihitung sekali per hari per pengirim, walau pesannya banyak atau namanya tercatat berbeda.
   const counted = new Set<string>();
+  const totalNew = new Set<string>();
+  const totalOld = new Set<string>();
   for (const r of outbound) {
     const prospectId = Number(r.prospect_id);
     const day = Number(r.day);
@@ -112,47 +139,29 @@ export async function leadHandling(brandIds: number[] | null, users: LeadHandlin
     if (counted.has(id)) continue;
     counted.add(id);
     const row = rowFor(sender.key, sender.user);
-    if (firstOutDay.get(prospectId) === day) row.newLeads += 1;
+    const firstOut = firstOutTs.get(prospectId);
+    const isNew = firstOut !== undefined && dayOf(firstOut) === day;
+    if (isNew) row.newLeads += 1;
     else row.oldLeads += 1;
+    (isNew ? totalNew : totalOld).add(`${day}|${prospectId}`);
   }
 
-  // Waktu balas lead baru: pesan jamaah pertama → balasan pertama sesudahnya, milik pengirim balasan itu.
+  // Waktu balas lead baru (balasan pertamanya jatuh di periode ini), milik pengirim balasan itu.
   const newLeadIds = prospectIds.filter((id) => {
     const ts = firstOutTs.get(id);
     return ts !== undefined && ts >= fromTs && ts <= toTs;
   });
   const replies = new Map<string, number[]>();
-  for (const ids of chunks(newLeadIds)) {
-    const firstIn = await prisma.$queryRaw<FirstInRow[]>`
-      SELECT prospect_id, MIN(timestamp) AS first_in FROM chat_messages
-      WHERE prospect_id IN (${Prisma.join(ids)}) AND is_from_me = 0
-      GROUP BY prospect_id`;
-    const inbound = new Map(firstIn.map((row) => [Number(row.prospect_id), Number(row.first_in)]));
-    const replied = await prisma.chatMessage.findMany({
-      where: { prospectId: { in: ids }, isFromMe: true, timestamp: { gte: fromTs, lte: toTs } },
-      orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
-      select: { prospectId: true, timestamp: true, senderUserId: true, senderName: true },
-    });
-    const done = new Set<number>();
-    for (const message of replied) {
-      const prospectId = message.prospectId!;
-      const firstInTs = inbound.get(prospectId);
-      // Tanpa pesan jamaah sebelumnya (CS memulai chat) tidak ada waktu balas.
-      if (done.has(prospectId) || firstInTs === undefined || message.timestamp < firstInTs) continue;
-      done.add(prospectId);
-      const sender = senderOf(message.senderUserId, message.senderName);
-      const list = replies.get(sender.key) ?? [];
-      list.push(Math.round((message.timestamp - firstInTs) / 60));
-      replies.set(sender.key, list);
-    }
+  for (const reply of (await firstReplies(newLeadIds)).values()) {
+    const sender = senderOf(reply.senderUserId, reply.senderName);
+    replies.set(sender.key, [...(replies.get(sender.key) ?? []), reply.minutes]);
   }
   for (const [key, minutes] of replies) {
     const row = known.get(key);
     if (row) row.medianReplyMinutes = median(minutes);
   }
 
-  const rows = [...known.values()].filter((r) => r.key !== PHONE_KEY && (r.isActive || r.newLeads || r.oldLeads))
-    .sort((a, b) => b.newLeads + b.oldLeads - (a.newLeads + a.oldLeads) || a.name.localeCompare(b.name));
-  const phone = known.get(PHONE_KEY);
-  return phone ? [...rows, phone] : rows;
+  const rows = [...known.values()].filter((r) => r.key !== LEAD_PHONE_KEY && (r.isActive || r.newLeads || r.oldLeads)).sort(compareLeadRows);
+  const phone = known.get(LEAD_PHONE_KEY);
+  return { rows: phone ? [...rows, phone] : rows, totals: { newLeads: totalNew.size, oldLeads: totalOld.size } };
 }

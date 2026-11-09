@@ -4,7 +4,17 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryClient } from '../../app/query';
+
+const auth = vi.hoisted(() => ({ user: { id: 1, role: 'admin' as string, brandId: null as number | null } }));
+vi.mock('../../app/auth', () => ({ useAuth: () => auth }));
+
 import { ReportsPage, periodRange } from './ReportsPage';
+
+/** Rentang tanggal permintaan laporan terakhir untuk tab itu. */
+const lastRange = (urls: string[], tab: string) => {
+  const url = [...urls].reverse().find((u) => u.includes(`/reports/${tab}?`))!;
+  return { from: /from=([\d-]+)/.exec(url)![1]!, to: /to=([\d-]+)/.exec(url)![1]! };
+};
 
 const sales = {
   summary: { leads: 20, deals: 4, jamaah: 11, lost: 3, conversion: 20, dealValue: 160_000_000, cashIn: 40_000_000, avgDealValue: 40_000_000, avgDaysToDeal: 6.5 },
@@ -46,6 +56,7 @@ describe('Menu Laporan', () => {
   let urls: string[] = [];
   beforeEach(() => {
     queryClient.clear();
+    auth.user = { id: 1, role: 'admin', brandId: null };
     budgetResponse = () => json({ adSpend: 12_500_000, adSpendNote: null });
     urls = [];
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
@@ -106,6 +117,29 @@ describe('Menu Laporan', () => {
     const today = urls.find((u) => u.includes('/reports/leads?'))!;
     const from = /from=([\d-]+)/.exec(today)![1];
     expect(today).toContain(`to=${from}`);
+  });
+
+  it('pindah ke tab Lead Harian memakai "Hari ini"; kembali ke tab lain memakai "Bulan ini"', async () => {
+    render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/laporan']}><ReportsPage /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('Umroh Syawal')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Lead Harian' }));
+    await waitFor(() => expect(urls.some((u) => u.includes('/reports/leads?'))).toBe(true));
+    const day = lastRange(urls, 'leads');
+    expect(day.from).toBe(day.to);
+    fireEvent.click(screen.getByRole('tab', { name: 'Kinerja CS' }));
+    await waitFor(() => expect(urls.some((u) => u.includes('/reports/cs?'))).toBe(true));
+    expect(lastRange(urls, 'cs').from).toMatch(/-01$/);
+  });
+
+  it('CS: brand yang tampil di pilihan = brand yang dipilih API untuk datanya', async () => {
+    auth.user = { id: 7, role: 'cs', brandId: 2 };
+    render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/laporan']}><ReportsPage /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('Lead baru ditangani · 4')).toBeTruthy();
+    // Permintaan tanpa brand tertentu; API memakai brand bawaan CS lalu mengembalikannya (brandId 2).
+    expect(urls.find((u) => u.includes('/reports/leads?'))).toContain('brandId=all');
+    expect(screen.getAllByRole('combobox', { name: 'Cakupan brand' })[0]!.textContent).toContain('Hana Tours');
+    expect(screen.queryByRole('tab', { name: 'Kinerja CS' })).toBeNull();
+    expect(screen.queryByText('Unduh CSV')).toBeNull();
   });
 
   it('Total budget dimuat terpisah: Meta gagal tidak menahan kartu lain dan tampil sebagai gagal, bukan nol', async () => {
