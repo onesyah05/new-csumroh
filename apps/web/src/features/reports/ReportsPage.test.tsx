@@ -42,7 +42,7 @@ const creatives = {
   rows: [{
     adId: 'A1', brand: 'Hana Tours', adName: 'Video testimoni jamaah', campaignName: 'Ramadan', thumbnailUrl: '/uploads/ad-creatives/A1.jpg',
     spend: 2_000_000, impressions: 50_000, clicks: 900, ctr: 1.8, conversations: 40, leads: 30, spam: 10, spamRate: 25, qualified: 12, qualifiedRate: 40,
-    deals: 1, dealValue: 40_000_000, costPerLead: 66_667, costPerQualified: 166_667, costPerDeal: 2_000_000, roas: 20,
+    deals: 1, jamaah: 4, dealValue: 40_000_000, costPerLead: 66_667, costPerQualified: 166_667, costPerDeal: 2_000_000, roas: 20,
   }],
 };
 

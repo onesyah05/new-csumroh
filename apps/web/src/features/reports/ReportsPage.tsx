@@ -78,7 +78,7 @@ type BudgetReport = { adSpend: number | null; adSpendNote: string | null };
 type CsReport = {
   rows: { id: number; name: string; isActive: boolean; leads: number; handledNew: number; handledOld: number; deals: number; jamaah: number; dealValue: number; conversion: number; medianReplyMinutes: number | null; takenOver: number; openNow: number; overdueFollowups: number }[];
 };
-type SourcesReport = { total: number; rows: { source: string; label: string; leads: number; spam: number; deals: number; lost: number; open: number; conversion: number; dealValue: number }[] };
+type SourcesReport = { total: number; rows: { source: string; label: string; leads: number; spam: number; deals: number; jamaah: number; lost: number; open: number; conversion: number; dealValue: number }[] };
 type AdsRow = { brandId: number; brand: string; status: 'ok' | 'not_configured' | 'error'; message: string | null; spend: number | null; leads: number; deals: number; purchaseValue: number; cpl: number | null; cac: number | null; roas: number | null };
 type AdsReport = {
   summary: { spend: number; leads: number; deals: number; purchaseValue: number; cpl: number | null; cac: number | null; roas: number | null; measuredBrands: number; brands: number };
@@ -383,6 +383,7 @@ function SourcesView({ data }: { data: SourcesReport }) {
         { label: 'Sumber', cell: (r) => <span className="font-medium">{r.label}</span> },
         { label: 'Lead', cell: (r) => <span className="flex items-center justify-end gap-2"><span className="hidden w-24 sm:block"><Bar value={r.leads} max={max} /></span>{num(r.leads)}</span>, align: 'right' },
         { label: 'Deal', cell: (r) => num(r.deals), align: 'right' },
+        { label: 'Jamaah', cell: (r) => num(r.jamaah), align: 'right' },
         { label: 'Spam', cell: (r) => num(r.spam), align: 'right' },
         { label: 'Batal', cell: (r) => num(r.lost), align: 'right' },
         { label: 'Berjalan', cell: (r) => num(r.open), align: 'right' },

@@ -368,23 +368,23 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
 // ── 3. Sumber lead ───────────────────────────────────────────────────────────────────────────────────────
 reportsRouter.get('/sources', asyncHandler(async (req, res) => {
   const { format, range, brandWhere } = parseRange(req);
-  const leads = await prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range }, select: { leadSource: true, status: true, dealValue: true, spamAt: true } });
-  const map = new Map<string, { source: string; label: string; leads: number; spam: number; deals: number; lost: number; open: number; dealValue: number }>();
+  const leads = await prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range }, select: { leadSource: true, status: true, dealValue: true, spamAt: true, paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true } });
+  const map = new Map<string, { source: string; label: string; leads: number; spam: number; deals: number; jamaah: number; lost: number; open: number; dealValue: number }>();
   for (const lead of leads) {
     const source = lead.leadSource || 'whatsapp';
-    const entry = map.get(source) ?? { source, label: SOURCE_LABEL[source] ?? source, leads: 0, spam: 0, deals: 0, lost: 0, open: 0, dealValue: 0 };
+    const entry = map.get(source) ?? { source, label: SOURCE_LABEL[source] ?? source, leads: 0, spam: 0, deals: 0, jamaah: 0, lost: 0, open: 0, dealValue: 0 };
     map.set(source, entry);
     // Spam dicatat terpisah: bukan lead, tetapi porsinya menunjukkan kualitas sumber.
     if (lead.spamAt) { entry.spam += 1; continue; }
     entry.leads += 1;
-    if (isWonStatus(lead.status)) { entry.deals += 1; entry.dealValue += num(lead.dealValue); } else if (isLostStatus(lead.status)) entry.lost += 1;
+    if (isWonStatus(lead.status)) { entry.deals += 1; entry.jamaah += jamaahOf(lead); entry.dealValue += num(lead.dealValue); } else if (isLostStatus(lead.status)) entry.lost += 1;
     else entry.open += 1;
     map.set(source, entry);
   }
   const rows = [...map.values()].map((r) => ({ ...r, conversion: pct(r.deals, r.leads) })).sort((a, b) => b.leads - a.leads);
   send(res, format, 'sumber-lead', { rows, total: leads.filter((l) => !l.spamAt).length }, {
-    header: ['Sumber', 'Lead', 'Spam', 'Deal', 'Batal', 'Masih berjalan', 'Konversi (%)', 'Nilai deal'],
-    rows: rows.map((r) => [r.label, r.leads, r.spam, r.deals, r.lost, r.open, r.conversion, r.dealValue]),
+    header: ['Sumber', 'Lead', 'Spam', 'Deal', 'Jamaah', 'Batal', 'Masih berjalan', 'Konversi (%)', 'Nilai deal'],
+    rows: rows.map((r) => [r.label, r.leads, r.spam, r.deals, r.jamaah, r.lost, r.open, r.conversion, r.dealValue]),
   });
 }));
 
@@ -573,7 +573,7 @@ const QUALIFIED_STAGES = new Set(['qualified', 'offer', 'objection', 'followup',
 export type CreativeRow = {
   adId: string; brand: string; adName: string; campaignName: string; thumbnailUrl: string | null;
   spend: number | null; impressions: number; clicks: number; ctr: number | null; conversations: number;
-  leads: number; spam: number; qualified: number; deals: number; dealValue: number;
+  leads: number; spam: number; qualified: number; deals: number; jamaah: number; dealValue: number;
 };
 
 reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
@@ -589,7 +589,7 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
     prospectAdIds(brandIds, range),
     prisma.payment.findMany({
       where: { ...brandWhere, status: 'verified', createdAt: range },
-      select: { prospectId: true, brandId: true, createdAt: true, prospect: { select: { id: true, status: true, dealValue: true } } },
+      select: { prospectId: true, brandId: true, createdAt: true, prospect: { select: { id: true, status: true, dealValue: true, paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true } } },
     }),
   ]);
   const deals = await firstDeals(payments, range.gte);
@@ -601,7 +601,7 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
   const rowFor = (adId: string, brand: string) => {
     let row = rows.get(adId);
     if (!row) {
-      row = { adId, brand, adName: `Iklan ${adId}`, campaignName: '', thumbnailUrl: null, spend: null, impressions: 0, clicks: 0, ctr: null, conversations: 0, leads: 0, spam: 0, qualified: 0, deals: 0, dealValue: 0 };
+      row = { adId, brand, adName: `Iklan ${adId}`, campaignName: '', thumbnailUrl: null, spend: null, impressions: 0, clicks: 0, ctr: null, conversations: 0, leads: 0, spam: 0, qualified: 0, deals: 0, jamaah: 0, dealValue: 0 };
       rows.set(adId, row);
     }
     return row;
@@ -632,6 +632,7 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
     // Iklan tanpa biaya/lead di periode ini baru muncul lewat deal-nya: brand diambil dari pembayaran.
     const row = rowFor(adOfProspect.get(payment.prospectId) || UNKNOWN_AD, brandName.get(payment.brandId) ?? '');
     row.deals += 1;
+    row.jamaah += jamaahOf(payment.prospect);
     row.dealValue += num(payment.prospect.dealValue);
   }
   // Iklan tanpa biaya di periode ini tidak ada di Insights: pakai nama yang pernah tersimpan.
@@ -654,8 +655,8 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
   })).sort((a, b) => (b.dealValue - a.dealValue) || ((b.spend ?? 0) - (a.spend ?? 0)) || (b.leads - a.leads));
 
   send(res, format, 'kreatif-iklan', { rows: list, brands: brandStatus }, {
-    header: ['Brand', 'Kampanye', 'Iklan', 'ID iklan', 'Biaya', 'Impresi', 'CTR (%)', 'Percakapan (Meta)', 'Lead', 'Spam', 'Spam (%)', 'Terkualifikasi', '% Qualified', 'Deal', 'Nilai deal', 'Biaya per lead', 'Biaya per lead terkualifikasi', 'Biaya per deal', 'ROAS'],
-    rows: list.map((r) => [r.brand, r.campaignName, r.adName, r.adId, r.spend ?? '', r.impressions, r.ctr ?? '', r.conversations, r.leads, r.spam, r.spamRate, r.qualified, r.qualifiedRate, r.deals, r.dealValue, r.costPerLead ?? '', r.costPerQualified ?? '', r.costPerDeal ?? '', r.roas ?? '']),
+    header: ['Brand', 'Kampanye', 'Iklan', 'ID iklan', 'Biaya', 'Impresi', 'CTR (%)', 'Percakapan (Meta)', 'Lead', 'Spam', 'Spam (%)', 'Terkualifikasi', '% Qualified', 'Deal', 'Jamaah', 'Nilai deal', 'Biaya per lead', 'Biaya per lead terkualifikasi', 'Biaya per deal', 'ROAS'],
+    rows: list.map((r) => [r.brand, r.campaignName, r.adName, r.adId, r.spend ?? '', r.impressions, r.ctr ?? '', r.conversations, r.leads, r.spam, r.spamRate, r.qualified, r.qualifiedRate, r.deals, r.jamaah, r.dealValue, r.costPerLead ?? '', r.costPerQualified ?? '', r.costPerDeal ?? '', r.roas ?? '']),
   });
 }));
 
