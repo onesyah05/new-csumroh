@@ -76,7 +76,7 @@ type SalesReport = {
 };
 type BudgetReport = { adSpend: number | null; adSpendNote: string | null };
 type CsReport = {
-  rows: { id: number; name: string; isActive: boolean; leads: number; handledNew: number; handledOld: number; deals: number; dealValue: number; conversion: number; medianReplyMinutes: number | null; takenOver: number; openNow: number; overdueFollowups: number }[];
+  rows: { id: number; name: string; isActive: boolean; leads: number; handledNew: number; handledOld: number; deals: number; jamaah: number; dealValue: number; conversion: number; medianReplyMinutes: number | null; takenOver: number; openNow: number; overdueFollowups: number }[];
 };
 type SourcesReport = { total: number; rows: { source: string; label: string; leads: number; spam: number; deals: number; lost: number; open: number; conversion: number; dealValue: number }[] };
 type AdsRow = { brandId: number; brand: string; status: 'ok' | 'not_configured' | 'error'; message: string | null; spend: number | null; leads: number; deals: number; purchaseValue: number; cpl: number | null; cac: number | null; roas: number | null };
@@ -357,6 +357,7 @@ function CsView({ data }: { data: CsReport }) {
         { label: 'Ditangani baru', cell: (r) => num(r.handledNew), align: 'right' },
         { label: 'Ditangani lama', cell: (r) => num(r.handledOld), align: 'right' },
         { label: 'Deal', cell: (r) => num(r.deals), align: 'right' },
+        { label: 'Jamaah', cell: (r) => num(r.jamaah), align: 'right' },
         { label: 'Konversi', cell: (r) => percent(r.conversion), align: 'right' },
         { label: 'Nilai deal', cell: (r) => rupiah(r.dealValue), align: 'right' },
         { label: 'Balas pertama', cell: (r) => (r.medianReplyMinutes === null ? '—' : r.medianReplyMinutes < 1 ? '< 1 menit' : durationLabel(r.medianReplyMinutes)), align: 'right' },

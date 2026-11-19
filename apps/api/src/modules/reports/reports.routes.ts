@@ -349,6 +349,7 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
       handledNew: handledBy.get(user.id)?.newLeads ?? 0,
       handledOld: handledBy.get(user.id)?.oldLeads ?? 0,
       deals: myDeals.length,
+      jamaah: myDeals.reduce((sum, d) => sum + jamaahOf(d.prospect), 0),
       dealValue: myDeals.reduce((sum, d) => sum + num(d.prospect.dealValue), 0),
       conversion: pct(myDeals.length, myLeads.length),
       medianReplyMinutes: median(replies),
@@ -359,8 +360,8 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
   }).filter((r) => r.isActive || r.leads || r.deals || r.handledNew || r.handledOld).sort((a, b) => b.dealValue - a.dealValue || b.deals - a.deals);
 
   send(res, format, 'kinerja-cs', { rows }, {
-    header: ['CS', 'Lead masuk', 'Ditangani baru', 'Ditangani lama', 'Deal', 'Nilai deal', 'Konversi (%)', 'Balas pertama (menit, median)', 'Diambil alih', 'Prospek aktif', 'Follow-up terlambat'],
-    rows: rows.map((r) => [r.name, r.leads, r.handledNew, r.handledOld, r.deals, r.dealValue, r.conversion, r.medianReplyMinutes ?? '', r.takenOver, r.openNow, r.overdueFollowups]),
+    header: ['CS', 'Lead masuk', 'Ditangani baru', 'Ditangani lama', 'Deal', 'Jamaah', 'Nilai deal', 'Konversi (%)', 'Balas pertama (menit, median)', 'Diambil alih', 'Prospek aktif', 'Follow-up terlambat'],
+    rows: rows.map((r) => [r.name, r.leads, r.handledNew, r.handledOld, r.deals, r.jamaah, r.dealValue, r.conversion, r.medianReplyMinutes ?? '', r.takenOver, r.openNow, r.overdueFollowups]),
   });
 }));
 

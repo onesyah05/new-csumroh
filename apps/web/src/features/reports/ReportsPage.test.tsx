@@ -26,7 +26,7 @@ const deals = {
   basis: 'verified', summary: { deals: 1, dealValue: 33_999_000, daysToDeal: { avg: 8, median: 8, min: 8, max: 8 } },
   rows: [{ id: 9, brandId: 2, brand: 'Hana Tours', name: 'HaikalShahab', phone: '62812', packageName: 'Umroh Reguler', dealValue: 33_999_000, source: 'Meta Ads', adName: 'H078', pic: 'Nadiya', lastCs: { name: 'Dara', at: '2026-10-06T05:00:00.000Z' }, leadAt: '2026-09-28T05:00:00.000Z', verifiedAt: '2026-10-06T04:00:00.000Z', daysToDeal: 8 }],
 };
-const cs = { rows: [{ id: 7, name: 'Aisyah', isActive: true, leads: 10, deals: 2, dealValue: 80_000_000, conversion: 20, medianReplyMinutes: 12, takenOver: 1, openNow: 6, overdueFollowups: 2 }] };
+const cs = { rows: [{ id: 7, name: 'Aisyah', isActive: true, leads: 10, deals: 2, jamaah: 5, dealValue: 80_000_000, conversion: 20, medianReplyMinutes: 12, takenOver: 1, openNow: 6, overdueFollowups: 2 }] };
 
 const leads = {
   brandId: 2,
