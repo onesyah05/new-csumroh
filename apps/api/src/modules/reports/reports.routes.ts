@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import { REPORT_ROLES, SOSMED_SOURCES, businessDateKey, canonicalStatus, isLostStatus, isWonStatus, leadSourceLabel, objectionLabel, sosmedLeadSource } from '@csumroh/shared-types';
+import { REPORT_ROLES, SOSMED_SOURCES, businessDateKey, canonicalStatus, isLostStatus, isWonStatus, leadSourceLabel, objectionLabel, qualifiedPct, sosmedLeadSource } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { authGuard, requireRole, scopedBrandId, visibleBrandIds } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
@@ -47,8 +47,8 @@ reportsRouter.get('/leads', requireRole(...REPORT_ROLES), asyncHandler(async (re
   const { format, range, brandIds, brandId } = parseRange(req, query);
   const { rows, totals } = await leadHandling(brandIds, await csUsersOf(brandIds), range);
   send(res, format, 'lead-harian', { brandId: brandId ?? null, rows, totals }, {
-    header: ['CS', 'Lead baru', 'Lead lama', 'Balas pertama lead baru (menit, median)'],
-    rows: rows.map((r) => [r.name, r.newLeads, r.oldLeads, r.medianReplyMinutes ?? '']),
+    header: ['CS', 'Lead baru', 'Lead lama', 'Lead baru terkualifikasi', '% Qualified', 'Balas pertama lead baru (menit, median)'],
+    rows: rows.map((r) => [r.name, r.newLeads, r.oldLeads, r.qualifiedNewLeads, qualifiedPct(r.qualifiedNewLeads, r.newLeads), r.medianReplyMinutes ?? '']),
   });
 }));
 
@@ -645,6 +645,7 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
   const list = [...rows.values()].map((r) => ({
     ...r,
     spamRate: pct(r.spam, r.leads + r.spam),
+    qualifiedRate: pct(r.qualified, r.leads),
     costPerLead: per(r.spend, r.leads),
     costPerQualified: per(r.spend, r.qualified),
     costPerDeal: per(r.spend, r.deals),
@@ -652,8 +653,8 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
   })).sort((a, b) => (b.dealValue - a.dealValue) || ((b.spend ?? 0) - (a.spend ?? 0)) || (b.leads - a.leads));
 
   send(res, format, 'kreatif-iklan', { rows: list, brands: brandStatus }, {
-    header: ['Brand', 'Kampanye', 'Iklan', 'ID iklan', 'Biaya', 'Impresi', 'CTR (%)', 'Percakapan (Meta)', 'Lead', 'Spam', 'Spam (%)', 'Terkualifikasi', 'Deal', 'Nilai deal', 'Biaya per lead', 'Biaya per lead terkualifikasi', 'Biaya per deal', 'ROAS'],
-    rows: list.map((r) => [r.brand, r.campaignName, r.adName, r.adId, r.spend ?? '', r.impressions, r.ctr ?? '', r.conversations, r.leads, r.spam, r.spamRate, r.qualified, r.deals, r.dealValue, r.costPerLead ?? '', r.costPerQualified ?? '', r.costPerDeal ?? '', r.roas ?? '']),
+    header: ['Brand', 'Kampanye', 'Iklan', 'ID iklan', 'Biaya', 'Impresi', 'CTR (%)', 'Percakapan (Meta)', 'Lead', 'Spam', 'Spam (%)', 'Terkualifikasi', '% Qualified', 'Deal', 'Nilai deal', 'Biaya per lead', 'Biaya per lead terkualifikasi', 'Biaya per deal', 'ROAS'],
+    rows: list.map((r) => [r.brand, r.campaignName, r.adName, r.adId, r.spend ?? '', r.impressions, r.ctr ?? '', r.conversations, r.leads, r.spam, r.spamRate, r.qualified, r.qualifiedRate, r.deals, r.dealValue, r.costPerLead ?? '', r.costPerQualified ?? '', r.costPerDeal ?? '', r.roas ?? '']),
   });
 }));
 

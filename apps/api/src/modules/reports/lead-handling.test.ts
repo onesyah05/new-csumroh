@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ queryRaw: vi.fn(), userFindMany: vi.fn() }));
+const mocks = vi.hoisted(() => ({ queryRaw: vi.fn(), userFindMany: vi.fn(), prospectFindMany: vi.fn() }));
 vi.mock('../../db/prisma.js', () => ({
-  prisma: { $queryRaw: mocks.queryRaw, user: { findMany: mocks.userFindMany } },
+  prisma: { $queryRaw: mocks.queryRaw, user: { findMany: mocks.userFindMany }, prospect: { findMany: mocks.prospectFindMany } },
 }));
 
 import { leadHandling } from './lead-handling.js';
@@ -16,6 +16,7 @@ const users = [{ id: 7, name: 'Aisyah', isActive: true }, { id: 8, name: 'Budi',
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.userFindMany.mockResolvedValue([]);
+  mocks.prospectFindMany.mockResolvedValue([]);
 });
 
 describe('Lead Harian', () => {
@@ -43,12 +44,13 @@ describe('Lead Harian', () => {
         { prospect_id: 4, first_in: sep1 + 6000, first_out: sep1 + 7200, sender_user_id: null, sender_name: 'Hana Tours Travel' },
       ]);
 
+    mocks.prospectFindMany.mockResolvedValueOnce([{ id: 1, status: 'offer' }, { id: 2, status: 'qualified' }, { id: 3, status: 'new' }, { id: 4, status: 'new' }]);
     const { rows, totals } = await leadHandling([1], users, range);
-    expect(totals).toEqual({ newLeads: 2, oldLeads: 2 });
+    expect(totals).toEqual({ newLeads: 2, oldLeads: 2, qualifiedNewLeads: 1 });
     expect(rows).toEqual([
-      { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 1, oldLeads: 1, medianReplyMinutes: 10 },
-      { key: 'user:8', userId: 8, name: 'Budi', isActive: true, newLeads: 0, oldLeads: 1, medianReplyMinutes: null },
-      { key: 'hp', userId: null, name: 'Dari HP (tanpa nama)', isActive: true, newLeads: 1, oldLeads: 0, medianReplyMinutes: 20 },
+      { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 1, oldLeads: 1, qualifiedNewLeads: 1, medianReplyMinutes: 10 },
+      { key: 'user:8', userId: 8, name: 'Budi', isActive: true, newLeads: 0, oldLeads: 1, qualifiedNewLeads: 0, medianReplyMinutes: null },
+      { key: 'hp', userId: null, name: 'Dari HP (tanpa nama)', isActive: true, newLeads: 1, oldLeads: 0, qualifiedNewLeads: 0, medianReplyMinutes: 20 },
     ]);
   });
 
@@ -77,6 +79,6 @@ describe('Lead Harian', () => {
       .mockResolvedValueOnce([]);
     const { rows, totals } = await leadHandling([1], users, range);
     expect(rows.map((r) => [r.name, r.newLeads])).toEqual([['Aisyah', 1], ['Budi', 1]]);
-    expect(totals).toEqual({ newLeads: 1, oldLeads: 0 });
+    expect(totals).toEqual({ newLeads: 1, oldLeads: 0, qualifiedNewLeads: 0 });
   });
 });

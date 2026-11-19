@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { compareLeadRows, LEAD_PHONE_KEY, type LeadHandlingReport, type LeadHandlingRow } from '@csumroh/shared-types';
+import { compareLeadRows, isQualifiedStage, LEAD_PHONE_KEY, type LeadHandlingReport, type LeadHandlingRow } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 
 /**
@@ -116,7 +116,7 @@ export async function leadHandling(
   const rowFor = (key: string, user: LeadHandlingUser | null) => {
     let row = known.get(key);
     if (!row) {
-      row = { key, userId: user?.id ?? null, name: user?.name ?? 'Dari HP (tanpa nama)', isActive: user?.isActive ?? true, newLeads: 0, oldLeads: 0, medianReplyMinutes: null };
+      row = { key, userId: user?.id ?? null, name: user?.name ?? 'Dari HP (tanpa nama)', isActive: user?.isActive ?? true, newLeads: 0, oldLeads: 0, qualifiedNewLeads: 0, medianReplyMinutes: null };
       known.set(key, row);
     }
     return row;
@@ -127,10 +127,18 @@ export async function leadHandling(
   };
   for (const user of users) rowFor(`user:${user.id}`, user);
 
+  // Posisi terkini tiap nomor: lead baru yang sudah Terkualifikasi (atau lebih jauh) dihitung berkualitas.
+  const qualifiedIds = new Set<number>();
+  for (const ids of chunks(prospectIds)) {
+    const found = await prisma.prospect.findMany({ where: { id: { in: ids } }, select: { id: true, status: true } });
+    for (const p of found) if (isQualifiedStage(p.status)) qualifiedIds.add(p.id);
+  }
+
   // Satu nomor dihitung sekali per hari per pengirim, walau pesannya banyak atau namanya tercatat berbeda.
   const counted = new Set<string>();
   const totalNew = new Set<string>();
   const totalOld = new Set<string>();
+  const totalQualified = new Set<string>();
   for (const r of outbound) {
     const prospectId = Number(r.prospect_id);
     const day = Number(r.day);
@@ -141,8 +149,10 @@ export async function leadHandling(
     const row = rowFor(sender.key, sender.user);
     const firstOut = firstOutTs.get(prospectId);
     const isNew = firstOut !== undefined && dayOf(firstOut) === day;
-    if (isNew) row.newLeads += 1;
-    else row.oldLeads += 1;
+    if (isNew) {
+      row.newLeads += 1;
+      if (qualifiedIds.has(prospectId)) { row.qualifiedNewLeads += 1; totalQualified.add(`${day}|${prospectId}`); }
+    } else row.oldLeads += 1;
     (isNew ? totalNew : totalOld).add(`${day}|${prospectId}`);
   }
 
@@ -163,5 +173,5 @@ export async function leadHandling(
 
   const rows = [...known.values()].filter((r) => r.key !== LEAD_PHONE_KEY && (r.isActive || r.newLeads || r.oldLeads)).sort(compareLeadRows);
   const phone = known.get(LEAD_PHONE_KEY);
-  return { rows: phone ? [...rows, phone] : rows, totals: { newLeads: totalNew.size, oldLeads: totalOld.size } };
+  return { rows: phone ? [...rows, phone] : rows, totals: { newLeads: totalNew.size, oldLeads: totalOld.size, qualifiedNewLeads: totalQualified.size } };
 }

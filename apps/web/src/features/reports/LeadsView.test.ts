@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LeadHandlingRow } from '@csumroh/shared-types';
 import { leadSlices } from './LeadsView';
 
-const row = (key: string, name: string, newLeads: number, oldLeads: number): LeadHandlingRow => ({ key, userId: key === 'hp' ? null : Number(key.slice(5)), name, isActive: true, newLeads, oldLeads, medianReplyMinutes: null });
+const row = (key: string, name: string, newLeads: number, oldLeads: number): LeadHandlingRow => ({ key, userId: key === 'hp' ? null : Number(key.slice(5)), name, isActive: true, newLeads, oldLeads, qualifiedNewLeads: 0, medianReplyMinutes: null });
 
 describe('Irisan pie Lead Harian', () => {
   it('5 CS teratas berwarna sendiri, sisanya "Lainnya", "Dari HP" terakhir, irisan nol dibuang', () => {

@@ -30,10 +30,10 @@ const cs = { rows: [{ id: 7, name: 'Aisyah', isActive: true, leads: 10, deals: 2
 
 const leads = {
   brandId: 2,
-  totals: { newLeads: 4, oldLeads: 7 },
+  totals: { newLeads: 4, oldLeads: 7, qualifiedNewLeads: 1 },
   rows: [
-    { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 3, oldLeads: 5, medianReplyMinutes: 4 },
-    { key: 'hp', userId: null, name: 'Dari HP (tanpa nama)', isActive: true, newLeads: 1, oldLeads: 2, medianReplyMinutes: null },
+    { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 3, oldLeads: 5, qualifiedNewLeads: 1, medianReplyMinutes: 4 },
+    { key: 'hp', userId: null, name: 'Dari HP (tanpa nama)', isActive: true, newLeads: 1, oldLeads: 2, qualifiedNewLeads: 0, medianReplyMinutes: null },
   ],
 };
 
@@ -41,7 +41,7 @@ const creatives = {
   brands: [{ brandId: 2, brand: 'Hana Tours', status: 'error', message: 'Token belum punya izin ads_read untuk ad account ini.' }],
   rows: [{
     adId: 'A1', brand: 'Hana Tours', adName: 'Video testimoni jamaah', campaignName: 'Ramadan', thumbnailUrl: '/uploads/ad-creatives/A1.jpg',
-    spend: 2_000_000, impressions: 50_000, clicks: 900, ctr: 1.8, conversations: 40, leads: 30, spam: 10, spamRate: 25, qualified: 12,
+    spend: 2_000_000, impressions: 50_000, clicks: 900, ctr: 1.8, conversations: 40, leads: 30, spam: 10, spamRate: 25, qualified: 12, qualifiedRate: 40,
     deals: 1, dealValue: 40_000_000, costPerLead: 66_667, costPerQualified: 166_667, costPerDeal: 2_000_000, roas: 20,
   }],
 };

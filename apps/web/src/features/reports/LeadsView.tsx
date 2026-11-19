@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { compareLeadRows, LEAD_PHONE_KEY, type LeadHandlingReport, type LeadHandlingRow } from '@csumroh/shared-types';
+import { compareLeadRows, LEAD_PHONE_KEY, qualifiedPct, type LeadHandlingReport, type LeadHandlingRow } from '@csumroh/shared-types';
 import { cn } from '../../lib/cn';
 import { durationLabel } from '../finance/verificationApi';
 
@@ -178,6 +178,7 @@ export function LeadsView({ data, currentUserId }: { data: LeadHandlingReport; c
                   {/* Layar HP: judul kolom pendek agar keempat kolom muat tanpa geser. */}
                   <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium sm:px-4 max-sm:px-2"><span className="sm:hidden">Baru</span><span className="hidden sm:inline">Lead baru</span></th>
                   <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium sm:px-4 max-sm:px-2"><span className="sm:hidden">Lama</span><span className="hidden sm:inline">Lead lama</span></th>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium sm:px-4 max-sm:px-2"><span className="sm:hidden">% Qual</span><span className="hidden sm:inline">% Qualified</span></th>
                   <th scope="col" className="whitespace-nowrap px-3 py-2 text-right font-medium sm:px-4 max-sm:px-2"><span className="sm:hidden">Balas</span><span className="hidden sm:inline">Balas pertama</span></th>
                 </tr>
               </thead>
@@ -189,6 +190,7 @@ export function LeadsView({ data, currentUserId }: { data: LeadHandlingReport; c
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-zinc-800 sm:px-4">{num(r.newLeads)}</td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-zinc-800 sm:px-4">{num(r.oldLeads)}</td>
+                    <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-zinc-800 sm:px-4" title={`${num(r.qualifiedNewLeads)} dari ${num(r.newLeads)} lead baru`}>{r.newLeads > 0 ? `${qualifiedPct(r.qualifiedNewLeads, r.newLeads).toLocaleString('id-ID')}%` : '—'}</td>
                     <td className="whitespace-nowrap py-2.5 pl-2 pr-3 text-right tabular-nums text-zinc-800 sm:px-4">{replyText(r.medianReplyMinutes)}</td>
                   </tr>
                 ))}
@@ -199,7 +201,7 @@ export function LeadsView({ data, currentUserId }: { data: LeadHandlingReport; c
       </section>
       <p className="text-xs text-zinc-500">
         Dihitung per nomor per hari. Lead baru = nomor yang belum pernah dibalas sebelum hari itu; lead lama = sudah pernah dibalas.
-        Chat yang diketik langsung di HP tidak tercatat atas nama CS dan masuk baris “Dari HP”. Balas pertama = median waktu balas ke lead baru.
+        Chat yang diketik langsung di HP tidak tercatat atas nama CS dan masuk baris “Dari HP”. % Qualified = bagian lead baru yang posisinya kini sudah Terkualifikasi atau sesudahnya. Balas pertama = median waktu balas ke lead baru.
         Nomor yang dichat dua CS pada hari yang sama masuk di baris kedua CS, tetapi total menghitungnya sekali.
       </p>
     </>
