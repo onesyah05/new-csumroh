@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { compareLeadRows, LEAD_PHONE_KEY, qualifiedPct, type LeadHandlingReport, type LeadHandlingRow } from '@csumroh/shared-types';
+import { compareLeadRows, LEAD_PHONE_KEY, percentOf, type LeadHandlingReport, type LeadHandlingRow } from '@csumroh/shared-types';
 import { cn } from '../../lib/cn';
 import { durationLabel } from '../finance/verificationApi';
 
@@ -190,7 +190,7 @@ export function LeadsView({ data, currentUserId }: { data: LeadHandlingReport; c
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-zinc-800 sm:px-4">{num(r.newLeads)}</td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-zinc-800 sm:px-4">{num(r.oldLeads)}</td>
-                    <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-zinc-800 sm:px-4" title={`${num(r.qualifiedNewLeads)} dari ${num(r.newLeads)} lead baru`}>{r.newLeads > 0 ? `${qualifiedPct(r.qualifiedNewLeads, r.newLeads).toLocaleString('id-ID')}%` : '—'}</td>
+                    <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-zinc-800 sm:px-4" title={`${num(r.qualifiedNewLeads)} dari ${num(r.newLeads)} lead baru`}>{r.newLeads > 0 ? `${percentOf(r.qualifiedNewLeads, r.newLeads).toLocaleString('id-ID')}%` : '—'}</td>
                     <td className="whitespace-nowrap py-2.5 pl-2 pr-3 text-right tabular-nums text-zinc-800 sm:px-4">{replyText(r.medianReplyMinutes)}</td>
                   </tr>
                 ))}

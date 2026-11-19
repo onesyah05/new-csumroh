@@ -1,11 +1,12 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import { REPORT_ROLES, SOSMED_SOURCES, businessDateKey, canonicalStatus, isLostStatus, isWonStatus, leadSourceLabel, objectionLabel, qualifiedPct, sosmedLeadSource } from '@csumroh/shared-types';
+import { REPORT_ROLES, SOSMED_SOURCES, businessDateKey, canonicalStatus, isLostStatus, isWonStatus, leadSourceLabel, isQualifiedStage, objectionLabel, percentOf, sosmedLeadSource } from '@csumroh/shared-types';
 import { prisma } from '../../db/prisma.js';
 import { authGuard, requireRole, scopedBrandId, visibleBrandIds } from '../../middleware/auth.js';
 import { asyncHandler, HttpError } from '../../utils/http.js';
 import { toCsv } from '../../utils/csv.js';
+import { jamaahOf } from '../dashboard/summary.service.js';
 import { fetchAdSpend } from './ad-spend.js';
 import { fetchAdInsights } from '../ads/ad-insights.js';
 import { SpamAudienceError, syncSpamAudience } from '../ads/spam-audience.js';
@@ -48,7 +49,7 @@ reportsRouter.get('/leads', requireRole(...REPORT_ROLES), asyncHandler(async (re
   const { rows, totals } = await leadHandling(brandIds, await csUsersOf(brandIds), range);
   send(res, format, 'lead-harian', { brandId: brandId ?? null, rows, totals }, {
     header: ['CS', 'Lead baru', 'Lead lama', 'Lead baru terkualifikasi', '% Qualified', 'Balas pertama lead baru (menit, median)'],
-    rows: rows.map((r) => [r.name, r.newLeads, r.oldLeads, r.qualifiedNewLeads, qualifiedPct(r.qualifiedNewLeads, r.newLeads), r.medianReplyMinutes ?? '']),
+    rows: rows.map((r) => [r.name, r.newLeads, r.oldLeads, r.qualifiedNewLeads, percentOf(r.qualifiedNewLeads, r.newLeads), r.medianReplyMinutes ?? '']),
   });
 }));
 
@@ -100,7 +101,7 @@ function send(res: Response, format: 'json' | 'csv', name: string, data: Record<
 const notSpam = { spamAt: null };
 
 const num = (value: unknown) => Number(value ?? 0) || 0;
-const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
+const pct = percentOf;
 const stageKey = (status: string) => {
   const s = canonicalStatus(status);
   return isWonStatus(s) ? 'deal' : isLostStatus(s) ? 'lose' : s;
@@ -115,7 +116,7 @@ async function verifiedPaymentsInRange(brandWhere: object, range: object) {
       prospect: {
         select: {
           id: true, status: true, createdAt: true, dealValue: true, paymentStatus: true, userId: true, leadSource: true,
-          paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true,
+          ...PAX_SELECT,
           brand: { select: { name: true } }, package: { select: { name: true } }, user: { select: { name: true } },
         },
       },
@@ -147,9 +148,8 @@ async function firstDeals<T extends { createdAt: Date; prospect: { id: number; s
 }
 
 // ── 1. Penjualan & funnel ────────────────────────────────────────────────────────────────────────────────
-/** Jamaah satu deal = seluruh peserta di tipe kamar (quad, triple, double) ditambah bayi. */
-const jamaahOf = (p: { paxQuad: number; paxTriple: number; paxDouble: number; paxInfant: number }) =>
-  num(p.paxQuad) + num(p.paxTriple) + num(p.paxDouble) + num(p.paxInfant);
+/** Kolom peserta yang dijumlahkan jadi jamaah (lihat jamaahOf). */
+const PAX_SELECT = { paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true } as const;
 
 /**
  * Total budget = biaya iklan Meta (Insights) seluruh brand dalam cakupan laporan. Hanya ad account berbiaya Rupiah yang
@@ -368,7 +368,7 @@ reportsRouter.get('/cs', asyncHandler(async (req, res) => {
 // ── 3. Sumber lead ───────────────────────────────────────────────────────────────────────────────────────
 reportsRouter.get('/sources', asyncHandler(async (req, res) => {
   const { format, range, brandWhere } = parseRange(req);
-  const leads = await prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range }, select: { leadSource: true, status: true, dealValue: true, spamAt: true, paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true } });
+  const leads = await prisma.prospect.findMany({ where: { ...brandWhere, createdAt: range }, select: { leadSource: true, status: true, dealValue: true, spamAt: true, ...PAX_SELECT } });
   const map = new Map<string, { source: string; label: string; leads: number; spam: number; deals: number; jamaah: number; lost: number; open: number; dealValue: number }>();
   for (const lead of leads) {
     const source = lead.leadSource || 'whatsapp';
@@ -567,9 +567,6 @@ async function prospectAdIds(brandIds: number[], created?: { gte: Date; lte: Dat
       ${prospectIds ? Prisma.sql`AND p.id IN (${Prisma.join(prospectIds)})` : Prisma.empty}`;
 }
 
-/** Lead berkualitas: posisi saat ini sudah Terkualifikasi atau sesudahnya. */
-const QUALIFIED_STAGES = new Set(['qualified', 'offer', 'objection', 'followup', 'closing', 'deal']);
-
 export type CreativeRow = {
   adId: string; brand: string; adName: string; campaignName: string; thumbnailUrl: string | null;
   spend: number | null; impressions: number; clicks: number; ctr: number | null; conversations: number;
@@ -589,7 +586,7 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
     prospectAdIds(brandIds, range),
     prisma.payment.findMany({
       where: { ...brandWhere, status: 'verified', createdAt: range },
-      select: { prospectId: true, brandId: true, createdAt: true, prospect: { select: { id: true, status: true, dealValue: true, paxQuad: true, paxTriple: true, paxDouble: true, paxInfant: true } } },
+      select: { prospectId: true, brandId: true, createdAt: true, prospect: { select: { id: true, status: true, dealValue: true, ...PAX_SELECT } } },
     }),
   ]);
   const deals = await firstDeals(payments, range.gte);
@@ -624,7 +621,7 @@ reportsRouter.get('/creatives', asyncHandler(async (req, res) => {
     const row = rowFor(lead.ad_id || UNKNOWN_AD, brandName.get(Number(lead.brand_id)) ?? '');
     if (Number(lead.spam)) { row.spam += 1; continue; }
     row.leads += 1;
-    if (QUALIFIED_STAGES.has(stageKey(lead.status))) row.qualified += 1;
+    if (isQualifiedStage(lead.status)) row.qualified += 1;
   }
   for (const payment of deals) {
     // Hanya prospek Meta Ads (sama dengan tab Iklan Meta); yang ID iklannya tak terbaca masuk baris "tidak teridentifikasi".
