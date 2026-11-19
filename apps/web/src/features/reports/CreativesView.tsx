@@ -10,7 +10,7 @@ import { rupiah } from '../finance/verificationApi';
 export type CreativeRow = {
   adId: string; brand: string; adName: string; campaignName: string; thumbnailUrl: string | null;
   spend: number | null; impressions: number; clicks: number; ctr: number | null; conversations: number;
-  leads: number; spam: number; spamRate: number; qualified: number; deals: number; dealValue: number;
+  leads: number; spam: number; spamRate: number; qualified: number; qualifiedRate: number; deals: number; jamaah: number; dealValue: number;
   costPerLead: number | null; costPerQualified: number | null; costPerDeal: number | null; roas: number | null;
 };
 export type CreativesReport = {
@@ -80,7 +80,7 @@ export function CreativesView({ data, query }: { data: CreativesReport; query: s
               <thead>
                 <tr className="border-b border-zinc-100 text-xs text-zinc-500">
                   <th scope="col" className="px-4 py-2 text-left font-medium">Iklan</th>
-                  {['Biaya', 'Impresi', 'CTR', 'Percakapan', 'Lead', 'Spam', 'Terkualifikasi', 'Deal', 'Nilai deal', 'Per lead', 'Per lead kualitas', 'Per deal', 'ROAS'].map((label) => (
+                  {['Biaya', 'Impresi', 'CTR', 'Percakapan', 'Lead', 'Spam', 'Terkualifikasi', '% Qualified', 'Deal', 'Jamaah', 'Nilai deal', 'Per lead', 'Per lead kualitas', 'Per deal', 'ROAS'].map((label) => (
                     <th key={label} scope="col" className="px-3 py-2 text-right font-medium">{label}</th>
                   ))}
                 </tr>
@@ -113,7 +113,9 @@ export function CreativesView({ data, query }: { data: CreativesReport; query: s
                     </td>
                     <td className={cn('px-3 py-2.5 text-right tabular-nums', r.spamRate >= 30 && 'font-semibold text-rose-600')}>{num(r.spam)}{r.spam > 0 && <span className="ml-1 text-xs text-zinc-500">{r.spamRate}%</span>}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{num(r.qualified)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{r.leads > 0 ? `${r.qualifiedRate.toLocaleString('id-ID')}%` : '—'}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{num(r.deals)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{num(r.jamaah)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{rupiah(r.dealValue)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{money(r.costPerLead)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{money(r.costPerQualified)}</td>

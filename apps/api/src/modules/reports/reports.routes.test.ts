@@ -79,7 +79,7 @@ beforeEach(() => {
   mocks.prospectCount.mockResolvedValue(0);
   mocks.paymentFindMany.mockResolvedValue([]);
   mocks.brandFindMany.mockResolvedValue([]);
-  mocks.leadHandling.mockResolvedValue({ rows: [], totals: { newLeads: 0, oldLeads: 0 } });
+  mocks.leadHandling.mockResolvedValue({ rows: [], totals: { newLeads: 0, oldLeads: 0, qualifiedNewLeads: 0 } });
   mocks.firstReplies.mockResolvedValue(new Map());
 });
 
@@ -219,7 +219,7 @@ describe('Laporan kinerja CS', () => {
     mocks.logFindMany.mockResolvedValueOnce([{ title: 'PIC diambil alih oleh Citra dari Aisyah' }]);
     // Lead 2 belum dibalas: tidak punya waktu balas.
     mocks.firstReplies.mockResolvedValueOnce(new Map([[1, { minutes: 10, senderUserId: 7, senderName: 'Aisyah' }]]));
-    mocks.leadHandling.mockResolvedValueOnce({ rows: [{ key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 4, oldLeads: 9, medianReplyMinutes: 3 }], totals: { newLeads: 4, oldLeads: 9 } });
+    mocks.leadHandling.mockResolvedValueOnce({ rows: [{ key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 4, oldLeads: 9, qualifiedNewLeads: 1, medianReplyMinutes: 3 }], totals: { newLeads: 4, oldLeads: 9, qualifiedNewLeads: 1 } });
     const { rows } = await get('/cs');
     expect(mocks.firstReplies).toHaveBeenCalledWith([1, 2]);
     expect(rows).toEqual([expect.objectContaining({ name: 'Aisyah', leads: 2, handledNew: 4, handledOld: 9, deals: 1, conversion: 50, dealValue: 40_000_000, medianReplyMinutes: 10, takenOver: 1, openNow: 5, overdueFollowups: 2 })]);
@@ -231,10 +231,10 @@ describe('Laporan Lead Harian', () => {
     mocks.userFindMany.mockResolvedValueOnce([{ id: 7, name: 'Aisyah', isActive: true }]);
     mocks.leadHandling.mockResolvedValueOnce({
       rows: [
-        { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 3, oldLeads: 5, medianReplyMinutes: 4 },
-        { key: 'hp', userId: null, name: 'Dari HP (tanpa nama)', isActive: true, newLeads: 1, oldLeads: 2, medianReplyMinutes: null },
+        { key: 'user:7', userId: 7, name: 'Aisyah', isActive: true, newLeads: 3, oldLeads: 5, qualifiedNewLeads: 1, medianReplyMinutes: 4 },
+        { key: 'hp', userId: null, name: 'Dari HP (tanpa nama)', isActive: true, newLeads: 1, oldLeads: 2, qualifiedNewLeads: 0, medianReplyMinutes: null },
       ],
-      totals: { newLeads: 4, oldLeads: 6 },
+      totals: { newLeads: 4, oldLeads: 6, qualifiedNewLeads: 1 },
     });
     const layer = (reportsRouter as any).stack.find((l: any) => l.route?.path === '/leads');
     const data = await new Promise<any>((resolve, reject) => {
@@ -245,7 +245,7 @@ describe('Laporan Lead Harian', () => {
       );
     });
     expect(data.brandId).toBe(3);
-    expect(data.totals).toEqual({ newLeads: 4, oldLeads: 6 });
+    expect(data.totals).toEqual({ newLeads: 4, oldLeads: 6, qualifiedNewLeads: 1 });
     expect(mocks.leadHandling).toHaveBeenCalledWith([3], [{ id: 7, name: 'Aisyah', isActive: true }], expect.objectContaining({ gte: new Date('2026-08-31T17:00:00.000Z') }));
   });
 });
